@@ -1,0 +1,1 @@
+includes("../../core/xmake.lua")
