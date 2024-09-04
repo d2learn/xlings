@@ -20,7 +20,7 @@ function main()
     if start_target then
         checker.main(start_target)
     else
-        if command == "checker" then
+        if command == "checker" or command == xlings_name then
             checker.main("lings") -- TODO -s start_target
         elseif command == "init" then
             init.xlings_init(xlings_name, xlings_lang)

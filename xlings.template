@@ -1,0 +1,6 @@
+includes("config.xlings.lua")
+
+add_includedirs("../" .. xlings_name)
+includes("../" .. xlings_name)
+
+includes("~/.xlings/core/xmake.lua")
