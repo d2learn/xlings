@@ -40,7 +40,7 @@ function print_info(target_name, built_targets, total_targets, current_file_path
         print(string.format("✅ Successfully ran %s!", current_file_path))
         print("\n🎉   The code is compiling!   🎉\n")
     else
-        print(string.format("❌ Error: Compilation/Running failed for %s:", current_file_path))
+        print(string.format("❌ Error: Compilation/Running failed for %s", current_file_path))
         print("\n The code exist some error!\n")
     end
 

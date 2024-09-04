@@ -12,6 +12,8 @@ PURPLE='\033[35m'
 CYAN='\033[36m'
 RESET='\033[0m'
 
+echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${RESET}"
+
 # 0. rm old xlings
 if [ -d $XLINGS_INSTALL_DIR ]; then
     echo -e "${PURPLE}[xlings]: delete xlings(old version)...${RESET}"
@@ -26,8 +28,15 @@ cp -r ./* $XLINGS_INSTALL_DIR
 cp $XLINGS_BIN_DIR/xlings.linux.sh $XLINGS_BIN_DIR/xlings
 chmod +x $XLINGS_BIN_DIR/xlings
 
-# 2. check xmake status
-echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${RESET}"
+# 2. add xlings and tools to PATH
+if ! grep -q "$XLINGS_BIN_DIR" ~/.bashrc; then
+    echo "" >> ~/.bashrc
+    echo "# xlings config" >> ~/.bashrc
+    echo "export PATH=\$PATH:$XLINGS_BIN_DIR" >> ~/.bashrc
+    echo -e "${PURPLE}[xlings]: config PATH (~/.bashrc)${RESET}"
+fi
+
+# 3. check xmake status
 if ! command -v xmake &> /dev/null
 then
     echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
@@ -36,10 +45,10 @@ else
     echo -e "${GREEN}[xlings]: xmake installed${RESET}"
 fi
 
-# 3. check/install mdbook
+# 4. check/install mdbook
 if ! command -v mdbook &> /dev/null
 then
-    echo -e "${PURPLE}[xlings]: start install mdbook...${RESET}"
+    echo -e "${PURPLE}[xlings]: download mdbook...${RESET}"
 
     if ! [ -f $XLINGS_BIN_DIR/mdbook ]; then
 
@@ -55,22 +64,13 @@ then
         # delete tmp-file
         rm ~/.xlings/mdbook.tar.gz
     fi
-
-    # add xlings and tools to PATH
-    if ! grep -q "$XLINGS_BIN_DIR" ~/.bashrc; then
-        # mdbook
-        echo "" >> ~/.bashrc
-        echo "# xlings config" >> ~/.bashrc
-        echo "export PATH=\$PATH:$XLINGS_BIN_DIR" >> ~/.bashrc
-        echo -e "${PURPLE}[xlings]: config PATH (~/.bashrc)${RESET}"
-    fi
-
+else
+    echo -e "${GREEN}[xlings]: mdbook installed${RESET}"
 fi
-echo -e "${GREEN}[xlings]: mdbook installed${RESET}"
 
 # 4. install info
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"
 
 echo -e $YELLOW
-echo -e "\t run xlings --help get more information"
+echo -e "\t run xlings help get more information"
 echo -e $RESET
