@@ -80,7 +80,7 @@ Commands:
          uninstall,      uninstall xlings
          help,           help info
 
-repo: https://github.com/Sunrisepeak/xlings
+repo: https://github.com/d2learn/xlings
 ```
 
 ## 示例
