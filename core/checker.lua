@@ -3,6 +3,8 @@ import("core.project.target")
 import("core.base.global")
 import("core.base.option")
 
+import("platform")
+
 -- TODO: optimze
 target_to_code_file = { }
 
@@ -10,11 +12,14 @@ XLINGS_WAIT = "XLINGS_WAIT"
 XLINGS_RETURN = "XLINGS_RETURN"
 
 function clear_screen()
+--[[
     if os.host() == "windows" then
-        print("\027[H\027[2J")
+        os.exec("xligns_clear.bat")
     else
         os.exec("clear")
     end
+]]
+    os.exec(platform.get_config_info().cmd_clear)
 end
 
 function print_info(target_name, built_targets, total_targets, current_file_path, output, status)

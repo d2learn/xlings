@@ -4,7 +4,7 @@ import("templates.c_language")
 import("templates.cpp_language")
 
 -- TODO: win/linux ../, ..\\ issue
-local book_folder_name = "../book"
+local book_folder_name = "book"
 
 book_config_template = [[
 [book]
@@ -24,7 +24,7 @@ git-repository-url = "https://github.com/Sunrisepeak/xlings"
 
 function xlings_init_book()
     --os.exec("mkdir -p " .. book_folder_name)
-    os.exec("pwd")
+    --os.exec("pwd")
     os.exec("mdbook init --force " .. book_folder_name)
     --os.exec("mdbook serve " .. book_folder_name)
 
@@ -92,5 +92,5 @@ end
 
 function xlings_init(xlings_name, xlings_lang)
     xlings_init_book()
-    xlings_init_exercises("../" .. xlings_name, xlings_lang)
+    xlings_init_exercises(xlings_name, xlings_lang)
 end

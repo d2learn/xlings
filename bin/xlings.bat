@@ -1,40 +1,33 @@
 @echo off
-setlocal
 
-set XLINGS_DIR=C:\\Users\\Public\\xlings
+set XLINGS_DIR=C:\Users\Public\xlings
 set PROJECT_DIR=%cd%
 set XLINGS_CACHE_DIR=%PROJECT_DIR%\.xlings
 
 set arg1=%1
 set arg2=%2
 
-set "commands=help -h uninstall update"
+set "commands=help uninstall update"
 
 if "%arg1%"=="" (
-    cd %XLINGS_DIR%\core
+    cd %XLINGS_DIR%/core
     xmake xlings
     exit /b
 )
 
-echo %commands% | findstr /b /c:"%arg1%" >nul
+echo %commands% | findstr /r "\<%arg1%\>" >nul
 if not errorlevel 1 (
-    cd %XLINGS_DIR%\core
+    cd %XLINGS_DIR%/core
     xmake xlings %arg1%
-    exit /b
-)
-
-if not exist "%PROJECT_DIR%\config.xlings" (
-    echo **command not support | not found config.xlings in current folder**
-    cd %XLINGS_DIR%\core
+) else if not exist "%PROJECT_DIR%/config.xlings" (
+    echo     "command not support | not found config.xlings in current folder"
+    cd %XLINGS_DIR%/core
     xmake xlings
 ) else (
     if not exist "%XLINGS_CACHE_DIR%" mkdir "%XLINGS_CACHE_DIR%"
     copy /y "%PROJECT_DIR%\config.xlings" "%XLINGS_CACHE_DIR%\config.xlings.lua"
-    copy /y "%XLINGS_DIR%\xlings.template" "%XLINGS_CACHE_DIR%\xmake.lua"
+    copy /y "%XLINGS_DIR%\tools\template.win.xlings" "%PROJECT_DIR%\xmake.lua"
 
-    cd %XLINGS_CACHE_DIR%
-
+    REM xmake f -o %XLINGS_CACHE_DIR%
     xmake xlings %arg1% %arg2%
 )
-
-endlocal

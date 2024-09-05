@@ -21,9 +21,7 @@ else
     # generate xlings cache file - .xlings
     mkdir -p $XLINGS_CACHE_DIR
     cp -f $PROJECT_DIR/config.xlings $XLINGS_CACHE_DIR/config.xlings.lua
-    cp -f $XLINGS_DIR/xlings.template $XLINGS_CACHE_DIR/xmake.lua
-
-    cd $XLINGS_CACHE_DIR
+    cp -f $XLINGS_DIR/tools/template.linux.xlings $PROJECT_DIR/xmake.lua
 
     xmake xlings $arg1 $arg2
 fi

@@ -39,15 +39,15 @@ function xlings_install_dependencies()
 
     release_url = platform.get_config_info().mdbook_url
 
-    if is_host("linux") then
-        mdbook_bin = install_dir .. "/bin/mdbook"
-        if not os.isfile(mdbook_bin) then
-            mdbook_zip = install_dir .. "/mdbook.tar.gz"
-        end
-    else
+    if is_host("windows") then
         mdbook_bin = install_dir .. "/bin/mdbook.exe"
         if not os.isfile(mdbook_bin) then
             mdbook_zip = install_dir .. "/mdbook.zip"
+        end
+    else
+        mdbook_bin = install_dir .. "/bin/mdbook"
+        if not os.isfile(mdbook_bin) then
+            mdbook_zip = install_dir .. "/mdbook.tar.gz"
         end
     end
 
@@ -92,8 +92,10 @@ function xlings_install()
     else
         local path_env = os.getenv("PATH")
         if not string.find(path_env, install_dir) then
+
             path_env = path_env .. ";" .. install_dir
-            os.setenv("PATH", path_env)
+            -- os.setenv("PATH", path_env) -- only tmp, move to install.win.bat
+            -- os.exec("setx PATH " .. path_env)
         end
     end
 
@@ -102,7 +104,21 @@ end
 
 function xlings_uninstall()
     local install_dir = platform.get_config_info().install_dir
-    os.rm(install_dir)
+    try
+    {
+        function()
+            os.rm(install_dir)
+        end,
+        catch
+        {
+            function (e)
+                -- TODO: error: cannot remove directory C:\Users\Public\xlings Unknown Error (145)
+            end
+        }
+    }
+
+    cprint("xlings uninstalled(" .. install_dir .. ") - ok")
+
 end
 
 function xlings_update()

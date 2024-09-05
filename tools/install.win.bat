@@ -1,11 +1,6 @@
 @echo off
-REM Define color codes
-set "GREEN=^<ESC^>[92m"
-set "YELLOW=^<ESC^>[93m"
-set "RESET=^<ESC^>[0m"
 
-REM Enable delayed expansion to use color codes
-setlocal enabledelayedexpansion
+set XLINGS_DIR=C:\Users\Public\xlings\bin
 
 echo [xlings]: start detect environment and try to auto config...
 
@@ -13,21 +8,29 @@ REM Check if xmake is installed
 where xmake >nul 2>&1
 
 IF %ERRORLEVEL% EQU 0 (
-    echo !GREEN![xlings]: xmake installed!RESET!
+    echo [xlings]: xmake installed
 ) else (
     REM xmake is not installed, downloading and running install script using PowerShell
     echo [xlings]: start install xmake...
     powershell -Command "Invoke-Expression ((Invoke-WebRequest 'https://xmake.io/psget.text' -UseBasicParsing).Content)"
 )
 
-call setup.bat
+REM 2. set xlings to PATH
+for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set UserPath=%%b
+echo %UserPath% | findstr /i "%XLINGS_DIR%" >nul
+if %errorlevel% neq 0 (
+    echo [xlings]: set xlings to PATH
+    setx PATH "%UserPath%;%XLINGS_DIR%"
+) else (
+    echo [xlings]: xlings is already in PATH.
+)
 
-REM 2. install xlings
+REM 3. install xlings
 cd core
 xmake xlings install
 
-REM 3. install info
+REM 4. install info
 echo [xlings]: xlings installed
 echo.
-echo     run !YELLOW!xlings help!RESET! get more information
+echo     run xlings help get more information (after restart vscode)
 echo.
