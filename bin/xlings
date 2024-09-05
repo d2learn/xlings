@@ -7,14 +7,14 @@ XLINGS_CACHE_DIR=$PROJECT_DIR/.xlings
 arg1=$1
 arg2=$2
 
-if [[ -z $arg1 || $arg1 == "help" || $arg1 == "-h" ]]; then
+if [[ -z $arg1 || $arg1 == "help" || $arg1 == "-h" || $arg1 == "uninstall" || $arg1 == "update" ]]; then
     cd $XLINGS_DIR/core
-    xmake xlings
+    xmake xlings $arg1
     exit 0
 fi
 
 if ! [ -f $PROJECT_DIR/config.xlings ]; then
-    echo -e "\n\t**not found config.xlings in current folder**\n"
+    echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
     cd $XLINGS_DIR/core
     xmake xlings
 else
