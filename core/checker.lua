@@ -50,7 +50,7 @@ function print_info(target_name, built_targets, total_targets, current_file_path
     print(output)
     print("====================")
 
-    print("\nHomepage: https://github.com/Sunrisepeak/xlings")
+    print("\nHomepage: https://github.com/d2learn/xlings")
 end
 
 function build_with_error_handling(target)
@@ -203,7 +203,7 @@ function main(start_target)
     local bingo = "\
         Bingo! 🎉🎉🎉\n \
 You have completed all exercises\n \
-tools-repo: https://github.com/Sunrisepeak/xlings\
+tools-repo: https://github.com/d2learn/xlings\
 "
 
     print_info("xlings", total_targets, total_targets, "...", bingo, true)

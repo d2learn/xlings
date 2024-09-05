@@ -17,7 +17,7 @@ function xlings_help()
     cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
-    cprint("repo: ${underline}https://github.com/Sunrisepeak/xlings${clear}")
+    cprint("repo: ${underline}https://github.com/d2learn/xlings${clear}")
 end
 
 function main()
