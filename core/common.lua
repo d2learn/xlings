@@ -29,6 +29,11 @@ function xlings_file_append(file, context)
     file:close()
 end
 
+function xlings_path_format(path)
+    path = string.gsub(path, "%.%.%/", "")
+    return path:gsub("%.%.%\\", "")
+end
+
 function xlings_install_dependencies()
     local release_url
     local mdbook_zip

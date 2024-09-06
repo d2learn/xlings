@@ -43,4 +43,5 @@ luac.out
 **/.xmake
 **/build
 .vscode
+**/.xlings
 

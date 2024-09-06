@@ -1,10 +1,11 @@
 -- local common = require("common") -- ('require' is not callable)
 import("common")
+import("platform")
+
 import("templates.c_language")
 import("templates.cpp_language")
 
--- TODO: win/linux ../, ..\\ issue
-local book_folder_name = "book"
+local book_folder_name = platform.get_config_info().projectdir .. "book"
 
 book_config_template = [[
 [book]
@@ -61,6 +62,8 @@ function xlings_init_exercises(xlings_name, xlings_lang)
     --print(c_language)
     --print(common)
     --print(x_template)
+
+    xlings_name = platform.get_config_info().projectdir .. xlings_name
 
     -- add exercises file
     file = xlings_name .. "/" .. x_template.exercises_file

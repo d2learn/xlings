@@ -3,6 +3,7 @@ import("core.project.target")
 import("core.base.global")
 import("core.base.option")
 
+import("common")
 import("platform")
 
 -- TODO: optimze
@@ -26,6 +27,8 @@ function print_info(target_name, built_targets, total_targets, current_file_path
 
     clear_screen()
 
+    current_file_path = common.xlings_path_format(current_file_path)
+
     -- print progress_bar
     local progress_bar_length = total_targets
     local arrow_count = built_targets
@@ -47,6 +50,10 @@ function print_info(target_name, built_targets, total_targets, current_file_path
     else
         print(string.format("❌ Error: Compilation/Running failed for %s", current_file_path))
         print("\n The code exist some error!\n")
+        -- TODO: remove the path prefix for output info
+        --if type(output) == "string" then
+            --output = common.xlings_path_format(output)
+        --end
     end
 
     -- print output

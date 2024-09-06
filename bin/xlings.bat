@@ -26,8 +26,9 @@ if not errorlevel 1 (
 ) else (
     if not exist "%XLINGS_CACHE_DIR%" mkdir "%XLINGS_CACHE_DIR%"
     copy /y "%PROJECT_DIR%\config.xlings" "%XLINGS_CACHE_DIR%\config.xlings.lua"
-    copy /y "%XLINGS_DIR%\tools\template.win.xlings" "%PROJECT_DIR%\xmake.lua"
+    copy /y "%XLINGS_DIR%\tools\template.win.xlings" ""%XLINGS_CACHE_DIR%\xmake.lua"
 
-    REM xmake f -o %XLINGS_CACHE_DIR%
+    cd %XLINGS_CACHE_DIR%
+
     xmake xlings %arg1% %arg2%
 )

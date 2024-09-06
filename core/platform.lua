@@ -1,5 +1,5 @@
 local xlings_install_dir = {
-    linux = "~/.xlings",
+    linux = ".xlings",
     windows = "C:/Users/Public/xlings",
 }
 
@@ -16,12 +16,19 @@ local command_clear = {
 
 local xlings_sourcedir = os.scriptdir() .. "/../"
 
+local xlings_projectdir = "../"
+
+if os.host() == "linux" then
+    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
+end
+
 function get_config_info()
     return {
         install_dir = xlings_install_dir[os.host()],
         sourcedir = xlings_sourcedir,
         mdbook_url = xlings_mdbook_url[os.host()],
         cmd_clear = command_clear[os.host()],
+        projectdir = xlings_projectdir,
     }
 end
 
