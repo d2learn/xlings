@@ -1,9 +1,11 @@
 import("core.base.text")
 import("core.base.option")
 
+import("platform")
 import("common")
 import("checker")
 import("init")
+import("drepo")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.1")
@@ -14,6 +16,7 @@ function xlings_help()
     cprint("\t ${magenta}checker${clear},  \t start auto-exercises from ${magenta}target${clear}")
     cprint("\t ${magenta}book${clear},     \t open book in your default browser")
     cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
+    cprint("\t ${magenta}drepo${clear},    \t print drepo info or download drepo(${magenta}target${clear})")
     cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
@@ -21,18 +24,23 @@ function xlings_help()
 end
 
 function main()
+    local run_dir = option.get("run_dir")
     local command = option.get("command")
-    local start_target = option.get("start_target")
+    local cmd_target = option.get("cmd_target")
     local xlings_name = option.get("xlings_name")
     local xlings_lang = option.get("xlings_lang")
 
+    -- init platform config
+    platform.set_rundir(run_dir)
+
+    --print(run_dir)
     --print(command)
-    --print(start_target)
+    --print(cmd_target)
     --print(xlings_name)
     --print(xlings_lang)
 
     if command == "checker" or command == xlings_name then
-        checker.main(start_target) -- TODO -s start_target
+        checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "init" then
         init.xlings_init(xlings_name, xlings_lang)
     elseif command == "book" then
@@ -46,6 +54,17 @@ function main()
         common.xlings_install()
     elseif command == "uninstall" then
         common.xlings_uninstall()
+    elseif command == "drepo" then
+        -- TODO drepo local-project management
+        if cmd_target ~= "xlings_name" then
+            drepo.print_drepo_info(cmd_target)
+            cprint("[xlings]: try to download drepo - ${magenta}" .. cmd_target .. "${clear}")
+            drepo.download_drepo(cmd_target)
+        else
+            cprint("\n\t${bright}drepo lists${clear}\n")
+            drepo.print_all_drepo_info()
+            cprint("\n\trun ${cyan}xlings drepo [drepo_name]${clear} to download\n")
+        end
     else
         xlings_help()
     end

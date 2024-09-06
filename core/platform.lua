@@ -15,11 +15,16 @@ local command_clear = {
 }
 
 local xlings_sourcedir = os.scriptdir() .. "/../"
-
 local xlings_projectdir = "../"
+local xlings_drepodir = xlings_sourcedir .. "drepo/"
+local xlings_rundir -- Note: need init in xlings.lua
 
 if os.host() == "linux" then
     xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
+end
+
+function set_rundir(rundir)
+    xlings_rundir = rundir
 end
 
 function get_config_info()
@@ -29,6 +34,8 @@ function get_config_info()
         mdbook_url = xlings_mdbook_url[os.host()],
         cmd_clear = command_clear[os.host()],
         projectdir = xlings_projectdir,
+        drepodir = xlings_drepodir,
+        rundir = xlings_rundir,
     }
 end
 

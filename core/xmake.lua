@@ -13,8 +13,9 @@ task("xlings")
         description = "init | book | checker | help",
         options = {
             -- args - input
+            {nil, "run_dir", "v", nil, "xlings's run directory"}, -- only internal use
             {nil, "command", "v", nil, "xlings's command"},
-            {nil, "start_target", "v", xlings_name, "check from start_target"},
+            {nil, "cmd_target", "v", xlings_name, "check from start_target"},
             -- args - default
             {nil, "xlings_name", "v", xlings_name, "xlings's name"},
             {nil, "xlings_lang", "v", xlings_lang, "xlings's programming languages"},

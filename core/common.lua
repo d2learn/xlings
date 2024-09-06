@@ -132,4 +132,17 @@ function xlings_update()
     git.pull({remote = "origin", tags = true, branch = "main", repodir = install_dir})
 end
 
+-- download repo from git_url to destination directory
+function xlings_download_repo(git_url, dest_dir)
+    local repo_name = git_url:match("([^/]+)%.git$")
+    dest_dir = dest_dir .. "/" .. repo_name
+    cprint("[xlings]: downloading ${magenta}%s${clear} from %s", repo_name, git_url)
+    if os.isdir(dest_dir) then
+        cprint("[xlings]: " .. repo_name .. " already exists.")
+        return
+    end
+    git.clone(git_url, {depth = 1, branch = "main", outputdir = dest_dir})
+    cprint("[xlings]: %s - ${green}ok${clear}", dest_dir)
+end
+
 --return common

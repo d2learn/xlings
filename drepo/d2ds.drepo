@@ -1,0 +1,5 @@
+name = d2ds
+git = git@github.com:Sunrisepeak/d2ds.git
+url = https://github.com/Sunrisepeak/d2ds
+tags = c++, data-structures
+profile = 强调动手实践的数据结构学习项目，其中包含在线书籍、公开课、练习代码等子项目

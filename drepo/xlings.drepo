@@ -1,0 +1,5 @@
+name = xlings
+git = git@github.com:d2learn/xlings.git
+url = https://github.com/d2learn/xlings
+tags = tools, build, auto-exercises, pkg-manager
+profile = 技术、实验、练习、自学类项目, 快速构建和管理工具

@@ -26,7 +26,7 @@ source ~/.bashrc
 
 # 2. install xlings
 cd $XLINGS_DIR/core
-xmake xlings install
+xmake xlings unused install
 
 # 3. install info
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"
