@@ -45,7 +45,7 @@ function main()
         init.xlings_init(xlings_name, xlings_lang)
     elseif command == "book" then
         --os.exec("mdbook build --open book") -- book is default folder
-        os.exec("mdbook serve --open book") -- book is default folder
+        os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "update" then
         common.xlings_update(xlings_name, xlings_lang)
         xlings_help()

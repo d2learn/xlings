@@ -6,7 +6,7 @@ import("templates.c_language")
 import("templates.cpp_language")
 import("templates.py_language")
 
-local book_folder_name = platform.get_config_info().projectdir .. "book"
+local book_folder_name = platform.get_config_info().bookdir
 
 book_config_template = [[
 [book]

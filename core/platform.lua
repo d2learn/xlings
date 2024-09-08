@@ -16,6 +16,7 @@ local command_clear = {
 
 local xlings_sourcedir = os.scriptdir() .. "/../"
 local xlings_projectdir = "../"
+local xlings_bookdir = xlings_projectdir .. "book/"
 local xlings_drepodir = xlings_sourcedir .. "drepo/"
 local xlings_rundir -- Note: need init in xlings.lua
 
@@ -36,6 +37,7 @@ function get_config_info()
         projectdir = xlings_projectdir,
         drepodir = xlings_drepodir,
         rundir = xlings_rundir,
+        bookdir = xlings_bookdir,
     }
 end
 
