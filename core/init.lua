@@ -4,6 +4,7 @@ import("platform")
 
 import("templates.c_language")
 import("templates.cpp_language")
+import("templates.py_language")
 
 local book_folder_name = platform.get_config_info().projectdir .. "book"
 
@@ -55,6 +56,8 @@ function xlings_init_exercises(xlings_name, xlings_lang)
     
     if xlings_lang == "cpp" then
         x_template = cpp_language.get_template()
+    elseif xlings_lang == "python" then
+        x_template = py_language.get_template()
     else
         x_template = c_language.get_template()
     end

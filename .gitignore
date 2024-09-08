@@ -44,4 +44,5 @@ luac.out
 **/build
 .vscode
 **/.xlings
+**/__pycache__
 
