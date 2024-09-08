@@ -125,7 +125,8 @@ function main(start_target)
 
     local base_dir = os.projectdir()
 
-    print(base_dir)
+    -- xlings project's cache dir(xmake.lua)
+    -- print(base_dir) -- /home/speak/workspace/github/d2ds/.xlings
 
     -- 获取 project 中所有 target
     local targets = project.targets()
@@ -151,6 +152,8 @@ function main(start_target)
         if not skip then
             local files = targets[name]:sourcefiles()
             for  _, file in ipairs((files)) do
+                -- TODO-X: use absolute path? avoid error (mtime/open file)
+                -- print("file: " .. file) -- ../dslings/tests/dslings.0.cpp
                 local relative_path = path.relative(file, base_dir)
                 local build_success = false
                 local sleep_sec = 1000 * 0.1
@@ -158,6 +161,7 @@ function main(start_target)
 
                 local file_modify_time
                 local compile_bypass_counter = 0
+                local open_target_file = false
 
                 while not build_success do
                     local curr_file_mtime = os.mtime(file)
@@ -189,6 +193,16 @@ function main(start_target)
                         if build_success then
                             built_targets = built_targets + 1
                         else
+                            if open_target_file == false then
+                                -- TODO1: -> TODO-X
+                                -- TODO2: skip to file-line? code -g file:line
+                                if platform.get_config_info().editor == "vscode" then
+                                    os.exec("code -g " .. file .. ":1") -- why work?
+                                else
+                                    -- TODO3: support more editor?
+                                end
+                                open_target_file = true
+                            end
                             sleep_sec = 1000 * 1
                         end
 

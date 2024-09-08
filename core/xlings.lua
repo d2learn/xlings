@@ -24,14 +24,19 @@ function xlings_help()
 end
 
 function main()
+
     local run_dir = option.get("run_dir")
     local command = option.get("command")
     local cmd_target = option.get("cmd_target")
+
+    -- config info - config.xlings
     local xlings_name = option.get("xlings_name")
     local xlings_lang = option.get("xlings_lang")
+    local xlings_editor = option.get("xlings_editor")
 
     -- init platform config
     platform.set_rundir(run_dir)
+    platform.set_editor(xlings_editor)
 
     --print(run_dir)
     --print(command)

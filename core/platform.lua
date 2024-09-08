@@ -18,15 +18,24 @@ local xlings_sourcedir = os.scriptdir() .. "/../"
 local xlings_projectdir = "../"
 local xlings_bookdir = xlings_projectdir .. "book/"
 local xlings_drepodir = xlings_sourcedir .. "drepo/"
-local xlings_rundir -- Note: need init in xlings.lua
 
 if os.host() == "linux" then
     xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
 end
 
+-- user config.xlings
+local xlings_rundir -- Note: need init in xlings.lua
+local xlings_editor
+
 function set_rundir(rundir)
     xlings_rundir = rundir
 end
+
+function set_editor(editor)
+    xlings_editor = editor
+end
+
+-- 
 
 function get_config_info()
     return {
@@ -38,6 +47,7 @@ function get_config_info()
         drepodir = xlings_drepodir,
         rundir = xlings_rundir,
         bookdir = xlings_bookdir,
+        editor = xlings_editor,
     }
 end
 
