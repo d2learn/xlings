@@ -35,6 +35,7 @@ function main()
     local xlings_editor = option.get("xlings_editor")
 
     -- init platform config
+    platform.set_name(xlings_name)
     platform.set_rundir(run_dir)
     platform.set_editor(xlings_editor)
 

@@ -15,7 +15,7 @@ local command_clear = {
 }
 
 local xlings_sourcedir = os.scriptdir() .. "/../"
-local xlings_projectdir = "../"
+local xlings_projectdir = "../" -- xlings_rundir
 local xlings_bookdir = xlings_projectdir .. "book/"
 local xlings_drepodir = xlings_sourcedir .. "drepo/"
 
@@ -24,8 +24,13 @@ if os.host() == "linux" then
 end
 
 -- user config.xlings
+local xlings_name
 local xlings_rundir -- Note: need init in xlings.lua
 local xlings_editor
+
+function set_name(name)
+    xlings_name = name
+end
 
 function set_rundir(rundir)
     xlings_rundir = rundir
@@ -48,6 +53,7 @@ function get_config_info()
         rundir = xlings_rundir,
         bookdir = xlings_bookdir,
         editor = xlings_editor,
+        name = xlings_name,
     }
 end
 

@@ -2,6 +2,7 @@ import("core.project.project")
 import("core.project.target")
 import("core.base.global")
 import("core.base.option")
+import("core.base.fwatcher")
 
 import("common")
 import("platform")
@@ -45,7 +46,7 @@ function print_info(target_name, built_targets, total_targets, current_file_path
 
     -- print status
     if status then
-        print(string.format("✅ Successfully ran %s!", current_file_path))
+        print(string.format("✅ Successfully ran %s", current_file_path))
         print("\n🎉   The code is compiling!   🎉\n")
     else
         print(string.format("❌ Error: Compilation/Running failed for %s", current_file_path))
@@ -122,6 +123,16 @@ function main(start_target)
     --local start_target = option.get("start_target")
 
     --clear_screen()
+    local config = platform.get_config_info()
+    local detect_dir = config.rundir .. "/" .. config.name
+    fwatcher.add(detect_dir, {recursion = true})
+    --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
+
+    --if platform.get_config_info().editor == "vscode" then
+        --os.exec("code " .. detect_dir)
+    --else
+        -- TODO3: support more editor?
+    --end
 
     local base_dir = os.projectdir()
 
@@ -164,12 +175,17 @@ function main(start_target)
                 local open_target_file = false
 
                 while not build_success do
+                    -- TODO: remove mtime detect
                     local curr_file_mtime = os.mtime(file)
                     if target_to_code_file[name] then
                         curr_file_mtime = curr_file_mtime + os.mtime(target_to_code_file[name])
                     end
 
-                    if file_modify_time ~= curr_file_mtime then
+                    local ok, event = fwatcher.wait(300)
+
+                    --cprint("event: ", ok)
+
+                    if file_modify_time ~= curr_file_mtime or ok > 0 then
                         --build_success = task.run("build", {target = name})
                         build_success = true
 
@@ -193,15 +209,15 @@ function main(start_target)
                         if build_success then
                             built_targets = built_targets + 1
                         else
-                            if open_target_file == false then
-                                -- TODO1: -> TODO-X
-                                -- TODO2: skip to file-line? code -g file:line
-                                if platform.get_config_info().editor == "vscode" then
+                            -- TODO1: -> TODO-X
+                            -- TODO2: skip to file-line? code -g file:line
+                            if platform.get_config_info().editor == "vscode" then
+                                if open_target_file == false then
                                     os.exec("code -g " .. file .. ":1") -- why work?
-                                else
-                                    -- TODO3: support more editor?
+                                    open_target_file = true
                                 end
-                                open_target_file = true
+                            else
+                                -- TODO3: support more editor?
                             end
                             sleep_sec = 1000 * 1
                         end
