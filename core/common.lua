@@ -6,7 +6,7 @@ import("devel.git")
 --local common = {}
 
 function escape_string(s)
-    return s:gsub("\\", "\\\\")
+    return tostring(s):gsub("\\", "\\\\")
             :gsub("\n", "\\n")
             :gsub("\"", "\\\"")
             :gsub("\t", "\\t")
