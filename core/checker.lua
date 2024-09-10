@@ -61,8 +61,8 @@ function print_info(target_name, built_targets, total_targets, target_files, out
         -- print ai tips
         local llm_config = config.llm_config
         if llm_config.enable then
-            cprint("\n${blink bright cyan}AI-Tips:${clear}")
-            cprint(platform.get_config_info().llm_config.response)
+            cprint("\n${blink bright cyan}AI-Tips(" .. llm_config.request_counter  .. "):${clear}")
+            cprint(llm_config.response)
         else
             cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://github.com/d2learn/xlings${clear}")
         end
@@ -168,6 +168,7 @@ function main(start_target)
     table.sort(sorted_targets)
 
     local skip = true
+
     for _, name in pairs(sorted_targets) do
 
         if skip and (name == start_target or string.find(name, start_target)) then
@@ -178,17 +179,23 @@ function main(start_target)
             local files = targets[name]:sourcefiles()
             local build_success = false
             local output = ""
-            local old_output = ""
+            local old_output_llm_req = ""
             local relative_path = ""
 
             local compile_bypass_counter = 21
             local open_target_file = false
             local update_ai_tips = false
+            local file_detect_interval = 0
 
             while not build_success do
 
                 local llm_config = platform.get_config_info().llm_config
-                local ok, event = fwatcher.wait(500)
+                local ok = 0
+                local event = nil
+
+                if file_detect_interval > 0 then
+                    ok, event = fwatcher.wait(file_detect_interval)
+                end
 
                 --print(ok)
                 --print(compile_bypass_counter)
@@ -196,42 +203,42 @@ function main(start_target)
                 local checker_task = function()
                     if ok > 0 or compile_bypass_counter > 20 then
 
-                            output, build_success = build_with_error_handling(name)
+                        output, build_success = build_with_error_handling(name)
 
-                            if build_success then
-                                output, build_success = run_with_error_handling(name)
+                        if build_success then
+                            output, build_success = run_with_error_handling(name)
+                        end
+
+                        local status = build_success
+
+                        if type(output) == "string" then
+                            if string.find(output, "❌") then
+                                status = false
+                                build_success = false
+                            elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
+                                build_success = false
                             end
+                        end
 
-                            local status = build_success
-
-                            if type(output) == "string" then
-                                if string.find(output, "❌") then
-                                    status = false
-                                    build_success = false
-                                elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
-                                    build_success = false
-                                end
-                            end
-
-                            if build_success then
-                                built_targets = built_targets + 1
-                            else
-                                -- TODO1: -> TODO-X
-                                -- TODO2: skip to file-line? code -g file:line
-                                if platform.get_config_info().editor == "vscode" then
-                                    if open_target_file == false then
-                                        for  _, file in ipairs((files)) do
-                                            os.exec("code -g " .. file .. ":1") -- why work?
-                                        end
-                                        open_target_file = true
+                        if build_success then
+                            built_targets = built_targets + 1
+                        else
+                            -- TODO1: -> TODO-X
+                            -- TODO2: skip to file-line? code -g file:line
+                            if platform.get_config_info().editor == "vscode" then
+                                if open_target_file == false then
+                                    for  _, file in ipairs((files)) do
+                                        os.exec("code -g " .. file .. ":1") -- why work?
                                     end
-                                else
-                                    -- TODO3: support more editor?
+                                    open_target_file = true
                                 end
+                            else
+                                -- TODO3: support more editor?
                             end
+                        end
 
-                            print_info(name, built_targets, total_targets, files, output, status)
-                            compile_bypass_counter = 0
+                        print_info(name, built_targets, total_targets, files, output, status)
+                        compile_bypass_counter = 0
                     else
                         if update_ai_tips then
                             print_info(name, built_targets, total_targets, files, output, status)
@@ -243,14 +250,22 @@ function main(start_target)
 
                 local llm_task = function()
                     --print(llm_config)
-                    if llm_config.enable and old_output ~= output and llm_config.run_status == false then
-                        if build_success then
-                            platform.platform.set_llm_response("...")
-                        elseif output then
-                            llm_interface.send_async_request(output)
+                    if llm_config.enable and llm_config.run_status == false then
+                        -- TODO:
+                        --      rebuild when haven't change code
+                        --      old_output_llm_req ~= output will be to true ?
+                        if compile_bypass_counter >= 1 and old_output_llm_req ~= output then
+                            if build_success then
+                                platform.set_llm_response("...")
+                            elseif output then
+                                llm_interface.send_request(output)
+                                old_output_llm_req = output
+                            end
+                            update_ai_tips = true
+                        else
+                            --platform.set_llm_response(2 * compile_bypass_counter .. "...")
+                            --update_ai_tips = true
                         end
-                        update_ai_tips = true
-                        old_output = output
                     end
                 end
 
@@ -258,6 +273,8 @@ function main(start_target)
                 jobs:addjob("xlings/checker", checker_task, {progress = true})
                 jobs:addjob("xlings/llm", llm_task, {isolate = true})
                 runjobs("xlings-task", jobs, { parallel = true })
+
+                file_detect_interval = 1500
             end
         else
             built_targets = built_targets + 1

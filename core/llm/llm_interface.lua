@@ -60,13 +60,14 @@ function generate_request_argvs(user_data)
     return argv
 end
 
-function send_async_request(info)
+function send_request(info)
     local tool = find_tool("curl")
     local llm_config = platform.get_config_info().llm_config
-    if tool then
+    if tool and llm_config.request_counter < 3000 then
         request_argv = generate_request_argvs(info)
         platform.set_llm_run_status(true)
         platform.set_llm_response("...")
+        platform.add_llm_request_counter()
         --print("[xlings]: start run llm(req)...")
         os.vrunv(tool.program, request_argv)
         data = common.xlings_read_file(llm_config.outputfile)
@@ -74,6 +75,6 @@ function send_async_request(info)
         platform.set_llm_response(content)
         platform.set_llm_run_status(false)
     else
-        cprint("[xlings]: curl not found")
+        cprint("[xlings]: curl not found or request counter over 3000")
     end
 end

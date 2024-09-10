@@ -61,6 +61,7 @@ local llm_outputfile = "llm_response.xlings.json"
 local llm_run_status = false
 local llm_response = "..."
 local llm_enable = false
+local llm_request_counter = 0
 
 function set_llm_id(id)
     if id then
@@ -93,6 +94,10 @@ function set_llm_response(response)
     llm_response = response
 end
 
+function add_llm_request_counter()
+    llm_request_counter = llm_request_counter + 1
+end
+
 -- all config info
 
 function get_config_info()
@@ -115,6 +120,7 @@ function get_config_info()
             run_status = llm_run_status,
             response = llm_response,
             enable = llm_enable,
+            request_counter = llm_request_counter,
         },
     }
 end
