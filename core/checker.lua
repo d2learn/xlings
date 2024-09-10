@@ -56,22 +56,25 @@ function print_info(target_name, built_targets, total_targets, target_files, out
     cprint("${dim bright}---------C-Output---------${clear}")
     print(output)
 
-    -- print ai tips
-    local llm_config = platform.get_config_info().llm_config
-    if llm_config.enable then
-        cprint("\n${blink bright cyan}AI-Tips:${clear}")
-        cprint(platform.get_config_info().llm_config.response)
-    else
-        cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://github.com/d2learn/xlings${clear}")
-    end
+    local config = platform.get_config_info()
+    if target_name ~= config.name or built_targets ~= total_targets then
+        -- print ai tips
+        local llm_config = config.llm_config
+        if llm_config.enable then
+            cprint("\n${blink bright cyan}AI-Tips:${clear}")
+            cprint(platform.get_config_info().llm_config.response)
+        else
+            cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://github.com/d2learn/xlings${clear}")
+        end
 
-    -- print files detail
-    cprint("\n${dim bright}---------E-Files---------${clear}")
-    local files_detail = ""
-    for _, file in ipairs(target_files) do
-        files_detail = files_detail .. file .. "\n"
+        -- print files detail
+        cprint("\n${dim bright}---------E-Files---------${clear}")
+        local files_detail = ""
+        for _, file in ipairs(target_files) do
+            files_detail = files_detail .. file .. "\n"
+        end
+        print(common.xlings_path_format(files_detail))
     end
-    print(common.xlings_path_format(files_detail))
 
     cprint("${dim bright}-------------------------${clear}")
     cprint("\nHomepage: ${underline}https://github.com/d2learn/xlings${clear}")
@@ -193,8 +196,6 @@ function main(start_target)
                 local checker_task = function()
                     if ok > 0 or compile_bypass_counter > 20 then
 
-                            build_success = true
-
                             output, build_success = build_with_error_handling(name)
 
                             if build_success then
@@ -243,9 +244,13 @@ function main(start_target)
                 local llm_task = function()
                     --print(llm_config)
                     if llm_config.enable and old_output ~= output and llm_config.run_status == false then
-                        llm_interface.send_async_request(output)
-                        old_output = output
+                        if build_success then
+                            platform.platform.set_llm_response("...")
+                        elseif output then
+                            llm_interface.send_async_request(output)
+                        end
                         update_ai_tips = true
+                        old_output = output
                     end
                 end
 
@@ -264,7 +269,7 @@ function main(start_target)
 You have completed all exercises\n \
 tools-repo: https://github.com/d2learn/xlings\
 "
-
-    print_info("xlings", total_targets, total_targets, "...", bingo, true)
+    config = platform.get_config_info()
+    print_info(config.name, total_targets, total_targets, {"config.xlings"}, bingo, true)
 
 end

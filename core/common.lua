@@ -120,6 +120,7 @@ function xlings_read_file(file)
 end
 
 function xlings_path_format(path)
+    path = tostring(path)
     if "windows" == os.host() then
         path = path:gsub("%.%.%\\", "")
     else
