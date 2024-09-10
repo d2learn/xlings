@@ -20,5 +20,6 @@ task("xlings")
             {nil, "xlings_name", "v", xlings_name, "xlings's name"},
             {nil, "xlings_lang", "v", xlings_lang, "xlings's programming languages"},
             {nil, "xlings_editor", "v", xlings_editor, "xlings's programming languages"},
+            {nil, "xlings_llm_config", "v", xlings_llm_config, "xlings's llm config file path"},
         }
     }

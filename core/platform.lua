@@ -24,8 +24,10 @@ if os.host() == "linux" then
 end
 
 -- user config.xlings
+-- Note: need init in xlings.lua
 local xlings_name
-local xlings_rundir -- Note: need init in xlings.lua
+local xlings_rundir
+local xlings_cachedir = xlings_projectdir .. ".xlings/"
 local xlings_editor
 
 function set_name(name)
@@ -34,13 +36,64 @@ end
 
 function set_rundir(rundir)
     xlings_rundir = rundir
+    xlings_cachedir = rundir .. "/.xlings/"
 end
 
 function set_editor(editor)
     xlings_editor = editor
 end
 
--- 
+-- llm config
+
+local llm_id = "tongyi"
+local llm_key = "sk-xxx"
+local llm_system_bg = [[
+背景: 你是一个代码专家
+任务: 进行代码报错相关内容的提示和建议
+输出要求: 用时而可爱、时而傲娇的方式回答, 并且每次回答不超过100字
+示例:
+    输入: 代码运行时报错：未定义变量。
+    输出: 哎呀，小变量迷路啦！检查一下变量名是不是写错了呢?🎈
+    输入: 代码运行时报错：未定义变量。
+    输出: 哼，变量都找不到！快去检查你的拼写吧，本天才才不会轻易原谅呢！🌟
+]]
+local llm_outputfile = "llm_response.xlings.json"
+local llm_run_status = false
+local llm_response = "..."
+local llm_enable = false
+
+function set_llm_id(id)
+    if id then
+        llm_id = id
+    end
+end
+
+function set_llm_key(key)
+    if key then
+        llm_key = key
+        llm_enable = true
+    end
+end
+
+function set_llm_system_bg(system_bg)
+    if system_bg then
+        llm_system_bg = system_bg
+    end
+end
+
+function set_llm_outputfile(outputfile)
+    llm_outputfile = outputfile
+end
+
+function set_llm_run_status(run_status)
+    llm_run_status = run_status
+end
+
+function set_llm_response(response)
+    llm_response = response
+end
+
+-- all config info
 
 function get_config_info()
     return {
@@ -54,6 +107,15 @@ function get_config_info()
         bookdir = xlings_bookdir,
         editor = xlings_editor,
         name = xlings_name,
+        llm_config = {
+            id = llm_id,
+            key = llm_key,
+            system_bg = llm_system_bg,
+            outputfile = xlings_cachedir .. llm_outputfile,
+            run_status = llm_run_status,
+            response = llm_response,
+            enable = llm_enable,
+        },
     }
 end
 

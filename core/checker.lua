@@ -4,8 +4,12 @@ import("core.base.global")
 import("core.base.option")
 import("core.base.fwatcher")
 
+import("private.async.jobpool")
+import("async.runjobs")
+
 import("common")
 import("platform")
+import("llm.llm_interface")
 
 -- TODO: optimze
 target_to_code_file = { }
@@ -13,20 +17,11 @@ target_to_code_file = { }
 XLINGS_WAIT = "XLINGS_WAIT"
 XLINGS_RETURN = "XLINGS_RETURN"
 
-function clear_screen()
---[[
-    if os.host() == "windows" then
-        os.exec("xligns_clear.bat")
-    else
-        os.exec("clear")
-    end
-]]
-    os.exec(platform.get_config_info().cmd_clear)
-end
+function print_info(target_name, built_targets, total_targets, target_files, output, status)
 
-function print_info(target_name, built_targets, total_targets, current_file_path, output, status)
+    common.xlings_clear_screen()
 
-    clear_screen()
+    local current_file_path = target_files[#target_files]
 
     current_file_path = common.xlings_path_format(current_file_path)
 
@@ -35,12 +30,12 @@ function print_info(target_name, built_targets, total_targets, current_file_path
     local arrow_count = built_targets
     local dash_count = progress_bar_length - arrow_count
     local progress_bar = string.format(
-        "🌏Progress: [%s>%s] %d/%d",
+        "🌏Progress: ${green}[%s>%s]${clear} %d/%d",
         string.rep("=", arrow_count),
         string.rep("-", dash_count),
         arrow_count, progress_bar_length
     )
-    print(progress_bar)
+    cprint(progress_bar)
 
     print(string.format("\n[Target: %s]\n", target_name))
 
@@ -58,12 +53,28 @@ function print_info(target_name, built_targets, total_targets, current_file_path
     end
 
     -- print output
-    print("Output:")
-    print("====================")
+    cprint("${dim bright}---------C-Output---------${clear}")
     print(output)
-    print("====================")
 
-    print("\nHomepage: https://github.com/d2learn/xlings")
+    -- print ai tips
+    local llm_config = platform.get_config_info().llm_config
+    if llm_config.enable then
+        cprint("\n${blink bright cyan}AI-Tips:${clear}")
+        cprint(platform.get_config_info().llm_config.response)
+    else
+        cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://github.com/d2learn/xlings${clear}")
+    end
+
+    -- print files detail
+    cprint("\n${dim bright}---------E-Files---------${clear}")
+    local files_detail = ""
+    for _, file in ipairs(target_files) do
+        files_detail = files_detail .. file .. "\n"
+    end
+    print(common.xlings_path_format(files_detail))
+
+    cprint("${dim bright}-------------------------${clear}")
+    cprint("\nHomepage: ${underline}https://github.com/d2learn/xlings${clear}")
 end
 
 function build_with_error_handling(target)
@@ -122,7 +133,7 @@ function main(start_target)
     local checker_pass = false
     --local start_target = option.get("start_target")
 
-    --clear_screen()
+    --common.xlings_clear_screen()
     local config = platform.get_config_info()
     local detect_dir = config.rundir .. "/" .. config.name
     fwatcher.add(detect_dir, {recursion = true})
@@ -162,80 +173,86 @@ function main(start_target)
 
         if not skip then
             local files = targets[name]:sourcefiles()
-            for  _, file in ipairs((files)) do
-                -- TODO-X: use absolute path? avoid error (mtime/open file)
-                -- print("file: " .. file) -- ../dslings/tests/dslings.0.cpp
-                local relative_path = path.relative(file, base_dir)
-                local build_success = false
-                local sleep_sec = 1000 * 0.1
-                local output = ""
+            local build_success = false
+            local output = ""
+            local old_output = ""
+            local relative_path = ""
 
-                local file_modify_time
-                local compile_bypass_counter = 0
-                local open_target_file = false
+            local compile_bypass_counter = 21
+            local open_target_file = false
+            local update_ai_tips = false
 
-                while not build_success do
-                    -- TODO: remove mtime detect
-                    local curr_file_mtime = os.mtime(file)
-                    if target_to_code_file[name] then
-                        curr_file_mtime = curr_file_mtime + os.mtime(target_to_code_file[name])
-                    end
+            while not build_success do
 
-                    local ok, event = fwatcher.wait(300)
+                local llm_config = platform.get_config_info().llm_config
+                local ok, event = fwatcher.wait(500)
 
-                    --cprint("event: ", ok)
+                --print(ok)
+                --print(compile_bypass_counter)
 
-                    if file_modify_time ~= curr_file_mtime or ok > 0 then
-                        --build_success = task.run("build", {target = name})
-                        build_success = true
+                local checker_task = function()
+                    if ok > 0 or compile_bypass_counter > 20 then
 
-                        output, build_success = build_with_error_handling(name)
+                            build_success = true
 
-                        if build_success then
-                            output, build_success = run_with_error_handling(name)
-                        end
+                            output, build_success = build_with_error_handling(name)
 
-                        local status = build_success
-
-                        if type(output) == "string" then
-                            if string.find(output, "❌") then
-                                status = false
-                                build_success = false
-                            elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
-                                build_success = false
+                            if build_success then
+                                output, build_success = run_with_error_handling(name)
                             end
-                        end
 
-                        if build_success then
-                            built_targets = built_targets + 1
-                        else
-                            -- TODO1: -> TODO-X
-                            -- TODO2: skip to file-line? code -g file:line
-                            if platform.get_config_info().editor == "vscode" then
-                                if open_target_file == false then
-                                    os.exec("code -g " .. file .. ":1") -- why work?
-                                    open_target_file = true
+                            local status = build_success
+
+                            if type(output) == "string" then
+                                if string.find(output, "❌") then
+                                    status = false
+                                    build_success = false
+                                elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
+                                    build_success = false
                                 end
-                            else
-                                -- TODO3: support more editor?
                             end
-                            sleep_sec = 1000 * 1
-                        end
 
-                        print_info(name, built_targets, total_targets, relative_path, output, status)
-                        output = ""
+                            if build_success then
+                                built_targets = built_targets + 1
+                            else
+                                -- TODO1: -> TODO-X
+                                -- TODO2: skip to file-line? code -g file:line
+                                if platform.get_config_info().editor == "vscode" then
+                                    if open_target_file == false then
+                                        for  _, file in ipairs((files)) do
+                                            os.exec("code -g " .. file .. ":1") -- why work?
+                                        end
+                                        open_target_file = true
+                                    end
+                                else
+                                    -- TODO3: support more editor?
+                                end
+                            end
+
+                            print_info(name, built_targets, total_targets, files, output, status)
+                            compile_bypass_counter = 0
                     else
+                        if update_ai_tips then
+                            print_info(name, built_targets, total_targets, files, output, status)
+                            update_ai_tips = false
+                        end
                         compile_bypass_counter = compile_bypass_counter + 1
                     end
-
-                    file_modify_time = curr_file_mtime
-                    if compile_bypass_counter > 20 then
-                        compile_bypass_counter = 0
-                        file_modify_time = nil
-                    end
-                    os.sleep(sleep_sec)
-
                 end
+
+                local llm_task = function()
+                    --print(llm_config)
+                    if llm_config.enable and old_output ~= output and llm_config.run_status == false then
+                        llm_interface.send_async_request(output)
+                        old_output = output
+                        update_ai_tips = true
+                    end
+                end
+
+                local jobs = jobpool.new()
+                jobs:addjob("xlings/checker", checker_task, {progress = true})
+                jobs:addjob("xlings/llm", llm_task, {isolate = true})
+                runjobs("xlings-task", jobs, { parallel = true })
             end
         else
             built_targets = built_targets + 1

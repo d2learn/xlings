@@ -5,6 +5,68 @@ import("devel.git")
 
 --local common = {}
 
+function escape_string(s)
+    return s:gsub("\\", "\\\\")
+            :gsub("\n", "\\n")
+            :gsub("\"", "\\\"")
+            :gsub("\t", "\\t")
+            :gsub("\r", "\\r")
+            -- remove ansi color
+            -- https://github.com/fluent/fluent-bit/discussions/6151
+            -- strip ansi https://stackoverflow.com/a/49209650/368691
+            :gsub('[\27\155][][()#;?%d]*[A-PRZcf-ntqry=><~]', '')
+end
+
+-- lua style (only support var)
+function xlings_config_file_parse(filename)
+    local config = {}
+    local file = io.open(filename, "r")
+    if not file then
+        error("[xlings]: Could not open file: " .. filename)
+    end
+
+    local multi_line_value = false
+    local key, value
+    for line in file:lines() do
+        -- not match
+        if multi_line_value then
+            if line:find("]]") then
+                config[key] = config[key] .. "\n" .. line:sub(1, -3)
+                multi_line_value = false
+            else
+                config[key] = config[key] .. "\n" .. line
+            end
+        else
+            -- key only match a_b_id -> id
+            key, value = line:match("(%w+)%s*=%s*(.+)")
+            if key and value then
+                --value = value:trim()
+                value = value:match("^%s*(.-)%s*$")
+                if value:sub(1, 1) == "\"" and value:sub(-1) == "\"" then
+                    value = value:sub(2, -2)
+                elseif value:sub(1, 2) == "[[" then
+                    value = value:sub(3)
+                    multi_line_value = true
+                end
+                config[key] = value
+            end
+        end
+    end
+    file:close()
+    return config
+end
+
+function xlings_clear_screen()
+    --[[
+        if os.host() == "windows" then
+            os.exec("xligns_clear.bat")
+        else
+            os.exec("clear")
+        end
+    ]]
+    os.exec(platform.get_config_info().cmd_clear)
+end
+
 function xlings_create_file_and_write(file, context)
     local file, err = io.open(file, "w")
 
@@ -29,9 +91,28 @@ function xlings_file_append(file, context)
     file:close()
 end
 
+function xlings_read_file(file)
+    local file, err = io.open(file, "r")
+
+    if not file then
+        print("Error opening file: " .. err)
+        return
+    end
+
+    local content = file:read("*a")
+    file:close()
+    return content
+end
+
 function xlings_path_format(path)
-    path = string.gsub(path, "%.%.%/", "")
-    return path:gsub("%.%.%\\", "")
+    if "windows" == os.host() then
+        path = path:gsub("%.%.%\\", "")
+    else
+        path = string.gsub(path, "%.%.%/", "")
+    end
+    -- remove leading and trailing whitespaces
+    path = string.gsub(path, "^%s*(.-)%s*$", "%1")
+    return path
 end
 
 function xlings_install_dependencies()
