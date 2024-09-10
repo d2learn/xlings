@@ -34,17 +34,19 @@ function main()
     local xlings_lang = option.get("xlings_lang")
     local xlings_editor = option.get("xlings_editor")
 
-    -- llm config info - llm.config.xlings
-    local xlings_llm_config = option.get("xlings_llm_config")
-    xlings_llm_config = common.xlings_config_file_parse(run_dir .. "/" .. xlings_llm_config)
-
     -- init platform config
     platform.set_name(xlings_name)
     platform.set_rundir(run_dir)
     platform.set_editor(xlings_editor)
-    platform.set_llm_id(xlings_llm_config.id)
-    platform.set_llm_key(xlings_llm_config.key)
-    platform.set_llm_system_bg(xlings_llm_config.bg)
+
+    -- llm config info - llm.config.xlings
+    local xlings_llm_config = option.get("xlings_llm_config")
+    if xlings_llm_config then
+        xlings_llm_config = common.xlings_config_file_parse(run_dir .. "/" .. xlings_llm_config)
+        platform.set_llm_id(xlings_llm_config.id)
+        platform.set_llm_key(xlings_llm_config.key)
+        platform.set_llm_system_bg(xlings_llm_config.bg)
+    end
 
     --print(run_dir)
     --print(command)

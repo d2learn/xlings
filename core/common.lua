@@ -20,9 +20,24 @@ end
 -- lua style (only support var)
 function xlings_config_file_parse(filename)
     local config = {}
-    local file = io.open(filename, "r")
+    local file, err
+    try
+    {
+        function()
+            file = io.open(filename, "r")
+        end,
+        catch
+        {
+            function (e)
+                err = e
+            end
+        }
+    }
+    
     if not file then
-        error("[xlings]: Could not open file: " .. filename)
+        cprint("${yellow}[xlings]: " .. err)
+        os.sleep(1000)
+        return config
     end
 
     local multi_line_value = false

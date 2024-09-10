@@ -10,7 +10,7 @@ import("platform")
 ]]
 import("llm.tongyi")
 
-function
+
 function get_llm()
     local llm_config = platform.get_config_info().llm_config
     local llm
