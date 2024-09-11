@@ -21,9 +21,11 @@ _build_file = "xmake.lua"
 _build_file_template = [[
 target("pylings-demo")
     set_kind("phony")
+    add_files("exercises/pylings.py")
     add_files("tests/pylings-demo.py")
     on_run(function (target)
-        os.exec("python3 " .. os.scriptdir() .. "/tests/pylings-demo.py")
+        import("common")
+        common.xlings_python(os.scriptdir() .. "/tests/pylings-demo.py")
     end)
 ]]
 

@@ -71,6 +71,19 @@ function xlings_config_file_parse(filename)
     return config
 end
 
+function xlings_exec(cmd)
+    os.exec(platform.get_config_info().cmd_wrapper .. tostring(cmd))
+end
+
+function xlings_python(file)
+    if os.host() == "windows" then
+        file = file:gsub("/", "\\")
+        xlings_exec("python " .. file)
+    else
+        xlings_exec("python3 " .. file)
+    end
+end
+
 function xlings_clear_screen()
     --[[
         if os.host() == "windows" then
@@ -86,7 +99,7 @@ function xlings_create_file_and_write(file, context)
     local file, err = io.open(file, "w")
 
     if not file then
-        print("Error opening file: " .. err)
+        print("[xlings]: Error opening file: " .. err)
         return
     end
 
@@ -98,7 +111,7 @@ function xlings_file_append(file, context)
     local file, err = io.open(file, "a")
 
     if not file then
-        print("Error opening file: " .. err)
+        print("[xlings]: Error opening file: " .. err)
         return
     end
 
@@ -110,7 +123,7 @@ function xlings_read_file(file)
     local file, err = io.open(file, "r")
 
     if not file then
-        print("Error opening file: " .. err)
+        print("[xlings]: Error opening file: " .. err)
         return
     end
 
@@ -155,7 +168,7 @@ function xlings_install_dependencies()
 
     if mdbook_zip then
         cprint("[xlings]: downloading mdbook from %s to %s", release_url, mdbook_zip)
-        http.download(release_url, mdbook_zip)
+        http.download(release_url, mdbook_zip) -- { insecure = true }
         archive.extract(mdbook_zip, install_dir .. "/bin/")
         os.rm(mdbook_zip)
     end
@@ -219,7 +232,7 @@ function xlings_uninstall()
         }
     }
 
-    cprint("xlings uninstalled(" .. install_dir .. ") - ok")
+    cprint("[xlings]: xlings uninstalled(" .. install_dir .. ") - ok")
 
 end
 

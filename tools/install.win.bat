@@ -27,7 +27,8 @@ if %errorlevel% neq 0 (
 
 REM 3. install xlings
 cd core
-xmake xlings install
+xmake xlings unused install
+cd ..
 
 REM 4. install info
 echo [xlings]: xlings installed

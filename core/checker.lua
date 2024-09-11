@@ -136,7 +136,8 @@ function main(start_target)
     local checker_pass = false
     --local start_target = option.get("start_target")
 
-    --common.xlings_clear_screen()
+    common.xlings_clear_screen()
+
     local config = platform.get_config_info()
     local detect_dir = config.rundir .. "/" .. config.name
     fwatcher.add(detect_dir, {recursion = true})
@@ -228,7 +229,12 @@ function main(start_target)
                             if platform.get_config_info().editor == "vscode" then
                                 if open_target_file == false then
                                     for  _, file in ipairs((files)) do
-                                        os.exec("code -g " .. file .. ":1") -- why work?
+                                        if os.host() == "windows" then
+                                            --file = platform.get_config_info().rundir .. "\\" .. common.xlings_path_format(file)
+                                        else
+                                            -- why work?
+                                        end
+                                        os.exec(platform.get_config_info().cmd_wrapper .. "code -g " .. file .. ":1")
                                     end
                                     open_target_file = true
                                 end
@@ -254,12 +260,12 @@ function main(start_target)
                         -- TODO:
                         --      rebuild when haven't change code
                         --      old_output_llm_req ~= output will be to true ?
-                        if compile_bypass_counter >= 1 and old_output_llm_req ~= output then
-                            if build_success then
-                                platform.set_llm_response("...")
-                            elseif output then
+                        if old_output_llm_req ~= output then
+                            if compile_bypass_counter >= 1 and output then
                                 llm_interface.send_request(output)
                                 old_output_llm_req = output
+                            else
+                                platform.set_llm_response("...")
                             end
                             update_ai_tips = true
                         else

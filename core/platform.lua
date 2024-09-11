@@ -14,8 +14,13 @@ local command_clear = {
     windows = xlings_install_dir.windows .. "/tools/xlings_clear.bat",
 }
 
+local command_wrapper = {
+    linux = "",
+    windows = xlings_install_dir.windows .. "/tools/win_cmd_wrapper.bat ",
+}
+
 local xlings_sourcedir = os.scriptdir() .. "/../"
-local xlings_projectdir = "../" -- xlings_rundir
+local xlings_projectdir = "../" -- xlings_rundir TODO: optimize
 local xlings_bookdir = xlings_projectdir .. "book/"
 local xlings_drepodir = xlings_sourcedir .. "drepo/"
 
@@ -106,6 +111,7 @@ function get_config_info()
         sourcedir = xlings_sourcedir,
         mdbook_url = xlings_mdbook_url[os.host()],
         cmd_clear = command_clear[os.host()],
+        cmd_wrapper = command_wrapper[os.host()],
         projectdir = xlings_projectdir,
         drepodir = xlings_drepodir,
         rundir = xlings_rundir,

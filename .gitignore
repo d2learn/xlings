@@ -40,6 +40,7 @@ luac.out
 *.hex
 
 # other
+bin/mdbook*
 **/.xmake
 **/build
 .vscode

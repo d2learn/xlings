@@ -75,7 +75,7 @@ function xlings_init_exercises(xlings_name, xlings_lang)
         x_template.exercises_file_template
     )
 
-    print(file .. " - ok")
+    print("[xlings]: " .. file .. " - ok")
 
     -- add tests file
     file = xlings_name .. "/" .. x_template.tests_file
@@ -84,7 +84,7 @@ function xlings_init_exercises(xlings_name, xlings_lang)
         x_template.tests_file_template
     )
 
-    print(file .. " - ok")
+    print("[xlings]: " .. file .. " - ok")
 
     -- add build file
     file = xlings_name .. "/" .. x_template.build_file
@@ -93,7 +93,7 @@ function xlings_init_exercises(xlings_name, xlings_lang)
         x_template.build_file_template
     )
 
-    print(file .. " - ok")
+    print("[xlings]: " .. file .. " - ok")
 end
 
 function xlings_init(xlings_name, xlings_lang)
