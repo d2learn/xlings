@@ -103,6 +103,14 @@ function add_llm_request_counter()
     llm_request_counter = llm_request_counter + 1
 end
 
+-- features config
+
+local xlings_runmode = "normal" -- normal, loop
+
+function set_runmode(runmode)
+    xlings_runmode = runmode
+end
+
 -- all config info
 
 function get_config_info()
@@ -116,8 +124,10 @@ function get_config_info()
         drepodir = xlings_drepodir,
         rundir = xlings_rundir,
         bookdir = xlings_bookdir,
+        cachedir = xlings_cachedir,
         editor = xlings_editor,
         name = xlings_name,
+        runmode = xlings_runmode,
         llm_config = {
             id = llm_id,
             key = llm_key,

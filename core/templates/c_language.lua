@@ -29,6 +29,23 @@ target("clings-demo")
     add_files("tests/clings.c")
 ]]
 
+--- mini run config template
+
+_xmake_file_template = [[
+xlings_editor = "vscode"
+xlings_runmode = "loop"
+
+local target_name = "%s" -- 1.name
+local target_sourcefile = "../%s" -- 2.sourcefile
+--xlings_name = target_sourcefile
+
+target(target_name) -- 1.name
+    set_kind("binary")
+    add_files(target_sourcefile) -- 2.sourcefile
+
+includes("%s") -- 3.xlings_file
+]]
+
 function get_template()
     return {
         exercises_file = _exercises_file,
@@ -37,5 +54,6 @@ function get_template()
         tests_file_template = _tests_file_template,
         build_file = _build_file,
         build_file_template = _build_file_template,
+        xmake_file_template = _xmake_file_template
     }
 end

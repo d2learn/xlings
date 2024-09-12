@@ -21,6 +21,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
 
     common.xlings_clear_screen()
 
+    local config = platform.get_config_info()
     local current_file_path = target_files[#target_files]
 
     current_file_path = common.xlings_path_format(current_file_path)
@@ -37,7 +38,10 @@ function print_info(target_name, built_targets, total_targets, target_files, out
     )
     cprint(progress_bar)
 
-    print(string.format("\n[Target: %s]\n", target_name))
+    cprint(
+        string.format("\n[Target: %s] - ", target_name) ..
+        "${blink bright magenta}" .. config.runmode .. "${clear}\n"
+    )
 
     -- print status
     if status then
@@ -56,7 +60,6 @@ function print_info(target_name, built_targets, total_targets, target_files, out
     cprint("${dim bright}---------C-Output---------${clear}")
     print(output)
 
-    local config = platform.get_config_info()
     if target_name ~= config.name or built_targets ~= total_targets then
         -- print ai tips
         local llm_config = config.llm_config
@@ -139,7 +142,10 @@ function main(start_target)
     common.xlings_clear_screen()
 
     local config = platform.get_config_info()
-    local detect_dir = config.rundir .. "/" .. config.name
+    local detect_dir = config.rundir
+    if config.name ~= "xlings_name" then
+        detect_dir = detect_dir .. "/" .. config.name
+    end
     fwatcher.add(detect_dir, {recursion = true})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
 
@@ -169,6 +175,7 @@ function main(start_target)
     table.sort(sorted_targets)
 
     local skip = true
+    local runmode = platform.get_config_info().runmode
 
     for _, name in pairs(sorted_targets) do
 
@@ -219,6 +226,10 @@ function main(start_target)
                             elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
                                 build_success = false
                             end
+                        end
+
+                        if runmode == "loop" then
+                            build_success = false -- continue to run
                         end
 
                         if build_success then

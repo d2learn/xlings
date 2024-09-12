@@ -11,7 +11,15 @@ set "commands=help -h uninstall update drepo"
 
 if "%arg1%"=="" (
     cd %XLINGS_DIR%/core
-    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2
+    xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2%
+    cd %XLINGS_RUN_DIR%
+    exit /b
+)
+
+if "%arg1%"=="run" (
+    if not exist "%XLINGS_CACHE_DIR%" mkdir "%XLINGS_CACHE_DIR%"
+    cd %XLINGS_DIR%/core
+    xmake xlings %XLINGS_RUN_DIR% run %arg2%
     cd %XLINGS_RUN_DIR%
     exit /b
 )

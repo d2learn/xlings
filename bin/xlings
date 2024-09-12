@@ -13,6 +13,13 @@ if [[ -z $arg1 || $arg1 == "help" || $arg1 == "-h" || $arg1 == "uninstall" || $a
     exit 0
 fi
 
+if [ $arg1 == "run" ]; then
+    mkdir -p $XLINGS_CACHE_DIR
+    cd $XLINGS_DIR/core
+    xmake xlings $XLINGS_RUN_DIR run $arg2
+    exit 0
+fi
+
 if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
     echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
     cd $XLINGS_DIR/core

@@ -29,6 +29,28 @@ target("pylings-demo")
     end)
 ]]
 
+--- mini run config template
+
+_xmake_file_template = [[
+xlings_editor = "vscode"
+xlings_runmode = "loop"
+
+local target_name = "%s" -- 1.name
+local target_sourcefile = "%s" -- 2.sourcefile
+--xlings_name = target_sourcefile
+
+target(target_name)
+    set_kind("phony")
+    add_files("../" .. target_sourcefile)
+    on_run(function (target)
+        import("common")
+        local rundir = string.match(os.scriptdir(), "(.+)/[^/]+")
+        common.xlings_python(rundir .. "/" .. target_sourcefile)
+    end)
+
+includes("%s") -- 3.xlings_file
+]]
+
 function get_template()
     return {
         exercises_file = _exercises_file,
@@ -37,5 +59,6 @@ function get_template()
         tests_file_template = _tests_file_template,
         build_file = _build_file,
         build_file_template = _build_file_template,
+        xmake_file_template = _xmake_file_template
     }
 end
