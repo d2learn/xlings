@@ -23,3 +23,8 @@ task("xlings")
             {nil, "xlings_llm_config", "v", xlings_llm_config, "xlings's llm config file path"},
         }
     }
+
+includes("@builtin/xpack")
+if xpack then
+    includes("xpack.lua")
+end

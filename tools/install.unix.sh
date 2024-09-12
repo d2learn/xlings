@@ -13,6 +13,16 @@ RESET='\033[0m'
 
 echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${RESET}"
 
+# 0. check curl status
+if ! command -v curl &> /dev/null
+then
+    echo -e "${PURPLE}[xlings]: start install curl...${RESET}"
+    curl -fsSL https://xmake.io/shget.text | bash
+else
+    echo -e "${GREEN}[xlings]: curl installed${RESET}"
+fi
+
+
 # 1. check xmake status
 if ! command -v xmake &> /dev/null
 then
