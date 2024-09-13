@@ -21,8 +21,13 @@ if [ $arg1 == "run" ]; then
 fi
 
 if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
-    echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
     cd $XLINGS_DIR/core
+    if [ $arg1 == "install" ]; then
+        xmake xlings $XLINGS_RUN_DIR install $arg2
+        exit 0
+    else
+        echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
+    fi
     xmake xlings $XLINGS_RUN_DIR
 else
     # generate xlings cache file - .xlings

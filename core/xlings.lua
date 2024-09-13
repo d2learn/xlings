@@ -7,22 +7,54 @@ import("checker")
 import("init")
 import("drepo")
 import("mini_run")
+import("installer.xinstall")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.1")
     cprint("")
     cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
+    
     cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}init${clear},     \t init projects by ${blue}config.xlings${clear}")
     cprint("\t ${magenta}run${clear},      \t easy to run ${magenta}target${clear} - sourcecode file")
-    cprint("\t ${magenta}checker${clear},  \t start auto-exercises from ${magenta}target${clear}")
-    cprint("\t ${magenta}book${clear},     \t open book in your default browser")
-    cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
+    cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
     cprint("\t ${magenta}drepo${clear},    \t print drepo info or download drepo(${magenta}target${clear})")
+    cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
     cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
+
+    cprint("${bright}Project Commands:${clear} ${dim}(need config.xlings)${clear}")
+    cprint("\t ${magenta}init${clear},     \t init project by ${blue}config.xlings${clear}")
+    cprint("\t ${magenta}book${clear},     \t open project's book in default browser")
+    cprint("\t ${magenta}checker${clear},  \t start project's auto-exercises from ${magenta}target${clear}")
+    cprint("")
     cprint("repo: ${underline}https://github.com/d2learn/xlings${clear}")
+end
+
+function deps_check_and_install()
+    -- language support
+    local xlings_lang = option.get("xlings_lang")
+    if xlings_lang then
+        xinstall(xlings_lang)
+    end
+
+    -- editor support
+    local xlings_editor = option.get("xlings_editor")
+    if xlings_editor == "vscode" then
+        xinstall("vscode")
+    else
+        -- TODO: other support
+    end
+
+    -- project dependencies
+    local xlings_deps = option.get("xlings_deps")
+    if xlings_deps then
+        deps_list = common.xlings_str_split(xlings_deps, ",")
+        for _, dep in ipairs(deps_list) do
+            name = common.xlings_str_trim(dep)
+            xinstall(name)
+        end
+    end
 end
 
 function main()
@@ -75,8 +107,21 @@ function main()
         common.xlings_update(xlings_name, xlings_lang)
         xlings_help()
     elseif command == "install" then
-        -- TODO: isn't user command, only use in install script
-        common.xlings_install()
+        if cmd_target == "xlings" then
+            common.xlings_install()
+        elseif xlings_name ~= cmd_target then
+            if xinstall.support(cmd_target) then
+                if xinstall.installed(cmd_target) then
+                    cprint("[xlings]: already installed - ${green bright}" .. cmd_target)
+                else
+                    xinstall(cmd_target)
+                end
+            end
+        elseif "xlings_name" ~= xlings_name then
+            deps_check_and_install()
+        else
+            xinstall.list()
+        end
     elseif command == "uninstall" then
         common.xlings_uninstall()
     elseif command == "drepo" then

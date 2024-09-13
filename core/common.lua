@@ -5,7 +5,7 @@ import("devel.git")
 
 --local common = {}
 
-function escape_string(s)
+function xlings_str_format(s)
     return tostring(s):gsub("\\", "\\\\")
             :gsub("\n", "\\n")
             :gsub("\"", "\\\"")
@@ -15,6 +15,23 @@ function escape_string(s)
             -- https://github.com/fluent/fluent-bit/discussions/6151
             -- strip ansi https://stackoverflow.com/a/49209650/368691
             :gsub('[\27\155][][()#;?%d]*[A-PRZcf-ntqry=><~]', '')
+end
+
+function xlings_str_split(str, delimiter)
+    local result = {}
+    local from = 1
+    local delim_from, delim_to = string.find(str, delimiter, from)
+    while delim_from do
+        table.insert(result, string.sub(str, from, delim_from-1))
+        from = delim_to + 1
+        delim_from, delim_to = string.find(str, delimiter, from)
+    end
+    table.insert(result, string.sub(str, from))
+    return result
+end
+
+function xlings_str_trim(s)
+    return s:match("^%s*(.-)%s*$")
 end
 
 -- lua style (only support var)
@@ -95,6 +112,11 @@ function xlings_clear_screen()
     os.exec(platform.get_config_info().cmd_clear)
 end
 
+function xlings_download(url, dest)
+    cprint("[xlings]: downloading %s to %s", url, dest)
+    http.download(url, dest) -- { insecure = true }
+end
+
 function xlings_create_file_and_write(file, context)
     local file, err = io.open(file, "w")
 
@@ -144,41 +166,6 @@ function xlings_path_format(path)
     return path
 end
 
-function xlings_install_dependencies()
-    local release_url
-    local mdbook_zip
-    local mdbook_bin
-    local install_dir = platform.get_config_info().install_dir
-
-    cprint("[xlings]: install mdbook...")
-
-    release_url = platform.get_config_info().mdbook_url
-
-    if is_host("windows") then
-        mdbook_bin = install_dir .. "/bin/mdbook.exe"
-        if not os.isfile(mdbook_bin) then
-            mdbook_zip = install_dir .. "/mdbook.zip"
-        end
-    else
-        mdbook_bin = install_dir .. "/bin/mdbook"
-        if not os.isfile(mdbook_bin) then
-            mdbook_zip = install_dir .. "/mdbook.tar.gz"
-        end
-    end
-
-    if mdbook_zip then
-        cprint("[xlings]: downloading mdbook from %s to %s", release_url, mdbook_zip)
-        http.download(release_url, mdbook_zip) -- { insecure = true }
-        archive.extract(mdbook_zip, install_dir .. "/bin/")
-        os.rm(mdbook_zip)
-    end
-
-    if os.isfile(mdbook_bin) then
-        cprint("[xlings]: mdbook installed")
-    end
-
-end
-
 function xlings_install()
 
     xlings_uninstall() -- TODO: avoid delete mdbook?
@@ -213,8 +200,6 @@ function xlings_install()
             -- os.exec("setx PATH " .. path_env)
         end
     end
-
-    xlings_install_dependencies()
 end
 
 function xlings_uninstall()

@@ -1,4 +1,5 @@
 xlings_name = "cpplings"
 xlings_lang = "cpp"
 xlings_editor = "vscode"
+xlings_deps = "cpp, vscode, mdbook"
 xlings_llm_config = "../.xlings/llm.config.xlings"

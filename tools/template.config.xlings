@@ -1,5 +1,6 @@
 xlings_name = "dslings"
 xlings_lang = "cpp"
+xlings_deps = "cpp, vscode, mdbook"
 --xlings_editor = "vscode"
 --xlings_err_skip = true
 --xlings_llm_config = "llm.config.xlings" -- llm-config-file path

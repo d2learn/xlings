@@ -19,8 +19,8 @@ function generate_request_data(model, system_data, user_data)
         }
     ]
 }]]
-    local escaped_system_data = common.escape_string(system_data)
-    local escaped_user_data = common.escape_string(user_data)
+    local escaped_system_data = common.xlings_str_format(system_data)
+    local escaped_user_data = common.xlings_str_format(user_data)
     local data = string.format(data_template, model, escaped_system_data, escaped_user_data)
     return data
 end

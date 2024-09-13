@@ -3,11 +3,16 @@ local xlings_install_dir = {
     windows = "C:/Users/Public/xlings",
 }
 
--- v0.4.40
-local xlings_mdbook_url = {
-    linux = "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz",
-    windows = "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-pc-windows-msvc.zip",
+if os.host() == "linux" then
+    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
+end
+
+local xlings_root_cache_dir = {
+    linux = xlings_install_dir.linux .. "/.xlings",
+    windows = xlings_install_dir.windows .. "/.xlings",
 }
+
+local xlings_bin_dir = xlings_install_dir[os.host()] .. "/bin"
 
 local command_clear = {
     linux = "clear",
@@ -24,9 +29,6 @@ local xlings_projectdir = "../" -- xlings_rundir TODO: optimize
 local xlings_bookdir = xlings_projectdir .. "book/"
 local xlings_drepodir = xlings_sourcedir .. "drepo/"
 
-if os.host() == "linux" then
-    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
-end
 
 -- user config.xlings
 -- Note: need init in xlings.lua
@@ -117,13 +119,14 @@ function get_config_info()
     return {
         install_dir = xlings_install_dir[os.host()],
         sourcedir = xlings_sourcedir,
-        mdbook_url = xlings_mdbook_url[os.host()],
         cmd_clear = command_clear[os.host()],
         cmd_wrapper = command_wrapper[os.host()],
         projectdir = xlings_projectdir,
+        bindir = xlings_bin_dir,
         drepodir = xlings_drepodir,
         rundir = xlings_rundir,
         bookdir = xlings_bookdir,
+        rcachedir = xlings_root_cache_dir[os.host()],
         cachedir = xlings_cachedir,
         editor = xlings_editor,
         name = xlings_name,

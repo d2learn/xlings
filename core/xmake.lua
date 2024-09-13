@@ -26,6 +26,7 @@ task("xlings")
             {nil, "xlings_editor", "v", xlings_editor, "xlings's programming languages"},
             {nil, "xlings_llm_config", "v", xlings_llm_config, "xlings's llm config file path"},
             {nil, "xlings_runmode", "v", xlings_runmode, "xlings's run mode"},
+            {nil, "xlings_deps", "v", xlings_deps, "project dependencies auto install"},
         }
     }
 

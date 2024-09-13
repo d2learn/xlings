@@ -29,8 +29,13 @@ if not errorlevel 1 (
     cd %XLINGS_DIR%/core
     xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2%
 ) else if not exist "%XLINGS_RUN_DIR%/config.xlings" (
-    echo     "command not support | not found config.xlings in current folder"
     cd %XLINGS_DIR%/core
+    if "%arg1%"=="install" (
+        xmake xlings %XLINGS_RUN_DIR% install %arg2%
+        exit /b
+    ) else (
+        echo     "command not support | not found config.xlings in current folder"
+    )
     xmake xlings %XLINGS_RUN_DIR%
 ) else (
     if not exist "%XLINGS_CACHE_DIR%" mkdir "%XLINGS_CACHE_DIR%"
