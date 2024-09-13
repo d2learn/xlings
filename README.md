@@ -1,18 +1,23 @@
 # xlings
 
-技术教程、课程作业、labs、及类[d2x]()项目快速构建和管理工具
+技术学习、教程教学类项目构建和管理工具
 
 ## 功能
 
 - **项目模板** - 快速生成一个包括书籍、练习代码等内容的项目结构
 - **自动化练习检测** - 编译器驱动开发学习
-- **Markdown书籍生成** - 编写markdown文件并生成在线电子书
+- **Markdown书籍** - 编写markdown文件生成在线电子书
+- **常用工具下载** - 常用技术类工具/软件下载
+- **多语言代码运行检测** - 自动识别代码文件进行(编译)运行, 并时实检测代码变化显示运行结果
+  - c
+  - cpp
+  - python
+  - ...
 - **多项目管理和下载** - 多个项目管理、信息查看、下载等功能
 - **AI提示引导** - 配置对应的大模型, 做为错误代码提示小助理
   - openai - dev
   - tongyi - ok
   - ...
-- **常用工具下载** - 常用工具一键下载
 
 ---
 
@@ -45,8 +50,6 @@ tools\install.win.bat
 ## 用法简介
 
 > 使用xlings下载[d2ds](https://github.com/Sunrisepeak/d2ds)并运行dsligs
->
-> (使用xlings创建新项目步骤见 -> [创建类d2x项目](docs/quick_start.md))
 
 ### 下载项目
 
@@ -72,6 +75,31 @@ xlings dslings
 ```bash
 xlings book
 ```
+
+### 更多常用命令
+
+```bash
+xlings version: pre-v0.0.1
+
+Usage: $ xlings [command] [target]
+
+Commands:
+	 run,      	 easy to run target - sourcecode file
+	 install,  	 install software/env(target)
+	 drepo,    	 print drepo info or download drepo(target)
+	 update,   	 update xlings to the latest version
+	 uninstall,	 uninstall xlings
+	 help,     	 help info
+
+Project Commands: (need config.xlings)
+	 init,     	 init project by config.xlings
+	 book,     	 open project's book in default browser
+	 checker,  	 start project's auto-exercises from target
+
+repo: https://github.com/d2learn/xlings
+```
+
+> 注: 使用xlings创建新项目步骤见 -> [创建类d2x项目](docs/quick_start.md)
 
 ## 示例
 
