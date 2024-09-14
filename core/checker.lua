@@ -194,6 +194,7 @@ function main(start_target)
             local open_target_file = false
             local update_ai_tips = false
             local file_detect_interval = 0
+            local status = false
 
             while not build_success do
 
@@ -217,7 +218,7 @@ function main(start_target)
                             output, build_success = run_with_error_handling(name)
                         end
 
-                        local status = build_success
+                        status = build_success
 
                         if type(output) == "string" then
                             if string.find(output, "❌") then

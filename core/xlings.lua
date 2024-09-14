@@ -8,6 +8,7 @@ import("init")
 import("drepo")
 import("mini_run")
 import("installer.xinstall")
+import("config")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.1")
@@ -71,11 +72,13 @@ function main()
 
     -- init platform config
     platform.set_name(xlings_name)
+    platform.set_lang(xlings_lang)
     platform.set_rundir(run_dir)
     platform.set_editor(xlings_editor)
     platform.set_runmode(xlings_runmode)
 
     -- llm config info - llm.config.xlings
+    config.llm.load_global_config()
     local xlings_llm_config = option.get("xlings_llm_config")
     if xlings_llm_config then
         xlings_llm_config = common.xlings_config_file_parse(run_dir .. "/" .. xlings_llm_config)
@@ -106,6 +109,8 @@ function main()
     elseif command == "update" then
         common.xlings_update(xlings_name, xlings_lang)
         xlings_help()
+    elseif command == "config" then
+        config.llm()
     elseif command == "install" then
         if cmd_target == "xlings" then
             common.xlings_install()

@@ -47,6 +47,11 @@ function generate_request_argvs(user_data)
     table.insert(argv, "Content-Type: application/json")
 
     table.insert(argv, "--data")
+    local system_bg = llm_config.system_bg
+    local lang = platform.get_config_info().lang
+    if lang then
+        system_bg = system_bg .. "\n编程语言: " .. lang
+    end
     local req_data = get_llm().generate_request_data("qwen-turbo", llm_config.system_bg, user_data)
     --cprint(llm_config.outputfile)
     common.xlings_create_file_and_write(llm_config.outputfile, req_data)

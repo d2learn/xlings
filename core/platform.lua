@@ -34,11 +34,16 @@ local xlings_drepodir = xlings_sourcedir .. "drepo/"
 -- Note: need init in xlings.lua
 local xlings_name
 local xlings_rundir
+local xlings_lang
 local xlings_cachedir = xlings_projectdir .. ".xlings/"
 local xlings_editor
 
 function set_name(name)
     xlings_name = name
+end
+
+function set_lang(lang)
+    xlings_lang = lang
 end
 
 function set_rundir(rundir)
@@ -130,6 +135,7 @@ function get_config_info()
         cachedir = xlings_cachedir,
         editor = xlings_editor,
         name = xlings_name,
+        lang = xlings_lang,
         runmode = xlings_runmode,
         llm_config = {
             id = llm_id,

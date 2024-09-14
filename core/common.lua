@@ -88,6 +88,20 @@ function xlings_config_file_parse(filename)
     return config
 end
 
+function xlings_save_config_to_file(config, file)
+    local file, err = io.open(file, "w")
+
+    if not file then
+        print("[xlings]: Error opening file: " .. err)
+        return
+    end
+
+    for k, v in pairs(config) do
+        file:write(k .. " = \"" .. v .. "\"\n")
+    end
+    file:close()
+end
+
 function xlings_exec(cmd)
     os.exec(platform.get_config_info().cmd_wrapper .. tostring(cmd))
 end
@@ -236,7 +250,13 @@ function xlings_download_repo(git_url, dest_dir)
         cprint("[xlings]: " .. repo_name .. " already exists.")
         return
     end
-    git.clone(git_url, {depth = 1, branch = "main", outputdir = dest_dir})
+    git.clone(
+        git_url,
+        {
+            depth = 1, branch = "main",
+            outputdir = dest_dir, recursive = true,
+        }
+    )
     cprint("[xlings]: %s - ${green}ok${clear}", dest_dir)
 end
 

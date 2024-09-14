@@ -7,7 +7,7 @@ set XLINGS_CACHE_DIR=%XLINGS_RUN_DIR%\.xlings
 set arg1=%1
 set arg2=%2
 
-set "commands=help -h uninstall update drepo"
+set "commands=help -h uninstall update drepo config"
 
 if "%arg1%"=="" (
     cd %XLINGS_DIR%/core

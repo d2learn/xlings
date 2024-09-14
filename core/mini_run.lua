@@ -34,6 +34,7 @@ function generate_config(target_name, source_file)
 
     local content = string.format(
         template.xmake_file_template,
+        file_type,
         target_name,
         target_sourcefile,
         xlings_file

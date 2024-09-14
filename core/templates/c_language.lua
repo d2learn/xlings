@@ -34,6 +34,7 @@ target("clings-demo")
 _xmake_file_template = [[
 xlings_editor = "vscode"
 xlings_runmode = "loop"
+xlings_lang = "%s" -- 0.lang
 
 local target_name = "%s" -- 1.name
 local target_sourcefile = "../%s" -- 2.sourcefile
