@@ -45,8 +45,8 @@ target(target_name)
     add_files("../" .. target_sourcefile)
     on_run(function (target)
         import("common")
-        local rundir = string.match(os.scriptdir(), "(.+)/[^/]+")
-        common.xlings_python(rundir .. "/" .. target_sourcefile)
+        local rundir = path.directory(os.scriptdir())
+        common.xlings_python(path.join(rundir, target_sourcefile))
     end)
 
 includes("%s") -- 3.xlings_file

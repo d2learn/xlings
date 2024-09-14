@@ -143,10 +143,14 @@ function main(start_target)
 
     local config = platform.get_config_info()
     local detect_dir = config.rundir
-    if config.name ~= "xlings_name" then
+    local detect_recursion = false
+    if config.name ~= "xlings_name" then -- is d2x project
         detect_dir = detect_dir .. "/" .. config.name
+        detect_recursion = true
+    else -- is mini_run
+        --detect_recursion = false
     end
-    fwatcher.add(detect_dir, {recursion = true})
+    fwatcher.add(detect_dir, {recursion = detect_recursion})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
 
     --if platform.get_config_info().editor == "vscode" then
@@ -254,7 +258,7 @@ function main(start_target)
                                 -- TODO3: support more editor?
                             end
                         end
-
+                        
                         print_info(name, built_targets, total_targets, files, output, status)
                         compile_bypass_counter = 0
                     else

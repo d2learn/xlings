@@ -33,22 +33,23 @@ function xlings_help()
 end
 
 function deps_check_and_install()
+    local xlings_deps = option.get("xlings_deps")
+
     -- language support
     local xlings_lang = option.get("xlings_lang")
-    if xlings_lang then
+    if xlings_lang and not string.find(tostring(xlings_deps), tostring(xlings_lang)) then
         xinstall(xlings_lang)
     end
 
     -- editor support
     local xlings_editor = option.get("xlings_editor")
-    if xlings_editor == "vscode" then
+    if xlings_editor == "vscode" and not string.find(tostring(xlings_deps), tostring(xlings_lang)) then
         xinstall("vscode")
     else
         -- TODO: other support
     end
 
     -- project dependencies
-    local xlings_deps = option.get("xlings_deps")
     if xlings_deps then
         deps_list = common.xlings_str_split(xlings_deps, ",")
         for _, dep in ipairs(deps_list) do
@@ -94,6 +95,7 @@ function main()
     --print(xlings_lang)
 
     if command == "checker" or command == xlings_name then
+        xinstall(xlings_lang)
         checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
         if os.isfile(path.join(run_dir, cmd_target)) then

@@ -106,6 +106,16 @@ function xlings_exec(cmd)
     os.exec(platform.get_config_info().cmd_wrapper .. tostring(cmd))
 end
 
+function xlings_run_bat_script(content, use_adnim) -- only for windows
+    local script_file = path.join(platform.get_config_info().rcachedir, "win_tmp.bat")
+    xlings_create_file_and_write(script_file, content)
+    if use_adnim then
+        os.exec([[powershell -Command "Start-Process ']] .. script_file .. [[' -Verb RunAs -Wait]])
+    else
+        os.exec(script_file)
+    end
+end
+
 function xlings_python(file)
     if os.host() == "windows" then
         file = file:gsub("/", "\\")
@@ -131,7 +141,7 @@ function xlings_download(url, dest)
     http.download(url, dest) -- { insecure = true }
 end
 
-function xlings_create_file_and_write(file, context)
+function xlings_create_file_and_write(file, content)
     local file, err = io.open(file, "w")
 
     if not file then
@@ -139,11 +149,11 @@ function xlings_create_file_and_write(file, context)
         return
     end
 
-    file:write(context)
+    file:write(content)
     file:close()
 end
 
-function xlings_file_append(file, context)
+function xlings_file_append(file, content)
     local file, err = io.open(file, "a")
 
     if not file then
@@ -151,7 +161,7 @@ function xlings_file_append(file, context)
         return
     end
 
-    file:write(context)
+    file:write(content)
     file:close()
 end
 
@@ -195,14 +205,14 @@ function xlings_install()
 
     if is_host("linux") then
         local bashrc = os.getenv("HOME") .. "/.bashrc"
-        local context = "export PATH=$PATH:" .. install_dir .. "/bin"
+        local content = "export PATH=$PATH:" .. install_dir .. "/bin"
         -- append to bashrc when not include xlings str in .bashrc
         if not os.isfile(bashrc) then
-            xlings_create_file_and_write(bashrc, context)
+            xlings_create_file_and_write(bashrc, content)
         else
             local bashrc_content = io.readfile(bashrc)
-            if not string.find(bashrc_content, context) then
-                xlings_file_append(bashrc, context)
+            if not string.find(bashrc_content, content) then
+                xlings_file_append(bashrc, content)
             end
         end
     else

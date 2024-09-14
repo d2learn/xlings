@@ -1,4 +1,5 @@
 import("installer.vscode")
+import("installer.visual_studio")
 import("installer.mdbook")
 import("installer.c_and_cpp")
 import("installer.python")
@@ -6,6 +7,7 @@ import("installer.python")
 local supported_installers = {
     ["vscode"]    = vscode,
     ["mdbook"]    = mdbook,
+    ["vs"]        = visual_studio,
     ["c"]         = c_and_cpp,
     ["gcc"]       = c_and_cpp,
     ["cpp"]       = c_and_cpp,
@@ -62,6 +64,8 @@ function install(name, x_installer)
     end
 
     x_installer.install()
+
+    cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
 end
 
 function main(name)

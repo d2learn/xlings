@@ -1,33 +1,31 @@
+import("lib.detect.find_tool")
+
 import("platform")
 import("common")
+import("installer.visual_studio")
+
+local vstudio_url = "https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&passive=false"
+local vstudio_setup = "VisualStudioSetup.exe"
+
+local vstudio_setup_file = path.join(platform.get_config_info().rcachedir, vstudio_setup)
+local vs_install_path = "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community"
+local vs_cpp_components = "Microsoft.VisualStudio.Workload.NativeDesktop;Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
 
 function installed()
-    local detect_cmd = "g++ --version"
     if os.host() == "windows" then
-        detect_cmd = "cl --version"
+        return visual_studio.installed()
     elseif os.host() == "linux" or os.host() == "macosx" then
-    	detect_cmd = "g++ --version"
+        return nil ~= find_tool("g++", {version = true, force = true, paths = paths})
     else
         -- TODO
     end
-
-    return try {
-        function()
-            os.exec(detect_cmd)
-            return true
-        end, catch {
-            function(e)
-                return false
-            end
-        }
-    }
 end
 
 function install()
     print("[xlings]: Installing c/cpp environment...")
 
     if os.host() == "windows" then
-        -- TODO: install vscode on windows
+        visual_studio.install()
     elseif os.host() == "linux" then
         os.exec("sudo apt-get install g++ -y")
     elseif os.host() == "macosx" then

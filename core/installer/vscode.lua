@@ -1,3 +1,5 @@
+import("lib.detect.find_tool")
+
 import("platform")
 import("common")
 
@@ -16,23 +18,16 @@ local vscode_package = {
 local vscode_file = path.join(config.rcachedir, vscode_package[os.host()])
 
 function installed()
-    if os.host() == "windows" then
-        
-    elseif os.host() == "linux" or os.host() == "macosx" then
-    	return try {
-            function()
-                os.exec("code --version")
-                return true
-            end, catch {
-                function(e)
-                    return false
-                end
-            }
+    return try {
+        function()
+            common.xlings_exec("code --version")
+            return true
+        end, catch {
+            function(e)
+                return false
+            end
         }
-    else
-        -- TODO
-    end
-    return false
+    }
 end
 
 function install()
@@ -46,9 +41,20 @@ function install()
 
     if os.host() == "windows" then
         -- TODO: install vscode on windows
+        try {
+            function ()
+                print("[xlings]: runninng vscode installer, it may take some minutes...")
+                common.xlings_exec(vscode_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
+            end, catch {
+                function (e)
+                    os.tryrm(vscode_file)
+                end
+            }
+        }
     elseif os.host() == "linux" then
         os.exec("sudo dpkg -i " .. vscode_file)
     elseif os.host() == "macosx" then
         -- TODO: install vscode on macosx
     end
+
 end
