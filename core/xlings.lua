@@ -94,6 +94,7 @@ function main()
     --print(xlings_name)
     --print(xlings_lang)
 
+    -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "checker" or command == xlings_name then
         xinstall(xlings_lang)
         checker.main(cmd_target) -- TODO -s cmd_target
@@ -104,9 +105,11 @@ function main()
             cprint("[xlings]: ${red}file not found${clear} - " .. cmd_target)
         end
     elseif command == "init" then
+        xinstall("mdbook")
         init.xlings_init(xlings_name, xlings_lang)
     elseif command == "book" then
         --os.exec("mdbook build --open book") -- book is default folder
+        xinstall("mdbook")
         os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "update" then
         common.xlings_update(xlings_name, xlings_lang)

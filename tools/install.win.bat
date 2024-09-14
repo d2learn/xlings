@@ -25,9 +25,13 @@ if %errorlevel% neq 0 (
     echo [xlings]: xlings is already in PATH.
 )
 
+if exist "%cd%/install.win.bat" (
+    cd ..
+)
+
 REM 3. install xlings
 cd core
-xmake xlings unused install
+xmake xlings unused install xlings
 cd ..
 
 REM 4. install info

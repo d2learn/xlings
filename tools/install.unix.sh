@@ -1,6 +1,6 @@
 #!/bin/bash
 
-XLINGS_DIR=`pwd`
+RUN_DIR=`pwd`
 
 # ANSI color codes
 RED='\033[31m'
@@ -34,9 +34,14 @@ fi
 
 source ~/.bashrc
 
+if [ -f $RUN_DIR/install.unix.sh ]; then
+    cd ..
+    RUN_DIR=`pwd`
+fi
+
 # 2. install xlings
-cd $XLINGS_DIR/core
-xmake xlings unused install
+cd $RUN_DIR/core
+xmake xlings unused install xlings
 
 # 3. install info
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"
