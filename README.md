@@ -28,7 +28,7 @@
 **使用git获取源码**
 
 ```bash
-git clone git@github.com:Sunrisepeak/xlings.git
+git clone git@github.com:d2learn/xlings.git
 ```
 
 **安装xlings**
