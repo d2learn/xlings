@@ -23,15 +23,15 @@
 
 ## 安装
 
-### 获取源码
+### 方式一: 命令行安装
 
-> 使用git获取源码或下载对应项目的zip包再解压
+**使用git获取源码**
 
 ```bash
 git clone git@github.com:Sunrisepeak/xlings.git
 ```
 
-### 安装xlings
+**安装xlings**
 
 > 在项目的根目录执行安装脚本
 
@@ -47,9 +47,18 @@ bash tools/install.unix.sh
 tools\install.win.bat
 ```
 
+### 方式二: 下载zip包安装
+
+**下载压缩包** -> [xlings.zip](https://github.com/d2learn/xlings/archive/refs/heads/main.zip)
+
+**解压zip并运行安装脚本**
+
+- windows: 双击解压后tools目录中的`install.win.bat`进行安装
+- linux: 鼠标右键点击tools目录中的`install.unix.sh`选择**运行程序选项**进行安装
+
 ## 用法简介
 
-> 使用xlings下载[d2ds](https://github.com/Sunrisepeak/d2ds)并运行dsligs
+> 以xlings下载[d2ds](https://github.com/Sunrisepeak/d2ds)并运行dslings练习代码为例
 
 ### 下载项目
 
@@ -103,8 +112,8 @@ repo: https://github.com/d2learn/xlings
 
 ## 示例
 
-| examples | cases | other |
+| examples | desc | other |
 | --- | --- | --- |
-| [d2c-e](examples/d2c) | | |
-| [d2cpp-e](examples/d2cpp) | | |
-| [d2ds](examples/d2ds) | [d2ds](https://github.com/Sunrisepeak/d2ds) | |
+| [d2ds](https://github.com/Sunrisepeak/d2ds) | 动手学数据结构项目 | |
+| [d2cpp](https://github.com/d2learn/d2cpp) | 动手学C++项目 | |
+| ... | ... | |
