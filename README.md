@@ -1,6 +1,6 @@
 # xlings
 
-技术学习、教程教学类项目构建和管理工具
+一个自动化编译运行检测、教程教学类项目构建和管理工具
 
 ## 功能
 
@@ -53,8 +53,8 @@ tools\install.win.bat
 
 **解压zip并运行安装脚本**
 
-- windows: 双击解压后tools目录中的`install.win.bat`进行安装
-- linux: 鼠标右键点击tools目录中的`install.unix.sh`选择**运行程序选项**进行安装
+- windows: 双击解压后 tools目录中的`install.win.bat`进行安装
+- linux: 鼠标右键点击 tools目录中的`install.unix.sh`选择**运行程序选项**进行安装
 
 ## 用法简介
 
