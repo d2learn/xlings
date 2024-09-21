@@ -251,6 +251,9 @@ function main(start_target)
                                             -- why work?
                                         end
                                         os.exec(platform.get_config_info().cmd_wrapper .. "code -g " .. file .. ":1")
+
+                                        -- TODO: optimize -> mini-run's detect logic for targetfile
+                                        fwatcher.add(path.directory(file))
                                     end
                                     open_target_file = true
                                 end
