@@ -22,9 +22,16 @@ function print_info(target_name, built_targets, total_targets, target_files, out
     common.xlings_clear_screen()
 
     local config = platform.get_config_info()
-    local current_file_path = target_files[#target_files]
+    local current_file_path_old = target_files[#target_files]
 
-    current_file_path = common.xlings_path_format(current_file_path)
+    current_file_path = common.xlings_path_format(current_file_path_old)
+
+    -- format path(remove prefix) for output
+    output = tostring(output):gsub(current_file_path_old, current_file_path)
+    if config.name ~= "xlings_name" and output then
+        output = output:gsub(path.join("%.%.\\", config.name), config.name)
+            :gsub(path.join("%.%./", config.name), config.name)
+    end
 
     -- print progress_bar
     local progress_bar_length = total_targets
@@ -149,6 +156,10 @@ function main(start_target)
         detect_recursion = true
     else -- is mini_run
         --detect_recursion = false
+        local files = project.targets()[start_target]:sourcefiles()
+        local file = nil
+        for _, f in ipairs(files) do file = f break end
+        detect_dir = path.directory(file)
     end
     fwatcher.add(detect_dir, {recursion = detect_recursion})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
@@ -251,9 +262,6 @@ function main(start_target)
                                             -- why work?
                                         end
                                         os.exec(platform.get_config_info().cmd_wrapper .. "code -g " .. file .. ":1")
-
-                                        -- TODO: optimize -> mini-run's detect logic for targetfile
-                                        fwatcher.add(path.directory(file))
                                     end
                                     open_target_file = true
                                 end
