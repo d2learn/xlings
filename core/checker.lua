@@ -23,8 +23,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
 
     local config = platform.get_config_info()
     local current_file_path_old = target_files[#target_files]
-
-    current_file_path = common.xlings_path_format(current_file_path_old)
+    local current_file_path = common.xlings_path_format(current_file_path_old)
 
     -- format path(remove prefix) for output
     output = tostring(output):gsub(current_file_path_old, current_file_path)
