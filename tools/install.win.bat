@@ -21,6 +21,7 @@ echo %UserPath% | findstr /i "%XLINGS_BIN_DIR%" >nul
 if %errorlevel% neq 0 (
     echo [xlings]: set xlings to PATH
     setx PATH "%UserPath%;%XLINGS_BIN_DIR%"
+    set "PATH=%UserPath%;%XLINGS_BIN_DIR%"
 ) else (
     echo [xlings]: xlings is already in PATH.
 )
@@ -37,5 +38,5 @@ cd ..
 REM 4. install info
 echo [xlings]: xlings installed
 echo.
-echo     run xlings help get more information (after restart vscode)
+echo     run xlings help get more information
 echo.
