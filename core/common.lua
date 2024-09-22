@@ -205,7 +205,7 @@ function xlings_install()
 
     if is_host("linux") then
         local bashrc = os.getenv("HOME") .. "/.bashrc"
-        local content = "export PATH=$PATH:" .. install_dir .. "/bin"
+        local content = "\nexport PATH=$PATH:" .. install_dir .. "/bin"
         -- append to bashrc when not include xlings str in .bashrc
         if not os.isfile(bashrc) then
             xlings_create_file_and_write(bashrc, content)
