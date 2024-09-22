@@ -35,6 +35,8 @@ cd core
 xmake xlings unused install xlings
 cd ..
 
+xlings
+
 REM 4. install info
 echo [xlings]: xlings installed
 echo.

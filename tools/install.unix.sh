@@ -43,6 +43,8 @@ fi
 cd $RUN_DIR/core
 xmake xlings unused install xlings
 
+xlings
+
 # 3. install info
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"
 
