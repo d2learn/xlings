@@ -25,10 +25,12 @@ function install()
     print("[xlings]: Installing c/cpp environment...")
 
     if os.host() == "windows" then
-        visual_studio.install()
+        return visual_studio.install()
     elseif os.host() == "linux" then
         os.exec("sudo apt-get install g++ -y")
     elseif os.host() == "macosx" then
         -- TODO: install vscode on macosx
     end
+
+    return true
 end

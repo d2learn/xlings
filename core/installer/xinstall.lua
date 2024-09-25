@@ -63,9 +63,12 @@ function install(name, x_installer)
         return
     end
 
-    x_installer.install()
-
-    cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
+    if x_installer.install() then
+        cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
+    else
+        cprint("[xlings]: ${red}" .. name .. " install failed, clear cache and retry${clear}")
+        install(name, x_installer)
+    end
 end
 
 function main(name)

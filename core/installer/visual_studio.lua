@@ -43,7 +43,7 @@ function install()
         common.xlings_download(vstudio_url, vstudio_installer_file)
     end
 
-    try {
+    return try {
         function ()
             common.xlings_exec(
                 vstudio_installer_file ..
@@ -56,9 +56,11 @@ function install()
                 -- " --norestart " ..
                 " --wait " -- ..
             )
+            return true
         end, catch {
             function (e)
                 os.tryrm(vstudio_installer_file)
+                return false
             end
         }
     }

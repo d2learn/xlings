@@ -47,20 +47,16 @@ function install()
         common.xlings_download(release_url, mdbook_zip_file)
     end
 
-    try {
+    return try {
         function ()
             archive.extract(mdbook_zip_file, install_dir)
+            return true
         end, catch {
             function (e)
                 os.tryrm(mdbook_zip_file)
                 cprint("[xlings]: extract failed for " .. mdbook_zip_file)
+                return false
             end
         }
     }
-    
-
-    if os.isfile(mdbook_bin_file) then
-        cprint("[xlings]: mdbook installed")
-    end
-
 end

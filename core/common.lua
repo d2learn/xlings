@@ -2,6 +2,8 @@ import("net.http")
 import("utils.archive")
 import("platform")
 import("devel.git")
+import("lib.detect.find_tool")
+import("async.runjobs")
 
 --local common = {}
 
@@ -138,7 +140,21 @@ end
 
 function xlings_download(url, dest)
     cprint("[xlings]: downloading %s to %s", url, dest)
-    http.download(url, dest) -- { insecure = true }
+
+    local tool = find_tool("curl")
+    if tool then -- support progress-bar
+        local outputdir = path.directory(dest)
+        if not os.isdir(outputdir) then
+            os.mkdir(outputdir)
+        end
+        -- -#, --progress-bar
+        -- -L, --location):
+        xlings_exec(tool.program .. " -L -# -o " .. dest .. " " .. url)
+        --os.vrunv(tool.program, {"-#", "-o", dest, url})
+    else
+        -- { insecure = true }
+        runjobs("download",function () http.download(url, dest) end, { progress = true })
+    end
 end
 
 function xlings_create_file_and_write(file, content)

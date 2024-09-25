@@ -39,22 +39,22 @@ function install()
         common.xlings_download(url, vscode_file)
     end
 
-    if os.host() == "windows" then
-        -- TODO: install vscode on windows
-        try {
-            function ()
+    return try {
+        function ()
+            if os.host() == "windows" then
                 print("[xlings]: runninng vscode installer, it may take some minutes...")
                 common.xlings_exec(vscode_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
-            end, catch {
-                function (e)
-                    os.tryrm(vscode_file)
-                end
-            }
+            elseif os.host() == "linux" then
+                os.exec("sudo dpkg -i " .. vscode_file)
+            elseif os.host() == "macosx" then
+                -- TODO: install vscode on macosx
+            end
+            return true
+        end, catch {
+            function (e)
+                os.tryrm(vscode_file)
+                return false
+            end
         }
-    elseif os.host() == "linux" then
-        os.exec("sudo dpkg -i " .. vscode_file)
-    elseif os.host() == "macosx" then
-        -- TODO: install vscode on macosx
-    end
-
+    }
 end
