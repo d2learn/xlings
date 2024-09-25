@@ -41,7 +41,7 @@ function install()
             end, catch {
                 function (e)
                     print(e)
-                    --os.tryrm(python_installer_file)
+                    os.tryrm(python_installer_file)
                 end
             }
         }
@@ -50,4 +50,5 @@ function install()
     elseif os.host() == "macosx" then
         -- TODO: install vscode on macosx
     end
+    return true
 end
