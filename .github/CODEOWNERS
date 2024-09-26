@@ -1,0 +1,22 @@
+# syntax:
+#   path @username or @teamname
+
+# all repo
+* @sunrisepeak
+
+## install module
+core/installer/* @HuHongMing86
+
+## drepo module
+
+
+###### history #####
+#
+# # all repo
+# * @xxx
+#
+# ## install module
+# core/installer/* @xxx
+#
+# ## drepo module
+#
