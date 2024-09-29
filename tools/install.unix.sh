@@ -54,5 +54,7 @@ cd $RUN_DIR
 
 # if $1 is nil
 if [ $1 == "disable_reopen" ]; then
+    echo -e "[xlings]: exec bash - disable reopen"
+else
     exec bash # update env
 fi

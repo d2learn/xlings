@@ -82,7 +82,6 @@ source $INSTALL_SCRIPT disable_reopen
 
 echo "Cleaning up..."
 cd $RUN_DIR
-echo `pwd`
 rm -rf $INSTALL_DIR
 
 echo "Installation completed!"
