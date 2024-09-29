@@ -51,4 +51,8 @@ echo -e "\t run $YELLOW xlings help $RESET get more information"
 echo -e ""
 
 cd $RUN_DIR
-exec bash # update env
+
+# if $1 is nil
+if [ $1 == "disable_reopen" ]; then
+    exec bash # update env
+fi
