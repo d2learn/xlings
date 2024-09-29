@@ -1,9 +1,11 @@
 #!/bin/bash
 
-RUN_DIR=`pwd`
+# avoid sub-script side effects
+QI_RUN_DIR=`pwd`
+QI_INSTALL_DIR=".xlings_software_install"
+
 SOFTWARE_URL="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 ZIP_FILE="software.zip"
-INSTALL_DIR=".xlings_software_install"
 XLINGS_DIR="xlings-main"
 INSTALL_SCRIPT="tools/install.unix.sh"
 
@@ -51,13 +53,13 @@ fi
 # ------------------------------
 
 # remove old dir
-if [ -d "$INSTALL_DIR" ]; then
-    rm -rf "$INSTALL_DIR"
+if [ -d "$QI_INSTALL_DIR" ]; then
+    rm -rf "$QI_INSTALL_DIR"
 fi
 
 # create tmp dir
-mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+mkdir -p "$QI_INSTALL_DIR"
+cd "$QI_INSTALL_DIR"
 
 echo "Downloading xlings..."
 curl -L -o "$ZIP_FILE" "$SOFTWARE_URL"
@@ -81,8 +83,9 @@ cd "$XLINGS_DIR"
 source $INSTALL_SCRIPT disable_reopen
 
 echo "Cleaning up..."
-cd $RUN_DIR
-rm -rf $INSTALL_DIR
+cd $QI_RUN_DIR
+echo "Removing $QI_RUN_DIR/$QI_INSTALL_DIR(tmpfiles)..."
+rm -rf $QI_INSTALL_DIR
 
 echo "Installation completed!"
 exec bash # update env
