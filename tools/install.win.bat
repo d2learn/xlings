@@ -2,6 +2,8 @@
 
 set XLINGS_BIN_DIR=C:\Users\Public\xlings\bin
 
+set arg1=%1
+
 echo [xlings]: start detect environment and try to auto config...
 
 REM Check if xmake is installed
@@ -35,10 +37,16 @@ cd core
 xmake xlings unused install xlings
 cd ..
 
-xlings
-
 REM 4. install info
 echo [xlings]: xlings installed
 echo.
 echo     run xlings help get more information
 echo.
+
+REM 5. update env
+if "%arg1%"=="disable_reopen" (
+    echo [xlings]: cmd - disable reopen
+) else (
+    # update env by start cmd : TODO disable version info /Q?
+    cmd
+)
