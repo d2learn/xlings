@@ -44,9 +44,9 @@ echo     run xlings help get more information
 echo.
 
 REM 5. update env
-if "%arg1%"=="disable_reopen" (
-    echo [xlings]: cmd - disable reopen
-) else (
-    # update env by start cmd : TODO disable version info /Q?
-    cmd
-)
+REM if "%arg1%"=="disable_reopen" (
+REM    echo [xlings]: cmd - disable reopen
+REM ) else (
+REM    REM update env by start cmd : TODO disable version info /Q?
+REM    cmd
+REM )

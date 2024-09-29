@@ -23,92 +23,25 @@
 
 ## 安装
 
-### 方式一: 命令行安装
-
-**使用git获取源码**
+### Linux
 
 ```bash
-git clone git@github.com:d2learn/xlings.git
+curl -fsSL https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.sh | bash
 ```
 
-**安装xlings**
-
-> 在项目的根目录执行安装脚本
-
-**linux/macos**
+or
 
 ```bash
-bash tools/install.unix.sh
+wget https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.sh -O - | bash
 ```
 
-**windows**
+### Windows - PowerShell
 
 ```bash
-tools\install.win.bat
+Invoke-Expression (Invoke-Webrequest 'https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.ps1' -UseBasicParsing).Content
 ```
 
-### 方式二: 下载zip包安装
-
-**下载压缩包** -> [xlings.zip](https://github.com/d2learn/xlings/archive/refs/heads/main.zip)
-
-**解压zip并运行安装脚本**
-
-- windows: 双击解压后 tools目录中的`install.win.bat`进行安装
-- linux: 鼠标右键点击 tools目录中的`install.unix.sh`选择**运行程序选项**进行安装
-
-## 用法简介
-
-> 以xlings下载[d2ds](https://github.com/Sunrisepeak/d2ds)并运行dslings练习代码为例
-
-### 下载项目
-
-> 下载d2ds项目到当前目录
-
-```bash
-xlings drepo d2ds
-```
-
-注: `xlings drepo`可以查看项目信息
-
-### 运行项目练习
-
-> 运行d2ds项目中的dslings代码练习
-
-```bash
-cd d2ds
-xlings dslings
-```
-
-### 打开项目书籍
-
-```bash
-xlings book
-```
-
-### 更多常用命令
-
-```bash
-xlings version: pre-v0.0.1
-
-Usage: $ xlings [command] [target]
-
-Commands:
-	 run,      	 easy to run target - sourcecode file
-	 install,  	 install software/env(target)
-	 drepo,    	 print drepo info or download drepo(target)
-	 update,   	 update xlings to the latest version
-	 uninstall,	 uninstall xlings
-	 help,     	 help info
-
-Project Commands: (need config.xlings)
-	 init,     	 init project by config.xlings
-	 book,     	 open project's book in default browser
-	 checker,  	 start project's auto-exercises from target
-
-repo: https://github.com/d2learn/xlings
-```
-
-> 注: 使用xlings创建新项目步骤见 -> [创建类d2x项目](docs/quick_start.md)
+**注: 更多安装方法和使用文档见 -> [xlings docs](https://d2learn.github.io/docs/xlings/chapter_0.html)**
 
 ## 示例
 
@@ -117,3 +50,5 @@ repo: https://github.com/d2learn/xlings
 | [d2ds](https://github.com/Sunrisepeak/d2ds) | 动手学数据结构项目 | |
 | [d2cpp](https://github.com/d2learn/d2cpp) | 动手学C++项目 | |
 | ... | ... | |
+
+[更多示例](https://d2learn.github.io/courses)
