@@ -21,7 +21,9 @@
 
 ---
 
-## 安装
+## 快速安装
+
+> 在命令行窗口执行一键安装命令
 
 ### Linux
 
@@ -41,7 +43,43 @@ wget https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_ins
 Invoke-Expression (Invoke-Webrequest 'https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.ps1' -UseBasicParsing).Content
 ```
 
-**注: 更多安装方法和使用文档见 -> [xlings docs](https://d2learn.github.io/docs/xlings/chapter_0.html)**
+> **注: 更多安装方法 -> [xlings安装](https://d2learn.github.io/docs/xlings/chapter_1.html)**
+
+## 用法简介
+
+### 运行代码
+
+> xlings会自动匹配编程语言, 并实时检查代码变化
+
+```bash
+xlings run your_code.py
+xlings run your_code.c
+xlings run your_code.cpp
+```
+
+### 环境配置和软件安装
+
+**环境配置**
+
+> 一键配置c语言环境
+
+```bash
+xlings install c
+```
+
+**软件安装**
+
+> 一键安装vscode
+
+```bash
+xlings install vscode
+```
+
+### 搭建交互式教程或课程实验
+
+> [项目搭建](https://d2learn.github.io/docs/xlings/chapter_3.html)
+
+**注: 更多用法见社区文档 -> [xlings docs](https://d2learn.github.io/docs/xlings/chapter_0.html)**
 
 ## 示例
 
