@@ -28,19 +28,19 @@
 ### Linux
 
 ```bash
-curl -fsSL https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://d2learn.org/xlings-install.sh | bash
 ```
 
 or
 
 ```bash
-wget https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.sh -O - | bash
+wget https://d2learn.org/xlings-install.sh -O - | bash
 ```
 
 ### Windows - PowerShell
 
 ```bash
-Invoke-Expression (Invoke-Webrequest 'https://github.com/d2learn/xlings/raw/refs/heads/main/tools/other/quick_install.ps1' -UseBasicParsing).Content
+Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1' -UseBasicParsing).Content
 ```
 
 > **注: 更多安装方法 -> [xlings安装](https://d2learn.github.io/docs/xlings/chapter_1.html)**

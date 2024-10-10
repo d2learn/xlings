@@ -9,6 +9,81 @@ ZIP_FILE="software.zip"
 XLINGS_DIR="xlings-main"
 INSTALL_SCRIPT="tools/install.unix.sh"
 
+# ------------------------------
+
+echo -e "$(cat << 'EOF'
+
+ __   __  _      _                     
+ \ \ / / | |    (_)    pre-v0.0.1                
+  \ V /  | |     _  _ __    __ _  ___ 
+   > <   | |    | || '_ \  / _` |/ __|
+  / . \  | |____| || | | || (_| |\__ \
+ /_/ \_\ |______|_||_| |_| \__, ||___/
+                            __/ |     
+                           |___/      
+
+repo:  https://github.com/d2learn/xlings
+forum: https://forum.d2learn.org
+
+---
+
+EOF
+)"
+
+
+SOFTWARE_URL1="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
+SOFTWARE_URL2="https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+measure_latency() {
+    local url="$1"
+    local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+    local latency
+
+    if command_exists ping; then
+        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F'/' 'END{print $5}')
+    elif command_exists curl; then
+        latency=$(curl -o /dev/null -s -w '%{time_total}\n' "$url")
+    else
+        echo "Error: Neither ping nor curl is available." >&2
+        exit 1
+    fi
+
+    if [ -n "$latency" ]; then
+        echo "$latency"
+    else
+        echo "999999"
+    fi
+}
+
+echo "Testing network..."
+latency1=$(measure_latency "$SOFTWARE_URL1")
+latency2=$(measure_latency "$SOFTWARE_URL2")
+
+echo "Latency for github.com : $latency1 ms"
+echo "Latency for gitee.com : $latency2 ms"
+
+# 比较延迟并选择最快的 URL
+if command_exists bc; then
+    if (( $(echo "$latency1 < $latency2" | bc -l) )); then
+        SOFTWARE_URL=$SOFTWARE_URL1
+    else
+        SOFTWARE_URL=$SOFTWARE_URL2
+    fi
+else
+    # 如果 bc 不可用，使用简单的字符串比较
+    if [[ "$latency1" < "$latency2" ]]; then
+        SOFTWARE_URL=$SOFTWARE_URL1
+    else
+        SOFTWARE_URL=$SOFTWARE_URL2
+    fi
+fi
+
+# ------------------------------
+
 install_tool() {
     tool=$1
     if command -v apt-get &> /dev/null; then
