@@ -22,6 +22,64 @@ $downloadUrl = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 
 # ---------------------------------------------------------------
 
+$xlings = @"
+ __   __  _      _                     
+ \ \ / / | |    (_)    pre-v0.0.1                
+  \ V /  | |     _  _ __    __ _  ___ 
+   > <   | |    | || '_ \  / _  |/ __|
+  / . \  | |____| || | | || (_| |\__ \
+ /_/ \_\ |______|_||_| |_| \__, ||___/
+                            __/ |     
+                           |___/      
+
+repo:  https://github.com/d2learn/xlings
+forum: https://forum.d2learn.org
+
+---
+"@
+
+Write-Host $xlings -ForegroundColor Green
+
+
+$SOFTWARE_URL1 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
+$SOFTWARE_URL2 = "https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
+
+function Measure-Latency {
+    param (
+        [string]$Url
+    )
+
+    $domain = ([System.Uri]$Url).Host
+    try {
+        $ping = Test-Connection -ComputerName $domain -Count 3 -ErrorAction Stop
+        $latency = $ping | Measure-Object -Property ResponseTime -Average | Select-Object -ExpandProperty Average
+        return [math]::Round($latency, 2)
+    }
+    catch {
+        Write-Warning "Unable to ping $domain"
+        return 999999
+    }
+}
+
+Write-Host "Testing network..."
+$latency1 = Measure-Latency -Url $SOFTWARE_URL1
+$latency2 = Measure-Latency -Url $SOFTWARE_URL2
+
+Write-Host "Latency for github.com : $latency1 ms"
+Write-Host "Latency for gitee.com : $latency2 ms"
+
+if ($latency1 -lt $latency2) {
+    $downloadUrl = $SOFTWARE_URL1
+}
+else {
+    $downloadUrl = $SOFTWARE_URL2
+}
+
+#Write-Host "Final URL: $downloadUrl"
+#exit 0
+
+# ---------------------------------------------------------------
+
 # Clear old-cache
 if (Test-Path $installDir) {
     Remove-Item $installDir -Recurse -Force

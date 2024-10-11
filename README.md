@@ -40,7 +40,7 @@ wget https://d2learn.org/xlings-install.sh -O - | bash
 ### Windows - PowerShell
 
 ```bash
-Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1' -UseBasicParsing).Content
+Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content
 ```
 
 > **注: 更多安装方法 -> [xlings安装](https://d2learn.github.io/docs/xlings/chapter_1.html)**
