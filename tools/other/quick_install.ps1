@@ -152,4 +152,6 @@ Show-Progress -Activity "Installation complete" -PercentComplete 100
 Write-Host "$softwareName has been successfully installed."
 
 # Update env
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","User") + ";" + $xlingsBinDir
+$env:Path += ";$xlingsBinDir"
+
+# powershell.exe -ExecutionPolicy Bypass -File tools/other/quick_install.ps1
