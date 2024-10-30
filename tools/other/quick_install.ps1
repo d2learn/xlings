@@ -152,6 +152,6 @@ Show-Progress -Activity "Installation complete" -PercentComplete 100
 Write-Host "$softwareName has been successfully installed."
 
 # Update env
-$env:Path += ";$xlingsBinDir"
+$env:Path += ";$xlingsBinDir;C:\Users\$env:USERNAME\xmake"
 
 # powershell.exe -ExecutionPolicy Bypass -File tools/other/quick_install.ps1
