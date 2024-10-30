@@ -15,6 +15,7 @@ local vs_cpp_components = "Microsoft.VisualStudio.Workload.NativeDesktop;" ..
 function installed()
     local version = nil
     if os.host() == "windows" then
+        toolchain.load("msvc"):check()
         version = toolchain.load("msvc"):config("vs")
     elseif os.host() == "linux" then
     	-- cprint("[xlings]: vs not support for linux")
