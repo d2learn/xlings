@@ -1,23 +1,11 @@
-# xlings
+<div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
 
-一个自动化编译运行检测、教程教学类项目构建和管理工具
+<div align="center">
+  <a href="https://forum.d2learn.org/category/9/xlings" target="_blank"><img src="https://img.shields.io/badge/xlings-forum-blue" /></a>
+  <a href="https://d2learn.org" target="_blank"><img src="https://img.shields.io/badge/License-Apache2.0-success" alt="License"></a>
+</div>
 
-## 功能
-
-- **项目模板** - 快速生成一个包括书籍、练习代码等内容的项目结构
-- **自动化练习检测** - 编译器驱动开发学习
-- **Markdown书籍** - 编写markdown文件生成在线电子书
-- **常用工具下载** - 常用技术类工具/软件下载
-- **多语言代码运行检测** - 自动识别代码文件进行(编译)运行, 并时实检测代码变化显示运行结果
-  - c
-  - cpp
-  - python
-  - ...
-- **多项目管理和下载** - 多个项目管理、信息查看、下载等功能
-- **AI提示引导** - 配置对应的大模型, 做为错误代码提示小助理
-  - openai - dev
-  - tongyi - ok
-  - ...
+<div align=center>xlings是一个 ⌈软件安装、一键环境配置、AI代码提示、实时编译运行、教程教学项目搭建和管理⌋ 编程学习和课程搭建工具🛠️</div>
 
 ---
 
@@ -77,16 +65,12 @@ xlings install vscode
 
 ### 搭建交互式教程或课程实验
 
-> [项目搭建](https://d2learn.github.io/docs/xlings/chapter_3.html)
+- [项目搭建](https://d2learn.github.io/docs/xlings/chapter_3.html)
+- [d2ds项目示例](https://github.com/d2learn/d2ds)
+- [更多文档](https://d2learn.org/docs/xlings/chapter_0.html)
 
-**注: 更多用法见社区文档 -> [xlings docs](https://d2learn.github.io/docs/xlings/chapter_0.html)**
+## 相关链接
 
-## 示例
-
-| examples | desc | other |
-| --- | --- | --- |
-| [d2ds](https://github.com/Sunrisepeak/d2ds) | 动手学数据结构项目 | |
-| [d2cpp](https://github.com/d2learn/d2cpp) | 动手学C++项目 | |
-| ... | ... | |
-
-[更多示例](https://d2learn.github.io/courses)
+- [主页](https://d2learn.org/xlings) : 工具动态和核心功能展示
+- [论坛](https://forum.d2learn.org/category/9/xlings) : 问题反馈、项目开发、想法交流
+- [xmake](https://github.com/xmake-io/xmake): 为xlings提供基础环境
