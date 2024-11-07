@@ -29,7 +29,8 @@ function xlings_help()
     cprint("\t ${magenta}book${clear},     \t open project's book in default browser")
     cprint("\t ${magenta}checker${clear},  \t start project's auto-exercises from ${magenta}target${clear}")
     cprint("")
-    cprint("repo: ${underline}https://github.com/d2learn/xlings${clear}")
+    cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
+    cprint("")
 end
 
 function deps_check_and_install()

@@ -3,11 +3,14 @@ import("installer.visual_studio")
 import("installer.mdbook")
 import("installer.c_and_cpp")
 import("installer.python")
+import("installer.devcpp")
 
 local supported_installers = {
     ["vscode"]    = vscode,
     ["mdbook"]    = mdbook,
     ["vs"]        = visual_studio,
+    ["devcpp"]   = devcpp,
+    ["devc++"]   = devcpp,
     ["c"]         = c_and_cpp,
     ["gcc"]       = c_and_cpp,
     ["cpp"]       = c_and_cpp,
@@ -63,12 +66,19 @@ function install(name, x_installer)
         return
     end
 
-    if x_installer.install() then
+    local success = x_installer.install()
+
+    cprint("")
+    cprint("[xlings]: ${yellow bright}反馈(feedback)${clear}: ${underline}https://forum.d2learn.org/category/9/xlings${clear}")
+    cprint("")
+
+    if success then
         cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
     else
-        cprint("[xlings]: ${red}" .. name .. " install failed, clear cache and retry${clear}")
+        cprint("[xlings]: ${red}" .. name .. " install failed or not support, clear cache and retry${clear}")
         install(name, x_installer)
     end
+
 end
 
 function main(name)
