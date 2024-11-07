@@ -1,100 +1,89 @@
-# xlings
-xlings is a tools about - build 'self-study、auto-exercises、tests' projects
+<div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
+
+<div align="center">
+  <a href="https://forum.d2learn.org/category/9/xlings" target="_blank"><img src="https://img.shields.io/badge/Forum-xlings-blue" /></a>
+  <a href="https://d2learn.org" target="_blank"><img src="https://img.shields.io/badge/License-Apache2.0-success" alt="License"></a>
+  <a href="https://www.bilibili.com/video/BV1yeSgYPEzr" target="_blank"><img src="https://img.shields.io/badge/Video-bilibili-teal" alt="Bilibili"></a>
+  <a href="https://youtu.be/uN4amaIAkZ0?si=MpZ6GfLHQoZRmNqc" target="_blank"><img src="https://img.shields.io/badge/Video-YouTube-red" alt="YouTube"></a>
+</div>
+
+<div align=center>xlings is a programming learning and course building tool 🛠️</div>
+<div align=center> ⌈Software installation, One-click environment configuration, AI code suggestions, Real-time Compilation and execution, Tutorial project setup, and management⌋</div>
+
+<div align="center">
+  <a href="README.md" target="_blank">->中文<-</a>
+</div>
 
 ---
 
-## Useage
+## Recent Updates
 
-### 0.get xlings
+- Added Dev-C++ installation support - [Details](http://forum.d2learn.org/post/82)
+- Cross-drive run command (Windows) usage - [Details](http://forum.d2learn.org/post/66)
+- More updates and discussions -> [More](https://forum.d2learn.org/category/9/xlings)
 
-> clone xlings to your root-dir(or other)
+## Quick Installation
 
-```bash
-git clone git@github.com:Sunrisepeak/xlings.git
-```
+> Execute the one-click installation command in terminal
 
-### 1.project config files
-
-> create project config files in your project root-dir
-
-**config.xlings.lua**
-
-> config xlings_name, xlings_lang...
-
-```lua
-xlings_name = "clings"
-xlings_lang = "c"
-```
-
-**xmake.lua**
-
-> create xmake.lua file, then include config file and xlings's core/xmake.lua
-
-```lua
-includes("config.xlings.lua")
-
-add_includedirs(xlings_name)
-includes(xlings_name)
-
-includes("YourLocalXlingsPath/core/xmake.lua")
-```
-
-### 2.init project
-
-> init project dir structures and generate book, exercise and some default config file. enable 'xmake clings' command (xlings_name)
+### Linux
 
 ```bash
-xmake xlings init
+curl -fsSL https://d2learn.org/xlings-install.sh | bash
 ```
 
-**dir structures**
+or
 
 ```bash
-├── book
-│   ├── book
-|   |    ....
-│   ├── .gitignore
-│   ├── book.toml
-│   └── src
-│       ├── chapter_1.md
-│       └── SUMMARY.md
-├── clings
-│   ├── exercises
-│   │   └── clings.h
-│   ├── tests
-│   │   └── clings.c
-│   └── xmake.lua
-├── config.xlings.lua
-└── xmake.lua
+wget https://d2learn.org/xlings-install.sh -O - | bash
 ```
 
-**render book**
-
-> render markdown file to book and open on your default browser
-
-### 3.use project
-
-**open book**
+### Windows - PowerShell
 
 ```bash
-xmake xlings book
+Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content
 ```
 
-**auto-exercises**
+> **Note: More installation methods -> [xlings installation](https://d2learn.github.io/docs/xlings/chapter_1.html)**
+
+## Usage Introduction
+
+### Run Code
+
+> xlings automatically matches programming language and checks code changes in real-time
 
 ```bash
-xmake clings -- clings is xlings_name in your project
+xlings run your_code.py
+xlings run your_code.c
+xlings run your_code.cpp
 ```
 
-### 4.custom project
+### Environment Setup and Software Installation
 
-> modify some config file, book config - book.toml, clings config - exercises/xmake.lua....
+**Environment Setup**
 
+> One-click C language environment setup
 
-### Examples & Cases
+```bash
+xlings install c
+```
 
-| examples | cases | other |
-| --- | --- | --- |
-| [d2c-e](examples/d2c) | | |
-| [d2cpp-e](examples/d2cpp) | | |
-| [d2ds](examples/d2ds) | [d2ds](https://github.com/Sunrisepeak/d2ds) | |
+**Software Installation**
+
+> One-click VSCode installation
+
+```bash
+xlings install vscode
+```
+
+### Build Interactive Tutorials or Course Labs
+
+- [Project Setup](https://d2learn.github.io/docs/xlings/chapter_3.html)
+- [d2ds Project Example](https://github.com/d2learn/d2ds)
+- [More Documentation](https://d2learn.org/docs/xlings/chapter_0.html)
+
+## Related Links
+
+- [Homepage](https://d2learn.org/xlings): Tool updates and core feature showcase
+- [Forum](https://forum.d2learn.org/category/9/xlings): Issue feedback, project development, idea exchange  
+- [xmake](https://github.com/xmake-io/xmake): Provides basic environment for xlings

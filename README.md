@@ -10,6 +10,10 @@
 <div align=center>xlings是一个编程学习和课程搭建工具🛠️</div>
 <div align=center>⌈软件安装、一键环境配置、AI代码提示、实时编译运行、教程教学项目搭建和管理⌋</div>
 
+<div align="center">
+  <a href="README.en.md" target="_blank">->English<-</a>
+</div>
+
 ---
 
 ## 最近动态
