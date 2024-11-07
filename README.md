@@ -1,13 +1,22 @@
 <div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
 
 <div align="center">
-  <a href="https://forum.d2learn.org/category/9/xlings" target="_blank"><img src="https://img.shields.io/badge/xlings-forum-blue" /></a>
+  <a href="https://forum.d2learn.org/category/9/xlings" target="_blank"><img src="https://img.shields.io/badge/Forum-xlings-blue" /></a>
   <a href="https://d2learn.org" target="_blank"><img src="https://img.shields.io/badge/License-Apache2.0-success" alt="License"></a>
+  <a href="https://www.bilibili.com/video/BV1yeSgYPEzr" target="_blank"><img src="https://img.shields.io/badge/Video-bilibili-teal" alt="Bilibili"></a>
+  <a href="https://youtu.be/uN4amaIAkZ0?si=MpZ6GfLHQoZRmNqc" target="_blank"><img src="https://img.shields.io/badge/Video-YouTube-red" alt="YouTube"></a>
 </div>
 
-<div align=center>xlings是一个 ⌈软件安装、一键环境配置、AI代码提示、实时编译运行、教程教学项目搭建和管理⌋ 编程学习和课程搭建工具🛠️</div>
+<div align=center>xlings是一个编程学习和课程搭建工具🛠️</div>
+<div align=center>⌈软件安装、一键环境配置、AI代码提示、实时编译运行、教程教学项目搭建和管理⌋</div>
 
 ---
+
+## 最近动态
+
+- 支持Dev-C++安装 - [详情](http://forum.d2learn.org/post/82)
+- run命令跨存储盘(windows)使用 - [详情](http://forum.d2learn.org/post/66)
+- 更多动态和讨论 -> [More](https://forum.d2learn.org/category/9/xlings)
 
 ## 快速安装
 
