@@ -6,6 +6,7 @@ import("installer.c_and_cpp")
 import("installer.python")
 import("installer.devcpp")
 import("installer.vcpp6")
+import("installer.rust")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -13,7 +14,7 @@ local supported_installers = {
     ["vs"]        = visual_studio,
     ["devcpp"]    = devcpp,
     ["devc++"]    = devcpp,
-    ["vc++6.0"]    = vcpp6,
+    ["vc++6.0"]   = vcpp6,
     ["c"]         = c_and_cpp,
     ["cpp"]       = c_and_cpp,
     ["c++"]       = c_and_cpp,
@@ -21,6 +22,7 @@ local supported_installers = {
     ["g++"]       = gcc,
     ["python"]    = python,
     ["python3"]   = python,
+    ["rust"]      = rust,
 }
 
 function list()
@@ -39,6 +41,41 @@ function get_installer(name)
     else
         cprint("[xlings]: ${red}installer not found${clear} - ${green}%s${clear}", name)
     end
+end
+
+
+local function print_info(info, name)
+    if not info then return end
+
+    cprint("\n--- ${cyan}info${clear}")
+
+    local fields = {
+        {key = "name", label = "name"},
+        {key = "homepage", label = "homepage"},
+        {key = "author", label = "author"},
+        {key = "maintainers", label = "maintainers"},
+        {key = "licenses", label = "licenses"},
+        {key = "github", label = "github"},
+        {key = "docs", label = "docs"},
+        --{key = "profile", label = "profile"}
+    }
+
+    cprint("")
+    for _, field in ipairs(fields) do
+        local value = info[field.key]
+        if value then
+            cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
+        end
+    end
+
+    cprint("")
+
+    if info["profile"] then
+        cprint( "\t${green bright}" .. info["profile"] .. "${clear}")
+    end
+
+    cprint("")
+
 end
 
 function support(name)
@@ -74,10 +111,6 @@ function install(name, x_installer)
 
     local success = x_installer.install()
 
-    cprint("")
-    cprint("[xlings]: ${yellow bright}反馈(feedback)${clear}: ${underline}https://forum.d2learn.org/category/9/xlings${clear}")
-    cprint("")
-
     if success then
         cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
     else
@@ -87,22 +120,34 @@ function install(name, x_installer)
 
 end
 
+function uninstall()
+    -- TODO
+end
+
 function main(name)
     if support(name) then
         cprint("${dim}-%s${clear}", name)
+
         local x_installer = get_installer(name)
         if x_installer.installed() then
             cprint("[xlings]: already installed - ${green bright}" .. name .. "${clear}")
         else
             install(name, x_installer)
         end
-    else
-        cprint(
-            "[xlings]: ${yellow}反馈 | Feedback to${clear}\n" ..
-            "${bright}\n" ..
-            "\thttps://forum.d2learn.org/category/9/xlings\n" ..
-            "\thttps://github.com/d2learn/xlings/issues\n" ..
-            "${clear}"
-        )
+
+        if x_installer.info then
+            local info = x_installer.info()
+            print_info(info, name)
+        end
+
     end
+
+    cprint("\n--- ${yellow}反馈 & 交流 | Feedback & Discourse${clear}\n")
+    cprint(
+        "${bright}\n" ..
+        "\thttps://forum.d2learn.org/category/9/xlings\n" ..
+        "\thttps://github.com/d2learn/xlings/issues\n" ..
+        "${clear}"
+    )
+
 end

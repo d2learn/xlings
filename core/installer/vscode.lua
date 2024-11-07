@@ -66,3 +66,15 @@ function install()
         }
     }
 end
+
+function info()
+    return {
+        name     = "vscode",
+        homepage = "https://code.visualstudio.com",
+        author   = "https://github.com/microsoft/vscode/graphs/contributors",
+        licenses = "MIT",
+        github   = "https://github.com/microsoft/vscode",
+        docs     = "https://code.visualstudio.com/docs",
+        profile  = "Visual Studio Code",
+    }
+end

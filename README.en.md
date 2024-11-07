@@ -18,6 +18,7 @@
 
 ## Recent Updates
 
+- add info features and rust support
 - Added Dev-C++ installation support - [Details](http://forum.d2learn.org/post/82)
 - Cross-drive run command (Windows) usage - [Details](http://forum.d2learn.org/post/66)
 - More updates and discussions -> [More](https://forum.d2learn.org/category/9/xlings)

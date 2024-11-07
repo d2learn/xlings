@@ -68,3 +68,14 @@ function install()
         }
     }
 end
+
+function info()
+    return {
+        name     = "mdbook",
+        author   = "https://github.com/rust-lang/mdBook/graphs/contributors",
+        licenses = "MPL-2.0 license",
+        github   = "https://github.com/rust-lang/mdBook",
+        docs     = "https://rust-lang.github.io/mdBook",
+        profile  = "Create book from markdown files. Like Gitbook but implemented in Rust",
+    }
+end

@@ -18,6 +18,7 @@
 
 ## 最近动态
 
+- install模块添加info功能并支持Rust安装
 - 支持Dev-C++安装 - [详情](http://forum.d2learn.org/post/82)
 - run命令跨存储盘(windows)使用 - [详情](http://forum.d2learn.org/post/66)
 - 更多动态和讨论 -> [More](https://forum.d2learn.org/category/9/xlings)
