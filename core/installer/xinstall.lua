@@ -5,6 +5,7 @@ import("installer.gcc")
 import("installer.c_and_cpp")
 import("installer.python")
 import("installer.devcpp")
+import("installer.vcpp6")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -12,6 +13,7 @@ local supported_installers = {
     ["vs"]        = visual_studio,
     ["devcpp"]    = devcpp,
     ["devc++"]    = devcpp,
+    ["vc++6.0"]    = vcpp6,
     ["c"]         = c_and_cpp,
     ["cpp"]       = c_and_cpp,
     ["c++"]       = c_and_cpp,
