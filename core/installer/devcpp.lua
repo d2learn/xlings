@@ -8,6 +8,14 @@ local config = platform.get_config_info()
 local devcpp_url = "https://gitee.com/sunrisepeak/xlings-pkg/releases/download/devcpp/devcpp.exe"
 local devcpp_installer = path.join(config.rcachedir, "devcpp-installer.exe")
 
+function support()
+    return {
+        windows = true,
+        linux = false,
+        macosx = false
+    }
+end
+
 function installed()
     if os.isfile("C:\\Program Files (x86)\\Dev-Cpp\\devcpp.exe") then
         return true

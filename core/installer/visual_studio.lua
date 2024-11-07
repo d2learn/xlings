@@ -11,6 +11,13 @@ local vs_install_path = [["C:\Program Files\Microsoft Visual Studio\2022\Communi
 local vs_cpp_components = "Microsoft.VisualStudio.Workload.NativeDesktop;" ..
     "Microsoft.VisualStudio.Component.VC.Tools.x86.x64;"
 
+function support()
+    return {
+        windows = true,
+        linux = false,
+        macosx = false
+    }
+end
 
 function installed()
     local version = nil

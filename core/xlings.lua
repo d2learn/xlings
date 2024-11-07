@@ -119,15 +119,9 @@ function main()
         config.llm()
     elseif command == "install" then
         if cmd_target == "xlings" then
-            common.xlings_install()
+            common.xlings_install() -- TODO: only for first install
         elseif xlings_name ~= cmd_target then
-            if xinstall.support(cmd_target) then
-                if xinstall.installed(cmd_target) then
-                    cprint("[xlings]: already installed - ${green bright}" .. cmd_target)
-                else
-                    xinstall(cmd_target)
-                end
-            end
+            xinstall(cmd_target)
         elseif "xlings_name" ~= xlings_name then
             deps_check_and_install()
         else

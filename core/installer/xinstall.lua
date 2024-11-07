@@ -1,6 +1,7 @@
 import("installer.vscode")
 import("installer.visual_studio")
 import("installer.mdbook")
+import("installer.gcc")
 import("installer.c_and_cpp")
 import("installer.python")
 import("installer.devcpp")
@@ -9,21 +10,23 @@ local supported_installers = {
     ["vscode"]    = vscode,
     ["mdbook"]    = mdbook,
     ["vs"]        = visual_studio,
-    ["devcpp"]   = devcpp,
-    ["devc++"]   = devcpp,
+    ["devcpp"]    = devcpp,
+    ["devc++"]    = devcpp,
     ["c"]         = c_and_cpp,
-    ["gcc"]       = c_and_cpp,
     ["cpp"]       = c_and_cpp,
     ["c++"]       = c_and_cpp,
-    ["g++"]       = c_and_cpp,
+    ["gcc"]       = gcc,
+    ["g++"]       = gcc,
     ["python"]    = python,
     ["python3"]   = python,
 }
 
 function list()
     cprint("\t${bright}xinstaller lists${clear}")
-    for name, _ in pairs(supported_installers) do
-        print(" " .. name)
+    for name, x_installer in pairs(supported_installers) do
+        if x_installer.support()[os.host()] then
+            print(" " .. name)
+        end
     end
 end
 
@@ -33,16 +36,24 @@ function get_installer(name)
         return installer
     else
         cprint("[xlings]: ${red}installer not found${clear} - ${green}%s${clear}", name)
-        cprint(
-            "[xlings]: ${yellow}feedback to${clear} " ..
-            "${bright}" ..
-            "https://github.com/d2learn/xlings/issues/new" ..
-            "${clear}"
-        )
     end
 end
 
-function installed(name) 
+function support(name)
+    local x_installer = get_installer(name)
+    if x_installer then
+        if x_installer.support()[os.host()] then
+            return true
+        else
+            cprint("[xlings]: ${red}<%s>-platform not support${clear} - ${green}%s${clear}", os.host(), name)
+        end
+    end
+
+    return false
+
+end
+
+function installed(name)
     local x_installer = get_installer(name)
     if x_installer then
         return x_installer.installed()
@@ -50,14 +61,7 @@ function installed(name)
     return false
 end
 
-function support(name)
-    return get_installer(name) ~= nil
-end
-
 function install(name, x_installer)
-    if x_installer.installed() then
-        return
-    end
 
     -- please input y or n
     cprint("[xlings]: ${bright}install %s? (y/n)", name)
@@ -82,9 +86,21 @@ function install(name, x_installer)
 end
 
 function main(name)
-    local x_installer = get_installer(name)
-    if x_installer then
+    if support(name) then
         cprint("${dim}-%s${clear}", name)
-        install(name, x_installer)
+        local x_installer = get_installer(name)
+        if x_installer.installed() then
+            cprint("[xlings]: already installed - ${green bright}" .. name .. "${clear}")
+        else
+            install(name, x_installer)
+        end
+    else
+        cprint(
+            "[xlings]: ${yellow}反馈 | Feedback to${clear}\n" ..
+            "${bright}\n" ..
+            "\thttps://forum.d2learn.org/category/9/xlings\n" ..
+            "\thttps://github.com/d2learn/xlings/issues\n" ..
+            "${clear}"
+        )
     end
 end

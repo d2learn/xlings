@@ -24,6 +24,14 @@ local install_dir = platform.get_config_info().bindir
 local mdbook_bin_file = path.join(install_dir, mdbook_bin[os.host()])
 local mdbook_zip_file = path.join(platform.get_config_info().rcachedir, mdbook_zip[os.host()])
 
+function support()
+    return {
+        windows = true,
+        linux = true,
+        macosx = false
+    }
+end
+
 function installed()
     return try {
         function()

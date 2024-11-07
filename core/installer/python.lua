@@ -5,6 +5,14 @@ import("common")
 local python_url = "https://gitee.com/sunrisepeak/xlings-pkg/releases/download/python12/python-3.12.6-amd64.exe"
 local python_installer_file = path.join(platform.get_config_info().rcachedir, "python-installer.exe")
 
+function support()
+    return {
+        windows = true,
+        linux = true,
+        macosx = false
+    }
+end
+
 function installed()
     return try {
         function()

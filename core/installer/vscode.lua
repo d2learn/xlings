@@ -17,6 +17,14 @@ local vscode_package = {
 
 local vscode_file = path.join(config.rcachedir, vscode_package[os.host()])
 
+function support()
+    return {
+        windows = true,
+        linux = true,
+        macosx = false
+    }
+end
+
 function installed()
     return try {
         function()
