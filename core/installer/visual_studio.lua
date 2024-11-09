@@ -3,8 +3,9 @@ import("core.tool.toolchain")
 import("platform")
 import("common")
 
+--local vstudio_url = "https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&passive=false"
 local vstudio_url = "https://aka.ms/vs/17/release/vs_community.exe"
-local vstudio_installer = "VisualStudioInstaller.exe"
+local vstudio_installer = "VisualStudioSetup.exe"
 
 local vstudio_installer_file = path.join(platform.get_config_info().rcachedir, vstudio_installer)
 local vs_install_path = [["C:\Program Files\Microsoft Visual Studio\2022\Community"]]

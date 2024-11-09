@@ -111,6 +111,16 @@ function install(name, x_installer, req_confirm)
         end
     end
 
+    if x_installer.deps then
+        cprint("[xlings]: install dependencies...")
+        local deps_list = x_installer.deps()[os.host()]
+        for _, dep_name in ipairs(deps_list) do
+            cprint("${dim}---${clear}")
+            main(dep_name, {confirm = false, info = false, feedback = false})
+        end
+        cprint("${dim}---${clear}")
+    end
+
     local success = x_installer.install()
 
     if success then
@@ -138,13 +148,14 @@ function main(name, options)
 
     if support(name) then
         local x_installer = get_installer(name)
+        local is_installed = x_installer.installed()
 
         if x_installer.info and options.info then
             local info = x_installer.info()
             print_info(info, name)
         end
 
-        if x_installer.installed() then
+        if is_installed then
             cprint("[xlings]: already installed - ${green bright}" .. name .. "${clear}")
         else
             install(name, x_installer, options.confirm)

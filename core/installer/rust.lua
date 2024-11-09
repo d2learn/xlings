@@ -72,6 +72,17 @@ function uninstall()
     common.xlings_exec("rustup self uninstall")
 end
 
+function deps()
+    return {
+        windows = {
+            "vs"
+        },
+        linux = {
+
+        },
+    }
+end
+
 function info()
     return {
         name     = "rust",
