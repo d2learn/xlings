@@ -23,7 +23,7 @@ end
 function generate_config(target_name, source_file)
 
     local config = platform.get_config_info()
-    local target_sourcefile = source_file
+    local target_sourcefile = common.xlings_path_format(source_file)
     local xlings_file = config.install_dir .. "/core/xmake.lua"
 
     local file_type = detect_file_type(source_file)

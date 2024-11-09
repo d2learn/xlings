@@ -196,13 +196,21 @@ end
 
 function xlings_path_format(path)
     path = tostring(path)
-    if "windows" == os.host() then
-        path = path:gsub("%.%.%\\", "")
-    else
-        path = string.gsub(path, "%.%.%/", "")
-    end
+
+    path = path:gsub("\\", "/")
+    
+    -- remove ./
+    path = path:gsub("%./", "")
+    
+    -- remove ../
+    --path = path:gsub("%.%.%/", "")
+    
+    -- /// -> /
+    path = path:gsub("/+", "/")
+
     -- remove leading and trailing whitespaces
     path = string.gsub(path, "^%s*(.-)%s*$", "%1")
+
     return path
 end
 

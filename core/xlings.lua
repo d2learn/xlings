@@ -33,31 +33,46 @@ function xlings_help()
     cprint("")
 end
 
-function deps_check_and_install()
-    local xlings_deps = option.get("xlings_deps")
+function deps_check_and_install(xdeps)
 
-    -- language support
-    local xlings_lang = option.get("xlings_lang")
-    if xlings_lang and not string.find(tostring(xlings_deps), tostring(xlings_lang)) then
-        xinstall(xlings_lang)
-    end
-
-    -- editor support
-    local xlings_editor = option.get("xlings_editor")
-    if xlings_editor == "vscode" and not string.find(tostring(xlings_deps), tostring(xlings_lang)) then
-        xinstall("vscode")
-    else
-        -- TODO: other support
-    end
+    local xppcmds = nil
 
     -- project dependencies
-    if xlings_deps then
-        deps_list = common.xlings_str_split(xlings_deps, ",")
-        for _, dep in ipairs(deps_list) do
-            name = common.xlings_str_trim(dep)
-            xinstall(name)
+    cprint("[xlings]: deps check and install...")
+    for name, value in pairs(xdeps) do
+        if name == "xppcmds" then
+            xppcmds = value
+        else
+            local pkg = {
+                name = name,
+                version = nil, -- TODO: support version
+            }
+            cprint("${dim}---${clear}")
+            xinstall(name, {confirm = false, info = false, feedback = false})
         end
     end
+
+--[[ -- TODO
+    --cprint("[xlings]: deps check...")
+    for name, _ in pairs(pkgs) do
+        installed / not support ...
+    end
+
+
+    cprint("[xlings]: deps install...")
+    for pkg, _ in pairs(pkgs) do
+        xinstall(pkg.name, {confirm = false, info = false, feedback = false})
+    end
+
+    -- TODO: display pkg-name for not support or install failed
+--]]
+
+    if xppcmds then
+        for _, cmd in ipairs(xppcmds) do
+            common.xlings_exec(cmd)
+        end
+    end
+
 end
 
 function main()
@@ -67,13 +82,16 @@ function main()
     local cmd_target = option.get("cmd_target")
 
     -- config info - config.xlings
-    local xlings_name = option.get("xlings_name")
+    local xname = option.get("xname")
+    local xdeps = option.get("xdeps")
+
+    -- TODO: rename
     local xlings_lang = option.get("xlings_lang")
     local xlings_editor = option.get("xlings_editor")
     local xlings_runmode = option.get("xlings_runmode")
 
     -- init platform config
-    platform.set_name(xlings_name)
+    platform.set_name(xname)
     platform.set_lang(xlings_lang)
     platform.set_rundir(run_dir)
     platform.set_editor(xlings_editor)
@@ -94,10 +112,12 @@ function main()
     --print(cmd_target)
     --print(xlings_name)
     --print(xlings_lang)
+    --print(xname)
+    --print(xdeps)
 
     -- TODO: optimize auto-deps install - xinstall(xx)
-    if command == "checker" or command == xlings_name then
-        xinstall(xlings_lang)
+    if command == "checker" or command == xname then
+        xinstall(xlings_lang, {confirm = false, info = false, feedback = false})
         checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
         if os.isfile(path.join(run_dir, cmd_target)) then
@@ -106,24 +126,24 @@ function main()
             cprint("[xlings]: ${red}file not found${clear} - " .. cmd_target)
         end
     elseif command == "init" then
-        xinstall("mdbook")
-        init.xlings_init(xlings_name, xlings_lang)
+        xinstall("mdbook", {confirm = false})
+        init.xlings_init(xname, xlings_lang)
     elseif command == "book" then
         --os.exec("mdbook build --open book") -- book is default folder
-        xinstall("mdbook")
+        xinstall("mdbook", {confirm = false})
         os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "update" then
-        common.xlings_update(xlings_name, xlings_lang)
+        common.xlings_update(xname, xlings_lang)
         xlings_help()
     elseif command == "config" then
         config.llm()
     elseif command == "install" then
         if cmd_target == "xlings" then
             common.xlings_install() -- TODO: only for first install
-        elseif xlings_name ~= cmd_target then
-            xinstall(cmd_target)
-        elseif "xlings_name" ~= xlings_name then
-            deps_check_and_install()
+        elseif cmd_target then
+            xinstall(cmd_target, {confirm = true, info = true, feedback = true})
+        elseif xdeps then
+            deps_check_and_install(xdeps)
         else
             xinstall.list()
         end

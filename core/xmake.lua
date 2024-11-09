@@ -2,8 +2,12 @@ add_rules("mode.debug")
 
 add_moduledirs(".")
 
-if xlings_name == nil then
-    xlings_name = "xlings_name"
+if xname == nil then
+    xname = "xlings_name"
+end
+
+if xlings_name then
+    xname = xlings_name
 end
 
 if xlings_runmode == nil then
@@ -19,14 +23,14 @@ task("xlings")
             -- args - input
             {nil, "run_dir", "v", nil, "xlings's run directory"}, -- only internal use
             {nil, "command", "v", nil, "xlings's command"},
-            {nil, "cmd_target", "v", xlings_name, "check from start_target"},
+            {nil, "cmd_target", "v", nil, "check from start_target"},
             -- args - default
-            {nil, "xlings_name", "v", xlings_name, "xlings's name"},
+            {nil, "xname", "v", xname, "xlings's name"},
+            {nil, "xdeps", "v", xdeps, "project dependencies auto install"},
             {nil, "xlings_lang", "v", xlings_lang, "xlings's programming languages"},
             {nil, "xlings_editor", "v", xlings_editor, "xlings's programming languages"},
             {nil, "xlings_llm_config", "v", xlings_llm_config, "xlings's llm config file path"},
             {nil, "xlings_runmode", "v", xlings_runmode, "xlings's run mode"},
-            {nil, "xlings_deps", "v", xlings_deps, "project dependencies auto install"},
         }
     }
 

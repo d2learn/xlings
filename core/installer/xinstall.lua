@@ -100,13 +100,15 @@ function installed(name)
     return false
 end
 
-function install(name, x_installer)
+function install(name, x_installer, req_confirm)
 
     -- please input y or n
-    cprint("[xlings]: ${bright}install %s? (y/n)", name)
-    local confirm = io.read()
-    if confirm ~= "y" then
-        return
+    if req_confirm then
+        cprint("[xlings]: ${bright}install %s? (y/n)", name)
+        local confirm = io.read()
+        if confirm ~= "y" then
+            return
+        end
     end
 
     local success = x_installer.install()
@@ -124,30 +126,42 @@ function uninstall()
     -- TODO
 end
 
-function main(name)
+function main(name, options)
+
+    if options == nil then
+        options = { -- default config
+            confirm = true,
+            info = false,
+            feedback = false,
+        }
+    end
+
     if support(name) then
-        cprint("${dim}-%s${clear}", name)
-
         local x_installer = get_installer(name)
-        if x_installer.installed() then
-            cprint("[xlings]: already installed - ${green bright}" .. name .. "${clear}")
-        else
-            install(name, x_installer)
-        end
 
-        if x_installer.info then
+        if x_installer.info and options.info then
             local info = x_installer.info()
             print_info(info, name)
         end
 
+        if x_installer.installed() then
+            cprint("[xlings]: already installed - ${green bright}" .. name .. "${clear}")
+        else
+            install(name, x_installer, options.confirm)
+        end
+
     end
 
-    cprint("\n--- ${yellow}反馈 & 交流 | Feedback & Discourse${clear}\n")
-    cprint(
-        "${bright}\n" ..
-        "\thttps://forum.d2learn.org/category/9/xlings\n" ..
-        "\thttps://github.com/d2learn/xlings/issues\n" ..
-        "${clear}"
-    )
+    if options.feedback then
+
+        cprint("\n\t\t${blue}反馈 & 交流 | Feedback & Discourse${clear}")
+        cprint(
+            "${bright}\n" ..
+            "\thttps://forum.d2learn.org/category/9/xlings\n" ..
+            "\thttps://github.com/d2learn/xlings/issues\n" ..
+            "${clear}"
+        )
+
+    end
 
 end

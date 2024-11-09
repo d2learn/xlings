@@ -17,13 +17,28 @@ target_to_code_file = { }
 XLINGS_WAIT = "XLINGS_WAIT"
 XLINGS_RETURN = "XLINGS_RETURN"
 
+-- remove ../ or ..\
+function delete_path_prefix(path)
+    path = tostring(path)
+    if "windows" == os.host() then
+        path = path:gsub("%.%.%\\", "")
+    else
+        path = string.gsub(path, "%.%.%/", "")
+    end
+    -- remove leading and trailing whitespaces
+    path = string.gsub(path, "^%s*(.-)%s*$", "%1")
+    return path
+end
+
 function print_info(target_name, built_targets, total_targets, target_files, output, status)
 
+    -- TODO: optimize / workaround cls failed on windows
+    common.xlings_clear_screen()
     common.xlings_clear_screen()
 
     local config = platform.get_config_info()
     local current_file_path_old = target_files[#target_files]
-    local current_file_path = common.xlings_path_format(current_file_path_old)
+    local current_file_path = delete_path_prefix(current_file_path_old)
 
     -- format path(remove prefix) for output
     output = tostring(output):gsub(current_file_path_old, current_file_path)
@@ -82,7 +97,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
         for _, file in ipairs(target_files) do
             files_detail = files_detail .. file .. "\n"
         end
-        print(common.xlings_path_format(files_detail))
+        print(delete_path_prefix(files_detail))
     end
 
     cprint("${dim bright}-------------------------${clear}")
@@ -144,6 +159,8 @@ end
 function main(start_target)
     local checker_pass = false
     --local start_target = option.get("start_target")
+
+    if start_target == nil then start_target = "" end -- TODO: optimize
 
     common.xlings_clear_screen()
 

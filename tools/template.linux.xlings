@@ -1,6 +1,8 @@
 includes("config.xlings.lua")
 
-add_includedirs("../" .. xlings_name)
-includes("../" .. xlings_name)
+if xlings_name then
+    add_includedirs("../" .. xlings_name)
+    includes("../" .. xlings_name)
+end
 
 includes("~/.xlings/core/xmake.lua")
