@@ -7,17 +7,23 @@
   <a href="https://youtu.be/uN4amaIAkZ0?si=MpZ6GfLHQoZRmNqc" target="_blank"><img src="https://img.shields.io/badge/Video-YouTube-red" alt="YouTube"></a>
 </div>
 
-<div align=center>xlings is a programming learning and course building tool 🛠️</div>
-<div align=center> ⌈Software installation, One-click environment configuration, AI code suggestions, Real-time Compilation and execution, Tutorial project setup, and management⌋</div>
-
 <div align="center">
-  <a href="README.md" target="_blank">->中文<-</a>
+  <a href="README.md" target="_blank">中文</a>
+  -
+  <a href="README.en.md" target="_blank">English</a>
+  -
+  Other
 </div>
+
+<div align=center>A Developer's Toolkit for Programming Learning, Development and Tutorial Creation 🛠️</div>
+<div align=center>⌈Software Installation, One-Click Environment Setup, Project Dependency Management⌋</div>
+<div align=center>⌈Real-time Compilation & Execution, AI Code Suggestions, Tutorial & Course Project Creation, Demo Examples Collection⌋</div>
 
 ---
 
 ## Recent Updates
 
+- add xdeps config for project-deps-management
 - add info features and rust support
 - Added Dev-C++ installation support - [Details](http://forum.d2learn.org/post/82)
 - Cross-drive run command (Windows) usage - [Details](http://forum.d2learn.org/post/66)
@@ -75,6 +81,31 @@ xlings install c
 
 ```bash
 xlings install vscode
+```
+
+### Project Dependency Management
+
+> Run the install command in the configuration file directory to install project dependencies (`config.xlings` configuration file is typically placed in the project root directory)
+
+**config.xlings Configuration File Example**
+
+```lua
+xname = "ProjectName"
+xdeps = {
+    cpp = "",
+    python = "3.12",
+    vs = "2022",
+    -- postprocess cmds
+    xppcmds = {
+        "echo hello xlings",
+    }
+}
+```
+
+**one-click project dependencies installation**
+
+```bash
+xlings install
 ```
 
 ### Build Interactive Tutorials or Course Labs
