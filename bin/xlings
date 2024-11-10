@@ -32,10 +32,12 @@ if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
 else
     # generate xlings cache file - .xlings
     mkdir -p $XLINGS_CACHE_DIR
-    cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config.xlings.lua
+    cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
     cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
 
     cd $XLINGS_CACHE_DIR
+
+    xmake l config-xlings.lua || exit $?
 
     xmake xlings $XLINGS_RUN_DIR $arg1 $arg2
 fi

@@ -28,8 +28,8 @@ end
 function installed()
     return try {
         function()
-            common.xlings_exec("rustc --version")
-            common.xlings_exec("cargo --version")
+            os.exec("rustc --version")
+            os.exec("cargo --version")
             return true
         end, catch {
             function(e)

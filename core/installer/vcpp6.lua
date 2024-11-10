@@ -15,7 +15,7 @@ end
 
 function install()
     print("[xlings]: Installing VC++ 6.0 ...")
-
+    os.exec("xmake g -c")
     cprint(
         "${yellow}\n" ..
         "Warning: VC++6.0是一个近30年前的软件(1998), 与现实环境严重不符。建议使用下面环境进行替代\n\n" ..

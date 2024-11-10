@@ -28,7 +28,7 @@ end
 function installed()
     return try {
         function()
-            common.xlings_exec("code --version")
+            os.exec("code --version")
             return true
         end, catch {
             function(e)

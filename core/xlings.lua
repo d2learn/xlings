@@ -14,7 +14,7 @@ function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.1")
     cprint("")
     cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
-    
+
     cprint("${bright}Commands:${clear}")
     cprint("\t ${magenta}run${clear},      \t easy to run ${magenta}target${clear} - sourcecode file")
     cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
@@ -38,7 +38,7 @@ function deps_check_and_install(xdeps)
     local xppcmds = nil
 
     -- project dependencies
-    cprint("[xlings]: deps check and install...")
+    cprint("[xlings]: start deps check and install...")
     for name, value in pairs(xdeps) do
         if name == "xppcmds" then
             xppcmds = value
@@ -68,6 +68,8 @@ function deps_check_and_install(xdeps)
 --]]
 
     if xppcmds then
+        cprint("\n[xlings]: start run postprocess cmds...")
+        os.cd(platform.get_config_info().rundir)
         for _, cmd in ipairs(xppcmds) do
             common.xlings_exec(cmd)
         end

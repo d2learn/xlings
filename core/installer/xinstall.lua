@@ -7,6 +7,10 @@ import("installer.python")
 import("installer.devcpp")
 import("installer.vcpp6")
 import("installer.rust")
+import("installer.nvm")
+import("installer.nodejs")
+import("installer.npm")
+import("installer.pnpm")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -23,6 +27,10 @@ local supported_installers = {
     ["python"]    = python,
     ["python3"]   = python,
     ["rust"]      = rust,
+    ["nvm"]       = nvm,
+    ["nodejs"]    = nodejs,
+    ["npm"]       = npm,
+    ["pnpm"]      = pnpm,
 }
 
 function list()
@@ -112,13 +120,15 @@ function install(name, x_installer, req_confirm)
     end
 
     if x_installer.deps then
-        cprint("[xlings]: install dependencies...")
         local deps_list = x_installer.deps()[os.host()]
-        for _, dep_name in ipairs(deps_list) do
+        if deps_list and not table.empty(deps_list) then
+            cprint("[xlings]: check ${bright green}" .. name .. "${clear} dependencies...")
+            for _, dep_name in ipairs(deps_list) do
+                cprint("${dim}---${clear}")
+                main(dep_name, {confirm = false, info = false, feedback = false})
+            end
             cprint("${dim}---${clear}")
-            main(dep_name, {confirm = false, info = false, feedback = false})
         end
-        cprint("${dim}---${clear}")
     end
 
     local success = x_installer.install()
@@ -127,7 +137,7 @@ function install(name, x_installer, req_confirm)
         cprint("[xlings]: ${green bright}" .. name .. "${clear} already installed(${yellow}takes effect in a new terminal or cmd${clear})")
     else
         cprint("[xlings]: ${red}" .. name .. " install failed or not support, clear cache and retry${clear}")
-        install(name, x_installer)
+        install(name, x_installer, true)
     end
 
 end

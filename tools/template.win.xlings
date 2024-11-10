@@ -1,4 +1,4 @@
-includes("config.xlings.lua")
+includes("config-xlings.lua")
 
 if xlings_name then
     add_includedirs("../" .. xlings_name)

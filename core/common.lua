@@ -141,20 +141,34 @@ end
 function xlings_download(url, dest)
     cprint("[xlings]: downloading %s to %s", url, dest)
 
-    local tool = find_tool("curl")
-    if tool then -- support progress-bar
-        local outputdir = path.directory(dest)
-        if not os.isdir(outputdir) then
-            os.mkdir(outputdir)
-        end
-        -- -#, --progress-bar
-        -- -L, --location):
-        xlings_exec(tool.program .. " -L -# -o " .. dest .. " " .. url)
-        --os.vrunv(tool.program, {"-#", "-o", dest, url})
-    else
-        -- { insecure = true }
-        runjobs("download",function () http.download(url, dest) end, { progress = true })
-    end
+    try
+    {
+        function()
+            local tool = find_tool("curl")
+            if tool then -- support progress-bar
+                local outputdir = path.directory(dest)
+                if not os.isdir(outputdir) then
+                    os.mkdir(outputdir)
+                end
+                -- -#, --progress-bar
+                -- -L, --location):
+                xlings_exec(tool.program .. " -L -# -o " .. dest .. " " .. url)
+                --os.vrunv(tool.program, {"-#", "-o", dest, url})
+            else
+                -- { insecure = true }
+                runjobs("download",function () http.download(url, dest) end, { progress = true })
+            end
+        end,
+        catch
+        {
+            function (e)
+                print(e)
+                cprint("\n\t${yellow}Please check your network environment${cylear}\n")
+            end
+        }
+    }
+
+
 end
 
 function xlings_create_file_and_write(file, content)
