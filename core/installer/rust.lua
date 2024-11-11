@@ -48,6 +48,22 @@ function install()
         common.xlings_download(url, rust_installer)
     end
 
+    function set_rust_env()
+        local home = os.getenv("USERPROFILE") or os.getenv("HOME")
+        local cargo_bin = path.join(home, ".cargo", "bin")
+
+        os.setenv("CARGO_HOME", path.join(home, ".cargo"))
+        os.setenv("RUSTUP_HOME", path.join(home, ".rustup"))
+
+        -- update path
+        local path_sep = is_host("windows") and ";" or ":"
+        local current_path = os.getenv("PATH") or ""
+
+        if not current_path:find(cargo_bin, 1, true) then
+            os.setenv("PATH", cargo_bin .. path_sep .. current_path)
+        end
+    end
+
     return try {
         function ()
             if os.host() == "windows" then
@@ -58,6 +74,7 @@ function install()
             elseif os.host() == "macosx" then
                 -- TODO: install rust on macosx
             end
+            set_rust_env()
             return true
         end, catch {
             function (e)

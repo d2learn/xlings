@@ -35,6 +35,9 @@ function installed()
         cprint("vs ".. version)
         return true
     else
+        local msvc_dir = "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC"
+        cprint("${green}Check${clear} MSVC Tools...")
+        if os.isdir(msvc_dir) then return true end
         return false
     end
 end

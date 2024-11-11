@@ -163,7 +163,7 @@ function xlings_download(url, dest)
         {
             function (e)
                 print(e)
-                cprint("\n\t${yellow}Please check your network environment${cylear}\n")
+                cprint("\n\t${yellow}Please check your network environment${clear}\n")
             end
         }
     }

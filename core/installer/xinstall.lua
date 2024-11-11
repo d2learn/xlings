@@ -11,6 +11,7 @@ import("installer.nvm")
 import("installer.nodejs")
 import("installer.npm")
 import("installer.pnpm")
+import("installer.project_graph")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -31,6 +32,7 @@ local supported_installers = {
     ["nodejs"]    = nodejs,
     ["npm"]       = npm,
     ["pnpm"]      = pnpm,
+    ["project-graph"] = project_graph,
 }
 
 function list()
