@@ -2,7 +2,7 @@ import("lib.detect.find_tool")
 
 import("platform")
 import("common")
-import("installer.visual_studio")
+import("installer.windows.visual_studio")
 import("installer.gcc")
 
 local vstudio_url = "https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&passive=false"

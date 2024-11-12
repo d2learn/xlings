@@ -1,6 +1,3 @@
-import("installer.visual_studio")
-import("installer.devcpp")
-
 function support()
     return {
         windows = true,

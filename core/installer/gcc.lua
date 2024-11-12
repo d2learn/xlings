@@ -2,7 +2,7 @@ import("lib.detect.find_tool")
 
 import("platform")
 import("common")
-import("installer.visual_studio")
+import("installer.windows.visual_studio")
 
 function support()
     return {

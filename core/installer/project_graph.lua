@@ -22,6 +22,14 @@ end
 function installed()
     local tool = find_tool("project-graph")
     if tool then return true end
+
+    if os.host() == "windows" then
+        local pgraph_exe_file = "C:\\Users\\" .. os.getenv("USERNAME") .. "\\AppData\\Local\\Project Graph\\project-graph.exe"
+        return os.isfile(pgraph_exe_file)
+    else
+        -- TODO: ...
+    end
+
     return false
 end
 

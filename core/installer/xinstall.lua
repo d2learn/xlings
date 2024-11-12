@@ -1,11 +1,10 @@
+import("installer.base.utils")
+
 import("installer.vscode")
-import("installer.visual_studio")
 import("installer.mdbook")
 import("installer.gcc")
 import("installer.c_and_cpp")
 import("installer.python")
-import("installer.devcpp")
-import("installer.vcpp6")
 import("installer.rust")
 import("installer.nvm")
 import("installer.nodejs")
@@ -16,10 +15,6 @@ import("installer.project_graph")
 local supported_installers = {
     ["vscode"]    = vscode,
     ["mdbook"]    = mdbook,
-    ["vs"]        = visual_studio,
-    ["devcpp"]    = devcpp,
-    ["devc++"]    = devcpp,
-    ["vc++6.0"]   = vcpp6,
     ["c"]         = c_and_cpp,
     ["cpp"]       = c_and_cpp,
     ["c++"]       = c_and_cpp,
@@ -34,6 +29,14 @@ local supported_installers = {
     ["pnpm"]      = pnpm,
     ["project-graph"] = project_graph,
 }
+
+for k, v in pairs(utils.load_installers("windows")) do
+    supported_installers[k] = v
+end
+
+supported_installers["devc++"]    = supported_installers.devcpp
+supported_installers["vc++6.0"]   = supported_installers.vcpp6
+supported_installers["vs"]        = supported_installers.visual_studio
 
 function list()
     cprint("\t${bright}xinstaller lists${clear}")
