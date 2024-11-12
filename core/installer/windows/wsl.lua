@@ -97,7 +97,7 @@ function guide_wsl_setup()
 
 [xlings]: WSL Ubuntu 初步指导:
 
-    0. 运行wsl: 通过 wsl -d ubuntu 命令 或点击命令行窗口顶部的下拉菜单 v 按钮选择ubuntu
+    0. 运行wsl: 点击命令行窗口顶部的下拉菜单 v 按钮选择ubuntu
     1. 等待 Ubuntu 初始化完成
     2. 创建一个新的 UNIX 用户名（不需要跟 Windows 用户名相同）
     3. 设置密码（输入时不会显示）

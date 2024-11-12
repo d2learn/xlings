@@ -16,14 +16,15 @@
 </div>
 
 <div align=center>一个用于编程学习、开发和课程搭建的开发者工具🛠️</div>
-<div align=center>⌈软件安装、一键环境配置、项目依赖管理⌋</div>
-<div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、Demos示例集⌋</div>
+<div align=center>⌈软件安装、一键环境配置、项目依赖管理、跨平台跨语言的包管理(初步)⌋</div>
+<div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、练习代码自动检测、Demos示例集⌋</div>
 
 
 ---
 
 ## 最近动态
 
+- 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
 - 软件安装模块增加deps依赖配置和"递归"安装实现
 - 初步xdeps项目依赖功能实现和配置文件格式初步确定
 - install模块添加info功能并支持Rust安装
@@ -83,6 +84,18 @@ xlings install c
 xlings install rust
 ```
 
+> 一键配置Python开发环境
+
+```bash
+xlings install python
+```
+
+> 一键配置windows系统的Linux环境 - wsl
+
+```bash
+xlings install wsl
+```
+
 **软件安装**
 
 > 一键安装vscode
@@ -90,6 +103,20 @@ xlings install rust
 ```bash
 xlings install vscode
 ```
+
+> 一键安装Visual Studio
+
+```bash
+xlings install vs
+```
+
+> 一键安装Dev-C++
+
+```bash
+xlings install devcpp
+```
+
+> 注意: 更多软件和环境支持可以使用`xlings install`命令进行查看
 
 ### 项目依赖管理
 
