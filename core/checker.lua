@@ -88,7 +88,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
             cprint("\n${blink bright cyan}AI-Tips(" .. llm_config.request_counter  .. "):${clear}")
             cprint(llm_config.response)
         else
-            cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://github.com/d2learn/xlings${clear}")
+            cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://d2learn.org/docs/xlings${clear}")
         end
 
         -- print files detail
@@ -243,7 +243,11 @@ function main(start_target)
                 local checker_task = function()
                     if ok > 0 or compile_bypass_counter > 20 then
 
-                        output, build_success = build_with_error_handling(name)
+                        if targets[name]:get("kind") ~= "phony" then
+                            output, build_success = build_with_error_handling(name)
+                        else
+                            build_success = true
+                        end
 
                         if build_success then
                             output, build_success = run_with_error_handling(name)
