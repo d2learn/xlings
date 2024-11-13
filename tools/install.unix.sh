@@ -28,6 +28,7 @@ if ! command -v xmake &> /dev/null
 then
     echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
     curl -fsSL https://xmake.io/shget.text | bash
+    source ~/.xmake/profile
 else
     echo -e "${GREEN}[xlings]: xmake installed${RESET}"
 fi
