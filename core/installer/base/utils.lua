@@ -15,6 +15,6 @@ function load_installers(dir)
 end
 
 function main()
-    local i = load_installers("windows")
-    print(i)
+    --local i = get_linux_distribution()
+    --print(i)
 end

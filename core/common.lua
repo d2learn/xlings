@@ -308,4 +308,35 @@ function xlings_download_repo(git_url, dest_dir)
     cprint("[xlings]: %s - ${green}ok${clear}", dest_dir)
 end
 
+
+function get_linux_distribution()
+    local os_release = io.open("/etc/os-release", "r")
+    if os_release then
+        local content = os_release:read("*a")
+        os_release:close()
+        
+        local id = content:match('ID=["]*([^"\n]+)["]*')
+        local version = content:match('VERSION_ID=["]*([^"\n]+)["]*')
+        local name = content:match('PRETTY_NAME=["]*([^"\n]+)["]*')
+
+        -- name use lowercase
+        if name then
+            name = name:lower()
+            name = name:gsub("%s+%d[%d%.]*%s*.*$", "")
+        end
+        
+        return {
+            id = id or "unknown",
+            version = version or "unknown",
+            name = name or "unknown"
+        }
+    end
+
+    return {
+        id = "unknown",
+        version = "unknown",
+        name = "unknown"
+    }
+end
+
 --return common

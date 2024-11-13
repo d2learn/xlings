@@ -11,6 +11,7 @@ import("installer.nodejs")
 import("installer.npm")
 import("installer.pnpm")
 import("installer.project_graph")
+import("installer.fnm")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -28,6 +29,7 @@ local supported_installers = {
     ["npm"]       = npm,
     ["pnpm"]      = pnpm,
     ["project-graph"] = project_graph,
+    ["fnm"] = fnm,
 }
 
 for k, v in pairs(utils.load_installers("windows")) do
@@ -148,6 +150,10 @@ function install(name, x_installer, req_confirm)
 end
 
 function uninstall()
+    -- TODO
+end
+
+function mpkger_installer(name)
     -- TODO
 end
 

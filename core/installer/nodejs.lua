@@ -28,10 +28,26 @@ function install()
 
     return try {
         function()
-            common.xlings_exec("nvm install lts")
-            common.xlings_exec("nvm use lts")
-            -- TODO: optimize
-            cprint("\n\n  ${yellow}Note${clear}: please run ${cyan}nvm use lts${clear} to enable nodejs \n\n")
+            if os.host() == "windows" then
+                common.xlings_exec("nvm install lts")
+                common.xlings_exec("nvm use lts")
+                -- TODO: optimize
+                cprint("\n\n  ${yellow}Note${clear}: please run ${cyan}nvm use lts${clear} to enable nodejs \n\n")
+            elseif os.host() == "linux" or os.host() == "macosx" then
+                -- TODO: fnm use lts-latest
+                --common.xlings_exec("fnm install --lts")
+                --common.xlings_exec("fnm use lts-latest")
+
+                local node_version = "v22.11.0"
+                common.xlings_exec("fnm install " .. node_version)
+                common.xlings_exec("fnm use " .. node_version)
+
+                local fnm_dir = os.getenv("FNM_DIR")
+                local node_bin_dir = path.join(fnm_dir, "node-versions", node_version, "installation", "bin")
+                print("node_bin_dir: " .. node_bin_dir)
+                os.addenv("PATH", node_bin_dir)
+            end
+
             return true
         end, catch {
             function(e)
@@ -43,7 +59,8 @@ function install()
 end
 
 function uninstall()
-    common.xlings_exec("nvm uninstall lts")
+    -- TODO
+    --common.xlings_exec("nvm uninstall lts")
 end
 
 function deps()
@@ -52,10 +69,10 @@ function deps()
             "nvm"
         },
         linux = {
-            "nvm"
+            "fnm"
         },
         macosx = {
-            "nvm"
+            "fnm"
         }
     }
 end

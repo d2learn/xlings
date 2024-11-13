@@ -63,8 +63,9 @@ function install()
         else
             -- Linux/macOS
             local home = os.getenv("HOME")
-            local cargo_env = path.join(home, ".cargo/env")
-            os.exec(". " .. cargo_env)
+            os.addenv("PATH", path.join(home, ".cargo/bin"))
+            --local cargo_env = path.join(home, ".cargo/env")
+            --os.exec(". " .. cargo_env)
         end
     end
 
@@ -83,6 +84,7 @@ function install()
             return true
         end, catch {
             function (e)
+                print("[xlings]: failed to install rust, error: %s", e)
                 os.tryrm(rust_installer)
                 return false
             end

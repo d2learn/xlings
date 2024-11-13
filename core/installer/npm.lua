@@ -27,8 +27,19 @@ function install()
 
     return try {
         function()
+            local cmd_str = ""
             -- common.xlings_exec("npm install -g npm@latest")
-            cprint("\n\n  ${yellow}Note${clear}: please run ${cyan}nvm use lts${clear} to enable npm \n\n")
+            if os.host() == "windows" then
+                cmd_str = "nvm use lts"
+            elseif os.host() == "linux" or os.host() == "macosx" then
+                -- TOOD: fnm use lts-latest
+                cmd_str = "fnm use lts-latest"
+            end
+
+            cprint("\n\n  ${yellow}Note${clear}: please run ${cyan}" .. cmd_str .. "${clear} to enable npm \n\n")
+
+            os.exec("npm --version")
+
             return true
         end, catch {
             function(e)

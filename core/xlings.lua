@@ -71,7 +71,22 @@ function deps_check_and_install(xdeps)
         cprint("\n[xlings]: start run postprocess cmds...")
         os.cd(platform.get_config_info().rundir)
         for _, cmd in ipairs(xppcmds) do
-            common.xlings_exec(cmd)
+            if type(cmd) == "table" then
+                local host_os = common.get_linux_distribution().name
+
+                if os.host() == "windows" or os.host() == "macosx" then
+                    host_os = os.host()
+                end
+
+                if host_os == cmd[1] then
+                    common.xlings_exec(cmd[2])
+                else
+                    -- TODO: support other platform
+                    print("skip postprocess cmd: " .. cmd[2] .. " - " .. cmd[1])
+                end
+            else
+                common.xlings_exec(cmd)
+            end
         end
     end
 
