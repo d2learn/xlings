@@ -157,6 +157,8 @@ echo "Running install.unix.sh..."
 cd "$XLINGS_DIR"
 source $INSTALL_SCRIPT disable_reopen
 
+source ~/.bashrc
+
 echo "Cleaning up..."
 cd $QI_RUN_DIR
 echo "Removing $QI_RUN_DIR/$QI_INSTALL_DIR(tmpfiles)..."
