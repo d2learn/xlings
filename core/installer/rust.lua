@@ -49,18 +49,22 @@ function install()
     end
 
     function set_rust_env()
-        local home = os.getenv("USERPROFILE") or os.getenv("HOME")
-        local cargo_bin = path.join(home, ".cargo", "bin")
+        if is_host("windows") then
+            local home = os.getenv("USERPROFILE")
+            local cargo_bin = path.join(home, ".cargo", "bin")
+            local current_path = os.getenv("PATH") or ""
 
-        os.setenv("CARGO_HOME", path.join(home, ".cargo"))
-        os.setenv("RUSTUP_HOME", path.join(home, ".rustup"))
+            os.setenv("CARGO_HOME", path.join(home, ".cargo"))
+            os.setenv("RUSTUP_HOME", path.join(home, ".rustup"))
 
-        -- update path
-        local path_sep = is_host("windows") and ";" or ":"
-        local current_path = os.getenv("PATH") or ""
-
-        if not current_path:find(cargo_bin, 1, true) then
-            os.setenv("PATH", cargo_bin .. path_sep .. current_path)
+            if not current_path:find(cargo_bin, 1, true) then
+                os.setenv("PATH", cargo_bin .. ";" .. current_path)
+            end
+        else
+            -- Linux/macOS
+            local home = os.getenv("HOME")
+            local cargo_env = path.join(home, ".cargo/env")
+            os.exec(". " .. cargo_env)
         end
     end
 
@@ -70,7 +74,8 @@ function install()
                 print("[xlings]: runninng rust installer, it may take some minutes...")
                 common.xlings_exec(rust_installer .. " --default-toolchain stable --profile default -y")
             elseif os.host() == "linux" then
-                os.exec("sh " .. rust_installer)
+                print("[xlings]: it may take some minutes...")
+                os.exec("sh " .. rust_installer .. " -v -y")
             elseif os.host() == "macosx" then
                 -- TODO: install rust on macosx
             end
