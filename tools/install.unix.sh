@@ -49,6 +49,7 @@ echo -e "${GREEN}[xlings]: xlings installed${RESET}"
 
 echo -e ""
 echo -e "\t run $YELLOW xlings help $RESET get more information"
+echo -e "\t after run $YELLOW source ~/.bashrc $RESET to reload"
 echo -e ""
 
 cd $RUN_DIR
