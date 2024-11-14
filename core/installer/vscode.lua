@@ -57,6 +57,14 @@ function install()
             elseif os.host() == "macosx" then
                 -- TODO: install vscode on macosx
             end
+
+            -- tips
+            print([[
+[xlings]: vscode Tips/小提示:
+    - auto save settings: File -> Auto Save
+    - 自动保存设置: 文件 -> 自动保存
+            ]])
+
             return true
         end, catch {
             function (e)

@@ -134,6 +134,7 @@ function main()
 
     -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "checker" or command == xname then
+        if xlings_editor then xinstall(xlings_editor, {confirm = false}) end
         xinstall(xlings_lang, {confirm = false, info = false, feedback = false})
         checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
