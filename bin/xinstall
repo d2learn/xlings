@@ -1,0 +1,3 @@
+#!/bin/bash
+
+xlings install $1 $2 $3

@@ -11,14 +11,13 @@
   <a href="README.md" target="_blank">中文</a>
   -
   <a href="README.en.md" target="_blank">English</a>
-  -
-  Other
+  |
+  <a href="README.en.md" target="_blank">项目开发看板</a>
 </div>
 
 <div align=center>一个用于编程学习、开发和课程搭建的开发者工具🛠️</div>
 <div align=center>⌈软件安装、一键环境配置、项目依赖管理、跨平台跨语言的包管理(初步)⌋</div>
 <div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、练习代码自动检测、Demos示例集⌋</div>
-
 
 ---
 
