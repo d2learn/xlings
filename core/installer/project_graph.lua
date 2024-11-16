@@ -46,11 +46,18 @@ function install()
     return try {
         function()
             print(installer_info)
+
             pgraph_installer = path.join(config.rcachedir, installer_info.name)
             if not os.isfile(pgraph_installer) then
                 common.xlings_download(installer_info.url, pgraph_installer)
             end
-            common.xlings_exec(pgraph_installer .. " /SILENT")
+
+            if os.host() == "windows" then
+                common.xlings_exec(pgraph_installer .. " /SILENT")
+            else -- linux
+                common.xlings_exec("sudo dpkg -i " .. pgraph_installer)
+            end
+
             return true
         end, catch {
             function(e)
