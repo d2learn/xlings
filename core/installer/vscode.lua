@@ -28,7 +28,11 @@ end
 function installed()
     return try {
         function()
-            os.exec("code --version")
+            if os.host() == "windows" and (os.getenv("USERNAME") or ""):lower() == "administrator" then
+                return os.isfile("C:\\Program Files\\Microsoft VS Code\\Code.exe")
+            else
+                os.exec("code --version")
+            end
             return true
         end, catch {
             function(e)
@@ -42,8 +46,10 @@ function install()
     print("[xlings]: Installing vscode...")
 
     local url = vscode_url[os.host()]
+    -- only windows administrator
+    local use_winget_sys = (os.getenv("USERNAME") or ""):lower() == "administrator"
 
-    if not os.isfile(vscode_file) then
+    if not os.isfile(vscode_file) and not use_winget_sys then
         common.xlings_download(url, vscode_file)
     end
 
@@ -51,7 +57,11 @@ function install()
         function ()
             if os.host() == "windows" then
                 print("[xlings]: runninng vscode installer, it may take some minutes...")
-                common.xlings_exec(vscode_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
+                if use_winget_sys then
+                    os.exec("winget install vscode --scope machine")
+                else
+                    common.xlings_exec(vscode_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
+                end
             elseif os.host() == "linux" then
                 os.exec("sudo dpkg -i " .. vscode_file)
             elseif os.host() == "macosx" then

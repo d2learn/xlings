@@ -29,6 +29,11 @@ function xlings_help()
     cprint("\t ${magenta}book${clear},     \t open project's book in default browser")
     cprint("\t ${magenta}checker${clear},  \t start project's auto-exercises from ${magenta}target${clear}")
     cprint("")
+
+    cprint("${bright}Short Commands:${clear} ${dim}(command alias)${clear}")
+    cprint("\t ${green}xinstall${clear}, \t xlings install")
+    cprint("\t ${green}xrun${clear},     \t xlings run")
+    cprint("")
     cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
     cprint("")
 end
