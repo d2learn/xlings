@@ -23,6 +23,7 @@
 
 ## 最近动态
 
+- 增加DotNet/C#和java/jdk8环境的支持
 - 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
 - 软件安装模块增加deps依赖配置和"递归"安装实现
 - 初步xdeps项目依赖功能实现和配置文件格式初步确定
