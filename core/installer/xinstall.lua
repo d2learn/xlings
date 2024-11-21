@@ -12,6 +12,10 @@ import("installer.npm")
 import("installer.pnpm")
 import("installer.project_graph")
 import("installer.fnm")
+import("installer.openjdk8")
+import("installer.java")
+import("installer.dotnet")
+import("installer.csharp")
 
 local supported_installers = {
     ["vscode"]    = vscode,
@@ -30,15 +34,21 @@ local supported_installers = {
     ["pnpm"]      = pnpm,
     ["project-graph"] = project_graph,
     ["fnm"] = fnm,
+    ["openjdk8"] = openjdk8,
+    ["java"] = java,
+    ["dotnet"] = dotnet,
+    ["csharp"] = csharp,
 }
 
 for k, v in pairs(utils.load_installers("windows")) do
     supported_installers[k] = v
 end
 
+-- alias
 supported_installers["devc++"]    = supported_installers.devcpp
 supported_installers["vc++6.0"]   = supported_installers.vcpp6
 supported_installers["vs"]        = supported_installers.visual_studio
+supported_installers["c#"]        = supported_installers.csharp
 
 function list()
     cprint("\t${bright}xinstaller lists${clear}")
