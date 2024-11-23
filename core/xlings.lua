@@ -174,7 +174,7 @@ function main()
         common.xlings_uninstall()
     elseif command == "drepo" then
         -- TODO drepo local-project management
-        if cmd_target ~= "xlings_name" then
+        if cmd_target and cmd_target ~= "xlings_name" then
             drepo.print_drepo_info(cmd_target)
             cprint("[xlings]: try to download drepo - ${magenta}" .. cmd_target .. "${clear}")
             drepo.download_drepo(cmd_target)
