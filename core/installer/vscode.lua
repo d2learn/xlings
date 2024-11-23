@@ -31,7 +31,8 @@ function installed()
             if os.host() == "windows" and (os.getenv("USERNAME") or ""):lower() == "administrator" then
                 return os.isfile("C:\\Program Files\\Microsoft VS Code\\Code.exe")
             else
-                os.exec("code --version")
+                -- os.exec("code --version") - windows cmd not support?
+                common.xlings_exec("code --version") -- for windows
             end
             return true
         end, catch {
