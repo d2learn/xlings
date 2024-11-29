@@ -72,8 +72,14 @@ function install()
     return try {
         function ()
             if os.host() == "windows" then
+                -- select toolchain(abi) msvc or gnu
+                local toolchain_abi = choice_toolchain()
                 print("[xlings]: runninng rust installer, it may take some minutes...")
-                common.xlings_exec(rust_installer .. " --default-toolchain stable --profile default -y")
+                common.xlings_exec(rust_installer
+                    .. " --default-host " .. toolchain_abi
+                    .. " --default-toolchain stable"
+                    .. " --profile default -y"
+                )
             elseif os.host() == "linux" then
                 print("[xlings]: it may take some minutes...")
                 os.exec("sh " .. rust_installer .. " -v -y")
@@ -99,7 +105,7 @@ end
 function deps()
     return {
         windows = {
-            "vs"
+            -- "vs"
         },
         linux = {
 
@@ -118,4 +124,35 @@ function info()
         docs     = "https://prev.rust-lang.org/en-US/documentation.html",
         profile  = "A language empowering everyone to build reliable and efficient software.",
     }
+end
+
+-- local functions
+
+-- host toolchain abi -- only for windows
+function choice_toolchain()
+    local toolchain_abi = "x86_64-pc-windows-gnu"
+    print("[xlings]: Select toolchain ABI:")
+    print([[
+
+        1. x86_64-pc-windows-gnu (default)
+        2. x86_64-pc-windows-msvc
+    ]])
+    cprint("${dim bright cyan}please input (1 or 2):${clear}")
+    io.stdout:flush()
+    local confirm = io.read()
+
+    if confirm == "2" then
+        toolchain_abi = "x86_64-pc-windows-msvc"
+        local vs = import("installer.windows.visual_studio")
+        if not vs.installed() then
+            vs.install()
+        end
+    end
+
+    return toolchain_abi
+end
+
+function main()
+    local ct = choice_toolchain()
+    print(ct)
 end
