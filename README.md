@@ -23,6 +23,7 @@
 
 ## 最近动态
 
+- xinstall功能更新介绍 - [文章](https://forum.d2learn.org/topic/48) / [视频](https://www.bilibili.com/video/BV1ejzvY4Eg7/?share_source=copy_web&vd_source=2ab9f3bdf795fb473263ee1fc1d268d0)
 - 增加DotNet/C#和java/jdk8环境的支持
 - 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
 - 软件安装模块增加deps依赖配置和"递归"安装实现
