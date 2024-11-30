@@ -1,3 +1,4 @@
+import("core.tool.toolchain")
 import("lib.detect.find_tool")
 
 import("platform")
@@ -22,7 +23,7 @@ end
 
 function installed()
     if os.host() == "windows" then
-        return visual_studio.installed()
+        return toolchain.load("mingw"):check() or visual_studio.installed()
     elseif os.host() == "linux" or os.host() == "macosx" then
         return gcc.installed()
     else
