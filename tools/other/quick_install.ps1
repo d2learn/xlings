@@ -151,7 +151,25 @@ Remove-Item $zipFile -Force
 Show-Progress -Activity "Installation complete" -PercentComplete 100
 Write-Host "$softwareName has been successfully installed."
 
-# Update env
+# Update env - for current user
+$userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$xlingsBinDir*") {
+    $userPath += ";$xlingsBinDir"
+    [System.Environment]::SetEnvironmentVariable("Path", $userPath, "User")
+}
+else {
+    Write-Host "Path already contains $xlingsBinDir"
+}
+
+if ($userPath -notlike "*C:\Users\$env:USERNAME\xmake*") {
+    $userPath += ";C:\Users\$env:USERNAME\xmake"
+    [System.Environment]::SetEnvironmentVariable("Path", $userPath, "User")
+}
+else {
+    Write-Host "Path already contains C:\Users\$env:USERNAME\xmake"
+}
+
+# Update env - for current window
 $env:Path += ";$xlingsBinDir;C:\Users\$env:USERNAME\xmake"
 
 # powershell.exe -ExecutionPolicy Bypass -File tools/other/quick_install.ps1
