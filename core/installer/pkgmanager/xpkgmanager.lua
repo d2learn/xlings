@@ -23,7 +23,7 @@ elseif os.host() == "linux" then
     if linux_host.name == "ubuntu" or linux_host.name == "debian" then
         xpm = apt
     elseif linux_host.name == "arch linux" then
-        -- TODO
+        xpm = pacman
     else
         cprint("[xlings] linux distribution not supported")
     end
