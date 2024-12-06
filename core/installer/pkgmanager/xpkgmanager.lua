@@ -22,8 +22,8 @@ elseif os.host() == "linux" then
     local linux_host = common.get_linux_distribution()
     if linux_host.name == "ubuntu" or linux_host.name == "debian" then
         xpm = apt
-    elseif linux_host.name == "arch" then
-        -- TODO
+    elseif linux_host.name == "arch linux" then
+        xpm = pacman
     else
         cprint("[xlings] linux distribution not supported")
     end
@@ -71,7 +71,7 @@ function search(query)
 end
 
 function list_installed()
-    cprint("[xlings] list_installed not implemented")
+    xpm.list_installed()
 end
 
 function info()
@@ -92,6 +92,6 @@ function get_xpm()
 end
 
 function main()
-    local xpm = get_xpm()
+    --local xpm = get_xpm()
     xpm.list_installed()
 end
