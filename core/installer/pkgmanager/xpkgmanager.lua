@@ -92,6 +92,6 @@ function get_xpm()
 end
 
 function main()
-    local xpm = get_xpm()
+    --local xpm = get_xpm()
     xpm.list_installed()
 end
