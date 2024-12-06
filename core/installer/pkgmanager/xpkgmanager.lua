@@ -71,7 +71,7 @@ function search(query)
 end
 
 function list_installed()
-    cprint("[xlings] list_installed not implemented")
+    xpm.list_installed()
 end
 
 function info()
