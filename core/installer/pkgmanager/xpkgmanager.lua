@@ -22,7 +22,7 @@ elseif os.host() == "linux" then
     local linux_host = common.get_linux_distribution()
     if linux_host.name == "ubuntu" or linux_host.name == "debian" then
         xpm = apt
-    elseif linux_host.name == "arch" then
+    elseif linux_host.name == "arch linux" then
         -- TODO
     else
         cprint("[xlings] linux distribution not supported")
