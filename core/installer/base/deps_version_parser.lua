@@ -52,6 +52,11 @@ end
 
 -- 解析复合版本字符串到版本对象
 function parse_version_ranges(version_str)
+    if not version_str or
+           version_str == "" or
+           version_str == "*" or
+           version_str == "any"
+    then return {} end
     local conditions = {}
     for cond in version_str:gmatch("[^ ,]+") do
         table.insert(conditions, parse_single_version_range(cond))
@@ -87,6 +92,15 @@ function merge_range(a, b)
     return merged
 end
 
+function is_range_illegal(range)
+    if range then return false end
+    if not range.min or not range.max then return false end
+    local c = compare_version(a.min, a.max)
+    if c > 0 then return true end
+    if c == 0 then return not min_inclusive or not max_inclusive end
+    return false
+end
+
 function compare_version_number(a, b)
     local a_parts = {} local b_parts = {}
     for num in a:gmatch("%d+") do table.insert(a_parts, tonumber(num)) end
@@ -110,8 +124,8 @@ function compare_version_suffix(a, b)
     if a == "" and b ~= "" then return  1 end
     if b == "" and a ~= "" then return -1 end
 
-    local as, av = a:match("^(%a+)(%d*)$")
-    local bs, bv = b:match("^(%a+)(%d*)$")
+    local as, av = a:match("^(%a+)[.+]?(%d*)$")
+    local bs, bv = b:match("^(%a+)[.+]?(%d*)$")
     as = pre_flags[as]
     bs = pre_flags[bs]
     if as ~= bs then return as > bs and 1 or -1 end
@@ -135,10 +149,14 @@ end
 -- 生成所需依赖
 function gen_deps(deps)
     local needed_deps = {}
-    for _, dep_set in ipairs(deps) do for pkg_name, version_str in pairs(dep_set) do
-        needed_deps[pkg_name] = not needed_deps[pkg_name] and
-                parse_version_ranges(version_str) or
-                merge_range(needed_deps[pkg_name], parse_version_ranges(version_str))
+    for _, dep_set in ipairs(deps) do
+        for pkg_name, version_str in pairs(dep_set) do
+            if tonumber(pkg_name) then
+                pkg_name = version_str
+                version_str = "any"
+            end local parsed = parse_version_ranges(version_str)
+            needed_deps[pkg_name] = not needed_deps[pkg_name] and
+                    parsed or merge_range(needed_deps[pkg_name], parsed)
     end end return needed_deps
 end
 
@@ -159,11 +177,11 @@ end
 function main()
     -- test gen_deps
     local deps = {
-        { packageA = "*", packageB = "*",      packageC = ">=2" },
-        {                 packageB = "~5.7.1", packageC = "~3.2.7" },
-        {                                      packageC = "3.0.x" },
-        {         packageD = ">=3 <4",         packageC = "3.0.5",  },
-        {         packageE = ">3.15"         },
+        { "packageA",  packageB = "*",       packageC = ">=2" },
+        {              packageB = "~5.7.1",  packageC = "~3.2.7" },
+        {                                    packageC = "3.0.x" },
+        {        packageD = ">=3 <4",        packageC = "3.0.5",  },
+        {        packageE = ">3.15"        },
     }
     local needed_deps = gen_deps(deps)
     for pkg, range in pairs(needed_deps) do
@@ -190,10 +208,11 @@ function main()
 
     -- test match_version
     local matches = {
-        { version = "1.2.3",    range = "*",               result = true },
-        { version = "1.2.3",    range = "~1.2.4",          result = false },
-        { version = "1.2.3",    range = ">=1.2.3-beta",    result = true },
-        { version = "1.2.3",    range = "1.2.3-beta",      result = false },
+        { version = "1.2.3",     range = "*",                result = true },
+        { version = "1.2.3",     range = "~1.2.4",           result = false },
+        { version = "1.2.3",     range = ">=1.2.3-beta.514", result = true },
+        { version = "1.2.3",     range = "1.2.3-beta",       result = false },
+        { version = "1.2.3-a+2", range = "<1.2.3-rc1",       result = true },
     }
     for _, m in ipairs(matches) do
         local range = parse_version_ranges(m.range)
