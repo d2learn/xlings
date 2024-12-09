@@ -1,0 +1,4 @@
+-- remote package repo manager
+-- 1. auto update - enable or disable | day week month
+-- 2. multi-repo support
+-- 3. private repo support

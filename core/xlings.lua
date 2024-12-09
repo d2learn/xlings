@@ -7,7 +7,7 @@ import("checker")
 import("init")
 import("drepo")
 import("mini_run")
-import("installer.xinstall")
+import("xim.xinstall")
 import("config")
 
 function xlings_help()

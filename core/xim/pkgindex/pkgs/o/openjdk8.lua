@@ -1,5 +1,3 @@
-import("installer.pkgmanager.xpkgmanager")
-
 function support()
     return {
         windows = true,
@@ -26,7 +24,7 @@ function install()
 
     return try {
         function ()
-            xpkgmanager.install("openjdk8")            
+            cprint("TODO: install OpenJDK 8")      
             return true
         end, catch {
             function (e)

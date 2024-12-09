@@ -143,7 +143,7 @@ function choice_toolchain()
 
     if confirm == "2" then
         toolchain_abi = "x86_64-pc-windows-msvc"
-        local vs = import("installer.windows.visual_studio")
+        local vs = import("xim.windows.visual_studio")
         if not vs.installed() then
             vs.install()
         end

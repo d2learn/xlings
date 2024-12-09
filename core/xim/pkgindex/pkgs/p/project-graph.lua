@@ -2,7 +2,7 @@ import("lib.detect.find_tool")
 
 import("platform")
 import("common")
-import("installer.base.github")
+import("xim.base.github")
 
 local config = platform.get_config_info()
 
