@@ -39,6 +39,17 @@ function deep_copy(orig)
     return _copy(orig)
 end
 
+function os_type()
+    local os_type = os.host()
+    
+    if os_type == "linux" then
+        os_type = linuxos.name()
+        -- os_version = linuxos.version() -- TODO: get linux version
+    end
+
+    return os_type
+end
+
 function main()
     print("\n\t test deep_copy \n")
     local mytabel = {
@@ -52,4 +63,6 @@ function main()
     local mytabel2 = deep_copy(mytabel)
     mytabel2["c"]["d"] = 5
     print(mytabel["c"]["d"])
+
+    print(os_type())
 end

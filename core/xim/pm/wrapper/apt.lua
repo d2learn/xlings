@@ -49,6 +49,6 @@ function info(name)
 end
 
 function main()
-    print(deps("vim"))
+    print(info("vim"))
 end
 

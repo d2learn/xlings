@@ -1,162 +1,95 @@
-import("common")
--- xim package template
-
-local XPackage = {}
-XPackage.__index = XPackage
+local XPkgManager = {}
+XPkgManager.__index = XPkgManager
 
 -- package: xim package spec: todo
-function new(pkg)
+function new()
     local instance = {}
-    debug.setmetatable(instance, XPackage)
-    instance.package = pkg.package
-    instance.hooks = {
-        support = pkg.support or nil,
-        installed = pkg.installed or nil,
-        deps = pkg.deps or nil,
-        install = pkg.install or nil,
-        config = pkg.config or nil,
-        uninstall = pkg.uninstall or nil,
-        info = pkg.info or nil,
-    }
+    debug.setmetatable(instance, XPkgManager)
+    instance.type = "xpm"
     return instance
 end
 
-function XPackage:support()
-    return _attr_template(self, "support")
+function XPkgManager:support(xpkg)
+    return xpkgs.support()
 end
 
-function XPackage:installed()
-    return _cmds_template(self, "installed")
+function XPkgManager:installed(xpkg)
+    return _try_execute_hook(xpkg:name(), xpkg.hooks, "installed")
 end
 
-function XPackage:deps()
-    return _attr_template(self, "deps")
+function XPkgManager:download(xpkg)
+    local source = xpkg:source()
+    local url = source.url
+    local sha256 = source.sha256
+
+    -- TODO
+
+    return true
 end
 
-function XPackage:install()
-    return _cmds_template(self, "install")
+function XPkgManager:deps(xpkg)
+    local deps = xpkg:deps()
+
+    -- TODO: analyze deps by semver
+
+    return deps
 end
 
-function XPackage:config()
-    return _cmds_template(self, "config")
+function XPkgManager:build(xpkg)
+    return _try_execute_hook(xpkg:name(), xpkg.hooks, "build")
 end
 
-function XPackage:uninstall()
-    return _cmds_template(self, "uninstall")
+function XPkgManager:install(xpkg)
+    return _try_execute_hook(xpkg:name(), xpkg.hooks, "install")
 end
 
-function XPackage:info()
-    return try {
-        function()
-            local info = {}
-            if self.hooks.info then
-                info = self.hooks.info()
-            else
-                info = {
-                    name = self.package.name,
-                    homapage = self.package.homapage,
-                    author = self.package.author,
-                    maintainers = self.package.maintainers,
-                    license = self.package.license,
-                    github = self.package.github,
-                    docs = self.package.docs,
-                }
-            end
-            cprint("\n--- ${cyan}info${clear}")
+function XPkgManager:config(xpkg)
+    return _try_execute_hook(xpkg:name(), xpkg.hooks, "config")
+end
 
-            local fields = {
-                {key = "name", label = "name"},
-                {key = "homepage", label = "homepage"},
-                {key = "author", label = "author"},
-                {key = "maintainers", label = "maintainers"},
-                {key = "licenses", label = "licenses"},
-                {key = "github", label = "github"},
-                {key = "docs", label = "docs"},
-                --{key = "profile", label = "profile"}
-            }
-        
-            cprint("")
-            for _, field in ipairs(fields) do
-                local value = info[field.key]
-                if value then
-                    cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
-                end
-            end
+function XPkgManager:uninstall(xpkg)
+    return _try_execute_hook(xpkg:name(), xpkg.hooks, "uninstall")
+end
 
-            cprint("")
+function XPkgManager:info(xpkg)
+    local info = xpkg:info()
 
-            if info["profile"] then
-                cprint( "\t${green bright}" .. info["profile"] .. "${clear}")
-            end
+    cprint("\n--- ${cyan}info${clear}")
 
-            cprint("")
-        end, catch {
-            function(e)
-                cprint("[xlings:xim]: ${yellow}warning:${clear} %s", e)
-                print(self)
-                cprint("[xlings:xim]: ${yellow}please check package file - info${clear}")
-                return false
-            end
-        }
+    local fields = {
+        {key = "name", label = "name"},
+        {key = "homepage", label = "homepage"},
+        {key = "version", label = "version"},
+        {key = "author", label = "author"},
+        {key = "maintainer", label = "maintainer"},
+        {key = "contributor", label = "contributor"},
+        {key = "license", label = "license"},
+        {key = "repo", label = "repo"},
+        {key = "docs", label = "docs"},
     }
+
+    cprint("")
+    for _, field in ipairs(fields) do
+        local value = info[field.key]
+        if value then
+            cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
+        end
+    end
+
+    cprint("")
+
+    if info["description"] then
+        cprint( "\t${green bright}" .. info["description"] .. "${clear}")
+    end
+
+    cprint("")
 end
 
----
-
-function _cmds_template(xpm, attr)
-    return try {
-        function()
-            if xpm.hooks[attr] then
-                return xpm.hooks[attr]()
-            else
-                local cmds = xpm.package[attr]
-                for _, cmd in ipairs(cmds) do
-                    if type(cmd) == "table" then
-                        local os_name = common.get_linux_distribution().name
-        
-                        if os.host() == "windows" or os.host() == "macosx" then
-                            os_name = os.host()
-                        end
-        
-                        if os_name == cmd[1] then
-                            common.xlings_exec(cmd[2])
-                        else
-                            -- TODO: support other platform
-                            print("skip cmd: " .. cmd[2] .. " - " .. cmd[1])
-                        end
-                    else
-                        common.xlings_exec(cmd)
-                    end
-                end
-            end
-            return true
-        end, catch {
-            function(e)
-                cprint("[xlings:xim]: ${yellow}warning:${clear} %s", e)
-                print(xpm)
-                cprint("[xlings:xim]: ${yellow}please check package file - %s${clear}", attr)
-                return false
-            end
-        }
-    }
-end
-
-function _attr_template(xpm, attr)
-    return try {
-        function()
-            if xpm.hooks[attr] then
-                return xpm.hooks[attr]()[os.host()]
-            else
-                return xpm.package[attr][os.host()]
-            end
-            return true
-        end, catch {
-            function(e)
-                print(xpm)
-                cprint("[xlings:xim]: ${yellow}warning:${clear} %s", e)
-                cprint("[xlings:xim]: ${yellow}please checker package file${clear} %s", e)
-                return false
-            end
-        }
-    }
+function _try_execute_hook(name, hooks, action)
+    if hooks[action] then
+        return hooks[action]()
+    else
+        cprint("[xlings:xim]: ${yellow}package %s no implement${clear} %s", action, name)
+    end
+    return false
 end

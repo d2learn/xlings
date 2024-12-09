@@ -4,7 +4,8 @@ PkgManagerWrapper.__index = PkgManagerWrapper
 function new(pm)
     local instance = {}
     debug.setmetatable(instance, PkgManagerWrapper)
-    instance.pm = pkg.pm
+    instance.type = "wrapper"
+    instance.pm = pm
     return instance
 end
 

@@ -1,8 +1,10 @@
 
-import("XPackage")
-import("index.IndexManager")
+import("xim.pm.XPackage")
+import("xim.pm.PkgManagerService")
+import("xim.index.IndexManager")
 
 local index_manager = IndexManager.new()
+local pm_service = PkgManagerService.new()
 
 --- class definition
 
@@ -57,10 +59,11 @@ function CmdProcessor:install()
     local pkg = index_manager:load_package(self._target)
     local xpkg = XPackage.new(pkg.data)
     if xpkg:support() then
+        local pms = xpkg:get_pmanager()
+        local pm_executor = pm_service:create_pm_executor(pms)
+        local is_installed = pm_executor:installed(xpkg)
 
-        local is_installed = xpkg:installed()
-
-        xpkg:info()
+        pm_executor:info(xpkg)
 
         if is_installed then
             cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target.name)

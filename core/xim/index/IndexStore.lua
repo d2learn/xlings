@@ -78,7 +78,15 @@ function _build_index_data(repodir)
     local files = os.files(path.join(repodir, "**.lua"))
     for _, file in ipairs(files) do
         local name = path.basename(file)
-        name = string.gsub(name, "_", "@")
+        local triple = string.split(name, "_") -- name_version_maintainer
+        if triple[2] then
+            name = triple[1] .. "@" .. string.gsub(triple[2], "-", ".")
+        end
+        print(name)
+        if triple[3] then
+            name = name .. "@" .. triple[3]
+        end
+        print(name)
         index[name] = {
             installed = false,
             path = file
