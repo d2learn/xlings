@@ -165,8 +165,7 @@ function match_version(range, version)
     cv = range.min and compare_version(range.min, version) or -1
     if cv > 0 then return false end
     if cv == 0 and not range.min_inclusive then return false end
-    cv = range.max and compare_version(range.max, version) or 1
-    cv = range.max and compare_version(range.max, version) or 1
+    cv = range.max and compare_version(range.max, version) or  1
     if cv < 0 then return false end
     if cv == 0 and not range.max_inclusive then return false end
     return true
