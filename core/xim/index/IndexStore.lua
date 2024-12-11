@@ -78,19 +78,30 @@ function _build_index_data(repodir)
     local files = os.files(path.join(repodir, "**.lua"))
     for _, file in ipairs(files) do
         local name = path.basename(file)
-        local triple = string.split(name, "_") -- name_version_maintainer
-        if triple[2] then
-            name = triple[1] .. "@" .. string.gsub(triple[2], "-", ".")
+        local name_maintainer = string.split(name, "_") -- name_version_maintainer
+        local pkg = inherit(
+            path.basename(file),
+            {rootdir = path.directory(file)}
+        ).package
+
+        name_maintainer[2] = name_maintainer[2] or "x"
+
+        for version, _ in pairs(pkg.pmanager) do
+            local key = string.format("%s@%s@%s", name_maintainer[1], version, name_maintainer[2])
+            index[key] = {
+                version = version,
+                installed = false,
+                path = file
+            }
         end
-        print(name)
-        if triple[3] then
-            name = name .. "@" .. triple[3]
+
+        --  create default version reference
+        if pkg.version then
+            index[name_maintainer[1]] = {
+                ref = string.format("%s@%s@%s", name_maintainer[1], pkg.version, name_maintainer[2])
+            }
+            index[name_maintainer[1] .. "@" .. pkg.version] = index[name_maintainer[1]]
         end
-        print(name)
-        index[name] = {
-            installed = false,
-            path = file
-        }
     end
     _save_index_data(index)
     return index
@@ -152,13 +163,14 @@ function _serialize(obj, layer)
 end
 
 function main()
-    local index_store = new(os.scriptdir())
+    local pkg_index_repo = path.join(path.directory(os.scriptdir()), "pkgindex")
+    local index_store = new(pkg_index_repo)
     local index = {}
-    index = index_store.index
+    index = index_store._index_data
     index["IndexStore"] = "你好"
     print(index)
-    print(index_store.index)
+    print(index_store._index_data)
     index_store:init()
     print(index)
-    print(index_store.index)
+    print(index_store._index_data)
 end

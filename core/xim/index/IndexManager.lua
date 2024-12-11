@@ -57,6 +57,9 @@ end
 function IndexManager:load_package(name)
     if self.index[name] then
         local pkg = self.index[name]
+        if pkg.ref then
+            pkg = self.index[pkg.ref]
+        end
         -- package cache
         if pkg.data == nil then
             -- load package file
@@ -66,11 +69,16 @@ function IndexManager:load_package(name)
                 path.basename(pkg.path),
                 {rootdir = path.directory(pkg.path)}
             )
-            self.index[name].data = data
+            if pkg.ref then
+                self.index[pkg.ref].data = data
+                self.index[name] = self.index[pkg.ref]
+            else
+                self.index[name].data = data
+            end
         end
         return self.index[name]
     else
-        cprint("[xlings:xim]: ${yellow}package not found - " .. name)
+        cprint("[xlings:xim]: load_package: ${yellow}package not found - " .. name)
         return nil
     end
 end

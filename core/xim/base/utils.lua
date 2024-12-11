@@ -50,6 +50,27 @@ function os_type()
     return os_type
 end
 
+function os_info()
+    local os_type = os.host()
+    local name, version = "", ""
+
+    if os_type == "linux" then
+        name = linuxos.name()
+        version = linuxos.version() -- TODO: get linux version
+    elseif os_type == "windows" then
+        name = winos.name()
+        version = winos.version()
+    elseif os_type == "macosx" then
+        name = macosxos.name()
+        version = macos.version()
+    end
+
+    return {
+        name = name,
+        version = version
+    }
+end
+
 function main()
     print("\n\t test deep_copy \n")
     local mytabel = {
@@ -65,4 +86,5 @@ function main()
     print(mytabel["c"]["d"])
 
     print(os_type())
+    print(os_info())
 end

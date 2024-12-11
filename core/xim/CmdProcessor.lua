@@ -19,7 +19,6 @@ function new(target, args) --- create new object
     instance._target = target -- target backup
     instance.target = _target_parse(target)
     instance.cmds = _cmds_parse(args)
-    
     return instance
 end
 
@@ -158,8 +157,8 @@ function _target_parse(target)
     local targets = string.split(target, "@")
     return {
         name = targets[1],
-        maintainer = targets[2],
-        version = targets[3]
+        version = targets[2],
+        maintainer = targets[3]
     }
 end
 

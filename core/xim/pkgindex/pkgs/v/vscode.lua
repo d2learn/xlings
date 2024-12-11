@@ -1,1 +1,0 @@
-package = inherit("vscode_1-93-1_microsoft").package

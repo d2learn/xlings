@@ -2,7 +2,7 @@ package = {
     homepage = "https://code.visualstudio.com",
 
     name = "vscode",
-    version = "1.9.3",
+    version = "1.93.1",
     description = "Visual Studio Code",
     contributor = "https://github.com/microsoft/vscode/graphs/contributors",
     license = "MIT",
@@ -14,30 +14,25 @@ package = {
     keywords = {"vscode", "cross-platform"},
     date = "2024-9-01",
 
-    support = {
-        windows = true,
-        ubuntu = true,
-        arch = false, -- TODO: add arch support
-    },
-
     pmanager = {
-        windows = {
-            -- TODO: use winget
-            xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb", sha256 = nil},
-        },
-        ubuntu = {
-            xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/VSCodeUserSetup-x64-1.93.1.exe", sha256 = nil},
-        },
-        arch = {
-            -- TODO: add arch support
-        },
+        ["1.93.1"] = {
+            windows = {
+                -- TODO: use winget
+                xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb", sha256 = nil},
+            },
+            ubuntu = {
+                xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/VSCodeUserSetup-x64-1.93.1.exe", sha256 = nil},
+            },
+            arch = {
+                -- TODO: add arch support
+            },
+        }
     },
 }
 
 import("common")
 import("xim.base.utils")
-
-local vscode_file = path.filename(package.pmanager[utils.os_type()].xpm.url)
+import("xim.base.runtime")
 
 function installed()
     if os.host() == "windows" and (os.getenv("USERNAME") or ""):lower() == "administrator" then
@@ -56,10 +51,10 @@ function install()
         if use_winget_sys then
             os.exec("winget install vscode --scope machine")
         else
-            common.xlings_exec(vscode_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
+            common.xlings_exec(runtime.pkginfo.install_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
         end
     elseif os.host() == "linux" then
-        os.exec("sudo dpkg -i " .. vscode_file)
+        os.exec("sudo dpkg -i " .. runtime.pkginfo.install_file)
     elseif os.host() == "macosx" then
         -- TODO: install vscode on macosx
     end

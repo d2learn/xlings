@@ -4,12 +4,13 @@ import("xim.base.utils")
 local XPackage = {}
 XPackage.__index = XPackage
 
-local os_type = utils.os_type()
+local os_info = utils.os_info()
 
 function new(pdata)
     local instance = {}
     debug.setmetatable(instance, XPackage)
     instance.pdata = pdata.package
+    instance.version = pdata.version
     instance.hooks = {
         installed = pdata.installed,
         build = pdata.build,
@@ -40,29 +41,31 @@ function XPackage:name()
 end
 
 function XPackage:support()
-    return self.pdata.support[os_type]
+    local pm = self.pdata.pmanager
+    if pm[self.pdata.version][os_info.name] then
+        return true
+    end
+    return false
 end
 
-function XPackage:source()
-    local pms = self:get_pmanager()
-    if not pms then
-        return nil
-    end
+function XPackage:get_xpm()
     return pms.xpm
 end
 
 function XPackage:deps()
     if not self.pdata.deps then
-        return {}
+        return nil
     end
     return self.pdata.deps[os_type]
 end
 
 function XPackage:get_pmanager()
-    if not self.pdata.pmanager then
-        return nil -- if pmanager is nil, default use xim
+    local pm = self.pdata.pmanager
+    if not pm then
+        cprint("[xlings:xim]: get_pmanager: package manager not found")
+        return { xpm = { url = nil, sha256 = nil } }
     end
-    return self.pdata.pmanager[os_type]
+    return pm[self.pdata.version][os_info.name]
 end
 
 --- XPackage Spec
@@ -74,7 +77,7 @@ package = {
     homepage = "https://example.com",
 
     name = "package-name",
-    version = "1.0.0",
+    version = "1.x.x",
     description = "Package description",
 
     author = "Author Name",
@@ -89,14 +92,11 @@ package = {
     categories = {"category1", "category2"},
     keywords = {"keyword1", "keyword2"},
     date = "2020-01-01",
-    env_type = "", -- unused
 
-    -- TODO: arch, os version support
-    support = {
-        windows = true,
-        ubuntu = true,
-        arch = true,
-    },
+    -- env info - todo
+    xvm_type = "", -- unused
+    xvm_support = false, -- unused
+    xvm_default = false,
 
     deps = {
         windows = { "xpkgname1", "xpkgname2" },
@@ -104,19 +104,20 @@ package = {
         arch = { "xpkgname4", "xpkgname2" },
     },
 
-    -- if pmanager is nil, default use xim
     pmanager = {
-        -- if defined, need clearly define the package manager
-        windows = {
-            xpm = {url = "https://example.com/xim-installer.exe", sha256 = "hash"},
+        ["1.0.0"] = {
+            windows = {
+                xpm = { url = "https://example.com/package-1.0.0.exe", sha256 = "xxxx" }
+            },
+            ubuntu = { apt = "apt-package-name" },
+            arch = { pacman = "pacman-package-name" },
         },
-        ubuntu = {
-            apt = "package-name",
-            snap = "package-name",
-        },
-        arch = {
-            pacman = "package-name",
-            aur = "package-name",
+        ["1.0.1"] = {
+            windows = {
+                xpm = { url = "https://example.com/package-1.0.1.exe", sha256 = "xxxx" }
+            },
+            ubuntu = { apt = "apt-package-name"},
+            arch = { pacman = "pacman-package-name"},
         },
     },
 
@@ -124,6 +125,9 @@ package = {
 }
 
 -- xim: hooks for package manager
+
+inherit("xim.base.runtime")
+-- runtime = {install_file = "", version = "x.x.x"}
 
 -- step 1: support check - package attribute
 
