@@ -1,3 +1,8 @@
+import("utils.archive")
+
+import("xim.base.utils")
+import("xim.base.runtime")
+
 local XPkgManager = {}
 XPkgManager.__index = XPkgManager
 
@@ -9,20 +14,40 @@ function new()
     return instance
 end
 
-function XPkgManager:support(xpkg)
-    return xpkgs.support()
-end
-
 function XPkgManager:installed(xpkg)
     return _try_execute_hook(xpkg:name(), xpkg.hooks, "installed")
 end
 
 function XPkgManager:download(xpkg)
-    local source = xpkg:source()
-    local url = source.url
-    local sha256 = source.sha256
+    local xpm = xpkg:get_xpm()
+    local url = xpm.url
+    local sha256 = xpm.sha256
+    -- TODO: impl independent download dir for env/vm
+    local download_dir = runtime.get_xim_data_dir()
+    local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
 
-    -- TODO
+    if not ok then -- retry download
+        ok, filename = utils.try_download_and_check(url, download_dir, sha256)
+    end
+
+    if ok then
+        local extension = path.extension(filename)
+        local compressed = false
+        for _, ext in ipairs({".zip", ".tar", ".gz", ".bz2", ".xz", ".7z"}) do
+            if extension == ext then
+                compressed = true
+                break
+            end
+        end
+        if compressed then
+            cprint("[xlings:xim]: start extract %s${clear}", path.filename(filename))
+            archive.extract(filename, download_dir)
+        end
+    else
+        -- download failed or sha256 check failed
+        cprint("[xlings:xim]: ${red}download or sha256-check failed${clear}")
+        return false
+    end
 
     return true
 end
@@ -32,7 +57,7 @@ function XPkgManager:deps(xpkg)
 
     -- TODO: analyze deps by semver
 
-    return deps
+    return deps or {}
 end
 
 function XPkgManager:build(xpkg)
@@ -60,9 +85,9 @@ function XPkgManager:info(xpkg)
         {key = "name", label = "name"},
         {key = "homepage", label = "homepage"},
         {key = "version", label = "version"},
-        {key = "author", label = "author"},
-        {key = "maintainer", label = "maintainer"},
-        {key = "contributor", label = "contributor"},
+        {key = "authors", label = "authors"},
+        {key = "maintainers", label = "maintainers"},
+        {key = "contributors", label = "contributors"},
         {key = "license", label = "license"},
         {key = "repo", label = "repo"},
         {key = "docs", label = "docs"},

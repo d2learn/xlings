@@ -243,7 +243,7 @@ function xlings_install()
 
     if is_host("linux") then
         local bashrc = os.getenv("HOME") .. "/.bashrc"
-        local content = "\nexport PATH=$PATH:" .. install_dir .. "/bin"
+        local content = "\nexport PATH=$PATH:" .. platform.get_config_info().bindir
         -- append to bashrc when not include xlings str in .bashrc
         if not os.isfile(bashrc) then
             xlings_create_file_and_write(bashrc, content)
@@ -266,15 +266,18 @@ end
 
 function xlings_uninstall()
     local install_dir = platform.get_config_info().install_dir
+    local rcachedir = platform.get_config_info().rcachedir
     try
     {
         function()
             os.rm(install_dir)
+            os.rm(rcachedir)
         end,
         catch
         {
             function (e)
                 -- TODO: error: cannot remove directory C:\Users\Public\xlings Unknown Error (145)
+                cprint("[xlings]: xlings_uninstall: " .. e)
             end
         }
     }

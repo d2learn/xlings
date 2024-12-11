@@ -3,16 +3,24 @@ local xlings_install_dir = {
     windows = "C:/Users/Public/xlings",
 }
 
-if os.host() == "linux" then
-    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
-end
-
 local xlings_root_cache_dir = {
-    linux = xlings_install_dir.linux .. "/.xlings",
-    windows = xlings_install_dir.windows .. "/.xlings",
+    linux =".xlings_data",
+    windows = "C:/Users/Public/.xlings_data",
 }
 
+if os.host() == "linux" then
+    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
+    xlings_root_cache_dir.linux = os.getenv("HOME") .. "/" .. xlings_root_cache_dir.linux
+end
+
 local xlings_bin_dir = xlings_install_dir[os.host()] .. "/bin"
+
+if not os.isdir(xlings_root_cache_dir[os.host()]) then
+    os.mkdir(xlings_root_cache_dir[os.host()])
+    os.cp(xlings_bin_dir, xlings_root_cache_dir[os.host()])
+end
+
+xlings_bin_dir = xlings_root_cache_dir[os.host()] .. "/bin"
 
 local command_clear = {
     linux = "clear",

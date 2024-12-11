@@ -9,7 +9,7 @@ function _tests()
     CmdProcessor.new("", {"-l"}):run()
 ]]
     print("\n[XIM-TEST]: install")
-    CmdProcessor.new("vscode@1.93.1@microsoft"):run()
+    CmdProcessor.new("rust"):run()
 end
 
 -- target name@version@maintainer

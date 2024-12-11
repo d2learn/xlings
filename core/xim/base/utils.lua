@@ -1,3 +1,5 @@
+import("common")
+
 local installer_base_dir = path.directory(os.scriptdir())
 
 function load_installers(dir)
@@ -71,20 +73,20 @@ function os_info()
     }
 end
 
-function main()
-    print("\n\t test deep_copy \n")
-    local mytabel = {
-        ["a"] = 1,
-        ["b"] = 2,
-        ["c"] = {
-            ["d"] = 3,
-            ["e"] = 4
-        }
-    }
-    local mytabel2 = deep_copy(mytabel)
-    mytabel2["c"]["d"] = 5
-    print(mytabel["c"]["d"])
+function try_download_and_check(url, dir, sha256)
+    local filename = path.join(dir, path.filename(url))
+    if not os.isfile(filename) then
+        common.xlings_download(url, filename)
+    end
+    if sha256 then
+        if hash.sha256(filename) ~= sha256 then
+            os.tryrm(filename)
+            return false, filename
+        end
+    end
+    return true, filename
+end
 
-    print(os_type())
-    print(os_info())
+function main()
+
 end

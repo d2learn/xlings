@@ -1,6 +1,6 @@
 @echo off
 
-set XLINGS_BIN_DIR=C:\Users\Public\xlings\bin
+set XLINGS_BIN_DIR=C:\Users\Public\.xlings_data\bin
 
 set arg1=%1
 

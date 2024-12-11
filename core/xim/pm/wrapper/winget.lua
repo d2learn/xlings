@@ -1,8 +1,3 @@
-function support(name)
-    local ok = os.execv("winget", {"show", name})
-    return ok == 0
-end
-
 function installed(name)
     local output = os.iorunv("winget", {"list", name})
     if output then
@@ -18,11 +13,6 @@ end
 
 function install(name)
     local ok = os.execv("winget", {"install", "-e", "--id", name})
-    return ok == 0
-end
-
-function config(name)
-    local ok = os.execv("winget", {"install", "-e", "--id", name, "--force"})
     return ok == 0
 end
 

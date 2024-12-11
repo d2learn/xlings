@@ -69,14 +69,12 @@ function IndexManager:load_package(name)
                 path.basename(pkg.path),
                 {rootdir = path.directory(pkg.path)}
             )
-            if pkg.ref then
-                self.index[pkg.ref].data = data
-                self.index[name] = self.index[pkg.ref]
-            else
-                self.index[name].data = data
-            end
+            -- pkg is a reference to the package
+            -- auto update self.index[ref].data
+            --self.index[self.index[name].ref].data = data
+            pkg.data = data
         end
-        return self.index[name]
+        return pkg
     else
         cprint("[xlings:xim]: load_package: ${yellow}package not found - " .. name)
         return nil

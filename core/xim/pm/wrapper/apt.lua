@@ -1,9 +1,3 @@
--- 检查是否支持某包（通过 `apt-cache show`）
-function support(name)
-    local ok = os.execv("apt-cache", {"show", name})
-    return ok == 0
-end
-
 -- 检查包是否已安装（通过 `apt list --installed`）
 function installed(name)
     local output = os.iorunv("apt", {"list", "--installed", name})
@@ -23,12 +17,6 @@ end
 -- 安装包（通过 `apt install`）
 function install(name)
     local ok = os.execv("sudo", {"apt", "-y", "install", name})
-    return ok == 0
-end
-
--- 重新配置包（通过 `apt install --reinstall`）
-function config(name)
-    local ok = os.execv("sudo", {"apt", "-y", "install", "--reinstall", name})
     return ok == 0
 end
 

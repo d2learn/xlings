@@ -6,17 +6,17 @@ XPackage.__index = XPackage
 
 local os_info = utils.os_info()
 
-function new(pdata)
+function new(pkg)
     local instance = {}
     debug.setmetatable(instance, XPackage)
-    instance.pdata = pdata.package
-    instance.version = pdata.version
+    instance.pdata = pkg.data.package
+    instance.version = pkg.version
     instance.hooks = {
-        installed = pdata.installed,
-        build = pdata.build,
-        install = pdata.install,
-        config = pdata.config,
-        uninstall = pdata.uninstall,
+        installed = pkg.data.installed,
+        build = pkg.data.build,
+        install = pkg.data.install,
+        config = pkg.data.config,
+        uninstall = pkg.data.uninstall,
     }
     return instance
 end
@@ -25,10 +25,10 @@ function XPackage:info()
     return {
         name = self.pdata.name,
         homapage = self.pdata.homapage,
-        version = self.pdata.version,
-        author = self.pdata.author,
-        maintainer = self.pdata.maintainer,
-        contributor = self.pdata.contributor,
+        version = self.version,
+        authors = self.pdata.authors,
+        maintainers = self.pdata.maintainers,
+        contributors = self.pdata.contributors,
         license = self.pdata.license,
         repo = self.pdata.repo,
         docs = self.pdata.docs,
@@ -42,19 +42,20 @@ end
 
 function XPackage:support()
     local pm = self.pdata.pmanager
-    if pm[self.pdata.version][os_info.name] then
+    if pm[self.version][os_info.name] then
         return true
     end
     return false
 end
 
 function XPackage:get_xpm()
+    local pms = self:get_pmanager()
     return pms.xpm
 end
 
 function XPackage:deps()
     if not self.pdata.deps then
-        return nil
+        return {}
     end
     return self.pdata.deps[os_type]
 end
@@ -65,7 +66,7 @@ function XPackage:get_pmanager()
         cprint("[xlings:xim]: get_pmanager: package manager not found")
         return { xpm = { url = nil, sha256 = nil } }
     end
-    return pm[self.pdata.version][os_info.name]
+    return pm[self.version][os_info.name]
 end
 
 --- XPackage Spec
@@ -77,12 +78,12 @@ package = {
     homepage = "https://example.com",
 
     name = "package-name",
-    version = "1.x.x",
+    version = "1.0.0", -- default version
     description = "Package description",
 
-    author = "Author Name",
-    maintainer = "Maintainer Name",
-    contributor = "Contributor Name",
+    authors = "Author Name",
+    maintainers = "Maintainer Name",
+    contributors = "Contributor Name",
     license = "MIT",
     repo = "https://example.com/repo",
     docs = "https://example.com/docs",

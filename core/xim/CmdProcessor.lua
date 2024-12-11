@@ -54,15 +54,15 @@ function CmdProcessor:run()
     index_manager:update()
 end
 
-function CmdProcessor:install()
+function CmdProcessor:install(disable_info)
     local pkg = index_manager:load_package(self._target)
-    local xpkg = XPackage.new(pkg.data)
+    local xpkg = XPackage.new(pkg)
     if xpkg:support() then
         local pms = xpkg:get_pmanager()
         local pm_executor = pm_service:create_pm_executor(pms)
         local is_installed = pm_executor:installed(xpkg)
 
-        pm_executor:info(xpkg)
+        if not disable_info then pm_executor:info(xpkg) end
 
         if is_installed then
             cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target.name)
@@ -77,17 +77,23 @@ function CmdProcessor:install()
                 end
             end
 
-            local deps_list = xpkg:deps()
-            for _, dep in ipairs(deps_list) do
-                new(dep, {"-y"}):install()
+            local deps_list = pm_executor:deps(xpkg)
+            if deps_list and not table.empty(deps_list) then
+                cprint("[xlings:xim]: check ${bright green}" .. name .. "${clear} dependencies...")
+                for _, dep_name in ipairs(deps_list) do
+                    cprint("${dim}---${clear}")
+                    new(dep_name, {"-y"}):install(true)
+                    cprint("${dim}---${clear}")
+                end
             end
 
-            if xpkg:install() then
+            if pm_executor:install(xpkg) then
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target.name)
                 index_manager.status_changed_pkg[self._target] = {installed = true}
             else
-                cprint("[xlings]: ${red}" .. self.target.name .. " install failed or not support, clear cache and retry${clear}")
-                self:install()
+                _feedback()
+                cprint("[xlings:xim]: ${red}" .. self.target.name .. " install failed or not support, clear cache and retry${clear}")
+                self:install(true)
             end
         end
     else
@@ -97,7 +103,7 @@ end
 
 function CmdProcessor:info()
     local pkg = index_manager:load_package(self._target)
-    local xpkg = XPackage.new(pkg.data)
+    local xpkg = XPackage.new(pkg)
     xpkg:info()
 end
 
@@ -105,7 +111,7 @@ function CmdProcessor:list()
     local name_list = index_manager:search()
     for _, name in ipairs(name_list) do
         local pkg = index_manager:load_package(name)
-        local xpkg = XPackage.new(pkg.data)
+        local xpkg = XPackage.new(pkg)
         if xpkg:installed() then
             index_manager.status_changed_pkg[name] = {installed = true}
             cprint("\n${dim}^%s\n", name)
@@ -198,6 +204,16 @@ function _cmds_parse(args)
         yes = cmds["-y"] or cmds["-yes"],
         version = cmds["-v"] or cmds["-version"]
     }
+end
+
+function _feedback()
+    cprint("\n\t\t${blue}反馈 & 交流 | Feedback & Discourse${clear}")
+    cprint(
+        "${bright}\n" ..
+        "\thttps://forum.d2learn.org/category/9/xlings\n" ..
+        "\thttps://github.com/d2learn/xlings/issues\n" ..
+        "${clear}"
+    )
 end
 
 function _test()

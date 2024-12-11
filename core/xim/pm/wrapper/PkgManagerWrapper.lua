@@ -9,9 +9,6 @@ function new(pm)
     return instance
 end
 
-function PkgManagerWrapper:support(xpkg)
-end
-
 function PkgManagerWrapper:installed(xpkg)
 end
 
