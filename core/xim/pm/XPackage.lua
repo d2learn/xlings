@@ -9,8 +9,8 @@ local os_info = utils.os_info()
 function new(pkg)
     local instance = {}
     debug.setmetatable(instance, XPackage)
-    instance.pdata = pkg.data.package
-    instance.version = pkg.version
+    instance.version, instance.pdata = _dereference(pkg.version, pkg.data.package)
+    instance._map_pkgname = nil -- for pm wrapper
     instance.hooks = {
         installed = pkg.data.installed,
         build = pkg.data.build,
@@ -40,33 +40,49 @@ function XPackage:name()
     return self.pdata.name
 end
 
-function XPackage:support()
-    local pm = self.pdata.pmanager
-    if pm[self.version][os_info.name] then
-        return true
+function XPackage:xpm_enable()
+    local xpm = self.pdata.xpm
+    if not xpm or not xpm[os_info.name] then
+        return false
     end
-    return false
+    return xpm[os_info.name][self.version] ~= nil
 end
 
-function XPackage:get_xpm()
-    local pms = self:get_pmanager()
-    return pms.xpm
+function XPackage:get_xpm_resources()
+    return self.pdata.xpm[os_info.name][self.version]
 end
 
 function XPackage:deps()
-    if not self.pdata.deps then
+    if not self.pdata.xpm or not self.pdata.xpm[os_info.name] then
         return {}
     end
-    return self.pdata.deps[os_type]
+    return self.pdata.xpm[os_info.name].deps or {}
 end
 
-function XPackage:get_pmanager()
-    local pm = self.pdata.pmanager
-    if not pm then
-        cprint("[xlings:xim]: get_pmanager: package manager not found")
-        return { xpm = { url = nil, sha256 = nil } }
+function XPackage:get_pm_wrapper()
+    -- self.version is package manager name when use local package manager
+    return self.version
+end
+
+function XPackage:get_map_pkgname()
+    return self.pdata.pm_wrapper[self.version]
+end
+
+function _dereference(version, package)
+    if package.xpm then
+        if package.xpm[os_info.name] then
+            local ref = package.xpm[os_info.name].ref
+            if ref then
+                package.xpm[os_info.name] = package.xpm[ref]
+            end
+            ref = package.xpm[os_info.name][version].ref
+            if ref then
+                package.xpm[os_info.name][version] = package.xpm[os_info.name][ref]
+                version = ref
+            end
+        end
     end
-    return pm[self.version][os_info.name]
+    return version, package
 end
 
 --- XPackage Spec
@@ -78,7 +94,6 @@ package = {
     homepage = "https://example.com",
 
     name = "package-name",
-    version = "1.0.0", -- default version
     description = "Package description",
 
     authors = "Author Name",
@@ -89,6 +104,7 @@ package = {
     docs = "https://example.com/docs",
 
     -- xim pkg info
+    archs = {"x86_64"},
     status = "stable", -- dev, stable, deprecated
     categories = {"category1", "category2"},
     keywords = {"keyword1", "keyword2"},
@@ -99,30 +115,27 @@ package = {
     xvm_support = false, -- unused
     xvm_default = false,
 
-    deps = {
-        windows = { "xpkgname1", "xpkgname2" },
-        ubuntu = { "xpkgname3", "xpkgname2@1.0.1" },
-        arch = { "xpkgname4", "xpkgname2" },
-    },
-
-    pmanager = {
-        ["1.0.0"] = {
-            windows = {
-                xpm = { url = "https://example.com/package-1.0.0.exe", sha256 = "xxxx" }
-            },
-            ubuntu = { apt = "apt-package-name" },
-            arch = { pacman = "pacman-package-name" },
+    xpm = {
+        windows = {
+            deps = {"dep1", "dep2"},
+            -- TODO: support url pattern
+            --["url_template"] = "https://example.com/version.zip",
+            --["1.0.0"] = "url_template", -- https://example.com/1.0.0.zip
+            ["1.0.1"] = {"url", "sha256"},
+            ["1.0.0"] = {"url", "sha256"},
         },
-        ["1.0.1"] = {
-            windows = {
-                xpm = { url = "https://example.com/package-1.0.1.exe", sha256 = "xxxx" }
-            },
-            ubuntu = { apt = "apt-package-name"},
-            arch = { pacman = "pacman-package-name"},
+        ubuntu = {
+            deps = {"dep3", "dep4"},
+            ["1.0.1"] = {"url", "sha256"},
+            ["1.0.0"] = {"url", "sha256"},
         },
     },
 
-    -- TODO: install path
+    pm_wrapper = {
+        apt = "xxxx",
+        winget = "xxxx",
+        pacman = "xxxx",
+    }
 }
 
 -- xim: hooks for package manager

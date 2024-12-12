@@ -75,35 +75,52 @@ end
 
 function _build_index_data(repodir)
     local index = {}
+    local os_info = utils.os_info()
     local files = os.files(path.join(repodir, "**.lua"))
     for _, file in ipairs(files) do
-        local name = path.basename(file)
-        local name_maintainer = string.split(name, "_") -- name_version_maintainer
+        local name_maintainer = path.basename(file)
         local pkg = inherit(
             path.basename(file),
             {rootdir = path.directory(file)}
         ).package
 
-        name_maintainer[2] = name_maintainer[2] or "x"
+        -- TODO: name_maintainer@version@arch
+        if not pkg.xpm or not pkg.xpm[os_info.name] then
+            local local_pm = utils.local_package_manager()
+            if pkg.pm_wrapper and pkg.pm_wrapper[local_pm] then
+                local index_key = string.format("%s@%s", name_maintainer, local_pm)
+                -- create default version reference to local package manager
+                index[name_maintainer] = { ref = index_key }
+                index[index_key] = {
+                    version = local_pm,
+                    installed = false,
+                    path = file
+                }
+            else
+                cprint("[xlings:xim]: ${yellow}package file error: %s", file)
+            end
+        else
+            for version, _ in pairs(pkg.xpm[os_info.name]) do
 
-        for version, _ in pairs(pkg.pmanager) do
-            local key = string.format("%s@%s@%s", name_maintainer[1], version, name_maintainer[2])
-            index[key] = {
-                version = version,
-                installed = false,
-                path = file
-            }
-        end
-
-        --  create default version reference
-        if pkg.version then
-            index[name_maintainer[1]] = {
-                ref = string.format("%s@%s@%s", name_maintainer[1], pkg.version, name_maintainer[2])
-            }
-            index[name_maintainer[1] .. "@" .. pkg.version] = index[name_maintainer[1]]
+                if version ~= "deps" then
+                    local key = string.format("%s@%s", name_maintainer, version)
+                    index[key] = {
+                        version = version,
+                        installed = false,
+                        path = file
+                    }
+                    if version == "latest" then
+                        index[name_maintainer] = {
+                            ref = key
+                        }
+                    end
+                end
+            end
         end
     end
+
     _save_index_data(index)
+
     return index
 end
 

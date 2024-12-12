@@ -1,4 +1,5 @@
 
+import("xim.base.utils")
 import("xim.pm.XPackage")
 import("xim.pm.PkgManagerService")
 import("xim.index.IndexManager")
@@ -56,10 +57,9 @@ end
 
 function CmdProcessor:install(disable_info)
     local pkg = index_manager:load_package(self._target)
-    local xpkg = XPackage.new(pkg)
-    if xpkg:support() then
-        local pms = xpkg:get_pmanager()
-        local pm_executor = pm_service:create_pm_executor(pms)
+    local pm_executor = pm_service:create_pm_executor(pkg)
+
+    if pm_executor:support() then
         local is_installed = pm_executor:installed(xpkg)
 
         if not disable_info then pm_executor:info(xpkg) end
@@ -70,9 +70,8 @@ function CmdProcessor:install(disable_info)
         else
             -- please input y or n
             if self.cmds.yes ~= true then
-                cprint("[xlings:xim]: ${bright}install %s? (y/n)", self.target.name)
-                local confirm = io.read()
-                if confirm ~= "y" then
+                local msg = string.format("${bright}install %s? (y/n)", self.target.name)
+                if not utils.prompt(msg, "y") then
                     return
                 end
             end
@@ -148,7 +147,16 @@ function CmdProcessor:help()
 end
 
 function CmdProcessor:remove()
-    print("remove not implement")
+    local pkg = index_manager:load_package(self._target)
+    local pm_executor = pm_service:create_pm_executor(pkg)
+    if pm_executor:installed() then
+        local msg = string.format("${bright}uninstall/remove %s? (y/n)", self._target)
+        if utils.prompt(msg, "y") then
+            pm_executor:uninstall()
+        end
+    else
+        cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target.name)
+    end
 end
 
 function CmdProcessor:update()
@@ -188,6 +196,7 @@ function _cmds_parse(args)
         ["-v"] = false, -- -version
         ["-version"] = false
     }
+
     for i = 1, #args do
         if cmds[args[i]] ~= nil then
             cmds[args[i]] = true

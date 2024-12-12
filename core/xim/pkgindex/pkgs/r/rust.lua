@@ -3,7 +3,6 @@ package = {
     homepage = "https://www.rust-lang.org",
 
     name = "rust",
-    version = "latest", -- default version
     description = "A language empowering everyone to build reliable and efficient software",
 
     authors = "rust team",
@@ -17,23 +16,22 @@ package = {
     categories = {"plang", "compiler"},
     keywords = {"Reliability", "Performance", "Productivity"},
 
-    deps = {
-        windows = {"visual-studio"},
-    },
-
-    pmanager = {
-        ["latest"] = {
-            windows = {
-                xpm = {
-                    url = "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe",
-                    sha256 = nil
-                }
-            },
-            ubuntu = {
-                xpm = { url = "https://sh.rustup.rs", sha256 = nil }
-            },
+    xpm = {
+        windows = {
+            --deps = {"visual-studio"},
+            ["latest"] = {
+                url = "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe",
+                sha256 = nil
+            }
         },
-    }
+        ubuntu = {
+            ["latest"] = {
+                url = "https://sh.rustup.rs",
+                sha256 = nil
+            }
+        },
+        debain = { ref = "ubuntu" },
+    },
 }
 
 function installed()
@@ -100,10 +98,8 @@ function _choice_toolchain()
 
     if confirm == "2" then
         toolchain_abi = "x86_64-pc-windows-msvc"
-        local vs = import("installer.windows.visual_studio")
-        if not vs.installed() then
-            vs.install()
-        end
+        -- TODO: install visual studio
+        --CmdProcessor.new("visual-studio", {"-y"}):install(true)
     end
 
     return toolchain_abi

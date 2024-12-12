@@ -1,4 +1,5 @@
 import("xim.base.utils")
+import("xim.pm.XPackage")
 import("xim.pm.XPkgManager")
 import("xim.pm.wrapper.PkgManagerWrapper")
 import("xim.pm.PkgManagerExecutor")
@@ -13,23 +14,20 @@ function new()
     return PkgManagerService
 end
 
-function PkgManagerService:create_pm_executor(pms)
+function PkgManagerService:create_pm_executor(pkg)
 
-    if pms.xpm then
-        return PkgManagerExecutor.new(self._pmanagers.xpm)
+    xpkg = XPackage.new(pkg)
+
+    if xpkg:xpm_enable() then
+        return PkgManagerExecutor.new(self._pmanagers.xpm, xpkg)
     end
 
-    local pm = nil
-    for key, _ in pairs(t) do
-        pm = self._pmanagers[key]
-        if pm then
-            break
-        end
+    local pm = xpkg:get_pm_wrapper()
+    if not self._pmanagers[pm] then
+        cprint("[xlings:xim]: local package manager not found")
     end
 
-    assert(pm, "package manager not found")
-
-    return PkgManagerExecutor.new(pm)
+    return PkgManagerExecutor.new(self._pmanagers[pm], xpkg)
 end
 
 function _dectect_and_load_pmanager()
@@ -37,18 +35,10 @@ function _dectect_and_load_pmanager()
         xpm = XPkgManager.new(),
     }
 
-    local os_type = utils.os_type()
-
-    if os_type == "windows" then
-        local winget = import("xim.pm.wrapper.winget")
-        pmanager.winget = PkgManagerWrapper.new(winget)
-    elseif os_type == "ubuntu" then
-        local apt = import("xim.pm.wrapper.apt")
-        pmanager.apt = PkgManagerWrapper.new(apt)
-    elseif os_type == "arch linux" then
-        -- TODO: add pacman
-    else
-        cprint("[xlings:xim]: local package manager not found on " .. os_type)
+    local pm = utils.local_package_manager()
+    if pm then
+        local pm_impl = import("xim.pm.wrapper." .. pm)
+        pmanager[pm] = PkgManagerWrapper.new(pm_impl)
     end
 
     return pmanager

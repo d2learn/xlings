@@ -37,6 +37,6 @@ function info(name)
 end
 
 function main()
-    print(info("vim"))
+    print(installed("openjdk-8-jdk"))
 end
 

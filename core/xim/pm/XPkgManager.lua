@@ -19,9 +19,15 @@ function XPkgManager:installed(xpkg)
 end
 
 function XPkgManager:download(xpkg)
-    local xpm = xpkg:get_xpm()
-    local url = xpm.url
-    local sha256 = xpm.sha256
+    local res = xpkg:get_xpm_resources()
+    local url = res.url
+    local sha256 = res.sha256
+
+    if not url then
+        cprint("[xlings:xim]: ${yellow}skip download (url is nil)${clear}")
+        return false
+    end
+
     -- TODO: impl independent download dir for env/vm
     local download_dir = runtime.get_xim_data_dir()
     local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
@@ -31,15 +37,7 @@ function XPkgManager:download(xpkg)
     end
 
     if ok then
-        local extension = path.extension(filename)
-        local compressed = false
-        for _, ext in ipairs({".zip", ".tar", ".gz", ".bz2", ".xz", ".7z"}) do
-            if extension == ext then
-                compressed = true
-                break
-            end
-        end
-        if compressed then
+        if utils.is_compressed(filename) then
             cprint("[xlings:xim]: start extract %s${clear}", path.filename(filename))
             archive.extract(filename, download_dir)
         end

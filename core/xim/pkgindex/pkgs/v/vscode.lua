@@ -2,7 +2,6 @@ package = {
     homepage = "https://code.visualstudio.com",
 
     name = "vscode",
-    version = "1.93.1",
     description = "Visual Studio Code",
     contributors = "https://github.com/microsoft/vscode/graphs/contributors",
     license = "MIT",
@@ -14,20 +13,20 @@ package = {
     keywords = {"vscode", "cross-platform"},
     date = "2024-9-01",
 
-    pmanager = {
-        ["1.93.1"] = {
-            windows = {
-                -- TODO: use winget
-                xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb", sha256 = nil},
-            },
-            ubuntu = {
-                xpm = {url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/VSCodeUserSetup-x64-1.93.1.exe", sha256 = nil},
-            },
-            arch = {
-                -- TODO: add arch support
-            },
-        }
+    xpm = {
+        ubuntu = {
+            ["latest"] = { ref = "1.93.1" },
+            ["1.93.1"] = {
+                url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb",
+                sha256 = nil
+            }
+        },
     },
+
+    pm_wrapper = {
+        winget = "vscode",
+        pacman = "code",
+    }
 }
 
 import("common")

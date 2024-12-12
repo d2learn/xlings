@@ -8,8 +8,7 @@ function _tests()
     print("\n[XIM-TEST]: list")
     CmdProcessor.new("", {"-l"}):run()
 ]]
-    print("\n[XIM-TEST]: install")
-    CmdProcessor.new("rust"):run()
+    CmdProcessor.new("mdbook@0.4.40", {}):run()
 end
 
 -- target name@version@maintainer

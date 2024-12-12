@@ -87,6 +87,45 @@ function try_download_and_check(url, dir, sha256)
     return true, filename
 end
 
+function is_compressed(filename)
+    local ext = path.extension(filename)
+    local exts = {
+        ['.zip'] = true,
+        ['.tar'] = true,
+        ['.gz']  = true,
+        ['.bz2'] = true,
+        ['.xz']  = true,
+        ['.7z']  = true
+    }
+    return exts[ext] or false
+end
+
+function local_package_manager()
+    local osinfo = os_info()
+    local pm = nil
+    if osinfo.name == "windows" then
+        pm = "winget"
+    elseif osinfo.name == "ubuntu" then
+        pm = "apt"
+    elseif osinfo.name == "archlinux" then
+        pm = "pacman"
+    elseif is_host("macosx") then
+        -- TODO
+    end
+    return pm
+end
+
+-- TODO: optmize
+function prompt(message, value)
+    cprint("${cyan blink}-> ${clear}%s", message)
+    local confirm = io.read()
+    if confirm ~= value then
+        return false
+    else
+        return true
+    end
+end
+
 function main()
 
 end
