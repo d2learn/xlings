@@ -26,22 +26,27 @@ end
 function CmdProcessor:run()
     if self._target and self._target ~= "" then
         if self.cmds.search then
+            cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self._target)
             self:search()
         else
             local pkg = index_manager:load_package(self._target)
-            if pkg.data == nil then
-                cprint("[xlings:xim]: package not found - ${yellow}%s${clear}\n", self._target)
-                self:search()
-                cprint("[xlings:xim]: ${yellow}please input correct package name${clear}")
-            elseif self.cmds.info then
-                self:info()
-            elseif self.cmds.remove then
-                self:remove()
-            elseif self.cmds.update then
-                self:update()
+            if pkg then
+                self._pm_executor = pm_service:create_pm_executor(pkg)
+                if self.cmds.info then
+                    self:info()
+                elseif self.cmds.remove then
+                    self:remove()
+                elseif self.cmds.update then
+                    self:update()
+                else
+                    self.cmds.info = true
+                    self:install()
+                end
             else
-                self.cmds.info = true
-                self:install()
+                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self._target)
+                cprint("\n\t${yellow}Did you mean one of these?\n")
+                self:search()
+                cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
             end
         end
     else
@@ -56,13 +61,10 @@ function CmdProcessor:run()
 end
 
 function CmdProcessor:install(disable_info)
-    local pkg = index_manager:load_package(self._target)
-    local pm_executor = pm_service:create_pm_executor(pkg)
+    if self._pm_executor:support() then
+        local is_installed = self._pm_executor:installed(xpkg)
 
-    if pm_executor:support() then
-        local is_installed = pm_executor:installed(xpkg)
-
-        if not disable_info then pm_executor:info(xpkg) end
+        if not disable_info then self._pm_executor:info(xpkg) end
 
         if is_installed then
             cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target.name)
@@ -76,7 +78,7 @@ function CmdProcessor:install(disable_info)
                 end
             end
 
-            local deps_list = pm_executor:deps(xpkg)
+            local deps_list = self._pm_executor:deps(xpkg)
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. name .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
@@ -86,7 +88,7 @@ function CmdProcessor:install(disable_info)
                 end
             end
 
-            if pm_executor:install(xpkg) then
+            if self._pm_executor:install(xpkg) then
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target.name)
                 index_manager.status_changed_pkg[self._target] = {installed = true}
             else
@@ -101,17 +103,15 @@ function CmdProcessor:install(disable_info)
 end
 
 function CmdProcessor:info()
-    local pkg = index_manager:load_package(self._target)
-    local xpkg = XPackage.new(pkg)
-    xpkg:info()
+    self._pm_executor:info()
 end
 
 function CmdProcessor:list()
     local name_list = index_manager:search()
     for _, name in ipairs(name_list) do
         local pkg = index_manager:load_package(name)
-        local xpkg = XPackage.new(pkg)
-        if xpkg:installed() then
+        local pme = pm_service:create_pm_executor(pkg)
+        if pme:installed() then
             index_manager.status_changed_pkg[name] = {installed = true}
             cprint("\n${dim}^%s\n", name)
         else
@@ -136,6 +136,7 @@ function CmdProcessor:help()
     cprint("${bright}Options:${clear}")
     cprint("  ${magenta}-i, -info${clear}     Display information about the software/package")
     cprint("  ${magenta}-r, -remove${clear}   Remove the software/package")
+    cprint("  ${magenta}    -uninstall${clear}")
     cprint("  ${magenta}-u, -update${clear}   Update the software/package")
     cprint("  ${magenta}-l, -list${clear}     List all installed software/packages")
     cprint("  ${magenta}-s, -search${clear}   Search for a software/package")
@@ -147,12 +148,18 @@ function CmdProcessor:help()
 end
 
 function CmdProcessor:remove()
-    local pkg = index_manager:load_package(self._target)
-    local pm_executor = pm_service:create_pm_executor(pkg)
-    if pm_executor:installed() then
-        local msg = string.format("${bright}uninstall/remove %s? (y/n)", self._target)
-        if utils.prompt(msg, "y") then
-            pm_executor:uninstall()
+    if self._pm_executor:installed() then
+
+        self._pm_executor:info()
+
+        local confirm = self.cmds.yes
+        if not confirm then
+            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self._target)
+            confirm = utils.prompt(msg, "y")
+        end
+        if confirm then
+            self._pm_executor:uninstall()
+            cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target.name)
         end
     else
         cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target.name)
@@ -183,6 +190,7 @@ function _cmds_parse(args)
         ["-info"] = false,
         ["-r"] = false, -- -remove/uninstall
         ["-remove"] = false,
+        ["-uninstall"] = false,
         ["-u"] = false, -- -update
         ["-update"] = false,
         ["-l"] = false, -- -list
@@ -205,7 +213,7 @@ function _cmds_parse(args)
 
     return {
         info = cmds["-i"] or cmds["-info"],
-        remove = cmds["-r"] or cmds["-remove"],
+        remove = cmds["-r"] or cmds["-remove"] or cmds["-uninstall"],
         update = cmds["-u"] or cmds["-update"],
         list = cmds["-l"] or cmds["-list"],
         search = cmds["-s"] or cmds["-search"],

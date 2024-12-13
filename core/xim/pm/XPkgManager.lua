@@ -47,11 +47,13 @@ function XPkgManager:download(xpkg)
         return false
     end
 
+    runtime.set_pkginfo({ install_file = filename })
+
     return true
 end
 
 function XPkgManager:deps(xpkg)
-    local deps = xpkg:deps()
+    local deps = xpkg:get_deps()
 
     -- TODO: analyze deps by semver
 
@@ -80,15 +82,15 @@ function XPkgManager:info(xpkg)
     cprint("\n--- ${cyan}info${clear}")
 
     local fields = {
-        {key = "name", label = "name"},
-        {key = "homepage", label = "homepage"},
-        {key = "version", label = "version"},
-        {key = "authors", label = "authors"},
-        {key = "maintainers", label = "maintainers"},
-        {key = "contributors", label = "contributors"},
-        {key = "license", label = "license"},
-        {key = "repo", label = "repo"},
-        {key = "docs", label = "docs"},
+        { key = "name",         label = "name" },
+        { key = "homepage",     label = "homepage" },
+        { key = "version",      label = "version" },
+        { key = "authors",      label = "authors" },
+        { key = "maintainers",  label = "maintainers" },
+        { key = "contributors", label = "contributors" },
+        { key = "license",      label = "license" },
+        { key = "repo",         label = "repo" },
+        { key = "docs",         label = "docs" },
     }
 
     cprint("")
@@ -102,7 +104,7 @@ function XPkgManager:info(xpkg)
     cprint("")
 
     if info["description"] then
-        cprint( "\t${green bright}" .. info["description"] .. "${clear}")
+        cprint("\t${green bright}" .. info["description"] .. "${clear}")
     end
 
     cprint("")

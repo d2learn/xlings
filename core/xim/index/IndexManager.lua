@@ -76,7 +76,7 @@ function IndexManager:load_package(name)
         end
         return pkg
     else
-        cprint("[xlings:xim]: load_package: ${yellow}package not found - " .. name)
+        cprint("[xlings:xim]: ${dim yellow}load package data failed - ${green}%s", name)
         return nil
     end
 end

@@ -9,15 +9,16 @@ package = {
     docs = "https://code.visualstudio.com/docs",
 
     status = "stable",
-    categories = {"editor", "tools"},
-    keywords = {"vscode", "cross-platform"},
+    categories = { "editor", "tools" },
+    keywords = { "vscode", "cross-platform" },
     date = "2024-9-01",
 
     xpm = {
         ubuntu = {
             ["latest"] = { ref = "1.93.1" },
             ["1.93.1"] = {
-                url = "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb",
+                url =
+                "https://vscode.download.prss.microsoft.com/dbazure/download/stable/38c31bc77e0dd6ae88a4e9cc93428cc27a56ba40/code_1.93.1-1726079302_amd64.deb",
                 sha256 = nil
             }
         },
@@ -30,7 +31,6 @@ package = {
 }
 
 import("common")
-import("xim.base.utils")
 import("xim.base.runtime")
 
 function installed()
@@ -44,16 +44,17 @@ function installed()
 end
 
 function install()
+    local pkginfo = runtime.get_pkginfo()
     local use_winget_sys = (os.getenv("USERNAME") or ""):lower() == "administrator"
     if os.host() == "windows" then
         print("[xlings]: runninng vscode installer, it may take some minutes...")
         if use_winget_sys then
             os.exec("winget install vscode --scope machine")
         else
-            common.xlings_exec(runtime.pkginfo.install_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
+            common.xlings_exec(pkginfo.install_file .. " /verysilent /suppressmsgboxes /mergetasks=!runcode")
         end
     elseif os.host() == "linux" then
-        os.exec("sudo dpkg -i " .. runtime.pkginfo.install_file)
+        os.exec("sudo dpkg -i " .. pkginfo.install_file)
     elseif os.host() == "macosx" then
         -- TODO: install vscode on macosx
     end
@@ -69,5 +70,5 @@ function install()
 end
 
 function uninstall()
-    -- TODO: uninstall vscode
+    os.exec("sudo dpkg --remove code")
 end
