@@ -43,7 +43,7 @@ end
 function install()
     if is_host("windows") then
         local toolchain_abi = _choice_toolchain()
-        common.xlings_exec(
+        os.exec(
             "rustup-init.exe"
             .. " --default-host " .. toolchain_abi
             .. " --default-toolchain stable"

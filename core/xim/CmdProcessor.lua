@@ -1,4 +1,4 @@
-
+import("xim.base.runtime")
 import("xim.base.utils")
 import("xim.pm.XPackage")
 import("xim.pm.PkgManagerService")
@@ -41,6 +41,7 @@ function CmdProcessor:run()
                 else
                     self.cmds.info = true
                     self:install()
+                    _feedback()
                 end
             else
                 cprint("[xlings:xim]: ${red}package not found - %s${clear}", self._target)
@@ -92,6 +93,8 @@ function CmdProcessor:install(disable_info)
                 index_manager.status_changed_pkg[self._target] = {installed = true}
             else
                 _feedback()
+                local pkginfo = runtime.get_pkginfo()
+                os.tryrm(pkginfo.install_file)
                 cprint("[xlings:xim]: ${red}" .. self.target.name .. " install failed or not support, clear cache and retry${clear}")
                 self:install(true)
             end
@@ -112,7 +115,7 @@ function CmdProcessor:list()
         local pme = pm_service:create_pm_executor(pkg)
         if pme:installed() then
             index_manager.status_changed_pkg[name] = {installed = true}
-            cprint("${dim bright}-> ${green}%s", name)
+            cprint("${dim bright}->${clear} ${green}%s", name)
         else
             index_manager.status_changed_pkg[name] = {installed = false}
         end
