@@ -27,7 +27,7 @@ package = {
             ["latest"] = { ref = "0.4.43" },
             ["0.4.43"] = {
                 url = "https://github.com/rust-lang/mdBook/releases/download/v0.4.43/mdbook-v0.4.43-x86_64-unknown-linux-gnu.tar.gz",
-                sha256 = nil
+                sha256 = "d20c2f20eb1c117dc5ebeec120e2d2f6455c90fe8b4f21b7466625d8b67b9e60"
             },
             ["0.4.40"] = {
                 url = "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz",
@@ -43,16 +43,22 @@ import("platform")
 
 local bindir = platform.get_config_info().bindir
 
+local mdbook_file = {
+    windows = "mdbook.exe",
+    linux = "mdbook",
+}
+
 function installed()
     os.exec("mdbook --version")
     return true
 end
 
 function install()
-    os.cp("mdbook", bindir)
+    os.cp(mdbook_file[os.host()], bindir)
     return true
 end
 
 function uninstall()
-    os.tryrm(path.join(bindir, "mdbook"))
+    os.tryrm(path.join(bindir, mdbook_file[os.host()]))
+    return true
 end

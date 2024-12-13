@@ -8,7 +8,7 @@ function installed(name)
 end
 
 function deps(name)
-    return nil, "winget does not provide dependency information"
+    return "winget does not provide dependency information"
 end
 
 function install(name)

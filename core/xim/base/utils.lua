@@ -60,7 +60,7 @@ function os_info()
         name = linuxos.name()
         version = linuxos.version() -- TODO: get linux version
     elseif os_type == "windows" then
-        name = winos.name()
+        name = "windows" -- winos.name()
         version = winos.version()
     elseif os_type == "macosx" then
         name = macosxos.name()
