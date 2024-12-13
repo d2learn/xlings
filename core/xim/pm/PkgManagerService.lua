@@ -18,7 +18,7 @@ function PkgManagerService:create_pm_executor(pkg)
 
     xpkg = XPackage.new(pkg)
 
-    if xpkg:xpm_enable() then
+    if xpkg:has_xpm() then
         return PkgManagerExecutor.new(self._pmanagers.xpm, xpkg)
     end
 

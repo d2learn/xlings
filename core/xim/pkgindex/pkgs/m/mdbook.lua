@@ -23,7 +23,7 @@ package = {
                 sha256 = nil
             }
         },
-        ubuntu = {
+        debain = {
             ["latest"] = { ref = "0.4.43" },
             ["0.4.43"] = {
                 url = "https://github.com/rust-lang/mdBook/releases/download/v0.4.43/mdbook-v0.4.43-x86_64-unknown-linux-gnu.tar.gz",
@@ -34,7 +34,8 @@ package = {
                 sha256 = "9ef07fd288ba58ff3b99d1c94e6d414d431c9a61fdb20348e5beb74b823d546b"
             },
         },
-        debain = { ref = "ubuntu" },
+        archlinux = { ref = "debain" },
+        ubuntu = { ref = "debain" },
     },
 }
 

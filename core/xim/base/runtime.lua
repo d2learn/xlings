@@ -23,7 +23,12 @@ function get_pkginfo()
 end
 
 function set_pkginfo(info)
-    pkginfo = info
+    if info.version then
+        pkginfo.version = info.version
+    end
+    if info.install_file then
+        pkginfo.install_file = info.install_file
+    end
 end
 
 function get_xim_data_dir()

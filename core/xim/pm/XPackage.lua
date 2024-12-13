@@ -40,7 +40,7 @@ function XPackage:name()
     return self.pdata.name
 end
 
-function XPackage:xpm_enable()
+function XPackage:has_xpm()
     local xpm = self.pdata.xpm
     if not xpm or not xpm[os_info.name] then
         return false
@@ -52,7 +52,7 @@ function XPackage:get_xpm_resources()
     return self.pdata.xpm[os_info.name][self.version]
 end
 
-function XPackage:deps()
+function XPackage:get_deps()
     if not self.pdata.xpm or not self.pdata.xpm[os_info.name] then
         return {}
     end
@@ -69,19 +69,22 @@ function XPackage:get_map_pkgname()
 end
 
 function _dereference(version, package)
+    function _deref_helper(tbl, key)
+        local ref = tbl[key].ref
+        if ref then
+            tbl[key] = tbl[ref]
+            key = ref
+        end
+        return key
+    end
+
     if package.xpm then
         if package.xpm[os_info.name] then
-            local ref = package.xpm[os_info.name].ref
-            if ref then
-                package.xpm[os_info.name] = package.xpm[ref]
-            end
-            ref = package.xpm[os_info.name][version].ref
-            if ref then
-                package.xpm[os_info.name][version] = package.xpm[os_info.name][ref]
-                version = ref
-            end
+            _deref_helper(package.xpm, os_info.name)
+            version = _deref_helper(package.xpm[os_info.name], version)
         end
     end
+
     return version, package
 end
 

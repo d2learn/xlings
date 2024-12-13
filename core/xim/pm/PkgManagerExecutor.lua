@@ -101,6 +101,7 @@ end
 function _try_execute(pme, action)
     local pm = pme._pm
     local xpkg = pme._xpkg
+    runtime.set_pkginfo({version = pme._xpkg.version})
     return try {
         function()
             --cprint("[xlings:xim]: execute - [action: %s]", action)
