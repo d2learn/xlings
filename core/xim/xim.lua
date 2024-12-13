@@ -1,11 +1,12 @@
 import("CmdProcessor")
 
 -- adjust the input parameters -> target arg1 arg2 arg3 ...
-function _input_params_process(target, ...)
-    local args = {...}
+function _input_params_process(target, args)
+
     if target:sub(1, 1) == '-' then
         local new_target_index = nil
         local old_target = target
+        target = ""
         for i = 1, #args do
             if args[i]:sub(1, 1) ~= '-' then
                 target = args[i]
@@ -42,8 +43,18 @@ end
 --      xmake l xim.lua vscode -i
 --      xmake l xim.lua -r vscode -y
 function main(target, ...)
-    local new_target, args = _input_params_process(target, ...)
-    --print("new_target: ", new_target)
-    --print("args: ", args)
-	CmdProcessor.new(new_target, args):run()
+    local xim_args = { ... }
+    try {
+        function ()
+            local new_target, args = _input_params_process(target, xim_args)
+            --print("new_target: ", new_target)
+            --print("args: ", args)
+            CmdProcessor.new(new_target, args):run()
+        end,
+        catch {
+            function (errors)
+                print("[xlings:xim] main: error - ", errors)
+            end
+        }
+    }
 end

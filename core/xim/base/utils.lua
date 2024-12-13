@@ -126,6 +126,15 @@ function prompt(message, value)
     end
 end
 
+function load_module(fullpath, rootdir)
+    -- rootdir/a/b/c.lua -> a.b.c
+    local pattern = "^" .. rootdir:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1") .. "/?"
+    local relative_path = fullpath:gsub(pattern, "")
+    local path_parts = string.split(relative_path, "/")
+    local module_path = table.concat(path_parts, "."):gsub("%.lua$", "")
+    return inherit(module_path, {rootdir = rootdir})
+end
+
 function main()
 
 end

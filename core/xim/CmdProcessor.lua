@@ -51,7 +51,6 @@ function CmdProcessor:run()
         end
     else
         if self.cmds.list then
-            print("\tinstaller list")
             self:list()
         else
             self:help()
@@ -113,7 +112,7 @@ function CmdProcessor:list()
         local pme = pm_service:create_pm_executor(pkg)
         if pme:installed() then
             index_manager.status_changed_pkg[name] = {installed = true}
-            cprint("\n${dim}^%s\n", name)
+            cprint("${dim bright}-> ${green}%s", name)
         else
             index_manager.status_changed_pkg[name] = {installed = false}
         end
@@ -127,6 +126,10 @@ function CmdProcessor:search()
 end
 
 function CmdProcessor:help()
+    cprint("")
+    cprint("\t${bright}XIM - Xlings Installation Manager${clear}")
+    cprint("")
+
     cprint("${bright}xim version:${clear} pre-v0.0.1")
     cprint("")
     cprint("${bright}Usage1: $ ${cyan}xlings install [target] [options]")
@@ -141,6 +144,13 @@ function CmdProcessor:help()
     cprint("  ${magenta}-l, -list${clear}     List all installed software/packages")
     cprint("  ${magenta}-s, -search${clear}   Search for a software/package")
     cprint("  ${magenta}-h, -help${clear}     Display this help message")
+
+    cprint("")
+    cprint("${bright}Examples:${clear}")
+    cprint("  ${cyan}xim vscode${clear}     -- install vscode")
+    cprint("  ${cyan}xim -r vscode${clear}  -- remove/uninstall vscode")
+    cprint("  ${cyan}xim -l${clear}         -- list all installed software/packages")
+    cprint("  ${cyan}xim -s code${clear}    -- search for software/package with 'code'")
 
     cprint("")
     cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")

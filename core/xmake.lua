@@ -24,6 +24,7 @@ task("xlings")
             {nil, "run_dir", "v", nil, "xlings's run directory"}, -- only internal use
             {nil, "command", "v", nil, "xlings's command"},
             {nil, "cmd_target", "v", nil, "check from start_target"},
+            {nil, "cmd_args", "vs", nil, "xlings's command args"},
             -- args - default
             {nil, "xname", "v", xname, "xlings's name"},
             {nil, "xdeps", "v", xdeps, "project dependencies auto install"},

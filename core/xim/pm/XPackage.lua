@@ -100,8 +100,8 @@ package = {
     description = "Package description",
 
     authors = "Author Name",
-    maintainers = "Maintainer Name",
-    contributors = "Contributor Name",
+    maintainers = "Maintainer Name or url",
+    contributors = "Contributor Name or url",
     license = "MIT",
     repo = "https://example.com/repo",
     docs = "https://example.com/docs",
@@ -111,7 +111,7 @@ package = {
     status = "stable", -- dev, stable, deprecated
     categories = {"category1", "category2"},
     keywords = {"keyword1", "keyword2"},
-    date = "2020-01-01",
+    date = "2024-12-01",
 
     -- env info - todo
     xvm_type = "", -- unused
@@ -121,30 +121,28 @@ package = {
     xpm = {
         windows = {
             deps = {"dep1", "dep2"},
-            -- TODO: support url pattern
-            --["url_template"] = "https://example.com/version.zip",
-            --["1.0.0"] = "url_template", -- https://example.com/1.0.0.zip
             ["1.0.1"] = {"url", "sha256"},
             ["1.0.0"] = {"url", "sha256"},
         },
         ubuntu = {
             deps = {"dep3", "dep4"},
+            ["latest"] = { ref = "1.0.1"},
             ["1.0.1"] = {"url", "sha256"},
             ["1.0.0"] = {"url", "sha256"},
         },
     },
 
     pm_wrapper = {
-        apt = "xxxx",
-        winget = "xxxx",
-        pacman = "xxxx",
+        pacman = "pakcage name",
     }
 }
 
 -- xim: hooks for package manager
 
-inherit("xim.base.runtime")
--- runtime = {install_file = "", version = "x.x.x"}
+import("xim.base.runtime")
+
+-- pkginfo = runtime.get_pkginfo()
+-- pkginfo = {install_file = "", version = "x.x.x"}
 
 -- step 1: support check - package attribute
 

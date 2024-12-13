@@ -238,6 +238,16 @@ function xlings_install()
     -- cp xliings to install_dir and force overwrite
     os.cp(platform.get_config_info().sourcedir, install_dir, {force = true})
 
+    -- create rcachedir
+    local rcachedir = platform.get_config_info().rcachedir
+    cprint("[xlings]: create rcachedir %s", rcachedir)
+    os.mkdir(platform.get_config_info().rcachedir)
+
+    -- create bin dir
+    local bindir = platform.get_config_info().bindir
+    cprint("[xlings]: create bindir %s", bindir)
+    os.cp(path.join(install_dir, "bin"), bindir, {force = true})
+
     -- add bin to linux bashrc and windows's path env
     cprint("[xlings]: add bin to linux's .bashrc or windows's path env")
 

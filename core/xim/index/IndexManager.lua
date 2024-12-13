@@ -44,9 +44,11 @@ function IndexManager:search(query, limit)
 
     for k, v in pairs(self.index) do
         if k:find(query) or query == "" then
-            table.insert(names, k)
-            if #names >= limit then
-                break
+            if not v.ref then
+                table.insert(names, k)
+                if #names >= limit then
+                    break
+                end
             end
         end
     end
@@ -57,9 +59,11 @@ end
 function IndexManager:load_package(name)
     if self.index[name] then
         local pkg = self.index[name]
-        if pkg.ref then
+
+        while pkg.ref do
             pkg = self.index[pkg.ref]
         end
+
         -- package cache
         if pkg.data == nil then
             -- load package file

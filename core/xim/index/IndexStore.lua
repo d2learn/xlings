@@ -4,11 +4,12 @@ local IndexStore = {}
 IndexStore.__index = IndexStore
 
 local index_file = path.join(os.scriptdir(), "xim-index-db.lua")
+local default_repo_dir = path.join(path.directory(os.scriptdir()), "pkgindex")
 
 function new(repodir)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
-    instance.repodir = repodir or "pkgindex"
+    instance.repodir = repodir or default_repo_dir
     instance:init()
     return instance
 end
@@ -79,11 +80,8 @@ function _build_index_data(repodir)
     local files = os.files(path.join(repodir, "**.lua"))
     for _, file in ipairs(files) do
         local name_maintainer = path.basename(file)
-        local pkg = inherit(
-            path.basename(file),
-            {rootdir = path.directory(file)}
-        ).package
-
+        local pkg = utils.load_module(file, repodir).package
+        print(pkg)
         -- TODO: name_maintainer@version@arch
         if not pkg.xpm or not pkg.xpm[os_info.name] then
             local local_pm = utils.local_package_manager()
@@ -100,16 +98,26 @@ function _build_index_data(repodir)
                 cprint("[xlings:xim]: ${yellow}package file error: %s", file)
             end
         else
-            for version, _ in pairs(pkg.xpm[os_info.name]) do
+            local os_key = pkg.xpm[os_info.name].ref or os_info.name
+            for version, _ in pairs(pkg.xpm[os_key]) do
 
                 if version ~= "deps" then
                     local key = string.format("%s@%s", name_maintainer, version)
-                    index[key] = {
-                        version = version,
-                        installed = false,
-                        path = file
-                    }
+
+                    if pkg.xpm[os_key][version].ref then
+                        index[key] = {
+                            ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
+                        }
+                    else 
+                        index[key] = {
+                            version = version,
+                            installed = false,
+                            path = file
+                        }
+                    end
+
                     if version == "latest" then
+                        print(name_maintainer)
                         index[name_maintainer] = {
                             ref = key
                         }
