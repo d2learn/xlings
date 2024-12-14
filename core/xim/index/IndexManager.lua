@@ -1,6 +1,8 @@
 -- Package IndexManager
 
-import("IndexStore")
+import("xim.base.utils")
+import("xim.index.RepoManager")
+import("xim.index.IndexStore")
 
 local IndexManager = {}
 IndexManager.__index = IndexManager
@@ -18,7 +20,8 @@ end
 
 function IndexManager:init()
     if index_store == nil then
-        index_store = IndexStore.new()
+        local repo_manager = RepoManager.new()
+        index_store = IndexStore.new(repo_manager:repodirs())
         self.index = index_store:get_index_data()
     end
 end
@@ -58,10 +61,11 @@ end
 
 function IndexManager:load_package(name)
     if self.index[name] then
-        local pkg = self.index[name]
 
-        while pkg.ref do
-            pkg = self.index[pkg.ref]
+        local _, pkg = utils.deref(self.index, name)
+
+        if pkg.pmwrapper then
+            return pkg
         end
 
         -- package cache

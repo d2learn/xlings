@@ -1,55 +1,78 @@
 import("CmdProcessor")
 
--- adjust the input parameters -> target arg1 arg2 arg3 ...
-function _input_params_process(target, args)
+function _input_process(args)
 
-    if target:sub(1, 1) == '-' then
-        local new_target_index = nil
-        local old_target = target
-        target = ""
-        for i = 1, #args do
-            if args[i]:sub(1, 1) ~= '-' then
-                target = args[i]
-                new_target_index = i
-                break
-            end
-        end
-
-        if new_target_index then
-            table.remove(args, new_target_index)
-        end
-        table.insert(args, 1, old_target)
+    if #args == 1 and args[1]:sub(1, 1) ~= '-' then
+        return args[1], { install = true }
     end
 
-    return target, args
+    local main_target = ""
+
+    local boolean_cmds = {
+        ["-y"] = false, -- -yes (boolean)
+
+        -- double dash commands
+        ["--yes"] = false, -- -yes (boolean)
+        ["--detect"] = false, -- -detect local installed software
+    }
+
+    -- Mutually Exclusive Commands 
+    local main_cmds = {
+        ["-i"] = false,  -- -install (string)
+        ["-r"] = false,  -- -remove (string)
+        ["-u"] = false,  -- -update (string)
+        ["-l"] = false,  -- -list (string)
+        ["-s"] = false,  -- -search (string)
+        ["-h"] = false   -- -help (string)
+    }
+
+    local kv_cmds = {
+        -- TODo: add kv cmds
+    }
+
+    for i = 1, #args do
+        if boolean_cmds[args[i]] == false then
+            boolean_cmds[args[i]] = true
+        elseif main_cmds[args[i]] == false then
+            main_cmds[args[i]] = true
+            main_target = args[i + 1]
+        end
+    end
+
+    cmds = {
+        install = main_cmds["-i"],
+        remove = main_cmds["-r"],
+        update = main_cmds["-u"],
+        list = main_cmds["-l"],
+        search = main_cmds["-s"],
+        help = main_cmds["-h"],
+        yes = boolean_cmds["-y"] or boolean_cmds["--yes"],
+        detect = boolean_cmds["--detect"]
+    }
+
+    return main_target, cmds
 end
 
 function _tests()
---[[
-    print("\n[XIM-TEST]: help")
-    CmdProcessor.new(nil, {"-h"}):run()
-
-    print("\n[XIM-TEST]: list")
-    CmdProcessor.new("", {"-l"}):run()
-]]
     CmdProcessor.new("vscode", {"-i"}):run()
 end
 
+-- xim [command] [target]
+-- command: -i -r -u -l -s -h -y
 -- target name@version@maintainer
--- args: -i -r -u -l -s -h -y -v
 -- example:
 --      xmake l xim.lua -h
 --      xmake l xim.lua vscode
---      xmake l xim.lua vscode -i
+--      xmake l xim.lua -i vscode
 --      xmake l xim.lua -r vscode -y
-function main(target, ...)
-    local xim_args = { ... }
+function main(...)
+    local args = { ... } or { "-h" }
     try {
         function ()
-            local new_target, args = _input_params_process(target, xim_args)
-            --print("new_target: ", new_target)
-            --print("args: ", args)
-            CmdProcessor.new(new_target, args):run()
+            local main_target, cmds = _input_process(args)
+            --print("main_target: ", main_target)
+            --print("cmds: ", cmds)
+            CmdProcessor.new(main_target, cmds):run()
         end,
         catch {
             function (errors)

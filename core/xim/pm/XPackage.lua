@@ -10,7 +10,7 @@ function new(pkg)
     local instance = {}
     debug.setmetatable(instance, XPackage)
     instance.version, instance.pdata = _dereference(pkg.version, pkg.data.package)
-    instance._map_pkgname = nil -- for pm wrapper
+    instance.name = instance.pdata.name
     instance.hooks = {
         installed = pkg.data.installed,
         build = pkg.data.build,
@@ -36,10 +36,6 @@ function XPackage:info()
     }
 end
 
-function XPackage:name()
-    return self.pdata.name
-end
-
 function XPackage:has_xpm()
     local xpm = self.pdata.xpm
     if not xpm or not xpm[os_info.name] then
@@ -59,32 +55,10 @@ function XPackage:get_deps()
     return self.pdata.xpm[os_info.name].deps or {}
 end
 
-function XPackage:get_pm_wrapper()
-    -- self.version is package manager name when use local package manager
-    return self.version
-end
-
-function XPackage:get_map_pkgname()
-    return self.pdata.pm_wrapper[self.version]
-end
-
 function _dereference(version, package)
-    function _deref_helper(tbl, key)
-        local ref = tbl[key].ref
-        if ref then
-            tbl[key] = tbl[ref]
-            key = ref
-        end
-        return key
-    end
-
-    if package.xpm then
-        if package.xpm[os_info.name] then
-            _deref_helper(package.xpm, os_info.name)
-            version = _deref_helper(package.xpm[os_info.name], version)
-        end
-    end
-
+    local _, entry = utils.deref(package.xpm, os_info.name)
+    package.xpm[os_info.name] = entry
+    version, _ = utils.deref(package.xpm[os_info.name], version)
     return version, package
 end
 
@@ -131,10 +105,6 @@ package = {
             ["1.0.0"] = {"url", "sha256"},
         },
     },
-
-    pm_wrapper = {
-        pacman = "pakcage name",
-    }
 }
 
 -- xim: hooks for package manager

@@ -6,14 +6,12 @@ import("xim.pm.XPkgManager")
 local PkgManagerExecutor = {}
 PkgManagerExecutor.__index = PkgManagerExecutor
 
-local gobal_xpm = XPkgManager.new()
-
-function new(pm, xpkg)
+function new(pm, pkg)
     local instance = {}
     debug.setmetatable(instance, PkgManagerExecutor)
     instance.type = pm.type
     instance._pm = pm
-    instance._xpkg = xpkg
+    instance._pkg = pkg -- XPackage or Local Package
     return instance
 end
 
@@ -28,10 +26,6 @@ end
 
 function PkgManagerExecutor:deps()
     local deps = _try_execute(self, "deps")
-    if self._pm.type == "wrapper" then
-        print("\n---\n" .. deps .. "\n---\n")
-        deps = gobal_xpm:deps(self._xpkg)
-    end
     return deps
 end
 
@@ -42,7 +36,7 @@ end
 
 function PkgManagerExecutor:_build()
     -- only for xpm, and called in install
-    if self._xpkg.hooks.build then
+    if self._pkg.hooks.build then
         cprint("[xlings:xim]: start build...")
         return _try_execute(self, "build")
     end
@@ -61,7 +55,7 @@ function PkgManagerExecutor:install()
         end
     end
 
-    cprint("[xlings:xim]: start install ${green}%s${clear}, it may take some minutes...", self._xpkg:name())
+    cprint("[xlings:xim]: start install ${green}%s${clear}, it may take some minutes...", self._pkg.name)
     if not _try_execute(self, "install") then
         cprint("[xlings:xim]: hooks.install: ${red}install failed${clear}")
         return false
@@ -79,8 +73,8 @@ end
 
 function PkgManagerExecutor:_config()
     -- only for xpm, and called in install
-    if self._xpkg.hooks.config then
-        cprint("[xlings:xim]: start config...", self._xpkg:name())
+    if self._pkg.hooks.config then
+        cprint("[xlings:xim]: start config...", self._pkg.name)
         return _try_execute(self, "config")
     end
     return true
@@ -92,20 +86,17 @@ end
 
 function PkgManagerExecutor:info()
     _try_execute(self, "info")
-    if self._pm.type == "wrapper" then
-        gobal_xpm:info(self._xpkg)
-    end
 end
 
 -- try to execute the action
 function _try_execute(pme, action)
     local pm = pme._pm
-    local xpkg = pme._xpkg
-    runtime.set_pkginfo({version = pme._xpkg.version})
+    local pkg = pme._pkg
+    runtime.set_pkginfo({version = pme._pkg.version})
     return try {
         function()
             --cprint("[xlings:xim]: execute - [action: %s]", action)
-            return pm[action](pm, xpkg)
+            return pm[action](pm, pkg)
         end,
         catch {
             function(error)

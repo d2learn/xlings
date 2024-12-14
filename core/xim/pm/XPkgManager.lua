@@ -15,7 +15,7 @@ function new()
 end
 
 function XPkgManager:installed(xpkg)
-    return _try_execute_hook(xpkg:name(), xpkg.hooks, "installed")
+    return _try_execute_hook(xpkg.name, xpkg.hooks, "installed")
 end
 
 function XPkgManager:download(xpkg)
@@ -61,19 +61,19 @@ function XPkgManager:deps(xpkg)
 end
 
 function XPkgManager:build(xpkg)
-    return _try_execute_hook(xpkg:name(), xpkg.hooks, "build")
+    return _try_execute_hook(xpkg.name, xpkg.hooks, "build")
 end
 
 function XPkgManager:install(xpkg)
-    return _try_execute_hook(xpkg:name(), xpkg.hooks, "install")
+    return _try_execute_hook(xpkg.name, xpkg.hooks, "install")
 end
 
 function XPkgManager:config(xpkg)
-    return _try_execute_hook(xpkg:name(), xpkg.hooks, "config")
+    return _try_execute_hook(xpkg.name, xpkg.hooks, "config")
 end
 
 function XPkgManager:uninstall(xpkg)
-    return _try_execute_hook(xpkg:name(), xpkg.hooks, "uninstall")
+    return _try_execute_hook(xpkg.name, xpkg.hooks, "uninstall")
 end
 
 function XPkgManager:info(xpkg)

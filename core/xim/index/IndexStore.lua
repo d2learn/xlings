@@ -1,15 +1,19 @@
 import("xim.base.utils")
+import("xim.base.runtime")
 
 local IndexStore = {}
 IndexStore.__index = IndexStore
 
-local index_file = path.join(os.scriptdir(), "xim-index-db.lua")
-local default_repo_dir = path.join(path.directory(os.scriptdir()), "pkgindex")
+local os_info = utils.os_info()
+local index_file = path.join(runtime.get_xim_data_dir(), "xim-index-db.lua")
+local default_repo_dir = {
+    path.join(path.directory(os.scriptdir()), "pkgindex")
+}
 
-function new(repodir)
+function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
-    instance.repodir = repodir or default_repo_dir
+    instance.indexdirs = indexdirs or default_repo_dir
     instance:init()
     return instance
 end
@@ -23,18 +27,85 @@ function IndexStore:init()
             catch {
                 function(e)
                     print(e)
-                    self._index_data = _build_index_data(self.repodir)
+                    self._index_data = _build_index_data(self.indexdir)
                 end
             }
         }
     else
-        self._index_data = _build_index_data(self.repodir)
+        self:rebuild()
     end
 end
 
 function IndexStore:rebuild()
-    print("rebuild index database")
-    self._index_data = _build_index_data(self.repodir)
+    cprint("[xlings:xim]: rebuild index database")
+    self._index_data = { }
+    for _, indexdir in ipairs(self.indexdirs) do
+        self:build_pkg_index(indexdir)
+        self:build_pmwrapper_index(indexdir)
+    end
+    _save_index_data(self._index_data)
+    return self._index_data
+end
+
+function IndexStore:build_pkg_index(indexdir)
+    local pkgsdir = path.join(indexdir, "pkgs")
+    local files = os.files(path.join(pkgsdir, "**.lua"))
+    for _, file in ipairs(files) do
+        local name_maintainer = path.basename(file)
+        local pkg = utils.load_module(file, indexdir).package
+        -- TODO: name_maintainer@version@arch
+        local os_key = pkg.xpm[os_info.name].ref or os_info.name
+        for version, _ in pairs(pkg.xpm[os_key]) do
+
+            if version ~= "deps" then
+                local key = string.format("%s@%s", name_maintainer, version)
+
+                if pkg.xpm[os_key][version].ref then
+                    self._index_data[key] = {
+                        ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
+                    }
+                else 
+                    self._index_data[key] = {
+                        version = version,
+                        installed = false,
+                        path = file
+                    }
+                end
+
+                if version == "latest" then
+                    self._index_data[name_maintainer] = {
+                        ref = key
+                    }
+                end
+            end
+        end
+    end
+end
+
+function IndexStore:build_pmwrapper_index(indexdir)
+    local pmwrapper_file = path.join(indexdir, "pmwrapper.lua")
+    if os.isfile(pmwrapper_file) then
+        local pmwrapper = utils.load_module(
+            pmwrapper_file,
+            indexdir
+        ).pmwrapper
+        for name, pm in pairs(pmwrapper) do
+            if pm[os_info.name] then
+                local version = pm[os_info.name][1]
+                local pkgname = pm[os_info.name][2]
+                local key = string.format("%s@%s", name, version)
+                self._index_data[key] = {
+                    pmwrapper = version,
+                    name = pkgname,
+                    installed = false,
+                }
+                -- if exist xpm index, skip this
+                if self._index_data[name] == nil then
+                    self._index_data[name] = { ref = key }
+                end
+            end
+        end
+    end
 end
 
 function IndexStore:save_to_local()
@@ -53,7 +124,8 @@ end
 
 function IndexStore:update_index_data(name, status)
     status = status or {}
-    if status.installed then
+    if status.installed ~= nil then
+        name, _ = utils.deref(self._index_data, name)
         if self._index_data[name].installed ~= status.installed then
             self._index_data[name].installed = status.installed
             self._need_update = true
@@ -71,64 +143,6 @@ function _load_index_data()
             {rootdir = path.directory(index_file)}
         ).get_index_db()
     end
-    return index
-end
-
-function _build_index_data(repodir)
-    local index = {}
-    local os_info = utils.os_info()
-    local files = os.files(path.join(repodir, "**.lua"))
-    for _, file in ipairs(files) do
-        local name_maintainer = path.basename(file)
-        local pkg = utils.load_module(file, repodir).package
-        print(pkg)
-        -- TODO: name_maintainer@version@arch
-        if not pkg.xpm or not pkg.xpm[os_info.name] then
-            local local_pm = utils.local_package_manager()
-            if pkg.pm_wrapper and pkg.pm_wrapper[local_pm] then
-                local index_key = string.format("%s@%s", name_maintainer, local_pm)
-                -- create default version reference to local package manager
-                index[name_maintainer] = { ref = index_key }
-                index[index_key] = {
-                    version = local_pm,
-                    installed = false,
-                    path = file
-                }
-            else
-                cprint("[xlings:xim]: ${yellow}package file error: %s", file)
-            end
-        else
-            local os_key = pkg.xpm[os_info.name].ref or os_info.name
-            for version, _ in pairs(pkg.xpm[os_key]) do
-
-                if version ~= "deps" then
-                    local key = string.format("%s@%s", name_maintainer, version)
-
-                    if pkg.xpm[os_key][version].ref then
-                        index[key] = {
-                            ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
-                        }
-                    else 
-                        index[key] = {
-                            version = version,
-                            installed = false,
-                            path = file
-                        }
-                    end
-
-                    if version == "latest" then
-                        print(name_maintainer)
-                        index[name_maintainer] = {
-                            ref = key
-                        }
-                    end
-                end
-            end
-        end
-    end
-
-    _save_index_data(index)
-
     return index
 end
 

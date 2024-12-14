@@ -115,6 +115,13 @@ function local_package_manager()
     return pm
 end
 
+function deref(tlb, key)
+    while tlb[key].ref do
+        key = tlb[key].ref
+    end
+    return key, tlb[key] 
+end
+
 -- TODO: optmize
 function prompt(message, value)
     cprint("${cyan blink}-> ${clear}%s", message)

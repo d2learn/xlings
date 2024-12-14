@@ -12,39 +12,35 @@ local pm_service = PkgManagerService.new()
 local CmdProcessor = {}
 CmdProcessor.__index = CmdProcessor
 
-function new(target, args) --- create new object
+function new(target, cmds) --- create new object
     local instance = {}
     debug.setmetatable(instance, CmdProcessor)
 
     -- member variable
-    instance._target = target -- target backup
-    instance.target = _target_parse(target)
-    instance.cmds = _cmds_parse(args)
+    instance.target = target -- target backup
+    instance.cmds = cmds
     return instance
 end
 
 function CmdProcessor:run()
-    if self._target and self._target ~= "" then
+    if self.target and self.target ~= "" then
         if self.cmds.search then
-            cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self._target)
+            cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
             self:search()
         else
-            local pkg = index_manager:load_package(self._target)
+            local pkg = index_manager:load_package(self.target)
             if pkg then
                 self._pm_executor = pm_service:create_pm_executor(pkg)
-                if self.cmds.info then
-                    self:info()
-                elseif self.cmds.remove then
+                if self.cmds.remove then
                     self:remove()
                 elseif self.cmds.update then
                     self:update()
                 else
-                    self.cmds.info = true
                     self:install()
                     _feedback()
                 end
             else
-                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self._target)
+                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
                 cprint("\n\t${yellow}Did you mean one of these?\n")
                 self:search()
                 cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
@@ -53,6 +49,9 @@ function CmdProcessor:run()
     else
         if self.cmds.list then
             self:list()
+        elseif self.cmds.detect then
+            cprint("[xlings:xim]: start detect local packages...")
+            self:detect()
         else
             self:help()
         end
@@ -67,12 +66,12 @@ function CmdProcessor:install(disable_info)
         if not disable_info then self._pm_executor:info(xpkg) end
 
         if is_installed then
-            cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target.name)
-            index_manager.status_changed_pkg[self._target] = {installed = true}
+            cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target)
+            index_manager.status_changed_pkg[self.target] = {installed = true}
         else
             -- please input y or n
             if self.cmds.yes ~= true then
-                local msg = string.format("${bright}install %s? (y/n)", self.target.name)
+                local msg = string.format("${bright}install %s? (y/n)", self.target)
                 if not utils.prompt(msg, "y") then
                     return
                 end
@@ -80,27 +79,27 @@ function CmdProcessor:install(disable_info)
 
             local deps_list = self._pm_executor:deps(xpkg)
             if deps_list and not table.empty(deps_list) then
-                cprint("[xlings:xim]: check ${bright green}" .. name .. "${clear} dependencies...")
+                cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
                     cprint("${dim}---${clear}")
-                    new(dep_name, {"-y"}):install(true)
+                    new(dep_name, {yes = true}):install(true)
                     cprint("${dim}---${clear}")
                 end
             end
 
             if self._pm_executor:install(xpkg) then
-                cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target.name)
-                index_manager.status_changed_pkg[self._target] = {installed = true}
+                cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
+                index_manager.status_changed_pkg[self.target] = {installed = true}
             else
                 _feedback()
                 local pkginfo = runtime.get_pkginfo()
                 os.tryrm(pkginfo.install_file)
-                cprint("[xlings:xim]: ${red}" .. self.target.name .. " install failed or not support, clear cache and retry${clear}")
+                cprint("[xlings:xim]: ${red}" .. self.target .. " install failed or not support, clear cache and retry${clear}")
                 self:install(true)
             end
         end
     else
-        cprint("[xlings:xim]: ${red}<%s>-platform not support${clear} - ${green}%s${clear}", os.host(), self.target.name)
+        cprint("[xlings:xim]: ${red}<%s>-platform not support${clear} - ${green}%s${clear}", os.host(), self.target)
     end
 end
 
@@ -112,19 +111,14 @@ function CmdProcessor:list()
     local name_list = index_manager:search()
     for _, name in ipairs(name_list) do
         local pkg = index_manager:load_package(name)
-        local pme = pm_service:create_pm_executor(pkg)
-        if pme:installed() then
-            index_manager.status_changed_pkg[name] = {installed = true}
+        if pkg.installed then
             cprint("${dim bright}->${clear} ${green}%s", name)
-        else
-            index_manager.status_changed_pkg[name] = {installed = false}
         end
     end
 end
 
 function CmdProcessor:search()
-    local name_list = index_manager:search(self._target)
-    name_list = name_list or index_manager:search(self.target.name)
+    local name_list = index_manager:search(self.target)
     print(name_list)
 end
 
@@ -135,20 +129,24 @@ function CmdProcessor:help()
 
     cprint("${bright}xim version:${clear} pre-v0.0.1")
     cprint("")
-    cprint("${bright}Usage1: $ ${cyan}xlings install [target] [options]")
-    cprint("${bright}Usage2: $ ${cyan}xim [target] [options]")
+    cprint("${bright}Usage1: $ ${cyan}xlings install [command] [target]")
+    cprint("${bright}Usage2: $ ${cyan}xim [command] [target]")
     cprint("")
 
-    cprint("${bright}Options:${clear}")
-    cprint("  ${magenta}-i, -info${clear}     Display information about the software/package")
-    cprint("  ${magenta}-r, -remove${clear}   Remove the software/package")
-    cprint("  ${magenta}    -uninstall${clear}")
-    cprint("  ${magenta}-u, -update${clear}   Update the software/package")
-    cprint("  ${magenta}-l, -list${clear}     List all installed software/packages")
-    cprint("  ${magenta}-s, -search${clear}   Search for a software/package")
-    cprint("  ${magenta}-h, -help${clear}     Display this help message")
-
+    cprint("${bright}Commands:${clear}")
+    cprint("  ${magenta}-i${clear},   install,   install software/package/env")
+    cprint("  ${magenta}-r${clear},   remove,    remove the software/package/env")
+    cprint("  ${magenta}-u${clear},   update,    update the software/package/env")
+    cprint("  ${magenta}-l${clear},   list,      list all installed software/packages/env")
+    cprint("  ${magenta}-s${clear},   search,    search for a software/package")
+    cprint("  ${magenta}-h${clear},   help,      display this help message")
     cprint("")
+
+    cprint("${bright}SysCommands:${clear}")
+    cprint("  ${magenta}--yes${clear},       yes to all prompts")
+    cprint("  ${magenta}--detect${clear},    detect local software/packages")
+    cprint("")
+
     cprint("${bright}Examples:${clear}")
     cprint("  ${cyan}xim vscode${clear}     -- install vscode")
     cprint("  ${cyan}xim -r vscode${clear}  -- remove/uninstall vscode")
@@ -167,20 +165,36 @@ function CmdProcessor:remove()
 
         local confirm = self.cmds.yes
         if not confirm then
-            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self._target)
+            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self.target)
             confirm = utils.prompt(msg, "y")
         end
         if confirm then
             self._pm_executor:uninstall()
-            cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target.name)
+            index_manager.status_changed_pkg[self.target] = {installed = false}
+            _feedback()
+            cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target)
         end
     else
-        cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target.name)
+        cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target)
     end
 end
 
 function CmdProcessor:update()
-    print("update not implement")
+    cprint("[xlings:xim]: update not implement")
+end
+
+function CmdProcessor:detect()
+    local name_list = index_manager:search()
+    for _, name in ipairs(name_list) do
+        local pkg = index_manager:load_package(name)
+        local pme = pm_service:create_pm_executor(pkg)
+        if pme:installed() then
+            cprint("${dim bright}->${clear} ${green}%s", name)
+            index_manager.status_changed_pkg[name] = {installed = true}
+        else
+            index_manager.status_changed_pkg[name] = {installed = false}
+        end
+    end
 end
 
 --- module function
@@ -196,48 +210,9 @@ function _target_parse(target)
     }
 end
 
-function _cmds_parse(args)
-    args = args or {}
-    local cmds = {
-        ["-i"] = false,  -- -info
-        ["-info"] = false,
-        ["-r"] = false, -- -remove/uninstall
-        ["-remove"] = false,
-        ["-uninstall"] = false,
-        ["-u"] = false, -- -update
-        ["-update"] = false,
-        ["-l"] = false, -- -list
-        ["-list"] = false,
-        ["-s"] = false, -- -search
-        ["-search"] = false,
-        ["-h"] = false, -- -help
-        ["-help"] = false,
-        ["-y"] = false, -- -yes
-        ["-yes"] = false,
-        ["-v"] = false, -- -version
-        ["-version"] = false
-    }
-
-    for i = 1, #args do
-        if cmds[args[i]] ~= nil then
-            cmds[args[i]] = true
-        end
-    end
-
-    return {
-        info = cmds["-i"] or cmds["-info"],
-        remove = cmds["-r"] or cmds["-remove"] or cmds["-uninstall"],
-        update = cmds["-u"] or cmds["-update"],
-        list = cmds["-l"] or cmds["-list"],
-        search = cmds["-s"] or cmds["-search"],
-        help = cmds["-h"] or cmds["-help"],
-        yes = cmds["-y"] or cmds["-yes"],
-        version = cmds["-v"] or cmds["-version"]
-    }
-end
-
 function _feedback()
-    cprint("\n\t\t${blue}反馈 & 交流 | Feedback & Discourse${clear}")
+    cprint("\n\t     ${blue}反馈 & 交流 | Feedback & Discourse${clear}")
+    cprint("\t${dim}(if encounter any problem, please report it)")
     cprint(
         "${bright}\n" ..
         "\thttps://forum.d2learn.org/category/9/xlings\n" ..

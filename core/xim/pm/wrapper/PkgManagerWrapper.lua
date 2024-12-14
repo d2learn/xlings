@@ -9,23 +9,24 @@ function new(pm)
     return instance
 end
 
-function PkgManagerWrapper:installed(xpkg)
-    return self.pm.installed(xpkg:get_map_pkgname())
+function PkgManagerWrapper:installed(pkg)
+    return self.pm.installed(pkg.name)
 end
 
-function PkgManagerWrapper:deps(xpkg)
-    return self.pm.deps(xpkg:get_map_pkgname())
+function PkgManagerWrapper:deps(pkg)
+    self.pm.deps(pkg.name)
+    return {}
 end
 
-function PkgManagerWrapper:install(xpkg)
-    return self.pm.install(xpkg:get_map_pkgname())
+function PkgManagerWrapper:install(pkg)
+    return self.pm.install(pkg.name)
 end
 
-function PkgManagerWrapper:uninstall(xpkg)
-    return self.pm.uninstall(xpkg:get_map_pkgname())
+function PkgManagerWrapper:uninstall(pkg)
+    return self.pm.uninstall(pkg.name)
 end
 
-function PkgManagerWrapper:info(xpkg)
-    local info = self.pm.info(xpkg:get_map_pkgname())
+function PkgManagerWrapper:info(pkg)
+    local info = self.pm.info(pkg.name)
     print(info)
 end
