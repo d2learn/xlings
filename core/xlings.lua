@@ -54,7 +54,7 @@ function deps_check_and_install(xdeps)
                 version = nil, -- TODO: support version
             }
             cprint("${dim}---${clear}")
-            xinstall(name, "-y", unpack(cmd_args))
+            xinstall("-i", name, "-y", unpack(cmd_args))
         end
     end
 
@@ -103,7 +103,7 @@ function main()
     local run_dir = option.get("run_dir")
     local command = option.get("command")
     local cmd_target = option.get("cmd_target")
-    local cmd_args = option.get("cmd_args") or { "-h" }
+    local cmd_args = option.get("cmd_args")
 
     -- config info - config.xlings
     local xname = option.get("xname")
@@ -167,11 +167,15 @@ function main()
         if cmd_target == "xlings" then
             common.xlings_install() -- TODO: only for first install
         elseif cmd_target then
-            xinstall(cmd_target, unpack(cmd_args))
+            if cmd_args then
+                xinstall(cmd_target, unpack(cmd_args))
+            else
+                xinstall(cmd_target)
+            end
         elseif xdeps then
             deps_check_and_install(xdeps)
         else
-            xinstall("", unpack(cmd_args))
+            xinstall()
         end
     elseif command == "uninstall" then
         common.xlings_uninstall()
