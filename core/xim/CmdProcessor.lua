@@ -1,3 +1,5 @@
+-- xim user interface and core-program entry point
+
 import("xim.base.utils")
 import("xim.base.runtime")
 import("xim.pm.XPackage")
@@ -19,6 +21,9 @@ function new(target, cmds) --- create new object
     -- member variable
     instance.target = target -- target backup
     instance.cmds = cmds
+
+    index_manager:init()
+
     return instance
 end
 
@@ -39,6 +44,7 @@ function CmdProcessor:run_target_cmds()
     else
         local pkg = index_manager:load_package(self.target)
         if pkg then
+            cprint("${dim}[xlings:xim]: create pm executor for %s ... ${clear}\n", self.target)
             self._pm_executor = pm_service:create_pm_executor(pkg)
             if self.cmds.remove then
                 self:remove()

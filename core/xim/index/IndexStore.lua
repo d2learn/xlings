@@ -54,28 +54,30 @@ function IndexStore:build_pkg_index(indexdir)
         local name_maintainer = path.basename(file)
         local pkg = utils.load_module(file, indexdir).package
         -- TODO: name_maintainer@version@arch
-        local os_key = pkg.xpm[os_info.name].ref or os_info.name
-        for version, _ in pairs(pkg.xpm[os_key]) do
+        if pkg.xpm[os_info.name] then
+            local os_key = pkg.xpm[os_info.name].ref or os_info.name
+            for version, _ in pairs(pkg.xpm[os_key]) do
 
-            if version ~= "deps" then
-                local key = string.format("%s@%s", name_maintainer, version)
+                if version ~= "deps" then
+                    local key = string.format("%s@%s", name_maintainer, version)
 
-                if pkg.xpm[os_key][version].ref then
-                    self._index_data[key] = {
-                        ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
-                    }
-                else 
-                    self._index_data[key] = {
-                        version = version,
-                        installed = false,
-                        path = file
-                    }
-                end
+                    if pkg.xpm[os_key][version].ref then
+                        self._index_data[key] = {
+                            ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
+                        }
+                    else 
+                        self._index_data[key] = {
+                            version = version,
+                            installed = false,
+                            path = file
+                        }
+                    end
 
-                if version == "latest" then
-                    self._index_data[name_maintainer] = {
-                        ref = key
-                    }
+                    if version == "latest" then
+                        self._index_data[name_maintainer] = {
+                            ref = key
+                        }
+                    end
                 end
             end
         end

@@ -13,9 +13,6 @@ local repo_manager = RepoManager.new()
 
 function new()
     -- singleton
-    if IndexManager.index == nil then
-        IndexManager:init()
-    end
     return IndexManager
 end
 
