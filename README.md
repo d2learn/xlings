@@ -12,7 +12,9 @@
   -
   <a href="README.en.md" target="_blank">English</a>
   |
-  <a href="README.en.md" target="_blank">项目开发看板</a>
+  <a href="https://github.com/d2learn/xim-pkgindex" target="_blank">Package Index</a>
+  |
+  <a href="https://github.com/orgs/d2learn/projects/5" target="_blank">开发看板</a>
 </div>
 
 <div align=center>一个用于编程学习、开发和课程搭建的开发者工具🛠️</div>
@@ -23,6 +25,7 @@
 
 ## 最近动态
 
+- xinstall模块: 重构&分离框架代码和包文件 - [包索引仓库](https://github.com/d2learn/xim-pkgindex) / [PR](https://github.com/d2learn/xlings/pull/49) -- 2024/12/16
 - xinstall功能更新介绍 - [文章](https://forum.d2learn.org/topic/48) / [视频](https://www.bilibili.com/video/BV1ejzvY4Eg7/?share_source=copy_web&vd_source=2ab9f3bdf795fb473263ee1fc1d268d0)
 - 增加DotNet/C#和java/jdk8环境的支持
 - 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
