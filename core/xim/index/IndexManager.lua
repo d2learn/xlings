@@ -9,6 +9,7 @@ IndexManager.__index = IndexManager
 IndexManager.status_changed_pkg = {}
 
 local index_store = nil
+local repo_manager = RepoManager.new()
 
 function new()
     -- singleton
@@ -20,7 +21,6 @@ end
 
 function IndexManager:init()
     if index_store == nil then
-        local repo_manager = RepoManager.new()
         index_store = IndexStore.new(repo_manager:repodirs())
         self.index = index_store:get_index_data()
     end
@@ -32,6 +32,10 @@ function IndexManager:update()
     end
     index_store:save_to_local()
     IndexManager.status_changed_pkg = {}
+end
+
+function IndexManager:sync_repo()
+    repo_manager:sync()
 end
 
 function IndexManager:rebuild()

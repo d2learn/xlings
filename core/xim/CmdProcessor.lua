@@ -1,5 +1,5 @@
-import("xim.base.runtime")
 import("xim.base.utils")
+import("xim.base.runtime")
 import("xim.pm.XPackage")
 import("xim.pm.PkgManagerService")
 import("xim.index.IndexManager")
@@ -24,39 +24,50 @@ end
 
 function CmdProcessor:run()
     if self.target and self.target ~= "" then
-        if self.cmds.search then
-            cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
-            self:search()
-        else
-            local pkg = index_manager:load_package(self.target)
-            if pkg then
-                self._pm_executor = pm_service:create_pm_executor(pkg)
-                if self.cmds.remove then
-                    self:remove()
-                elseif self.cmds.update then
-                    self:update()
-                else
-                    self:install()
-                    _feedback()
-                end
-            else
-                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
-                cprint("\n\t${yellow}Did you mean one of these?\n")
-                self:search()
-                cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
-            end
-        end
+        self:run_target_cmds()
     else
-        if self.cmds.list then
-            self:list()
-        elseif self.cmds.detect then
-            cprint("[xlings:xim]: start detect local packages...")
-            self:detect()
-        else
-            self:help()
-        end
+        self:run_nontarget_cmds()
     end
     index_manager:update()
+end
+
+function CmdProcessor:run_target_cmds()
+-- target isnt nil - [is a package name]
+    if self.cmds.search then
+        cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
+        self:search()
+    else
+        local pkg = index_manager:load_package(self.target)
+        if pkg then
+            self._pm_executor = pm_service:create_pm_executor(pkg)
+            if self.cmds.remove then
+                self:remove()
+            elseif self.cmds.update then
+                self:update()
+            else
+                self:install()
+                _feedback()
+            end
+        else
+            cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
+            cprint("\n\t${yellow}Did you mean one of these?\n")
+            self:search()
+            cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
+        end
+    end
+end
+
+function CmdProcessor:run_nontarget_cmds()
+-- target is nil
+    if self.cmds.list then
+        self:list()
+    elseif self.cmds.sysdetect then
+        self:sys_detect()
+    elseif self.cmds.sysupdate then
+        self:sys_update()
+    else
+        self:help()
+    end
 end
 
 function CmdProcessor:install(disable_info)
@@ -95,11 +106,16 @@ function CmdProcessor:install(disable_info)
                 local pkginfo = runtime.get_pkginfo()
                 os.tryrm(pkginfo.install_file)
                 cprint("[xlings:xim]: ${red}" .. self.target .. " install failed or not support, clear cache and retry${clear}")
+                self.cmds.yes = false -- retry need confirm
                 self:install(true)
             end
         end
     else
-        cprint("[xlings:xim]: ${red}<%s>-platform not support${clear} - ${green}%s${clear}", os.host(), self.target)
+        cprint(
+            "[xlings:xim]: ${red}<%s>-platform not support${clear} - ${green}%s${clear}",
+            utils.os_info().name,
+            self.target
+        )
     end
 end
 
@@ -143,8 +159,8 @@ function CmdProcessor:help()
     cprint("")
 
     cprint("${bright}SysCommands:${clear}")
-    cprint("  ${magenta}--yes${clear},       yes to all prompts")
     cprint("  ${magenta}--detect${clear},    detect local software/packages")
+    cprint("  ${magenta}--update${clear},    update [self | index]")
     cprint("")
 
     cprint("${bright}Examples:${clear}")
@@ -183,7 +199,8 @@ function CmdProcessor:update()
     cprint("[xlings:xim]: update not implement")
 end
 
-function CmdProcessor:detect()
+function CmdProcessor:sys_detect()
+    cprint("[xlings:xim]: start detect local packages...")
     local name_list = index_manager:search()
     for _, name in ipairs(name_list) do
         local pkg = index_manager:load_package(name)
@@ -194,6 +211,17 @@ function CmdProcessor:detect()
         else
             index_manager.status_changed_pkg[name] = {installed = false}
         end
+    end
+end
+
+function CmdProcessor:sys_update()
+    local datadir = runtime.get_xim_data_dir()
+    if self.cmds.sysupdate == "index" then
+        index_manager:sync_repo()
+        index_manager:rebuild()
+        self:sys_detect()
+    elseif self.cmds.sysupdate == "self" then
+        cprint("[xlings:xim]: update self - todo")
     end
 end
 

@@ -10,17 +10,23 @@ local data_dir = runtime.get_xim_data_dir()
 local RepoManager = {}
 RepoManager.__index = RepoManager
 
+local gitee_repo = "https://gitee.com/sunrisepeak/xim-pkgindex.git"
+local github_repo = "https://github.com/d2learn/xim-pkgindex.git"
+
 function new()
-    RepoManager.repos = {
-        "https://github.com/d2learn/xim-pkgindex.git",
-    }
+    RepoManager.repos = { }
+    if is_host("windows") then
+        table.insert(RepoManager.repos, gitee_repo)
+    else
+        table.insert(RepoManager.repos, github_repo)
+    end
     RepoManager.updateSchedule = 30   -- days
     return RepoManager
 end
 
-function RepoManager:update()
+function RepoManager:sync()
     for _, repo in ipairs(self.repos) do
-        print("[xlings: xim]: updating package index repo:", repo)
+        print("[xlings: xim]: sync package index repo:", repo)
         local repodir = _to_repodir(repo)
         if os.isdir(repodir) then
             os.cd(repodir)
@@ -53,7 +59,7 @@ end
 
 function main()
     local repoManager = new()
-    repoManager:update()
+    repoManager:sync()
     print(repoManager:repodirs())
     print(_to_repodir("my/myrepo"))
 end

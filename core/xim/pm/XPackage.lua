@@ -24,7 +24,7 @@ end
 function XPackage:info()
     return {
         name = self.pdata.name,
-        homapage = self.pdata.homapage,
+        homepage = self.pdata.homepage,
         version = self.version,
         authors = self.pdata.authors,
         maintainers = self.pdata.maintainers,

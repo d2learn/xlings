@@ -10,9 +10,6 @@ function _input_process(args)
 
     local boolean_cmds = {
         ["-y"] = false, -- -yes (boolean)
-
-        -- double dash commands
-        ["--yes"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
     }
 
@@ -28,6 +25,7 @@ function _input_process(args)
 
     local kv_cmds = {
         -- TODo: add kv cmds
+        ["--update"] = false,  -- -update (string)
     }
 
     for i = 1, #args do
@@ -36,6 +34,8 @@ function _input_process(args)
         elseif main_cmds[args[i]] == false then
             main_cmds[args[i]] = true
             main_target = args[i + 1]
+        elseif kv_cmds[args[i]] == false then
+            kv_cmds[args[i]] = args[i + 1]
         end
     end
 
@@ -46,8 +46,9 @@ function _input_process(args)
         list = main_cmds["-l"],
         search = main_cmds["-s"],
         help = main_cmds["-h"],
-        yes = boolean_cmds["-y"] or boolean_cmds["--yes"],
-        detect = boolean_cmds["--detect"]
+        yes = boolean_cmds["-y"],
+        sysdetect = boolean_cmds["--detect"],
+        sysupdate = kv_cmds["--update"],
     }
 
     return main_target, cmds
