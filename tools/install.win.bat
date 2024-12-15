@@ -1,6 +1,6 @@
 @echo off
 
-set XLINGS_BIN_DIR=C:\Users\Public\xlings\bin
+set XLINGS_BIN_DIR=C:\Users\Public\.xlings_data\bin
 
 set arg1=%1
 
@@ -19,11 +19,11 @@ IF %ERRORLEVEL% EQU 0 (
 
 REM 2. set xlings to PATH
 for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set UserPath=%%b
-echo %UserPath% | findstr /i "%XLINGS_BIN_DIR%" >nul
+echo %UserPath% | findstr /i "xlings_data" >nul
 if %errorlevel% neq 0 (
     echo [xlings]: set xlings to PATH
     setx PATH "%UserPath%;%XLINGS_BIN_DIR%"
-    set "PATH=%UserPath%;%XLINGS_BIN_DIR%"
+    set "PATH=%PATH%;%XLINGS_BIN_DIR%"
 ) else (
     echo [xlings]: xlings is already in PATH.
 )

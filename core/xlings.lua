@@ -7,8 +7,9 @@ import("checker")
 import("init")
 import("drepo")
 import("mini_run")
-import("installer.xinstall")
 import("config")
+
+local xinstall = import("xim.xim")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.1")
@@ -31,7 +32,7 @@ function xlings_help()
     cprint("")
 
     cprint("${bright}Short Commands:${clear} ${dim}(command alias)${clear}")
-    cprint("\t ${green}xinstall${clear}, \t xlings install")
+    cprint("\t ${green}xinstall/xim${clear}, \t xlings install")
     cprint("\t ${green}xrun${clear},     \t xlings run")
     cprint("")
     cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
@@ -41,7 +42,7 @@ end
 function deps_check_and_install(xdeps)
 
     local xppcmds = nil
-
+    local cmd_args = option.get("cmd_args") or { "-y" }
     -- project dependencies
     cprint("[xlings]: start deps check and install...")
     for name, value in pairs(xdeps) do
@@ -53,7 +54,7 @@ function deps_check_and_install(xdeps)
                 version = nil, -- TODO: support version
             }
             cprint("${dim}---${clear}")
-            xinstall(name, {confirm = false, info = false, feedback = false})
+            xinstall("-i", name, "-y", unpack(cmd_args))
         end
     end
 
@@ -102,6 +103,7 @@ function main()
     local run_dir = option.get("run_dir")
     local command = option.get("command")
     local cmd_target = option.get("cmd_target")
+    local cmd_args = option.get("cmd_args")
 
     -- config info - config.xlings
     local xname = option.get("xname")
@@ -136,11 +138,12 @@ function main()
     --print(xlings_lang)
     --print(xname)
     --print(xdeps)
+    --print(cmd_args)
 
     -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "checker" or command == xname then
-        if xlings_editor then xinstall(xlings_editor, {confirm = false}) end
-        xinstall(xlings_lang, {confirm = false, info = false, feedback = false})
+        if xlings_editor then xinstall(xlings_editor, "-y") end
+        xinstall(xlings_lang, "-y")
         checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
         if os.isfile(path.join(run_dir, cmd_target)) then
@@ -149,11 +152,11 @@ function main()
             cprint("[xlings]: ${red}file not found${clear} - " .. cmd_target)
         end
     elseif command == "init" then
-        xinstall("mdbook", {confirm = false})
+        xinstall("mdbook", "-y")
         init.xlings_init(xname, xlings_lang)
     elseif command == "book" then
         --os.exec("mdbook build --open book") -- book is default folder
-        xinstall("mdbook", {confirm = false})
+        xinstall("mdbook", "-y")
         os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "update" then
         common.xlings_update(xname, xlings_lang)
@@ -164,11 +167,15 @@ function main()
         if cmd_target == "xlings" then
             common.xlings_install() -- TODO: only for first install
         elseif cmd_target then
-            xinstall(cmd_target, {confirm = true, info = true, feedback = true})
+            if cmd_args then
+                xinstall(cmd_target, unpack(cmd_args))
+            else
+                xinstall(cmd_target)
+            end
         elseif xdeps then
             deps_check_and_install(xdeps)
         else
-            xinstall.list()
+            xinstall()
         end
     elseif command == "uninstall" then
         common.xlings_uninstall()

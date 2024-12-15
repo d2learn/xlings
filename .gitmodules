@@ -1,0 +1,3 @@
+[submodule "core/xim/pkgindex"]
+	path = core/xim/pkgindex
+	url = git@github.com:d2learn/xim-pkgindex.git

@@ -11,7 +11,7 @@ set "commands=help -h uninstall update drepo config"
 
 if "%arg1%"=="" (
     cd /d %XLINGS_DIR%/core
-    xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2%
+    xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2% %3 %4 %5
     cd /d %XLINGS_RUN_DIR%
     exit /b
 )
@@ -19,7 +19,7 @@ if "%arg1%"=="" (
 if "%arg1%"=="run" (
     if not exist "%XLINGS_CACHE_DIR%" mkdir "%XLINGS_CACHE_DIR%"
     cd /d %XLINGS_DIR%/core
-    xmake xlings %XLINGS_RUN_DIR% run %arg2%
+    xmake xlings %XLINGS_RUN_DIR% run %arg2% %3 %4 %5
     cd /d %XLINGS_RUN_DIR%
     exit /b
 )
@@ -27,11 +27,11 @@ if "%arg1%"=="run" (
 echo %commands% | findstr /r "\<%arg1%\>" >nul
 if not errorlevel 1 (
     cd /d %XLINGS_DIR%/core
-    xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2%
+    xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2% %3 %4 %5
 ) else if not exist "%XLINGS_RUN_DIR%/config.xlings" (
     cd /d %XLINGS_DIR%/core
     if "%arg1%"=="install" (
-        xmake xlings %XLINGS_RUN_DIR% install %arg2%
+        xmake xlings %XLINGS_RUN_DIR% install %arg2% %3 %4 %5
     ) else (
         echo     "command not support | not found config.xlings in current folder"
         xmake xlings %XLINGS_RUN_DIR%
@@ -46,7 +46,7 @@ if not errorlevel 1 (
     REM check config file syntax, errorlevel 1 is greater than 1, not errorlevel 1 is less than 1 
     xmake l "%XLINGS_CACHE_DIR%\config-xlings.lua" | findstr /i "error"
     if errorlevel 1 (
-        xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2%
+        xmake xlings %XLINGS_RUN_DIR% %arg1% %arg2% %3 %4 %5
     )
 )
 

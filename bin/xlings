@@ -9,21 +9,21 @@ arg2=$2
 
 if [[ -z $arg1 || $arg1 == "help" || $arg1 == "-h" || $arg1 == "uninstall" || $arg1 == "update" || $arg1 == "drepo" || $arg1 == "config" ]]; then
     cd $XLINGS_DIR/core
-    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2
+    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2 $3 $4 $5
     exit 0
 fi
 
 if [ $arg1 == "run" ]; then
     mkdir -p $XLINGS_CACHE_DIR
     cd $XLINGS_DIR/core
-    xmake xlings $XLINGS_RUN_DIR run $arg2
+    xmake xlings $XLINGS_RUN_DIR run $arg2 $3 $4 $5
     exit 0
 fi
 
 if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
     cd $XLINGS_DIR/core
     if [ $arg1 == "install" ]; then
-        xmake xlings $XLINGS_RUN_DIR install $arg2
+        xmake xlings $XLINGS_RUN_DIR install $arg2 $3 $4 $5
         exit 0
     else
         echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
@@ -39,5 +39,5 @@ else
 
     xmake l config-xlings.lua || exit $?
 
-    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2
+    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2 $3 $4 $5
 fi
