@@ -142,6 +142,33 @@ function load_module(fullpath, rootdir)
     return inherit(module_path, {rootdir = rootdir})
 end
 
+function add_env_path(value)
+
+    local old_value = os.getenv("PATH")
+
+    if string.find(tostring(old_value), value) then
+        cprint("[xlings:xim]: env-path [%s] already exists", value)
+        return
+    end
+
+    cprint("[xlings:xim]: add [%s] to env-path", value)
+    os.addenv("PATH", value)
+
+    if is_host("windows") then
+        common.xlings_exec("setx PATH \"%PATH%;" .. value .. "\"")
+    else
+        local bashrc = os.getenv("HOME") .. "/.bashrc"
+        local content = "\nexport PATH=$PATH:" .. value
+        -- append to bashrc when not include xlings str in .bashrc
+        if not os.isfile(bashrc) then
+            common.xlings_create_file_and_write(bashrc, content)
+        else
+            local bashrc_content = io.readfile(bashrc)
+            common.xlings_file_append(bashrc, content)
+        end
+    end
+end
+
 function main()
 
 end

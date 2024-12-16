@@ -123,7 +123,7 @@ function _try_execute_hook(name, hooks, action)
     if hooks[action] then
         return hooks[action]()
     else
-        cprint("[xlings:xim]: ${yellow}package %s no implement${clear} %s", action, name)
+        cprint("[xlings:xim]: ${dim}package %s no implement${clear} %s", action, name)
     end
     return false
 end

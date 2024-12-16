@@ -40,23 +40,47 @@ function IndexManager:rebuild()
     self.index = index_store:get_index_data()
 end
 
-function IndexManager:search(query, limit)
-    local names = {}
+function IndexManager:search(query, opt)
+    local names = {
+        -- ["name"] = { alias1, alias2, ... }
+    }
 
+    opt = opt or {}
     query = query or ""
-    limit = limit or 1000
+    opt.limit = opt.limit or 1000
 
-    for k, v in pairs(self.index) do
-        if k:find(query) or query == "" then
-            if not v.ref then
-                table.insert(names, k)
-                if #names >= limit then
+    function is_installed(opt, pkg)
+        return opt.installed == nil or opt.installed == pkg.installed
+    end
+
+    function add_name(names, name, alias)
+        if names[name] == nil then
+            names[name] = {}
+        end
+        if alias then
+            if #names[name] < 5 then
+                table.insert(names[name], alias)
+            else
+                names[name][5] = "..."
+            end
+        end
+    end
+
+    for name, pkg in pairs(self.index) do
+        if name:find(query) or query == "" then
+            local alias_name = nil
+            if pkg.ref then
+                alias_name = name
+                name, pkg = utils.deref(self.index, pkg.ref)
+            end
+            if is_installed(opt, pkg) then 
+                add_name(names, name, alias_name)
+                if #names >= opt.limit then
                     break
                 end
             end
         end
     end
-
     return names
 end
 

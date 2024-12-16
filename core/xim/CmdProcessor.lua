@@ -56,9 +56,7 @@ function CmdProcessor:run_target_cmds()
             end
         else
             cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
-            cprint("\n\t${yellow}Did you mean one of these?\n")
-            self:search()
-            cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
+            self:target_tips()
         end
     end
 end
@@ -105,6 +103,7 @@ function CmdProcessor:install(disable_info)
             end
 
             if self._pm_executor:install(xpkg) then
+                cprint("\n\t ${yellow}**maybe need restart cmd/shell to load env**\n${clear}")
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
                 index_manager.status_changed_pkg[self.target] = {installed = true}
             else
@@ -130,18 +129,92 @@ function CmdProcessor:info()
 end
 
 function CmdProcessor:list()
-    local name_list = index_manager:search()
-    for _, name in ipairs(name_list) do
+    local names_table = index_manager:search()
+    for name, alias in pairs(names_table) do
         local pkg = index_manager:load_package(name)
         if pkg.installed then
-            cprint("${dim bright}->${clear} ${green}%s", name)
+            alias_str = table.concat(alias, ", ")
+            cprint(
+                "${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)",
+                name,
+                alias_str
+            )
         end
     end
 end
 
-function CmdProcessor:search()
-    local name_list = index_manager:search(self.target)
-    print(name_list)
+function CmdProcessor:search(opt)
+    opt = opt or {}
+    local names = index_manager:search(self.target, opt)
+    print(names)
+end
+
+function CmdProcessor:remove()
+    if self._pm_executor:installed() then
+
+        self._pm_executor:info()
+
+        local confirm = self.cmds.yes
+        if not confirm then
+            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self.target)
+            confirm = utils.prompt(msg, "y")
+        end
+        if confirm then
+            if self._pm_executor:uninstall() then
+                index_manager.status_changed_pkg[self.target] = {installed = false}
+                cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target)
+            end
+            _feedback()
+        end
+    else
+        cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target)
+        index_manager.status_changed_pkg[self.target] = {installed = false}
+        self:target_tips({ installed = true })
+    end
+end
+
+function CmdProcessor:update()
+    cprint("[xlings:xim]: update not implement")
+end
+
+function CmdProcessor:sys_detect()
+    cprint("[xlings:xim]: start detect local packages...")
+    local names_table = index_manager:search()
+    for name, alias in pairs(names_table) do
+        local pkg = index_manager:load_package(name)
+        local pme = pm_service:create_pm_executor(pkg)
+        if pme:installed() then
+            alias_str = table.concat(alias, ", ")
+            cprint("${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)", name, alias_str)
+            index_manager.status_changed_pkg[name] = {installed = true}
+        else
+            index_manager.status_changed_pkg[name] = {installed = false}
+        end
+    end
+end
+
+function CmdProcessor:sys_update()
+    local datadir = runtime.get_xim_data_dir()
+    if self.cmds.sysupdate == "index" then
+        index_manager:sync_repo()
+        index_manager:rebuild()
+        self:sys_detect()
+    elseif self.cmds.sysupdate == "self" then
+        cprint("[xlings:xim]: update self - todo")
+    end
+end
+
+--- module function
+
+function _target_parse(target)
+    -- exmaple xim@0.0.1@d2learn
+    target = target or ""
+    local targets = string.split(target, "@")
+    return {
+        name = targets[1],
+        version = targets[2],
+        maintainer = targets[3]
+    }
 end
 
 function CmdProcessor:help()
@@ -180,68 +253,10 @@ function CmdProcessor:help()
     cprint("")
 end
 
-function CmdProcessor:remove()
-    if self._pm_executor:installed() then
-
-        self._pm_executor:info()
-
-        local confirm = self.cmds.yes
-        if not confirm then
-            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self.target)
-            confirm = utils.prompt(msg, "y")
-        end
-        if confirm then
-            self._pm_executor:uninstall()
-            index_manager.status_changed_pkg[self.target] = {installed = false}
-            _feedback()
-            cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target)
-        end
-    else
-        cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target)
-    end
-end
-
-function CmdProcessor:update()
-    cprint("[xlings:xim]: update not implement")
-end
-
-function CmdProcessor:sys_detect()
-    cprint("[xlings:xim]: start detect local packages...")
-    local name_list = index_manager:search()
-    for _, name in ipairs(name_list) do
-        local pkg = index_manager:load_package(name)
-        local pme = pm_service:create_pm_executor(pkg)
-        if pme:installed() then
-            cprint("${dim bright}->${clear} ${green}%s", name)
-            index_manager.status_changed_pkg[name] = {installed = true}
-        else
-            index_manager.status_changed_pkg[name] = {installed = false}
-        end
-    end
-end
-
-function CmdProcessor:sys_update()
-    local datadir = runtime.get_xim_data_dir()
-    if self.cmds.sysupdate == "index" then
-        index_manager:sync_repo()
-        index_manager:rebuild()
-        self:sys_detect()
-    elseif self.cmds.sysupdate == "self" then
-        cprint("[xlings:xim]: update self - todo")
-    end
-end
-
---- module function
-
-function _target_parse(target)
-    -- exmaple xim@0.0.1@d2learn
-    target = target or ""
-    local targets = string.split(target, "@")
-    return {
-        name = targets[1],
-        version = targets[2],
-        maintainer = targets[3]
-    }
+function CmdProcessor:target_tips(opt)
+    cprint("\n\t${yellow}Did you mean one of these?\n")
+    self:search(opt)
+    cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
 end
 
 function _feedback()

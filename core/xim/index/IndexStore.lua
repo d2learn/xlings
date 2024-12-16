@@ -27,7 +27,7 @@ function IndexStore:init()
             catch {
                 function(e)
                     print(e)
-                    self._index_data = _build_index_data(self.indexdir)
+                    self:rebuild()
                 end
             }
         }
@@ -54,7 +54,11 @@ function IndexStore:build_pkg_index(indexdir)
         local name_maintainer = path.basename(file)
         local pkg = utils.load_module(file, indexdir).package
         -- TODO: name_maintainer@version@arch
-        if pkg.xpm[os_info.name] then
+        if pkg.ref then
+            self._index_data[name_maintainer] = {
+                ref = pkg.ref
+            }
+        elseif pkg.xpm[os_info.name] then
             local os_key = pkg.xpm[os_info.name].ref or os_info.name
             for version, _ in pairs(pkg.xpm[os_key]) do
 
@@ -92,19 +96,29 @@ function IndexStore:build_pmwrapper_index(indexdir)
             indexdir
         ).pmwrapper
         for name, pm in pairs(pmwrapper) do
-            if pm[os_info.name] then
+            local key = nil
+            if pm.ref then
+                target_key, target_pm = utils.deref(pmwrapper, pm.ref)
+                if target_pm[os_info.name] then
+                    local version = target_pm[os_info.name][1]
+                    key = name .. "@" .. version
+                    self._index_data[key] = {
+                        ref = target_key .. "@" .. version
+                    }
+                end
+            elseif pm[os_info.name] then
                 local version = pm[os_info.name][1]
                 local pkgname = pm[os_info.name][2]
-                local key = string.format("%s@%s", name, version)
+                key = string.format("%s@%s", name, version)
                 self._index_data[key] = {
                     pmwrapper = version,
                     name = pkgname,
                     installed = false,
                 }
-                -- if exist xpm index, skip this
-                if self._index_data[name] == nil then
-                    self._index_data[name] = { ref = key }
-                end
+            end
+            -- (key)os support and not exist xpm index
+            if key and self._index_data[name] == nil then
+                self._index_data[name] = { ref = key }
             end
         end
     end
