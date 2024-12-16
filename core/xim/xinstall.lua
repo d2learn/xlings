@@ -5,6 +5,7 @@
 
 import("xim.xim")
 
-function main(...)
-    xim(...)
+-- only support install
+function main(target)
+    xim("-i", target, "-y")
 end

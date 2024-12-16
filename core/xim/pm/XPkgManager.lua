@@ -15,7 +15,14 @@ function new()
 end
 
 function XPkgManager:installed(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg.hooks, "installed")
+    local ret = _try_execute_hook(xpkg.name, xpkg.hooks, "installed")
+    if type(ret) == "boolean" then
+        return ret
+    elseif type(ret) == "string" then
+        return string.find(ret, xpkg.version) ~= nil
+    else
+        return false
+    end
 end
 
 function XPkgManager:download(xpkg)
@@ -79,7 +86,9 @@ end
 function XPkgManager:info(xpkg)
     local info = xpkg:info()
 
-    cprint("\n--- ${cyan}info${clear}")
+    info.type = info.type or "package"
+
+    cprint("\n--- [${magenta bright}%s${clear}] ${cyan}info${clear}", info.type)
 
     local fields = {
         { key = "name",         label = "name" },

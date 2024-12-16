@@ -29,4 +29,11 @@ end
 function PkgManagerWrapper:info(pkg)
     local info = self.pm.info(pkg.name)
     print(info)
+    cprint([[
+
+--- ${cyan}info${clear}
+
+${bright}name:${clear} ${dim}%s${clear}
+${bright}pmwrapper:${clear} ${dim}%s${clear}
+    ]], pkg.name, pkg.pmwrapper)
 end
