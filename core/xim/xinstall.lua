@@ -7,5 +7,5 @@ import("xim.xim")
 
 -- only support install
 function main(target)
-    xim("-i", target, "-y")
+    xim("-i", target, "-y", "--disable-feedback")
 end

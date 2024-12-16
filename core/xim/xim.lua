@@ -11,6 +11,7 @@ function _input_process(args)
     local boolean_cmds = {
         ["-y"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
+        ["--disable-feedback"] = false, -- -feedback (boolean)
     }
 
     -- Mutually Exclusive Commands 
@@ -49,6 +50,7 @@ function _input_process(args)
         yes = boolean_cmds["-y"],
         sysdetect = boolean_cmds["--detect"],
         sysupdate = kv_cmds["--update"],
+        disable_feedback = boolean_cmds["--disable-feedback"]
     }
 
     return main_target, cmds

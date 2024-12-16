@@ -210,7 +210,7 @@ function main(start_target)
 
     for _, name in pairs(sorted_targets) do
 
-        if skip and (name == start_target or string.find(name, start_target)) then
+        if skip and (name == start_target or string.find(name, start_target, 1, true)) then
             skip = false;
         end
 
@@ -256,7 +256,7 @@ function main(start_target)
                         status = build_success
 
                         if type(output) == "string" then
-                            if string.find(output, "❌") then
+                            if string.find(output, "❌", 1, true) then
                                 status = false
                                 build_success = false
                             elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then

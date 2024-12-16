@@ -259,13 +259,13 @@ function xlings_install()
             xlings_create_file_and_write(bashrc, content)
         else
             local bashrc_content = io.readfile(bashrc)
-            if not string.find(bashrc_content, content) then
+            if not string.find(bashrc_content, content, 1, true) then
                 xlings_file_append(bashrc, content)
             end
         end
     else
         local path_env = os.getenv("PATH")
-        if not string.find(path_env, install_dir) then
+        if not string.find(path_env, install_dir, 1, true) then
 
             path_env = path_env .. ";" .. install_dir
             -- os.setenv("PATH", path_env) -- only tmp, move to install.win.bat

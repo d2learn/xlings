@@ -52,7 +52,7 @@ function CmdProcessor:run_target_cmds()
                 self:update()
             else
                 self:install()
-                _feedback()
+                self:_feedback()
             end
         else
             cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
@@ -96,18 +96,23 @@ function CmdProcessor:install(disable_info)
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
-                    cprint("${dim}---${clear}")
-                    new(dep_name, {yes = true}):install(true)
+                    cprint("${dim}---${clear}" .. dep_name)
+                    new(dep_name, {
+                        install = true,
+                        yes = true,
+                        disable_feedback = true
+                    }):run()
                     cprint("${dim}---${clear}")
                 end
             end
 
             if self._pm_executor:install(xpkg) then
-                cprint("\n\t ${yellow}**maybe need restart cmd/shell to load env**\n${clear}")
+                cprint("\n\t ${yellow}**maybe need to restart cmd/shell to load env**${clear}")
+                cprint("\t       ${dim}try to run${clear} source ~/.bashrc\n")
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
                 index_manager.status_changed_pkg[self.target] = {installed = true}
             else
-                _feedback()
+                self:_feedback()
                 local pkginfo = runtime.get_pkginfo()
                 os.tryrm(pkginfo.install_file)
                 cprint("[xlings:xim]: ${red}" .. self.target .. " install failed or not support, clear cache and retry${clear}")
@@ -160,11 +165,11 @@ function CmdProcessor:remove()
             confirm = utils.prompt(msg, "y")
         end
         if confirm then
-            if self._pm_executor:uninstall() then
+            if self._pm_executor:uninstall() and not self._pm_executor:installed() then
                 index_manager.status_changed_pkg[self.target] = {installed = false}
                 cprint("[xlings:xim]: ${green bright}%s${clear} - removed", self.target)
             end
-            _feedback()
+            self:_feedback()
         end
     else
         cprint("[xlings:xim]: ${yellow}package not installed${clear} - ${green}%s${clear}", self.target)
@@ -259,7 +264,12 @@ function CmdProcessor:target_tips(opt)
     cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
 end
 
-function _feedback()
+function CmdProcessor:_feedback()
+
+    if self.cmds.disable_feedback then
+        return
+    end
+
     cprint("\n\t     ${blue}反馈 & 交流 | Feedback & Discourse${clear}")
     cprint("\t${dim}(if encounter any problem, please report it)")
     cprint(

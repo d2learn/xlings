@@ -146,7 +146,7 @@ function add_env_path(value)
 
     local old_value = os.getenv("PATH")
 
-    if string.find(tostring(old_value), value) then
+    if string.find(old_value, value, 1, true) then
         cprint("[xlings:xim]: env-path [%s] already exists", value)
         return
     end
@@ -157,13 +157,18 @@ function add_env_path(value)
     if is_host("windows") then
         common.xlings_exec("setx PATH \"%PATH%;" .. value .. "\"")
     else
-        local bashrc = os.getenv("HOME") .. "/.bashrc"
         local content = "\nexport PATH=$PATH:" .. value
-        -- append to bashrc when not include xlings str in .bashrc
-        if not os.isfile(bashrc) then
-            common.xlings_create_file_and_write(bashrc, content)
-        else
-            local bashrc_content = io.readfile(bashrc)
+        append_bashrc(content)
+    end
+end
+
+function append_bashrc(content)
+    local bashrc = os.getenv("HOME") .. "/.bashrc"
+    if not os.isfile(bashrc) then
+        common.xlings_create_file_and_write(bashrc, content)
+    else
+        local bashrc_content = io.readfile(bashrc)
+        if string.find(bashrc_content, content, 1, true) == nil then
             common.xlings_file_append(bashrc, content)
         end
     end

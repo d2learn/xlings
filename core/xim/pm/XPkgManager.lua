@@ -19,7 +19,7 @@ function XPkgManager:installed(xpkg)
     if type(ret) == "boolean" then
         return ret
     elseif type(ret) == "string" then
-        return string.find(ret, xpkg.version) ~= nil
+        return string.find(ret, xpkg.version, 1, true) ~= nil
     else
         return false
     end
@@ -32,7 +32,7 @@ function XPkgManager:download(xpkg)
 
     if not url then
         cprint("[xlings:xim]: ${yellow}skip download (url is nil)${clear}")
-        return false
+        return true
     end
 
     -- TODO: impl independent download dir for env/vm
