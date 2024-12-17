@@ -228,7 +228,7 @@ function CmdProcessor:help()
     cprint("\t${bright}XIM - Xlings Installation Manager${clear}")
     cprint("")
 
-    cprint("${bright}xim version:${clear} pre-v0.0.1")
+    cprint("${bright}xim version:${clear} pre-v0.0.2")
     cprint("")
     cprint("${bright}Usage1: $ ${cyan}xlings install [command] [target]")
     cprint("${bright}Usage2: $ ${cyan}xim [command] [target]")

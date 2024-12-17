@@ -36,7 +36,7 @@ xlings checker
 ### 更多xlings命令
 
 ```bash
-xlings version: pre-v0.0.1
+xlings version: pre-v0.0.2
 
 Usage: $ xlings [command] [target]
 

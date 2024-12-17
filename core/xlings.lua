@@ -12,7 +12,7 @@ import("config")
 local xinstall = import("xim.xim")
 
 function xlings_help()
-    cprint("${bright}xlings version:${clear} pre-v0.0.1")
+    cprint("${bright}xlings version:${clear} pre-v0.0.2")
     cprint("")
     cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
 

@@ -24,7 +24,7 @@ $downloadUrl = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 
 $xlings = @"
  __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.1                
+ \ \ / / | |    (_)    pre-v0.0.2                
   \ V /  | |     _  _ __    __ _  ___ 
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \
@@ -42,7 +42,7 @@ Write-Host $xlings -ForegroundColor Green
 
 
 $SOFTWARE_URL1 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
-$SOFTWARE_URL2 = "https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
+$SOFTWARE_URL2 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 
 function Measure-Latency {
     param (
