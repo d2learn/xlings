@@ -45,7 +45,7 @@ function CmdProcessor:run_target_cmds()
     else
         local pkg = index_manager:load_package(self.target)
         if pkg then
-            cprint("${dim}[xlings:xim]: create pm executor for %s ... ${clear}\n", self.target)
+            cprint("${dim}[xlings:xim]: create pm executor for %s ... ${clear}", self.target)
             self._pm_executor = pm_service:create_pm_executor(pkg)
             if self.cmds.remove then
                 self:remove()
@@ -75,11 +75,11 @@ function CmdProcessor:run_nontarget_cmds()
     end
 end
 
-function CmdProcessor:install(disable_info)
+function CmdProcessor:install()
     if self._pm_executor:support() then
         local is_installed = self._pm_executor:installed(xpkg)
 
-        if not disable_info then self._pm_executor:info(xpkg) end
+        self:info()
 
         if is_installed then
             cprint("[xlings:xim]: already installed - ${green bright}%s${clear}", self.target)
@@ -101,15 +101,14 @@ function CmdProcessor:install(disable_info)
                     new(dep_name, {
                         install = true,
                         yes = true,
-                        disable_feedback = true
+                        disable_info = true
                     }):run()
                     cprint("${dim}---${clear}")
                 end
             end
 
             if self._pm_executor:install(xpkg) then
-                cprint("\n\t ${yellow}**maybe need to restart cmd/shell to load env**${clear}")
-                cprint("\t       ${dim}try to run${clear} source ~/.bashrc\n")
+                self:_restart_tips()
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
                 index_manager.status_changed_pkg[self.target] = {installed = true}
             else
@@ -131,6 +130,7 @@ function CmdProcessor:install(disable_info)
 end
 
 function CmdProcessor:info()
+    if self.cmds.disable_info then return end
     self._pm_executor:info()
 end
 
@@ -244,8 +244,9 @@ function CmdProcessor:help()
     cprint("")
 
     cprint("${bright}SysCommands:${clear}")
-    cprint("  ${magenta}--detect${clear},    detect local software/packages")
-    cprint("  ${magenta}--update${clear},    update [self | index]")
+    cprint("  ${magenta}--detect${clear},        detect local software/packages")
+    cprint("  ${magenta}--update${clear},        update [self | index]")
+    cprint("  ${magenta}--disable-info${clear},  disable info display")
     cprint("")
 
     cprint("${bright}Examples:${clear}")
@@ -265,12 +266,14 @@ function CmdProcessor:target_tips(opt)
     cprint("[xlings:xim]: ${yellow}please check the name and try again${clear}")
 end
 
+function CmdProcessor:_restart_tips()
+    if self.cmds.disable_info then return end
+    cprint("\n\t ${yellow}**maybe need to restart cmd/shell to load env**${clear}")
+    cprint("\t       ${dim}try to run${clear} source ~/.bashrc\n")
+end
+
 function CmdProcessor:_feedback()
-
-    if self.cmds.disable_feedback then
-        return
-    end
-
+    if self.cmds.disable_info then return end
     cprint("\n\t     ${blue}反馈 & 交流 | Feedback & Discourse${clear}")
     cprint("\t${dim}(if encounter any problem, please report it)")
     cprint(

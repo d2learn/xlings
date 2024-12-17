@@ -14,7 +14,7 @@ xim_data_dir = {
 
 xim_data_dir = xim_data_dir[os.host()]
 
-xim_debug = false
+xim_debug_flag = false
 
 if not os.isdir(xim_data_dir) then
     os.mkdir(xim_data_dir)
@@ -39,9 +39,9 @@ end
 
 function xim_debug(value) -- setter/getter
     if value ~= nil then
-        xim_debug = value
+        xim_debug_flag = value
     end
-    return xim_debug
+    return xim_debug_flag
 end
 
 function main()

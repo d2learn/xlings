@@ -125,7 +125,7 @@ end
 
 function _set_install_file(xpkg)
     local url = xpkg:get_xpm_resources().url
-    if not url then
+    if url then
         local filename = path.join(runtime.get_xim_data_dir(), path.filename(url))
         runtime.set_pkginfo({ install_file = filename })
     end

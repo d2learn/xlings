@@ -2,16 +2,12 @@ import("CmdProcessor")
 
 function _input_process(args)
 
-    if #args == 1 and args[1]:sub(1, 1) ~= '-' then
-        return args[1], { install = true }
-    end
-
     local main_target = ""
 
     local boolean_cmds = {
         ["-y"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
-        ["--disable-feedback"] = false, -- -feedback (boolean)
+        ["--disable-info"] = false, -- -feedback (boolean)
         ["--debug"] = false,  -- -debug (boolean)
     }
 
@@ -29,6 +25,10 @@ function _input_process(args)
         ["-l"] = false,  -- -list (string)
         ["--update"] = false,  -- -update (string)
     }
+
+    if args[1]:sub(1, 1) ~= '-' then
+        main_target = args[1]
+    end
 
     for i = 1, #args do
         if boolean_cmds[args[i]] == false then
@@ -54,7 +54,7 @@ function _input_process(args)
 
         yes = boolean_cmds["-y"],
         sysdetect = boolean_cmds["--detect"],
-        disable_feedback = boolean_cmds["--disable-feedback"],
+        disable_info = boolean_cmds["--disable-info"],
         debug = boolean_cmds["--debug"],
 
         list = kv_cmds["-l"],
