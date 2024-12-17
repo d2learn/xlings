@@ -26,7 +26,7 @@ function _input_process(args)
         ["--update"] = false,  -- -update (string)
     }
 
-    if args[1]:sub(1, 1) ~= '-' then
+    if #args > 0 and args[1]:sub(1, 1) ~= '-' then
         main_target = args[1]
     end
 
@@ -35,12 +35,13 @@ function _input_process(args)
             boolean_cmds[args[i]] = true
         elseif main_cmds[args[i]] == false then
             main_cmds[args[i]] = true
-            main_target = args[i + 1]
+            main_target = args[i + 1] or ""
         elseif kv_cmds[args[i]] == false then
-            kv_cmds[args[i]] = args[i + 1]
+            kv_cmds[args[i]] = args[i + 1] or ""
         end
     end
 
+    -- "" is "true"
     if kv_cmds["-l"] and kv_cmds["-l"]:sub(1, 1) == '-' then
         kv_cmds["-l"] = ""
     end
