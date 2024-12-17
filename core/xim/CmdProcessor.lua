@@ -22,6 +22,7 @@ function new(target, cmds) --- create new object
     instance.target = target -- target backup
     instance.cmds = cmds
 
+    runtime.xim_debug(cmds.debug)
     index_manager:init()
 
     return instance
@@ -134,7 +135,7 @@ function CmdProcessor:info()
 end
 
 function CmdProcessor:list()
-    local names_table = index_manager:search()
+    local names_table = index_manager:search(self.cmds.list)
     for name, alias in pairs(names_table) do
         local pkg = index_manager:load_package(name)
         if pkg.installed then

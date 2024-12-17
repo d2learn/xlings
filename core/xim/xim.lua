@@ -12,6 +12,7 @@ function _input_process(args)
         ["-y"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
         ["--disable-feedback"] = false, -- -feedback (boolean)
+        ["--debug"] = false,  -- -debug (boolean)
     }
 
     -- Mutually Exclusive Commands 
@@ -19,13 +20,13 @@ function _input_process(args)
         ["-i"] = false,  -- -install (string)
         ["-r"] = false,  -- -remove (string)
         ["-u"] = false,  -- -update (string)
-        ["-l"] = false,  -- -list (string)
         ["-s"] = false,  -- -search (string)
         ["-h"] = false   -- -help (string)
     }
 
     local kv_cmds = {
         -- TODo: add kv cmds
+        ["-l"] = false,  -- -list (string)
         ["--update"] = false,  -- -update (string)
     }
 
@@ -40,17 +41,24 @@ function _input_process(args)
         end
     end
 
+    if kv_cmds["-l"] and kv_cmds["-l"]:sub(1, 1) == '-' then
+        kv_cmds["-l"] = ""
+    end
+
     cmds = {
         install = main_cmds["-i"],
         remove = main_cmds["-r"],
         update = main_cmds["-u"],
-        list = main_cmds["-l"],
         search = main_cmds["-s"],
         help = main_cmds["-h"],
+
         yes = boolean_cmds["-y"],
         sysdetect = boolean_cmds["--detect"],
+        disable_feedback = boolean_cmds["--disable-feedback"],
+        debug = boolean_cmds["--debug"],
+
+        list = kv_cmds["-l"],
         sysupdate = kv_cmds["--update"],
-        disable_feedback = boolean_cmds["--disable-feedback"]
     }
 
     return main_target, cmds

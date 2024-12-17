@@ -14,6 +14,8 @@ xim_data_dir = {
 
 xim_data_dir = xim_data_dir[os.host()]
 
+xim_debug = false
+
 if not os.isdir(xim_data_dir) then
     os.mkdir(xim_data_dir)
 end
@@ -33,6 +35,13 @@ end
 
 function get_xim_data_dir()
     return xim_data_dir
+end
+
+function xim_debug(value) -- setter/getter
+    if value ~= nil then
+        xim_debug = value
+    end
+    return xim_debug
 end
 
 function main()

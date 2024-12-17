@@ -15,6 +15,9 @@ function new()
 end
 
 function XPkgManager:installed(xpkg)
+
+    _set_install_file(xpkg)
+
     local ret = _try_execute_hook(xpkg.name, xpkg.hooks, "installed")
     if type(ret) == "boolean" then
         return ret
@@ -31,7 +34,7 @@ function XPkgManager:download(xpkg)
     local sha256 = res.sha256
 
     if not url then
-        cprint("[xlings:xim]: ${yellow}skip download (url is nil)${clear}")
+        cprint("[xlings:xim]: ${dim}skip download (url is nil)${clear}")
         return true
     end
 
@@ -80,6 +83,7 @@ function XPkgManager:config(xpkg)
 end
 
 function XPkgManager:uninstall(xpkg)
+    _set_install_file(xpkg)
     return _try_execute_hook(xpkg.name, xpkg.hooks, "uninstall")
 end
 
@@ -117,6 +121,14 @@ function XPkgManager:info(xpkg)
     end
 
     cprint("")
+end
+
+function _set_install_file(xpkg)
+    local url = xpkg:get_xpm_resources().url
+    if not url then
+        local filename = path.join(runtime.get_xim_data_dir(), path.filename(url))
+        runtime.set_pkginfo({ install_file = filename })
+    end
 end
 
 function _try_execute_hook(name, hooks, action)

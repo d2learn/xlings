@@ -5,7 +5,7 @@ local IndexStore = {}
 IndexStore.__index = IndexStore
 
 local os_info = utils.os_info()
-local index_file = path.join(runtime.get_xim_data_dir(), "xim-index-db.lua")
+local index_db_file = path.join(runtime.get_xim_data_dir(), "xim-index-db.lua")
 local default_repo_dir = {
     path.join(path.directory(os.scriptdir()), "pkgindex")
 }
@@ -13,13 +13,21 @@ local default_repo_dir = {
 function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
-    instance.indexdirs = indexdirs or default_repo_dir
+    if runtime.xim_debug() then
+        cprint("[xlings:xim]: pkgindex debug mode")
+        instance.indexdirs = default_repo_dir
+        index_db_file = path.join(path.directory(os.scriptdir()), "xim-index-db.lua")
+        cprint("[xlings:xim]: indexdirs: %s", default_repo_dir[1])
+        cprint("[xlings:xim]: xim-index-db: %s", index_db_file)
+    else
+        instance.indexdirs = indexdirs or default_repo_dir
+    end
     instance:init()
     return instance
 end
 
 function IndexStore:init()
-    if os.isfile(index_file) then
+    if os.isfile(index_db_file) then
         try {
             function()
                 self._index_data = _load_index_data()
@@ -39,6 +47,7 @@ end
 function IndexStore:rebuild()
     cprint("[xlings:xim]: rebuild index database")
     self._index_data = { }
+    os.tryrm(index_db_file)
     for _, indexdir in ipairs(self.indexdirs) do
         self:build_pkg_index(indexdir)
         self:build_pmwrapper_index(indexdir)
@@ -153,10 +162,10 @@ end
 
 function _load_index_data()
     local index = {}
-    if os.isfile(index_file) then
+    if os.isfile(index_db_file) then
         index = import(
-            path.basename(index_file),
-            {rootdir = path.directory(index_file)}
+            path.basename(index_db_file),
+            {rootdir = path.directory(index_db_file)}
         ).get_index_db()
     end
     return index
@@ -190,7 +199,7 @@ end
 
     ]]
     data = header .. data .. index_interface
-    io.writefile(index_file, data)
+    io.writefile(index_db_file, data)
 end
 
 function _serialize(obj, layer)

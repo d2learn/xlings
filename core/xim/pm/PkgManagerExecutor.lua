@@ -81,6 +81,7 @@ function PkgManagerExecutor:_config()
 end
 
 function PkgManagerExecutor:uninstall()
+    os.cd(runtime.get_xim_data_dir())
     return _try_execute(self, "uninstall")
 end
 
