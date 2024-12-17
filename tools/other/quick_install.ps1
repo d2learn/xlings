@@ -42,7 +42,7 @@ Write-Host $xlings -ForegroundColor Green
 
 
 $SOFTWARE_URL1 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
-$SOFTWARE_URL2 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
+$SOFTWARE_URL2 = "https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
 
 function Measure-Latency {
     param (
