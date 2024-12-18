@@ -157,7 +157,7 @@ function add_env_path(value)
     if is_host("windows") then
         common.xlings_exec("setx PATH \"%PATH%;" .. value .. "\"")
     else
-        local content = "\nexport PATH=$PATH:" .. value
+        local content = "export PATH=$PATH:" .. value
         append_bashrc(content)
     end
 end
@@ -169,6 +169,7 @@ function append_bashrc(content)
     else
         local bashrc_content = io.readfile(bashrc)
         if string.find(bashrc_content, content, 1, true) == nil then
+            content = "\n" .. content
             common.xlings_file_append(bashrc, content)
         end
     end
