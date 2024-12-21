@@ -101,6 +101,7 @@ function IndexStore:build_xpkg_index(xpkg_file)
         end,
         catch {
             function(e)
+                cprint("\n${red}%s${clear}\n", e)
                 cprint("[xlings:xim]: ${yellow}xpackage file error or nil, skip - ${clear}%s", xpkg_file)
                 return false
             end
