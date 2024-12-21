@@ -62,67 +62,65 @@ Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt
 
 ## 用法简介
 
-### 运行代码
+> - `xlings install`命令缩写: `xinstall`, `xim`
+> - `xlings run`命令缩写: `xrun`
 
-> xlings会自动匹配编程语言, 并实时检查代码变化
+### XIM | 软件安装和环境自动配置
 
-```bash
-xlings run your_code.py
-xlings run your_code.c
-xlings run your_code.cpp
-```
+> XIM(Xlings Installation Manager)是xlings的安装管理模块,可以使用`xim`进行软件的安装和环境的配置
 
-### 环境配置和软件安装
+**编程环境安装配置**
 
-**环境配置**
-
-> 一键配置c语言开发环境
+> 一键安装配置对应的开发环境(python/java/rust/...)
 
 ```bash
-xlings install c
-```
-
-> 一键配置rust开发环境
-
-```bash
-xlings install rust
-```
-
-> 一键配置Python开发环境
-
-```bash
-xlings install python
-```
-
-> 一键配置windows系统的Linux环境 - wsl
-
-```bash
-xlings install wsl
+xim c
+xim cpp
+xim python
 ```
 
 **软件安装**
 
-> 一键安装vscode
+> 一键安装工具软件(vscode/vs/devcpp/nvm...)
 
 ```bash
-xlings install vscode
+xim vscode
 ```
 
-> 一键安装Visual Studio
+**卸载软件和移除配置**
 
 ```bash
-xlings install vs
+xim -r vscode
 ```
 
-> 一键安装Dev-C++
+**搜索支持的软件或配置**
+
+> xim模块支持模糊搜索, 如查询包含`vs`字符串的软件以及所有可以安装的版本
 
 ```bash
-xlings install devcpp
+xim -s vs
 ```
 
-> 注意: 更多软件和环境支持可以使用`xlings install`命令进行查看
+**如何添加软件安装/环境配置文件到XIM的包索引仓库?**
 
-### 项目依赖管理
+> 通过添加一个XPackage包文件, 所有人就都能通过xim安装对应软件和配置功能
+
+- 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
+- 添加XPackage文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
+
+> **注:** 使用`xim -h`命令, 可以获取XIM模块所有的命令行参数的使用和帮助信息
+
+### XRUN | 运行代码
+
+> 使用`xrun`可以运行代码。xlings会自动匹配编程语言, 并实时检查代码变化
+
+```bash
+xlings run your_code.py
+xrun your_code.c
+xrun your_code.cpp
+```
+
+### XDEPS | 项目依赖管理
 
 > 在配置文件所在目录运行install命令安装项目依赖(`config.xlings`配置文件一般放到项目根目录)
 
@@ -147,15 +145,19 @@ xdeps = {
 xlings install
 ```
 
-
 ### 搭建交互式教程或课程实验
 
 - [项目搭建](https://d2learn.github.io/docs/xlings/chapter_3.html)
 - [d2ds项目示例](https://github.com/d2learn/d2ds)
 - [更多文档](https://d2learn.org/docs/xlings/chapter_0.html)
 
+## 社区 & 交流
+
+- 社区论坛: [d2learn-xlings](https://forum.d2learn.org/category/9/xlings)
+- 交流群(Q): 1006282943
+
 ## 相关链接
 
 - [主页](https://d2learn.org/xlings) : 工具动态和核心功能展示
-- [论坛](https://forum.d2learn.org/category/9/xlings) : 问题反馈、项目开发、想法交流
+- [xim-pkgindex](https://github.com/d2learn/xim-pkgindex) : xlings安装管理模块(XIM)的包索引仓库
 - [xmake](https://github.com/xmake-io/xmake): 为xlings提供基础环境

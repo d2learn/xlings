@@ -263,6 +263,7 @@ function CmdProcessor:help()
     cprint("${bright}SysCommands:${clear}")
     cprint("  ${magenta}--detect${clear},        detect local software/packages")
     cprint("  ${magenta}--update${clear},        update [self | index]")
+    cprint("  ${magenta}--add-xpkg${clear},      add xpkg file to index database")
     cprint("  ${magenta}--disable-info${clear},  disable info display")
     cprint("")
 
