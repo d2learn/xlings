@@ -69,8 +69,8 @@ function CmdProcessor:run_nontarget_cmds()
         self:sys_detect()
     elseif self.cmds.sysupdate then
         self:sys_update()
-    elseif self.cmds.sysxpkg then
-        self:sys_xpkg()
+    elseif self.cmds.sysadd_xpkg then
+        self:sys_add_xpkg()
     else
         self:help()
     end
@@ -211,8 +211,8 @@ function CmdProcessor:sys_update()
     end
 end
 
-function CmdProcessor:sys_xpkg()
-    local xpkg_file = self.cmds.sysxpkg
+function CmdProcessor:sys_add_xpkg()
+    local xpkg_file = self.cmds.sysadd_xpkg
     if not os.isfile(xpkg_file) then
         cprint("[xlings:xim]: ${dim}convert xpkg-file to runtime path${clear} - %s", xpkg_file)
         xpkg_file = path.join(runtime.get_rundir(), xpkg_file)

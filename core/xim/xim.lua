@@ -23,7 +23,7 @@ function _input_process(args)
         -- TODo: add kv cmds
         ["-l"] = false,  -- -list (string)
         ["--update"] = false,  -- --update (string)
-        ["--xpkg"] = false,  -- --xpkg (string)
+        ["--add-xpkg"] = false,  -- --add-xpkg (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -59,7 +59,7 @@ function _input_process(args)
 
         list = kv_cmds["-l"],
         sysupdate = kv_cmds["--update"],
-        sysxpkg = kv_cmds["--xpkg"],
+        sysadd_xpkg = kv_cmds["--add-xpkg"],
     }
 
     return main_target, cmds
