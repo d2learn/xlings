@@ -5,6 +5,7 @@
 pkginfo = {
     version = "0.0.0",
     install_file = "xim-0.0.0.exe",
+    projectdir = "repo",
 }
 
 xim_data_dir = {
@@ -30,6 +31,9 @@ function set_pkginfo(info)
     end
     if info.install_file then
         pkginfo.install_file = info.install_file
+    end
+    if info.projectdir then
+        pkginfo.projectdir = info.projectdir
     end
 end
 

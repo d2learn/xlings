@@ -40,24 +40,31 @@ function XPkgManager:download(xpkg)
 
     -- TODO: impl independent download dir for env/vm
     local download_dir = runtime.get_xim_data_dir()
-    local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
 
-    if not ok then -- retry download
-        ok, filename = utils.try_download_and_check(url, download_dir, sha256)
-    end
-
-    if ok then
-        if utils.is_compressed(filename) then
-            cprint("[xlings:xim]: start extract %s${clear}", path.filename(filename))
-            archive.extract(filename, download_dir)
-        end
+    -- 1. git clone
+    if string.find(url, ".git", 1, true) then
+        local pdir = path.join(download_dir, path.basename(url))
+        os.exec("git clone --depth=1 " .. url .. " " .. pdir)
+        runtime.set_pkginfo({ projectdir = pdir })
     else
-        -- download failed or sha256 check failed
-        cprint("[xlings:xim]: ${red}download or sha256-check failed${clear}")
-        return false
-    end
+        local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
+        if not ok then -- retry download
+            ok, filename = utils.try_download_and_check(url, download_dir, sha256)
+        end
 
-    runtime.set_pkginfo({ install_file = filename })
+        if ok then
+            if utils.is_compressed(filename) then
+                cprint("[xlings:xim]: start extract %s${clear}", path.filename(filename))
+                archive.extract(filename, download_dir)
+            end
+        else
+            -- download failed or sha256 check failed
+            cprint("[xlings:xim]: ${red}download or sha256-check failed${clear}")
+            return false
+        end
+
+        runtime.set_pkginfo({ install_file = filename })
+    end
 
     return true
 end
@@ -126,8 +133,14 @@ end
 function _set_install_file(xpkg)
     local url = xpkg:get_xpm_resources().url
     if url then
-        local filename = path.join(runtime.get_xim_data_dir(), path.filename(url))
-        runtime.set_pkginfo({ install_file = filename })
+        local datadir = runtime.get_xim_data_dir()
+        if string.find(url, ".git", 1, true) then
+            local pdir = path.join(datadir, path.basename(url))
+            runtime.set_pkginfo({ projectdir = pdir })
+        else
+            local filename = path.join(datadir, path.filename(url))
+            runtime.set_pkginfo({ install_file = filename })
+        end
     end
 end
 

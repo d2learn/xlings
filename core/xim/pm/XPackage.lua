@@ -113,7 +113,7 @@ package = {
 import("xim.base.runtime")
 
 -- pkginfo = runtime.get_pkginfo()
--- pkginfo = {install_file = "", version = "x.x.x"}
+-- pkginfo = {install_file = "", projectdir = "", version = "x.x.x"}
 
 -- step 1: support check - package attribute
 
