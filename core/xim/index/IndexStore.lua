@@ -13,15 +13,7 @@ local default_repo_dir = {
 function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
-    if runtime.xim_debug() then
-        cprint("[xlings:xim]: pkgindex debug mode")
-        instance.indexdirs = default_repo_dir
-        index_db_file = path.join(path.directory(os.scriptdir()), "xim-index-db.lua")
-        cprint("[xlings:xim]: indexdirs: %s", default_repo_dir[1])
-        cprint("[xlings:xim]: xim-index-db: %s", index_db_file)
-    else
-        instance.indexdirs = indexdirs or default_repo_dir
-    end
+    instance.indexdirs = indexdirs or default_repo_dir
     instance:init()
     return instance
 end
@@ -49,52 +41,71 @@ function IndexStore:rebuild()
     self._index_data = { }
     os.tryrm(index_db_file)
     for _, indexdir in ipairs(self.indexdirs) do
-        self:build_pkg_index(indexdir)
+        self:build_xpkgs_index(indexdir)
         self:build_pmwrapper_index(indexdir)
     end
     _save_index_data(self._index_data)
     return self._index_data
 end
 
-function IndexStore:build_pkg_index(indexdir)
+function IndexStore:build_xpkgs_index(indexdir)
     local pkgsdir = path.join(indexdir, "pkgs")
     local files = os.files(path.join(pkgsdir, "**.lua"))
     for _, file in ipairs(files) do
-        local name_maintainer = path.basename(file)
-        local pkg = utils.load_module(file, indexdir).package
-        -- TODO: name_maintainer@version@arch
-        if pkg.ref then
-            self._index_data[name_maintainer] = {
-                ref = pkg.ref
-            }
-        elseif pkg.xpm[os_info.name] then
-            local os_key = pkg.xpm[os_info.name].ref or os_info.name
-            for version, _ in pairs(pkg.xpm[os_key]) do
+        self:build_xpkg_index(file)
+    end
+end
 
-                if version ~= "deps" then
-                    local key = string.format("%s@%s", name_maintainer, version)
+function IndexStore:build_xpkg_index(xpkg_file)
+    return try {
+        function()
+            local name_maintainer = path.basename(xpkg_file)
+            local pkg = utils.load_module(
+                xpkg_file,
+                path.directory(xpkg_file)
+            ).package
 
-                    if pkg.xpm[os_key][version].ref then
-                        self._index_data[key] = {
-                            ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
-                        }
-                    else 
-                        self._index_data[key] = {
-                            version = version,
-                            installed = false,
-                            path = file
-                        }
-                    end
+            -- TODO: name_maintainer@version@arch
+            if pkg.ref then
+                self._index_data[name_maintainer] = {
+                    ref = pkg.ref
+                }
+            elseif pkg.xpm[os_info.name] then
+                local os_key = pkg.xpm[os_info.name].ref or os_info.name
+                for version, _ in pairs(pkg.xpm[os_key]) do
 
-                    if version == "latest" then
-                        self._index_data[name_maintainer] = {
-                            ref = key
-                        }
+                    if version ~= "deps" then
+                        local key = string.format("%s@%s", name_maintainer, version)
+
+                        if pkg.xpm[os_key][version].ref then
+                            self._index_data[key] = {
+                                ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
+                            }
+                        else 
+                            self._index_data[key] = {
+                                version = version,
+                                installed = false,
+                                path = xpkg_file
+                            }
+                        end
+
+                        if version == "latest" then
+                            self._index_data[name_maintainer] = {
+                                ref = key
+                            }
+                        end
                     end
                 end
             end
-        end
-    end
+            return true
+        end,
+        catch {
+            function(e)
+                cprint("[xlings:xim]: ${yellow}xpackage file error or nil, skip - ${clear}%s", xpkg_file)
+                return false
+            end
+        }
+    }
 end
 
 function IndexStore:build_pmwrapper_index(indexdir)
@@ -133,8 +144,8 @@ function IndexStore:build_pmwrapper_index(indexdir)
     end
 end
 
-function IndexStore:save_to_local()
-    if self._need_update then
+function IndexStore:save_to_local(force_save)
+    if self._need_update or force_save then
         self._need_update = false
         _save_index_data(self._index_data)
     end

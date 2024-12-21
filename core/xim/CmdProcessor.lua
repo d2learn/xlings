@@ -22,7 +22,6 @@ function new(target, cmds) --- create new object
     instance.target = target -- target backup
     instance.cmds = cmds
 
-    runtime.xim_debug(cmds.debug)
     index_manager:init()
 
     return instance
@@ -70,6 +69,8 @@ function CmdProcessor:run_nontarget_cmds()
         self:sys_detect()
     elseif self.cmds.sysupdate then
         self:sys_update()
+    elseif self.cmds.sysxpkg then
+        self:sys_xpkg()
     else
         self:help()
     end
@@ -207,6 +208,22 @@ function CmdProcessor:sys_update()
         self:sys_detect()
     elseif self.cmds.sysupdate == "self" then
         cprint("[xlings:xim]: update self - todo")
+    end
+end
+
+function CmdProcessor:sys_xpkg()
+    local xpkg_file = self.cmds.sysxpkg
+    if not os.isfile(xpkg_file) then
+        cprint("[xlings:xim]: ${dim}convert xpkg-file to runtime path${clear} - %s", xpkg_file)
+        xpkg_file = path.join(runtime.get_rundir(), xpkg_file)
+    else
+        xpkg_file = path.absolute(xpkg_file)
+    end
+
+    if os.isfile(xpkg_file) then
+        index_manager:add_xpkg(xpkg_file)
+    else
+        cprint("[xlings:xim]: ${red}xpkg-file not found${clear} - %s", xpkg_file)
     end
 end
 

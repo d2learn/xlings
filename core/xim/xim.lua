@@ -8,7 +8,6 @@ function _input_process(args)
         ["-y"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
         ["--disable-info"] = false, -- -feedback (boolean)
-        ["--debug"] = false,  -- -debug (boolean)
     }
 
     -- Mutually Exclusive Commands 
@@ -23,7 +22,8 @@ function _input_process(args)
     local kv_cmds = {
         -- TODo: add kv cmds
         ["-l"] = false,  -- -list (string)
-        ["--update"] = false,  -- -update (string)
+        ["--update"] = false,  -- --update (string)
+        ["--xpkg"] = false,  -- --xpkg (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -56,10 +56,10 @@ function _input_process(args)
         yes = boolean_cmds["-y"],
         sysdetect = boolean_cmds["--detect"],
         disable_info = boolean_cmds["--disable-info"],
-        debug = boolean_cmds["--debug"],
 
         list = kv_cmds["-l"],
         sysupdate = kv_cmds["--update"],
+        sysxpkg = kv_cmds["--xpkg"],
     }
 
     return main_target, cmds

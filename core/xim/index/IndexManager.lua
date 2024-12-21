@@ -114,6 +114,13 @@ function IndexManager:load_package(name)
     end
 end
 
+function IndexManager:add_xpkg(xpkg_file)
+    cprint("[xlings:xim]: add xpkg - ${clear}%s", xpkg_file)
+    if index_store:build_xpkg_index(xpkg_file) then
+        index_store:save_to_local(true)
+    end
+end
+
 function main()
     local index_manager = new()
     index_manager.status_changed_pkg["vscode"] = {installed = false}
