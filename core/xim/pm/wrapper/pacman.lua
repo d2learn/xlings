@@ -25,9 +25,9 @@ function uninstall(name)
     return ok == 0
 end
 
--- 获取包信息（通过 `pacman -Qi`）
+-- 获取包信息（通过 `pacman -Si`）
 function info(name)
-    local output = os.iorunv("pacman", {"-Qi", name})
+    local output = os.iorunv("pacman", {"-Si", name})
     if output then
         return output:trim()
     else
