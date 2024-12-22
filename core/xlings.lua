@@ -6,10 +6,10 @@ import("common")
 import("checker")
 import("init")
 import("drepo")
-import("mini_run")
 import("config")
 
 local xinstall = import("xim.xim")
+local xrun = import("xrun.xrun")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.2")
@@ -54,7 +54,7 @@ function deps_check_and_install(xdeps)
                 version = nil, -- TODO: support version
             }
             cprint("${dim}---${clear}")
-            xinstall("-i", name, "-y", unpack(cmd_args))
+            xinstall("-i", name, "-y", "--disable-info", unpack(cmd_args))
         end
     end
 
@@ -142,21 +142,17 @@ function main()
 
     -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "checker" or command == xname then
-        if xlings_editor then xinstall(xlings_editor, "-y") end
-        xinstall(xlings_lang, "-y")
+        if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
+        xinstall(xlings_lang, "-y", "--disable-info")
         checker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
-        if os.isfile(path.join(run_dir, cmd_target)) then
-            mini_run(cmd_target)
-        else
-            cprint("[xlings]: ${red}file not found${clear} - " .. cmd_target)
-        end
+        xrun(cmd_target)
     elseif command == "init" then
-        xinstall("mdbook", "-y")
+        xinstall("mdbook", "-y", "--disable-info")
         init.xlings_init(xname, xlings_lang)
     elseif command == "book" then
         --os.exec("mdbook build --open book") -- book is default folder
-        xinstall("mdbook", "-y")
+        xinstall("mdbook", "-y", "--disable-info")
         os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "update" then
         common.xlings_update(xname, xlings_lang)

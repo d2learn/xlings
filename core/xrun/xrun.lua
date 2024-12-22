@@ -20,17 +20,13 @@ function detect_file_type(source_file)
     end
 end
 
-function generate_config(target_name, source_file)
+function generate_config(target_name, target_sourcefile)
 
     local config = platform.get_config_info()
-    local target_sourcefile = common.xlings_path_format(source_file)
     local xlings_file = config.install_dir .. "/core/xmake.lua"
-
-    local file_type = detect_file_type(source_file)
+    local file_type = detect_file_type(target_sourcefile)
     local template = templates_interface.get_template(file_type)
     local xmake_file_path = config.cachedir .. "/xmake.lua"
-
-    --cprint(template.xmake_file_template)
 
     local content = string.format(
         template.xmake_file_template,
@@ -43,6 +39,17 @@ function generate_config(target_name, source_file)
 end
 
 function main(source_file)
+
+    if os.isfile(source_file) then
+        source_file = path.absolute(source_file)
+    else
+        source_file = path.join(platform.get_config_info().rundir, source_file)
+        if not os.isfile(source_file) then
+            cprint("[xlings]: ${red}file not found${clear} - " .. source_file)
+            return
+        end
+    end
+
     local target_name = path.basename(source_file)
     generate_config(target_name, source_file)
     --os.exec("pwd")

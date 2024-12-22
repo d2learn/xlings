@@ -29,7 +29,7 @@ target("clings-demo")
     add_files("tests/clings.c")
 ]]
 
---- mini run config template
+--- xrun config template
 
 _xmake_file_template = [[
 xlings_editor = "vscode"
@@ -37,7 +37,7 @@ xlings_runmode = "loop"
 xlings_lang = "%s" -- 0.lang
 
 local target_name = "%s" -- 1.name
-local target_sourcefile = "../%s" -- 2.sourcefile
+local target_sourcefile = "%s" -- 2.sourcefile
 --xlings_name = target_sourcefile
 
 target(target_name) -- 1.name

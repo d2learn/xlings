@@ -164,18 +164,23 @@ function main(start_target)
 
     common.xlings_clear_screen()
 
+    -- xlings project's cache dir(xmake.lua)
+    local base_dir = os.projectdir()
+    os.cd(base_dir) -- avoid other module's side effect
+
     local config = platform.get_config_info()
     local detect_dir = config.rundir
     local detect_recursion = false
     if config.name ~= "xlings_name" then -- is d2x project
         detect_dir = detect_dir .. "/" .. config.name
         detect_recursion = true
-    else -- is mini_run
+    else -- is xrun - TODO: optimize
         --detect_recursion = false
         local files = project.targets()[start_target]:sourcefiles()
-        local file = nil
-        for _, f in ipairs(files) do file = f break end
-        detect_dir = path.directory(file)
+        if #files > 0 then
+            local file = path.absolute(files[1])
+            detect_dir = path.directory(file)
+        end
     end
     fwatcher.add(detect_dir, {recursion = detect_recursion})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
@@ -185,11 +190,6 @@ function main(start_target)
     --else
         -- TODO3: support more editor?
     --end
-
-    local base_dir = os.projectdir()
-
-    -- xlings project's cache dir(xmake.lua)
-    -- print(base_dir) -- /home/speak/workspace/github/d2ds/.xlings
 
     -- 获取 project 中所有 target
     local targets = project.targets()
@@ -276,11 +276,7 @@ function main(start_target)
                             if platform.get_config_info().editor == "vscode" then
                                 if open_target_file == false then
                                     for  _, file in ipairs((files)) do
-                                        if os.host() == "windows" then
-                                            --file = platform.get_config_info().rundir .. "\\" .. common.xlings_path_format(file)
-                                        else
-                                            -- why work?
-                                        end
+                                        file = path.absolute(file)
                                         os.exec(platform.get_config_info().cmd_wrapper .. "code -g " .. file .. ":1")
                                     end
                                     open_target_file = true
