@@ -36,6 +36,8 @@
 - run命令跨存储盘(windows)使用 - [详情](http://forum.d2learn.org/post/66)
 - 更多动态和讨论 -> [More](https://forum.d2learn.org/category/9/xlings)
 
+[![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
+
 ## 快速安装
 
 > 在命令行窗口执行一键安装命令
