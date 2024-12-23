@@ -58,7 +58,8 @@ function os_info()
 
     if os_type == "linux" then
         name = linuxos.name()
-        version = linuxos.version() -- TODO: get linux version
+        if name == "archlinux" then version = "rolling" -- TODO: arch linux version
+        else version = linuxos.version() end -- TODO: get linux version
     elseif os_type == "windows" then
         name = "windows" -- winos.name()
         version = winos.version()
