@@ -1,0 +1,52 @@
+name: Xlings Test - CI
+
+on: [push]
+
+jobs:
+  linux-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Install curl and git
+        run: sudo apt-get update && sudo apt-get install -y curl git
+
+      - name: Clone Xlings Repository & Installation
+        run: |
+          git clone --depth 1 https://github.com/d2learn/xlings.git
+          cd xlings && ./tools/install.unix.sh
+
+      - name: XIM Test on Ubuntu
+        run: |
+          export PATH=$PATH:/home/runner/.xlings_data/bin
+          xlings -h
+          xim -h
+          xim -l
+          xim --detect
+          xim -s v
+          xim -i vim -y
+          source ~/.bashrc
+          xim -l
+          xim -r vim -y
+          xim -l
+# TODO
+#  windows-job:
+#    runs-on: windows-latest
+#
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v2
+#
+#      - name: Execute PowerShell script on Windows
+#        run: |
+#          $script = Invoke-WebRequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing
+#          Invoke-Expression $script.Content
+#          xlings -h
+#          xim -h
+#        shell: pwsh
+#
+#      - name: XIM Test on Windows
+#        run: xim --detect
+#        shell: pwsh
