@@ -42,7 +42,7 @@ function XPkgManager:download(xpkg)
     local download_dir = runtime.get_xim_data_dir()
 
     -- 1. git clone
-    if string.find(url, ".git", 1, true) then
+    if string.find(url, "%.git$") then
         local pdir = path.join(download_dir, path.basename(url))
         os.exec("git clone --depth=1 " .. url .. " " .. pdir)
         runtime.set_pkginfo({ projectdir = pdir })
