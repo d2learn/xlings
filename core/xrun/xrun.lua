@@ -32,7 +32,7 @@ function generate_config(target_name, target_sourcefile)
         template.xmake_file_template,
         file_type,
         target_name,
-        target_sourcefile,
+        "[[" .. target_sourcefile .. "]]",
         xlings_file
     )
     common.xlings_create_file_and_write(xmake_file_path, content)
