@@ -33,6 +33,7 @@ function XPackage:info()
         license = self.pdata.license,
         repo = self.pdata.repo,
         docs = self.pdata.docs,
+        forum = self.pdata.forum,
         description = self.pdata.description,
     }
 end

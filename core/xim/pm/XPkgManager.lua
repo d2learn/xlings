@@ -1,5 +1,6 @@
 import("utils.archive")
 
+import("xim.base.github")
 import("xim.base.utils")
 import("xim.base.runtime")
 
@@ -36,6 +37,13 @@ function XPkgManager:download(xpkg)
     if not url then
         cprint("[xlings:xim]: ${dim}skip download (url is nil)${clear}")
         return true
+    end
+
+    if res.github_release_tag then
+        local user, project = xpkg:info().repo:match("github%.com/([%w-_]+)/([%w-_]+)")
+        -- url is a pattern, when github_release_tag is not nil
+        local info = github.get_release_tag_info(user, project, res.github_release_tag, url)
+        url = info.url
     end
 
     -- TODO: impl independent download dir for env/vm
@@ -111,6 +119,7 @@ function XPkgManager:info(xpkg)
         { key = "license",      label = "license" },
         { key = "repo",         label = "repo" },
         { key = "docs",         label = "docs" },
+        { key = "forum",        label = "forum" },
     }
 
     cprint("")
