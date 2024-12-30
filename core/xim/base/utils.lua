@@ -54,12 +54,18 @@ end
 
 function os_info()
     local os_type = os.host()
-    local name, version = "", ""
+    local name, version = "", "unknown-todo"
 
     if os_type == "linux" then
         name = linuxos.name()
-        if name == "archlinux" then version = "rolling" -- TODO: arch linux version
-        else version = linuxos.version() end -- TODO: get linux version
+        try {
+            function() version = linuxos.version() end,
+            catch { 
+                function(e)
+                    -- TODO: fix xmake's linux version issue
+                end 
+            }
+        }
     elseif os_type == "windows" then
         name = "windows" -- winos.name()
         version = winos.version()
