@@ -123,9 +123,16 @@ function local_package_manager()
 end
 
 function deref(tlb, key)
+
+    if tlb[key] == nil then return nil end
+
     while tlb[key].ref do
         key = tlb[key].ref
+        if tlb[key] == nil then
+            return nil
+        end
     end
+
     return key, tlb[key] 
 end
 

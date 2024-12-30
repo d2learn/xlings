@@ -73,7 +73,8 @@ function IndexManager:search(query, opt)
                 alias_name = name
                 name, pkg = utils.deref(self.index, pkg.ref)
             end
-            if is_installed(opt, pkg) then 
+            -- if ref to a nil, skip
+            if name and is_installed(opt, pkg) then 
                 add_name(names, name, alias_name)
                 if #names >= opt.limit then
                     break
@@ -88,6 +89,13 @@ function IndexManager:load_package(name)
     if self.index[name] then
 
         local _, pkg = utils.deref(self.index, name)
+
+        -- TODO: fix index-database ref nil value issue
+        --       IndexStore.lua:build_xpkg_index
+        --       add ref-platform check when add to index-db
+        if pkg == nil then
+            return nil
+        end
 
         if pkg.pmwrapper then
             return pkg
