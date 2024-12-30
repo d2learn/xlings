@@ -67,7 +67,7 @@ function IndexManager:search(query, opt)
     end
 
     for name, pkg in pairs(self.index) do
-        if name:find(query) or query == "" then
+        if name:find(query, 1, true) or query == "" then
             local alias_name = nil
             if pkg.ref then
                 alias_name = name
