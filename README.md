@@ -27,8 +27,8 @@
 
 - xpkg增加自动匹配github上release的url功能 - [文章](http://forum.d2learn.org/post/208) - 2024/12/30
 - xlings跨平台短命令 - [视频](https://www.bilibili.com/video/BV1dH6sYKEdB) - 2024/12/29
-- xinstall模块: 重构&分离框架代码和包文件 - [包索引仓库](https://github.com/d2learn/xim-pkgindex) / [PR](https://github.com/d2learn/xlings/pull/49) -- 2024/12/16
-- xinstall功能更新介绍 - [文章](https://forum.d2learn.org/topic/48) / [视频](https://www.bilibili.com/video/BV1ejzvY4Eg7/?share_source=copy_web&vd_source=2ab9f3bdf795fb473263ee1fc1d268d0)
+- xim模块: 重构&分离框架代码和包文件 - [包索引仓库](https://github.com/d2learn/xim-pkgindex) / [PR](https://github.com/d2learn/xlings/pull/49) -- 2024/12/16
+- xim功能更新介绍 - [文章](https://forum.d2learn.org/topic/48) / [视频](https://www.bilibili.com/video/BV1ejzvY4Eg7/?share_source=copy_web&vd_source=2ab9f3bdf795fb473263ee1fc1d268d0)
 - 增加DotNet/C#和java/jdk8环境的支持
 - 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
 - 软件安装模块增加deps依赖配置和"递归"安装实现
@@ -69,16 +69,16 @@ Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt
 
 ### XIM | 软件安装和环境自动配置
 
-> XIM(Xlings Installation Manager)是xlings的安装管理模块,可以使用`xinstall`进行软件的安装和环境的配置
+> XIM(Xlings Installation Manager)是xlings的安装管理模块,可以使用`xim`进行软件的安装和环境的配置
 
 **编程环境安装配置**
 
 > 一键安装配置对应的开发环境(python/java/rust/...)
 
 ```bash
-xinstall c
-xinstall cpp
-xinstall python
+xim c
+xim cpp
+xim python
 ```
 
 **软件安装**
@@ -86,31 +86,31 @@ xinstall python
 > 一键安装工具软件(vscode/vs/devcpp/nvm...)
 
 ```bash
-xinstall vscode
+xim vscode
 ```
 
 **卸载软件和移除配置**
 
 ```bash
-xinstall -r vscode
+xim -r vscode
 ```
 
 **搜索支持的软件或配置**
 
-> xinstall模块支持模糊搜索, 如查询包含`vs`字符串的软件以及所有可以安装的版本
+> xim模块支持模糊搜索, 如查询包含`vs`字符串的软件以及所有可以安装的版本
 
 ```bash
-xinstall -s vs
+xim -s vs
 ```
 
 **如何添加软件安装/环境配置文件到XIM的包索引仓库?**
 
-> 通过添加一个XPackage包文件, 所有人就都能通过xinstall安装对应软件和配置功能
+> 通过添加一个XPackage包文件, 所有人就都能通过xim安装对应软件和配置功能
 
 - 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
 - 添加XPackage文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
 
-> **注:** 使用`xinstall -h`命令, 可以获取XIM模块所有的命令行参数的使用和帮助信息
+> **注:** 使用`xim -h`命令, 可以获取XIM模块所有的命令行参数的使用和帮助信息
 
 ### XRUN | 运行代码
 
