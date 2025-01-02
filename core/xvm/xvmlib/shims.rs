@@ -1,6 +1,8 @@
 use std::fs;
 use std::process::Command;
 
+use crate::config::VData;
+
 // TODO
 pub enum Type {
     Symlink, // SymlinkWrapper,
@@ -63,6 +65,18 @@ impl Program {
         }
     }
 
+    pub fn set_path(&mut self, path: &str) {
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = if current_path.is_empty() {
+            path.to_string()
+        } else {
+            let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+            format!("{}{}{}", path, separator, current_path)
+        };
+
+        self.add_env("PATH", &new_path);
+    }
+
     pub fn add_arg(&mut self, arg: &str) {
         self.args.push(arg.to_string());
     }
@@ -73,9 +87,20 @@ impl Program {
         }
     }
 
+    pub fn set_vdata(&mut self, version_data: &VData) {
+        self.set_path(&version_data.path);
+        if let Some(envs) = &version_data.envs {
+            self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
+        }
+        if let Some(name) = &version_data.name {
+            self.name = name.clone();
+        }
+    }
+
     pub fn run(&self) {
         println!("Running Program [{}], version {:?}", self.name, self.version);
         println!("Args: {:?}", self.args);
+        //println!("Envs: {:?}", self.envs);
         Command::new(&self.name)
             .args(&self.args)
             .envs(self.envs.iter().cloned())

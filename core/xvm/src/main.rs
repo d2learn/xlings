@@ -1,10 +1,25 @@
 extern crate xvmlib;
 
+//use std::env;
+
 use xvmlib::shims;
+use xvmlib::config;
 
 fn main() {
-    let mut xim = shims::Program::new("node", "prev-0.0.2");
-    //xim.add_env("PATH", "~/.nvm/versions/node/v21.7.3/bin");
-    xim.add_args(&["-v", "o"]);
-    xim.run();
+
+    let target = "python";
+    //let current_dir = env::current_dir().unwrap();
+
+    let version_db = config::VersionDB::new("config/versions.xvm.yaml").unwrap();
+    let wconfig = config::WorkspaceConfig::new("config/workspace.xvm.yaml").unwrap();
+
+    let version = wconfig.get_version(target).unwrap();
+    let vdata = version_db.get_vdata(target, version).unwrap();
+
+    wconfig.active();
+
+    let mut program = shims::Program::new(target, version);
+    program.set_vdata(vdata);
+    program.add_arg("--version");
+    program.run();
 }
