@@ -1,0 +1,13 @@
+[package]
+name = "xvmlib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "xvmlib/lib.rs"
+
+[[bin]]
+name = "xvm"
+path = "src/main.rs"
+
+[dependencies]
