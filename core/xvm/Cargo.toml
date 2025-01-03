@@ -1,0 +1,18 @@
+[package]
+name = "xvmlib"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "xvmlib/lib.rs"
+
+[[bin]]
+name = "xvm"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+indexmap = { version = "1.9", features = ["serde"] }
+clap = { version = "4.3", features = ["derive"] } # 用于解析命令行参数
+anyhow = "1.0"
