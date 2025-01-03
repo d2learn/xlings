@@ -14,3 +14,5 @@ path = "src/main.rs"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 indexmap = { version = "1.9", features = ["serde"] }
+clap = { version = "4.3", features = ["derive"] } # 用于解析命令行参数
+anyhow = "1.0"

@@ -1,10 +1,9 @@
 ---
 python:
   3.12.3:
+    filename: python3
     path: /usr/bin
   2.7.18:
-    path: /usr/bin
-  3.12.1:
     path: /usr/bin
 java:
   8.0.0:

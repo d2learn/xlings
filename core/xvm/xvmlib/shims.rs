@@ -38,6 +38,10 @@ impl Program {
         &self.version
     }
 
+    pub fn set_filename(&mut self, filename: &str) {
+        self.filename = Some(filename.to_string());
+    }
+
     pub fn add_env(&mut self, key: &str, value: &str) {
         self.envs.push((key.to_string(), value.to_string()));
     }
@@ -56,9 +60,9 @@ impl Program {
         self.args.push(arg.to_string());
     }
 
-    pub fn add_args(&mut self, args: &[&str]) {
+    pub fn add_args(&mut self, args: &Vec<String>) {
         for arg in args {
-            self.args.push(arg.to_string());
+            self.args.push(arg.clone());
         }
     }
 
@@ -143,4 +147,49 @@ impl Program {
 
         new_path
     }
+}
+
+pub fn create(target: &str, dir: &str) {
+    println!("Saving Program to {}", dir);
+
+    if !fs::metadata(dir).is_ok() {
+        fs::create_dir_all(dir).unwrap();
+    }
+
+    // create shim-script-file for windows and unix
+    let (filename, args_placeholder) = shim_file(target, dir);
+
+    if !fs::metadata(&filename).is_ok() {
+        fs::write(&filename, &format!("xvm run {} {}",
+            target, args_placeholder
+        )).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&filename, PermissionsExt::from_mode(0o755)).unwrap();
+        }
+    }
+}
+
+pub fn delete(target: &str, dir: &str) {
+    let (filename, _) = shim_file(target, dir);
+
+    if fs::metadata(&filename).is_ok() {
+        fs::remove_file(&filename).unwrap();
+    }
+}
+
+fn shim_file<'a>(target: &str, dir: &'a str) -> (String, &'a str) {
+    let filename: String;
+    let args_placeholder: &str;
+    if cfg!(target_os = "windows") {
+        args_placeholder = "%*";
+        filename = format!("{}/{}.bat", dir, target);
+    } else {
+        args_placeholder = "$@";
+        filename = format!("{}/{}", dir, target);
+    }
+
+    (filename, args_placeholder)
 }

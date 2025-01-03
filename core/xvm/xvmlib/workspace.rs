@@ -22,7 +22,25 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(yaml_file: &str) -> Result<Self, io::Error> {
+
+    pub fn new(yaml_file: &str, name: &str) -> Self {
+        let root = WorkspaceRoot {
+            wmetadata: WMetadata {
+                name: name.to_string(),
+                active: false,
+            },
+            versions: IndexMap::new(),
+        };
+
+        save_to_file(yaml_file, &root).expect("Failed to save Workspace");
+
+        Workspace {
+            file: yaml_file.to_string(),
+            root: root,
+        }
+    }
+
+    pub fn from(yaml_file: &str) -> Result<Self, io::Error> {
         let root = load_from_file(yaml_file)?;
 
         Ok(Workspace {

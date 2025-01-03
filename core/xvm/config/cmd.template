@@ -1,5 +1,3 @@
-bindir: xxx
-
 xvm add target version --path xxx
 xvm add target version --filename xxx
 xvm add target version --env name=value
@@ -7,7 +5,7 @@ xvm remove target version
 
 xvm use target version
 xvm current target
-xvm run target version --args xxx
+xvm run target version --command xxx
 xvm list target
 
 xvm workspace target

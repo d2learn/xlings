@@ -11,12 +11,13 @@ use std::sync::OnceLock;
 pub use versiondb::VersionDB;
 pub use workspace::Workspace;
 
-pub static VERSION_DB: OnceLock<VersionDB> = OnceLock::new();
-pub static GLOBAL_WORKSPACE: OnceLock<Workspace> = OnceLock::new();
+// read-only global state
+static VERSION_DB: OnceLock<VersionDB> = OnceLock::new();
+static GLOBAL_WORKSPACE: OnceLock<Workspace> = OnceLock::new();
 
 pub fn init_versiondb(yaml_file: &str) {
     VERSION_DB.get_or_init(|| {
-        VersionDB::new(yaml_file).expect("Failed to initialize VersionDB")
+        VersionDB::from(yaml_file).expect("Failed to initialize VersionDB")
     });
 }
 
@@ -26,7 +27,7 @@ pub fn get_versiondb() -> &'static VersionDB {
 
 pub fn init_global_workspace(yaml_file: &str) {
     GLOBAL_WORKSPACE.get_or_init(|| {
-        Workspace::new(yaml_file).expect("Failed to initialize Workspace")
+        Workspace::from(yaml_file).expect("Failed to initialize Workspace")
     });
 }
 
