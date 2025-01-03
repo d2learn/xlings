@@ -13,3 +13,4 @@ path = "src/main.rs"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
+indexmap = { version = "1.9", features = ["serde"] }

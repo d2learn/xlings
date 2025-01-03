@@ -1,12 +1,14 @@
 use std::fs;
 use std::io;
-use std::collections::HashMap;
 
-use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use serde_yaml;
+use serde::de::DeserializeOwned;
 
-fn load_from_file<T>(yaml_file: &str) -> Result<T, io::Error>
+pub use serde::Serialize;
+pub use serde::Deserialize;
+pub use indexmap::IndexMap;
+
+pub fn load_from_file<T>(yaml_file: &str) -> Result<T, io::Error>
 where
     T: DeserializeOwned,
 {
@@ -18,47 +20,12 @@ where
     Ok(data)
 }
 
-#[derive(Debug, Deserialize)]
-pub struct VData {
-    pub name: Option<String>,
-    pub path: String,
-    pub envs: Option<HashMap<String, String>>,
-}
+pub fn save_to_file<T>(yaml_file: &str, data: &T) -> Result<(), io::Error>
+where
+    T: Serialize,
+{
+    let yaml = serde_yaml::to_string(data)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
-type VersionRoot = HashMap<String, HashMap<String, VData>>;
-
-pub struct VersionDB {
-    root: VersionRoot,
-}
-
-pub struct WorkspaceConfig {
-    root: HashMap<String, String>,
-}
-
-impl VersionDB {
-    pub fn new(yaml_file: &str) -> Result<Self, io::Error> {
-        let root = load_from_file(yaml_file)?;
-
-        Ok(VersionDB { root })
-    }
-
-    pub fn get_vdata(&self, name: &str, version: &str) -> Option<&VData> {
-        self.root.get(name)?.get(version)
-    }
-}
-
-impl WorkspaceConfig {
-    pub fn new(yaml_file: &str) -> Result<Self, io::Error> {
-        let root = load_from_file(yaml_file)?;
-
-        Ok(WorkspaceConfig { root })
-    }
-
-    pub fn get_version(&self, name: &str) -> Option<&String> {
-        self.root.get(name)
-    }
-
-    pub fn active(&self) {
-        self.root.get("xvm-workspace").map(|v| println!("Workspace: {}", v));
-    }
+    fs::write(yaml_file, yaml)
 }

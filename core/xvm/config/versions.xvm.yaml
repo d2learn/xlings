@@ -1,21 +1,27 @@
+---
 python:
   3.12.3:
-    name: python3.12
     path: /usr/bin
   2.7.18:
-    name: python2
     path: /usr/bin
-
+  3.12.1:
+    path: /usr/bin
 java:
   8.0.0:
     path: /usr/local/java/8
     envs:
       JAVA_HOME: /usr/local/java/8
       CLASSPATH: /usr/local/java/8/lib
-
 node:
   22.12.0:
     path: ~/.nvm/versions/node/v22.12.0/bin
-
   21.7.3:
     path: ~/.nvm/versions/node/v21.7.3/bin
+test:
+  3.12.1:
+    path: /usr/bin
+test2:
+  3.12.1:
+    path: /usr/bin
+  3.12.2:
+    path: /usr/bin

@@ -1,7 +1,7 @@
 use std::fs;
 use std::process::Command;
 
-use crate::config::VData;
+use crate::versiondb::VData;
 
 // TODO
 pub enum Type {
@@ -12,6 +12,8 @@ pub enum Type {
 pub struct Program {
     name: String,
     version: String,
+    filename: Option<String>,
+    path: String,
     envs: Vec<(String, String)>,
     args: Vec<String>,
 }
@@ -21,9 +23,81 @@ impl Program {
         Self {
             name: name.to_string(),
             version: version.to_string(),
+            filename: None,
+            path: String::new(),
             envs: Vec::new(),
             args: Vec::new(),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn add_env(&mut self, key: &str, value: &str) {
+        self.envs.push((key.to_string(), value.to_string()));
+    }
+
+    pub fn add_envs(&mut self, envs: &[(&str, &str)]) {
+        for (key, value) in envs {
+            self.envs.push((key.to_string(), value.to_string()));
+        }
+    }
+
+    pub fn set_path(&mut self, path: &str) {
+        self.path = path.to_string();
+    }
+
+    pub fn add_arg(&mut self, arg: &str) {
+        self.args.push(arg.to_string());
+    }
+
+    pub fn add_args(&mut self, args: &[&str]) {
+        for arg in args {
+            self.args.push(arg.to_string());
+        }
+    }
+
+    pub fn vdata(&self) -> VData {
+        VData {
+            filename: self.filename.clone(),
+            path: self.path.clone(),
+            envs: if self.envs.is_empty() {
+                None
+            } else {
+                Some(self.envs.iter().cloned().collect())
+            },
+        }
+    }
+
+    pub fn set_vdata(&mut self, vdata: &VData) {
+        self.set_path(&vdata.path);
+        if let Some(envs) = &vdata.envs {
+            self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
+        }
+        self.filename = vdata.filename.clone();
+    }
+
+    pub fn run(&self) {
+        println!("Running Program [{}], version {:?}", self.name, self.version);
+        println!("Args: {:?}", self.args);
+        //println!("Envs: {:?}", self.envs);
+
+        // if filename isnot empty, then use it, otherwise use name
+        let target_program = self.filename.as_ref().unwrap_or(&self.name);
+
+        Command::new(&target_program)
+            .args(&self.args)
+            .env("PATH", self.get_path_env())
+            .envs(self.envs.iter().cloned())
+            .status()
+            .expect("failed to execute process");
+
+        println!("Program [{}] finished", self.name);
     }
 
     pub fn save_to(&self, dir: &str) {
@@ -55,57 +129,18 @@ impl Program {
         }
     }
 
-    pub fn add_env(&mut self, key: &str, value: &str) {
-        self.envs.push((key.to_string(), value.to_string()));
-    }
+    ///// private methods
 
-    pub fn add_envs(&mut self, envs: &[(&str, &str)]) {
-        for (key, value) in envs {
-            self.envs.push((key.to_string(), value.to_string()));
-        }
-    }
-
-    pub fn set_path(&mut self, path: &str) {
+    fn get_path_env(&self) -> String {
         let current_path = std::env::var("PATH").unwrap_or_default();
+
         let new_path = if current_path.is_empty() {
-            path.to_string()
+            self.path.to_string()
         } else {
             let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-            format!("{}{}{}", path, separator, current_path)
+            format!("{}{}{}", self.path, separator, current_path)
         };
 
-        self.add_env("PATH", &new_path);
-    }
-
-    pub fn add_arg(&mut self, arg: &str) {
-        self.args.push(arg.to_string());
-    }
-
-    pub fn add_args(&mut self, args: &[&str]) {
-        for arg in args {
-            self.args.push(arg.to_string());
-        }
-    }
-
-    pub fn set_vdata(&mut self, version_data: &VData) {
-        self.set_path(&version_data.path);
-        if let Some(envs) = &version_data.envs {
-            self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
-        }
-        if let Some(name) = &version_data.name {
-            self.name = name.clone();
-        }
-    }
-
-    pub fn run(&self) {
-        println!("Running Program [{}], version {:?}", self.name, self.version);
-        println!("Args: {:?}", self.args);
-        //println!("Envs: {:?}", self.envs);
-        Command::new(&self.name)
-            .args(&self.args)
-            .envs(self.envs.iter().cloned())
-            .status()
-            .expect("failed to execute process");
-        println!("Program [{}] finished", self.name);
+        new_path
     }
 }
