@@ -27,5 +27,9 @@ where
     let yaml = serde_yaml::to_string(data)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
+    // if dir not exists, create it
+    let parent = std::path::Path::new(yaml_file).parent().unwrap();
+    fs::create_dir_all(parent)?;
+
     fs::write(yaml_file, yaml)
 }

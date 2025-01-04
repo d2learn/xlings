@@ -3,9 +3,12 @@ extern crate xvmlib;
 mod baseinfo;
 mod helper;
 mod cmdprocessor;
+mod handler;
 
 fn main() {
-    xvmlib::init_versiondb("config/versions.xvm.yaml");
-    xvmlib::init_global_workspace("config/workspace.xvm.yaml");
-    let _ = cmdprocessor::run();
+    //baseinfo::print_baseinfo();
+    xvmlib::init_versiondb(baseinfo::versiondb_file().as_str());
+    xvmlib::init_global_workspace(baseinfo::workspace_file().as_str());
+    let matches = cmdprocessor::parse_from_command_line();
+    let _ = cmdprocessor::run(&matches);
 }

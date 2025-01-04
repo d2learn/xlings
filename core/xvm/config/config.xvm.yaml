@@ -1,7 +1,7 @@
 bindir: xxx
 
 xvm add target version --path xxx
-xvm add target version --filename xxx
+xvm add target version --command xxx
 xvm add target version --env name=value
 xvm remove target version
 

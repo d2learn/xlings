@@ -2,11 +2,12 @@ mod config;
 mod versiondb;
 mod workspace;
 
+use std::fs;
+use std::sync::OnceLock;
+
 // public api
 
 pub mod shims;
-
-use std::sync::OnceLock;
 
 pub use versiondb::VersionDB;
 pub use workspace::Workspace;
@@ -17,6 +18,14 @@ static GLOBAL_WORKSPACE: OnceLock<Workspace> = OnceLock::new();
 
 pub fn init_versiondb(yaml_file: &str) {
     VERSION_DB.get_or_init(|| {
+
+        if fs::metadata(yaml_file).is_err() {
+            println!("init_versiondb: create {}", yaml_file);
+            return VersionDB::new(yaml_file);
+        }
+
+        //println!("init_versiondb: load from file");
+
         VersionDB::from(yaml_file).expect("Failed to initialize VersionDB")
     });
 }
@@ -27,6 +36,9 @@ pub fn get_versiondb() -> &'static VersionDB {
 
 pub fn init_global_workspace(yaml_file: &str) {
     GLOBAL_WORKSPACE.get_or_init(|| {
+        if fs::metadata(yaml_file).is_err() {
+            return Workspace::new(yaml_file, "global");
+        }
         Workspace::from(yaml_file).expect("Failed to initialize Workspace")
     });
 }

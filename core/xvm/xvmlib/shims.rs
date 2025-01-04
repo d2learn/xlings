@@ -3,16 +3,16 @@ use std::process::Command;
 
 use crate::versiondb::VData;
 
-// TODO
+// TODO: shim-mode, direct-mode
 pub enum Type {
-    Symlink, // SymlinkWrapper,
-    XvmRun, // Auto Detect Version
+    Direct,
+    Shim,
 }
 
 pub struct Program {
     name: String,
     version: String,
-    filename: Option<String>,
+    command: Option<String>,
     path: String,
     envs: Vec<(String, String)>,
     args: Vec<String>,
@@ -23,7 +23,7 @@ impl Program {
         Self {
             name: name.to_string(),
             version: version.to_string(),
-            filename: None,
+            command: None,
             path: String::new(),
             envs: Vec::new(),
             args: Vec::new(),
@@ -38,8 +38,8 @@ impl Program {
         &self.version
     }
 
-    pub fn set_filename(&mut self, filename: &str) {
-        self.filename = Some(filename.to_string());
+    pub fn set_command(&mut self, command: &str) {
+        self.command = Some(command.to_string());
     }
 
     pub fn add_env(&mut self, key: &str, value: &str) {
@@ -68,7 +68,7 @@ impl Program {
 
     pub fn vdata(&self) -> VData {
         VData {
-            filename: self.filename.clone(),
+            command: self.command.clone(),
             path: self.path.clone(),
             envs: if self.envs.is_empty() {
                 None
@@ -83,54 +83,37 @@ impl Program {
         if let Some(envs) = &vdata.envs {
             self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
         }
-        self.filename = vdata.filename.clone();
+        self.command = vdata.command.clone();
     }
 
     pub fn run(&self) {
-        println!("Running Program [{}], version {:?}", self.name, self.version);
-        println!("Args: {:?}", self.args);
+        //println!("Running Program [{}], version {:?}", self.name, self.version);
+        //println!("Args: {:?}", self.args);
         //println!("Envs: {:?}", self.envs);
 
-        // if filename isnot empty, then use it, otherwise use name
-        let target_program = self.filename.as_ref().unwrap_or(&self.name);
+        let mut target = self.name.as_str();
+        let mut parts: Vec<&str> = Vec::new();
 
-        Command::new(&target_program)
+        if let Some(command) = &self.command {
+            let mut split = command.split_whitespace();
+            target = split.next().unwrap();
+            parts = split.collect();
+        }
+
+        Command::new(&target)
+            .args(parts)
             .args(&self.args)
             .env("PATH", self.get_path_env())
             .envs(self.envs.iter().cloned())
             .status()
             .expect("failed to execute process");
 
-        println!("Program [{}] finished", self.name);
+        //println!("Program [{}] finished", self.name);
     }
 
     pub fn save_to(&self, dir: &str) {
-        println!("Saving Program to {}", dir);
-
-        if !fs::metadata(dir).is_ok() {
-            fs::create_dir_all(dir).unwrap();
-        }
-
-        // create shim-script-file for windows and unix
-        let filename: String;
-        let args_placeholder: &str;
-        if cfg!(target_os = "windows") {
-            args_placeholder = "%*";
-            filename = format!("{}/{}.bat", dir, self.name);
-        } else {
-            args_placeholder = "$@";
-            filename = format!("{}/{}", dir, self.name);
-        }
-
-        fs::write(&filename, &format!("echo run {} {}",
-            self.name, args_placeholder
-        )).unwrap();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&filename, PermissionsExt::from_mode(0o755)).unwrap();
-        }
+        // TODO: optimize - shim-mode, direct-mode
+        try_create(&self.name, dir);
     }
 
     ///// private methods
@@ -150,17 +133,16 @@ impl Program {
 }
 
 pub fn create(target: &str, dir: &str) {
-    println!("Saving Program to {}", dir);
-
     if !fs::metadata(dir).is_ok() {
         fs::create_dir_all(dir).unwrap();
     }
 
-    // create shim-script-file for windows and unix
+    println!("Creating shim file for [{}]", target);
+
     let (filename, args_placeholder) = shim_file(target, dir);
 
     if !fs::metadata(&filename).is_ok() {
-        fs::write(&filename, &format!("xvm run {} {}",
+        fs::write(&filename, &format!("xvm run {} --args {}",
             target, args_placeholder
         )).unwrap();
 
@@ -169,6 +151,14 @@ pub fn create(target: &str, dir: &str) {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&filename, PermissionsExt::from_mode(0o755)).unwrap();
         }
+    }
+}
+
+pub fn try_create(target: &str, dir: &str) {
+    let (filename, _) = shim_file(target, dir);
+
+    if !fs::metadata(&filename).is_ok() {
+        create(target, dir);
     }
 }
 

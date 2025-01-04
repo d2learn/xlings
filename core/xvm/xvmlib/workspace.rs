@@ -27,7 +27,7 @@ impl Workspace {
         let root = WorkspaceRoot {
             wmetadata: WMetadata {
                 name: name.to_string(),
-                active: false,
+                active: true,
             },
             versions: IndexMap::new(),
         };
@@ -71,6 +71,20 @@ impl Workspace {
 
     pub fn set_active(&mut self, active: bool) {
         self.root.wmetadata.active = active;
+    }
+
+    pub fn remove(&mut self, name: &str) {
+        self.root.versions.remove(name);
+    }
+
+    pub fn merge(&mut self, other: &Workspace) {
+        for (name, version) in &other.root.versions {
+            self.set_version(name, version);
+        }
+    }
+
+    pub fn match_by(&self, name: &str) -> Vec<(&String, &String)> {
+        self.root.versions.iter().filter(|(k, _)| k.contains(name)).collect()
     }
 
     pub fn save_to_local(&self) -> Result<(), io::Error> {
