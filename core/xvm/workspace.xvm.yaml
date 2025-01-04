@@ -1,0 +1,7 @@
+---
+xvm-wmetadata:
+  name: test
+  active: true
+versions:
+  test: 1.1.1
+  python: 2.4.18

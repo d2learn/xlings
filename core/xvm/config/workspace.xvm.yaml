@@ -1,0 +1,9 @@
+---
+xvm-wmetadata:
+  name: global
+  active: true
+versions:
+  python: 2.7.18
+  java: 8.0.0
+  node: 21.7.3
+  mytest: 3.12.2
