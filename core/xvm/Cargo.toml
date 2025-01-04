@@ -1,9 +1,10 @@
 [package]
-name = "xvmlib"
+name = "xvm-rs"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
+name = "xvmlib"
 path = "xvmlib/lib.rs"
 
 [[bin]]
