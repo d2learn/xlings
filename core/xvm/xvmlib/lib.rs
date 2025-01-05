@@ -56,11 +56,7 @@ pub fn init_shims(bindir : &str) {
     shims::create_shim_file(
         shims::XVM_ALIAS_WRAPPER,
         bindir,
-        if cfg!(target_os = "windows") {
-            "%*"
-        } else {
-            "$@"
-        }
+        ""
     );
 }
 

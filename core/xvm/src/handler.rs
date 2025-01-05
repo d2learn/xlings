@@ -195,7 +195,13 @@ pub fn xvm_run(matches: &ArgMatches) -> Result<()> {
     let vdb = xvmlib::get_versiondb();
     let vdata = vdb
         .get_vdata(target, version)
-        .expect("Version data not found");
+        .unwrap_or_else(|| {
+            println!("[{} {}] not found in the xvm database",
+                target.yellow(),
+                version.yellow()
+            );
+            std::process::exit(1);
+        });
 
     program.set_vdata(vdata);
 

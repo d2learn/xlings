@@ -94,11 +94,15 @@ impl Program {
         //println!("Args: {:?}", self.args);
         //println!("Envs: {:?}", self.envs);
 
-        let mut target = self.name.as_str();
+        let mut target = self.name.clone();
         let mut alias_args: Vec<&str> = Vec::new();
 
         if let Some(alias) = &self.alias {
-            target = XVM_ALIAS_WRAPPER;
+            target = XVM_ALIAS_WRAPPER.to_string();
+            #[cfg(target_os = "windows")]
+            {
+                target.push_str(".bat");
+            }
             alias_args = alias.split_whitespace().collect();
         }
 
@@ -135,12 +139,9 @@ impl Program {
 }
 
 pub fn try_create(target: &str, dir: &str) {
-    let (_, args_placeholder, header) = shim_file(target, dir);
     create_shim_file(
         target, dir,
-        &format!("{}\nxvm run {} --args {}",
-            header, target, args_placeholder
-        )
+        &format!("xvm run {} --args", target)
     );
 }
 
@@ -154,7 +155,7 @@ pub fn delete(target: &str, dir: &str) {
 
 pub fn create_shim_file(target: &str, dir: &str, content: &str) {
 
-    let (sfile, _, _) = shim_file(target, dir);
+    let (sfile, args_placeholder, header) = shim_file(target, dir);
 
     if !fs::metadata(&sfile).is_ok() {
 
@@ -164,7 +165,7 @@ pub fn create_shim_file(target: &str, dir: &str, content: &str) {
 
         //println!("creating shim file for [{}]", target);
 
-        fs::write(&sfile, content).unwrap();
+        fs::write(&sfile, &format!("{}\n{} {}", header, args_placeholder, content)).unwrap();
 
         #[cfg(unix)]
         {
