@@ -1,4 +1,4 @@
-use clap::{Arg, ArgAction, Command, ArgMatches};
+use clap::{Arg, ArgAction, Command, ArgMatches, value_parser};
 use anyhow::Result;
 
 use crate::handler;
@@ -57,11 +57,10 @@ fn build_command() -> Command {
                     .help("Specify the installation path for the target"),
             )
             .arg(
-                Arg::new("command")
-                    .long("command")
-                    .value_name("COMMAND")
+                Arg::new("alias")
+                    .long("alias")
                     .action(ArgAction::Set)
-                    .help("Specify a command for the target"),
+                    .help("Specify a alias for the target"),
             )
             .arg(
                 Arg::new("env")
@@ -150,16 +149,20 @@ fn build_command() -> Command {
                     .help("The name of the target"),
             )
             .arg(
-                Arg::new("enable")
-                    .long("enable")
-                    .action(ArgAction::SetTrue)
-                    .help("Enable the workspace"),
+                Arg::new("active")
+                    .long("active")
+                    .value_name("BOOL")
+                    .action(ArgAction::Set)
+                    .value_parser(value_parser!(bool))
+                    .help("Set the workspace as active"),
             )
             .arg(
-                Arg::new("disable")
-                    .long("disable")
-                    .action(ArgAction::SetTrue)
-                    .help("Disable the workspace"),
+                Arg::new("inherit")
+                    .long("inherit")
+                    .value_name("BOOL")
+                    .action(ArgAction::Set)
+                    .value_parser(value_parser!(bool))
+                    .help("Inherit from global workspace"),
             ),
     )
 }

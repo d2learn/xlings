@@ -3,16 +3,19 @@ use std::process::Command;
 
 use crate::versiondb::VData;
 
+pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
+
 // TODO: shim-mode, direct-mode
 pub enum Type {
     Direct,
     Shim,
+    Alias,
 }
 
 pub struct Program {
     name: String,
     version: String,
-    command: Option<String>,
+    alias: Option<String>,
     path: String,
     envs: Vec<(String, String)>,
     args: Vec<String>,
@@ -23,7 +26,7 @@ impl Program {
         Self {
             name: name.to_string(),
             version: version.to_string(),
-            command: None,
+            alias: None,
             path: String::new(),
             envs: Vec::new(),
             args: Vec::new(),
@@ -38,8 +41,8 @@ impl Program {
         &self.version
     }
 
-    pub fn set_command(&mut self, command: &str) {
-        self.command = Some(command.to_string());
+    pub fn set_alias(&mut self, alias: &str) {
+        self.alias = Some(alias.to_string());
     }
 
     pub fn add_env(&mut self, key: &str, value: &str) {
@@ -68,7 +71,7 @@ impl Program {
 
     pub fn vdata(&self) -> VData {
         VData {
-            command: self.command.clone(),
+            alias: self.alias.clone(),
             path: self.path.clone(),
             envs: if self.envs.is_empty() {
                 None
@@ -83,7 +86,7 @@ impl Program {
         if let Some(envs) = &vdata.envs {
             self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
         }
-        self.command = vdata.command.clone();
+        self.alias = vdata.alias.clone();
     }
 
     pub fn run(&self) {
@@ -92,16 +95,15 @@ impl Program {
         //println!("Envs: {:?}", self.envs);
 
         let mut target = self.name.as_str();
-        let mut parts: Vec<&str> = Vec::new();
+        let mut alias_args: Vec<&str> = Vec::new();
 
-        if let Some(command) = &self.command {
-            let mut split = command.split_whitespace();
-            target = split.next().unwrap();
-            parts = split.collect();
+        if let Some(alias) = &self.alias {
+            target = XVM_ALIAS_WRAPPER;
+            alias_args = alias.split_whitespace().collect();
         }
 
         Command::new(&target)
-            .args(parts)
+            .args(alias_args)
             .args(&self.args)
             .env("PATH", self.get_path_env())
             .envs(self.envs.iter().cloned())
@@ -132,54 +134,59 @@ impl Program {
     }
 }
 
-pub fn create(target: &str, dir: &str) {
-    if !fs::metadata(dir).is_ok() {
-        fs::create_dir_all(dir).unwrap();
-    }
-
-    println!("Creating shim file for [{}]", target);
-
-    let (filename, args_placeholder) = shim_file(target, dir);
-
-    if !fs::metadata(&filename).is_ok() {
-        fs::write(&filename, &format!("xvm run {} --args {}",
-            target, args_placeholder
-        )).unwrap();
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&filename, PermissionsExt::from_mode(0o755)).unwrap();
-        }
-    }
-}
-
 pub fn try_create(target: &str, dir: &str) {
-    let (filename, _) = shim_file(target, dir);
-
-    if !fs::metadata(&filename).is_ok() {
-        create(target, dir);
-    }
+    let (_, args_placeholder, header) = shim_file(target, dir);
+    create_shim_file(
+        target, dir,
+        &format!("{}\nxvm run {} --args {}",
+            header, target, args_placeholder
+        )
+    );
 }
 
 pub fn delete(target: &str, dir: &str) {
-    let (filename, _) = shim_file(target, dir);
+    let (filename, _, _) = shim_file(target, dir);
 
     if fs::metadata(&filename).is_ok() {
         fs::remove_file(&filename).unwrap();
     }
 }
 
-fn shim_file<'a>(target: &str, dir: &'a str) -> (String, &'a str) {
-    let filename: String;
+pub fn create_shim_file(target: &str, dir: &str, content: &str) {
+
+    let (sfile, _, _) = shim_file(target, dir);
+
+    if !fs::metadata(&sfile).is_ok() {
+
+        if !fs::metadata(dir).is_ok() {
+            fs::create_dir_all(dir).unwrap();
+        }
+
+        //println!("creating shim file for [{}]", target);
+
+        fs::write(&sfile, content).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&sfile, PermissionsExt::from_mode(0o755)).unwrap();
+        }
+    }
+}
+
+fn shim_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str) {
+    let sfile: String;
     let args_placeholder: &str;
+    let header: &str;
     if cfg!(target_os = "windows") {
+        header = "@echo off";
         args_placeholder = "%*";
-        filename = format!("{}/{}.bat", dir, target);
+        sfile = format!("{}/{}.bat", dir, target);
     } else {
+        header = "#!/bin/sh";
         args_placeholder = "$@";
-        filename = format!("{}/{}", dir, target);
+        sfile = format!("{}/{}", dir, target);
     }
 
-    (filename, args_placeholder)
+    (sfile, args_placeholder, header)
 }

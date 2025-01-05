@@ -6,6 +6,7 @@ use crate::config::*;
 pub struct WMetadata {
     pub name: String,
     pub active: bool,
+    pub inherit: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +29,7 @@ impl Workspace {
             wmetadata: WMetadata {
                 name: name.to_string(),
                 active: true,
+                inherit: true,
             },
             versions: IndexMap::new(),
         };
@@ -69,8 +71,16 @@ impl Workspace {
         self.root.wmetadata.active
     }
 
-    pub fn set_active(&mut self, active: bool) {
-        self.root.wmetadata.active = active;
+    pub fn set_active(&mut self, active: &bool) {
+        self.root.wmetadata.active = active.clone();
+    }
+
+    pub fn inherit(&self) -> bool {
+        self.root.wmetadata.inherit
+    }
+
+    pub fn set_inherit(&mut self, inherit: &bool) {
+        self.root.wmetadata.inherit = inherit.clone();
     }
 
     pub fn remove(&mut self, name: &str) {
@@ -85,6 +95,11 @@ impl Workspace {
 
     pub fn match_by(&self, name: &str) -> Vec<(&String, &String)> {
         self.root.versions.iter().filter(|(k, _)| k.contains(name)).collect()
+    }
+
+    // return all (target, version) pairs
+    pub fn all_versions(&self) -> Vec<(&String, &String)> {
+        self.root.versions.iter().collect()
     }
 
     pub fn save_to_local(&self) -> Result<(), io::Error> {

@@ -5,6 +5,8 @@ mod workspace;
 use std::fs;
 use std::sync::OnceLock;
 
+use colored::*;
+
 // public api
 
 pub mod shims;
@@ -30,50 +32,42 @@ pub fn init_versiondb(yaml_file: &str) {
     });
 }
 
-pub fn get_versiondb() -> &'static VersionDB {
-    VERSION_DB.get().expect("VersionDB not initialized")
-}
-
 pub fn init_global_workspace(yaml_file: &str) {
     GLOBAL_WORKSPACE.get_or_init(|| {
         if fs::metadata(yaml_file).is_err() {
             return Workspace::new(yaml_file, "global");
         }
-        Workspace::from(yaml_file).expect("Failed to initialize Workspace")
+
+        let workspace = Workspace::from(yaml_file).expect("Failed to initialize Workspace");
+
+        if !workspace.active() {
+            println!(
+                "\n\t{}\n",
+                "WARNING: Global Workspace is not active. Run 'xvm workspace global --active true' to activate it."
+                .yellow().bold()
+            );
+        }
+
+        workspace
     });
+}
+
+pub fn init_shims(bindir : &str) {
+    shims::create_shim_file(
+        shims::XVM_ALIAS_WRAPPER,
+        bindir,
+        if cfg!(target_os = "windows") {
+            "%*"
+        } else {
+            "$@"
+        }
+    );
+}
+
+pub fn get_versiondb() -> &'static VersionDB {
+    VERSION_DB.get().expect("VersionDB not initialized")
 }
 
 pub fn get_global_workspace() -> &'static Workspace {
     GLOBAL_WORKSPACE.get().expect("Global Workspace not initialized")
-}
-
-pub fn load_program(target: &str) -> shims::Program {
-    let global_workspace = get_global_workspace();
-
-    if !global_workspace.active() {
-        panic!("Global workspace is not active");
-    }
-
-    load_program_from_workspace(target, &global_workspace)
-}
-
-pub fn load_program_from_workspace(target: &str, workspace: &Workspace) -> shims::Program {
-
-    if !workspace.active() {
-        return load_program(target);
-    }
-
-    let version = workspace
-        .version(target)
-        .or_else(|| get_global_workspace().version(target))
-        .expect("Version not found");
-
-    let vdata = get_versiondb()
-        .get_vdata(target, version)
-        .expect("Version data not found");
-
-    let mut program = shims::Program::new(target, version);
-    program.set_vdata(vdata);
-
-    program
 }

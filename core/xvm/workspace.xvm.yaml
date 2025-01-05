@@ -2,6 +2,8 @@
 xvm-wmetadata:
   name: test
   active: true
+  inherit: true
 versions:
   test: 1.1.1
   python: 2.4.18
+  py: 0.0.2

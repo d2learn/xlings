@@ -15,7 +15,7 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
-    let command = matches.get_one::<String>("command");
+    let alias = matches.get_one::<String>("alias");
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
         .unwrap_or_default()
@@ -30,8 +30,8 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
         program.set_path(p);
     }
 
-    if let Some(c) = command {
-        program.set_command(c);
+    if let Some(c) = alias {
+        program.set_alias(c);
     }
 
     if !env_vars.is_empty() {
@@ -84,8 +84,12 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
     vdb.save_to_local().context("Failed to save VersionDB")?;
 
     if vdb.is_empty(target) {
-        println!("delete shim [{}] ...", target.green().bold());
+        let mut workspace = xvmlib::get_global_workspace().clone();
+        workspace.remove(target);
+        workspace.save_to_local().context("Failed to save Workspace")?;
+        println!("remove [{}] from workspace", target.green().bold());
         xvmlib::shims::delete(target, &baseinfo::platform::bindir());
+        println!("delete shim [{}] ...", target.green().bold());
     }
 
     Ok(())
@@ -126,19 +130,15 @@ pub fn xvm_use(matches: &ArgMatches) -> Result<()> {
 pub fn xvm_current(matches: &ArgMatches) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 
-    let mut workspace = xvmlib::get_global_workspace().clone();
-    if fs::metadata("workspace.xvm.yaml").is_ok() {
-        let local_workspace = helper::load_local_workspace();
-        if local_workspace.active() {
-            workspace.merge(&local_workspace);
-        }
-    }
-
+    let workspace = helper::load_workspace_and_merge();
     let name_version_pairs = workspace.match_by(target);
     let vdb = xvmlib::get_versiondb();
 
     let mut installed_num : u32 = 0;
     let total_num = name_version_pairs.len() as u32;
+
+    // workspace title
+    println!("\n\t[[{}]]\n", workspace.name().bold().bright_purple());
 
     for (name, version) in name_version_pairs {
         print!("{}:\t", name.bold(), );
@@ -146,8 +146,8 @@ pub fn xvm_current(matches: &ArgMatches) -> Result<()> {
             installed_num += 1;
             print!("{}", version.cyan());
             let vdata = vdb.get_vdata(name, &version).unwrap();
-            if let Some(command) = &vdata.command {
-                print!("\t -->  [{}]", command.dimmed());
+            if let Some(alias) = &vdata.alias {
+                print!("\t -->  [{}]", alias.dimmed());
             }
         } else {
             print!("{}", version.red());
@@ -156,7 +156,9 @@ pub fn xvm_current(matches: &ArgMatches) -> Result<()> {
     }
 
     if total_num == 0 {
-        println!("{} not found in workspace", target.bold().red());
+        println!("{} not found in [{}] workspace",
+            target.bold().red(), workspace.name().bold().bright_purple()
+        );
     } else {
         println!();
         if installed_num == total_num {
@@ -178,9 +180,15 @@ pub fn xvm_run(matches: &ArgMatches) -> Result<()> {
             .map(|s| s.to_string())
             .collect();
 
-    let workspace = helper::load_workspace(); // TODO: optimize
+    let workspace = helper::load_workspace_and_merge();
     let version = matches.get_one::<String>("version").unwrap_or_else(|| {
-        workspace.version(target).expect("No version selected")
+        workspace.version(target).unwrap_or_else(|| {
+            println!(
+                "{} not found in [{}] workspace",
+                target.bold().red(), workspace.name().bold().bright_purple()
+            );
+            std::process::exit(1);
+        })
     });
 
     let mut program = shims::Program::new(target, version);
@@ -229,8 +237,10 @@ pub fn xvm_list(matches: &ArgMatches) -> Result<()> {
 
 pub fn xvm_workspace(matches: &ArgMatches) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
-    let enable = matches.get_flag("enable");
-    let disable = matches.get_flag("disable");
+    let active = matches.get_one::<bool>("active");
+    let inherit = matches.get_one::<bool>("inherit");
+
+    let mut need_save = false;
 
     let mut workspace = if target == "global" {
         xvmlib::get_global_workspace().clone()
@@ -238,33 +248,58 @@ pub fn xvm_workspace(matches: &ArgMatches) -> Result<()> {
         if fs::metadata("workspace.xvm.yaml").is_ok() {
             helper::load_local_workspace()
         } else {
+            need_save = true;
             Workspace::new("workspace.xvm.yaml", target)
         }
     };
 
     if target != workspace.name() {
-        if helper::prompt(&format!("rename workspace to [{}]? (y/n): ", target.purple().bold()), "y") {
-            println!("\n\t[  {}  ->  {}  ]\n",
-                workspace.name().purple().bold(),
-                target.purple().bold()
-            );    
+        println!("\n\t[  {}  ->  {}  ]\n",
+            workspace.name().purple().bold().dimmed(),
+            target.bright_purple().bold()
+        );
+        if helper::prompt("rename workspace? (y/n): ", "y") {
             workspace.set_name(target);
+            println!("set workspace name to [{}] - ok", target.bold().bright_purple());
+            need_save = true;
         } else {
             return Ok(());
         }
     }
 
-    if enable {
-        println!("active workspace [{}]", target.purple().bold());
-        workspace.set_active(true);
-    } else if disable {
-        println!("deactive workspace [{}]", target.purple().bold());
-        workspace.set_active(false);
-    } else {
-        println!("workspace [{}] - {}", target.purple().bold(), workspace.active());
+    if let Some(active) = active {
+        println!("set workspace [{}] - active: {}", target.bold().bright_purple(), active);
+        workspace.set_active(active);
+        need_save = true;
+        if workspace.name() == "global" {
+            if *active {
+                // restore all shims
+                println!("restore all shims ...\n");
+                for (target, _) in workspace.all_versions() {
+                    println!("{} {}", "+".green().bold(), target);
+                    shims::try_create(target, &baseinfo::bindir());
+                }
+            } else {
+                // remove all shims
+                println!("remove all shims ...\n");
+                for (target, _) in workspace.all_versions() {
+                    println!("{} {}", "-".red().bold(), target);
+                    shims::delete(target, &baseinfo::bindir());
+                }
+            }
+            println!("\ndone.\n");
+        }
     }
 
-    workspace.save_to_local().context("Failed to save Workspace")?;
+    if let Some(inherit) = inherit {
+        println!("set workspace [{}] - inherit: {}", target.bold().bright_purple(), inherit);
+        workspace.set_inherit(inherit);
+        need_save = true;
+    }
+
+    if need_save {
+        workspace.save_to_local().context("Failed to save Workspace")?;
+    }
 
     Ok(())
 }

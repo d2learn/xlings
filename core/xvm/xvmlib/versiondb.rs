@@ -5,7 +5,7 @@ use crate::config::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VData {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
+    pub alias: Option<String>,
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub envs: Option<IndexMap<String, String>>,

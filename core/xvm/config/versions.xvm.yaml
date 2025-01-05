@@ -1,14 +1,14 @@
 ---
 python:
   3.12.3:
-    command: python3
+    alias: python3
     path: /usr/bin
   2.7.18:
     path: /usr/bin
   2.4.18:
     path: /usr/bin
   "3":
-    command: python3
+    alias: python3
     path: ""
 java:
   8.0.0:
