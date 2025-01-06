@@ -169,9 +169,9 @@ function add_env_path(value)
     os.addenv("PATH", value)
 
     if is_host("windows") then
-        common.xlings_exec("setx PATH \"%PATH%;" .. value .. "\"")
+        common.xlings_exec("setx PATH \"" .. value .. ";%PATH%\"")
     else
-        local content = "export PATH=$PATH:" .. value
+        local content = string.format("export PATH=%s:$PATH", value)
         append_bashrc(content)
     end
 end

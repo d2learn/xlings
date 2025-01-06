@@ -253,7 +253,7 @@ function xlings_install()
 
     if is_host("linux") then
         local bashrc = os.getenv("HOME") .. "/.bashrc"
-        local content = "\nexport PATH=$PATH:" .. platform.get_config_info().bindir
+        local content = string.format("\nexport PATH=%s:$PATH", platform.get_config_info().bindir)
         -- append to bashrc when not include xlings str in .bashrc
         if not os.isfile(bashrc) then
             xlings_create_file_and_write(bashrc, content)

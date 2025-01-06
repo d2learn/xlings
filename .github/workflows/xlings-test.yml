@@ -20,7 +20,7 @@ jobs:
 
       - name: XIM Test on Ubuntu
         run: |
-          export PATH=$PATH:/home/runner/.xlings_data/bin
+          export PATH=/home/runner/.xlings_data/bin:$PATH
           xlings -h
           xim -h
           xim -l

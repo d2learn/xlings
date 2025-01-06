@@ -154,7 +154,7 @@ Write-Host "$softwareName has been successfully installed."
 # Update env - for current user
 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$xlingsBinDir*") {
-    $userPath += ";$xlingsBinDir"
+    $userPath = "$xlingsBinDir;$userPath"
     [System.Environment]::SetEnvironmentVariable("Path", $userPath, "User")
 }
 else {
@@ -170,6 +170,6 @@ else {
 }
 
 # Update env - for current window
-$env:Path += ";$xlingsBinDir;C:\Users\$env:USERNAME\xmake"
+$env:Path = "$xlingsBinDir;C:\Users\$env:USERNAME\xmake;$env:Path"
 
 # powershell.exe -ExecutionPolicy Bypass -File tools/other/quick_install.ps1
