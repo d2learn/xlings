@@ -94,7 +94,7 @@ fn build_command() -> Command {
             )
             .arg(
                 Arg::new("version")
-                    //.required(true)
+                    .required(true)
                     .help("The version of the target"),
             ),
     )

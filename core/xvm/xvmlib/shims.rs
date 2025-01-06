@@ -165,7 +165,7 @@ pub fn create_shim_file(target: &str, dir: &str, content: &str) {
 
         //println!("creating shim file for [{}]", target);
 
-        fs::write(&sfile, &format!("{}\n{} {}", header, args_placeholder, content)).unwrap();
+        fs::write(&sfile, &format!("{}\n{} {}", header, content, args_placeholder)).unwrap();
 
         #[cfg(unix)]
         {
