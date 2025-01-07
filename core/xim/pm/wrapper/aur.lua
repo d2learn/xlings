@@ -17,7 +17,7 @@ function install(git_url)
     end
 
     -- 进入包目录
-    local ok = os.chdir(name)
+    local ok = os.cd(name)
     if not ok then
         cprint(string.format("Failed to enter directory: '%s'", name))
     end
