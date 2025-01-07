@@ -4,6 +4,8 @@ use std::env;
 
 static RUNDIR: OnceLock<PathBuf> = OnceLock::new();
 
+pub static WORKSPACE_FILE : &str = ".workspace.xvm.yaml";
+
 #[allow(dead_code)]
 pub fn rundir() {
     RUNDIR.get_or_init(|| {
@@ -17,7 +19,7 @@ pub fn versiondb_file() -> String {
 }
 
 pub fn workspace_file() -> String {
-    format!("{}/workspace.xvm.yaml", platform::xvm_homedir())
+    format!("{}/{}", platform::xvm_homedir(), WORKSPACE_FILE)
 }
 
 #[allow(dead_code)]

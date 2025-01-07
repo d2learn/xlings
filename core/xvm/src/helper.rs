@@ -1,13 +1,17 @@
 // helper
 use std::io::{self, Write};
 use std::fs;
+use std::env;
 
+use colored::Colorize;
 use xvmlib::Workspace;
+
+use crate::baseinfo;
 
 // try to load local workspace, if not found, load global workspace
 pub fn load_workspace() -> Workspace {
     let mut workspace;
-    if fs::metadata("workspace.xvm.yaml").is_ok() {
+    if fs::metadata(baseinfo::WORKSPACE_FILE).is_ok() {
         workspace = load_local_workspace();
         if !workspace.active() {
             workspace = xvmlib::get_global_workspace().clone()
@@ -19,12 +23,12 @@ pub fn load_workspace() -> Workspace {
 }
 
 pub fn load_local_workspace() -> Workspace {
-    Workspace::from("workspace.xvm.yaml").expect("Failed to load Workspace")
+    Workspace::from(baseinfo::WORKSPACE_FILE).expect("Failed to load Workspace")
 }
 
 pub fn load_workspace_and_merge() -> Workspace {
     let mut workspace = xvmlib::get_global_workspace().clone();
-    if fs::metadata("workspace.xvm.yaml").is_ok() {
+    if fs::metadata(baseinfo::WORKSPACE_FILE).is_ok() {
         let local_workspace = load_local_workspace();
         if local_workspace.active() {
             if local_workspace.inherit() {
@@ -50,4 +54,48 @@ pub fn prompt(prompt: &str, value: &str) -> bool {
     let input = input.trim().to_lowercase();
 
     input == value
+}
+
+pub fn runtime_check_and_tips() -> bool {
+    let path_to_check = baseinfo::bindir();
+    let path_var = env::var("PATH").unwrap_or_default();
+    let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+    let first_path = path_var.split(separator).next();
+
+    if let Some(first) = first_path {
+        if first == path_to_check {
+            true
+        } else {
+            print_commands(&path_to_check);
+            false
+        }
+    } else {
+        print_commands(&path_to_check);
+        false
+    }
+}
+
+fn print_commands(path_to_check: &str) {
+
+    println!("\n\t\t{}", "[Runtime Tips]".bold());
+
+    if cfg!(target_os = "windows") {
+        println!("\n# For PowerShell:");
+        println!(r#"[System.Environment]::SetEnvironmentVariable("PATH", "{}" + $env:PATH, "User")"#, path_to_check);
+
+        println!("\n# For cmd:");
+        println!(r#"setx PATH "{};%PATH%""#, path_to_check);
+
+        println!("\n-- {}", "run this command in cmd or PowerShell.".yellow());
+    } else {
+        println!("\n# For bash/zsh:");
+        println!(r#"export PATH="{}:$PATH""#, path_to_check);
+
+        println!("\n# For fish:");
+        println!(r#"set -Ux PATH {} $PATH"#, path_to_check);
+
+        println!("\n-- {}", "add it to your configuration file.".yellow());
+    }
+
+    println!("\n👉 Don't forget to refresh environment variable\n")
 }

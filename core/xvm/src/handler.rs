@@ -102,7 +102,8 @@ pub fn xvm_use(matches: &ArgMatches) -> Result<()> {
     let vdb = xvmlib::get_versiondb();
 
     if !vdb.has_target(target) {
-        println!("Target [{}] is missing from the xvm database. Please add it before proceeding.", target);
+        println!("Target [{}] is missing from the xvm database", target.bold().red());
+        println!("\n\t{}\n", "xvm add [target] [version] ...".yellow());
         std::process::exit(1);
     }
 
@@ -251,11 +252,16 @@ pub fn xvm_workspace(matches: &ArgMatches) -> Result<()> {
     let mut workspace = if target == "global" {
         xvmlib::get_global_workspace().clone()
     } else {
-        if fs::metadata("workspace.xvm.yaml").is_ok() {
+        if fs::metadata(baseinfo::WORKSPACE_FILE).is_ok() {
             helper::load_local_workspace()
         } else {
-            need_save = true;
-            Workspace::new("workspace.xvm.yaml", target)
+            println!("\n\t[ {} ]\n", target.bright_purple().bold());
+            if helper::prompt("create workspace? (y/n): ", "y") {
+                need_save = true;
+                Workspace::new(baseinfo::WORKSPACE_FILE, target)
+            } else {
+                return Ok(());
+            }
         }
     };
 
@@ -305,6 +311,7 @@ pub fn xvm_workspace(matches: &ArgMatches) -> Result<()> {
 
     if need_save {
         workspace.save_to_local().context("Failed to save Workspace")?;
+        println!("update workspace [{}] - ok", target.bold().bright_purple());
     }
 
     Ok(())
