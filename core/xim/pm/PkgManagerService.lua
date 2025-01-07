@@ -39,6 +39,12 @@ function _dectect_and_load_pmanager()
     if pm then
         local pm_impl = import("xim.pm.wrapper." .. pm)
         pmanager[pm] = PkgManagerWrapper.new(pm_impl)
+
+        if pm == "pacman" then
+            local pm_aur_impl = import("xim.pm.wrapper.aur")
+            pmanager["aur"] = pm_aur_impl
+        end
+
     end
 
     return pmanager
