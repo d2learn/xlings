@@ -11,12 +11,10 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install curl and git
-        run: sudo apt-get update && sudo apt-get install -y curl git
+        run: sudo apt-get install -y curl git
 
-      - name: Clone Xlings Repository & Installation
-        run: |
-          git clone --depth 1 https://github.com/d2learn/xlings.git
-          cd xlings && ./tools/install.unix.sh
+      - name: Installation
+        run: ./tools/install.unix.sh
 
       - name: XIM Test on Ubuntu
         run: |

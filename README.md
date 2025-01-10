@@ -17,14 +17,16 @@
   <a href="https://github.com/orgs/d2learn/projects/5" target="_blank">开发看板</a>
 </div>
 
-<div align=center>一个用于编程学习、开发和课程搭建的开发者工具🛠️</div>
-<div align=center>⌈软件安装、一键环境配置、项目依赖管理、跨平台跨语言的包管理(初步)⌋</div>
+<div align=center>一个用于编程学习、开发和课程搭建的开发者工具集🛠️</div>
 <div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、练习代码自动检测、Demos示例集⌋</div>
+<div align=center>⌈XIM - 跨平台包管理器、XVM - 通用多版本管理工具、 XRUN - 代码自动检测运行、 XDEPS - 项目依赖管理⌋</div>
 
 ---
 
 ## 最近动态
 
+- xim: 增加archlinux上aur的支持 - [PR](https://github.com/d2learn/xlings/pull/67) - 2025/1/10
+- xvm: 增加版本管理模块 - [文章](https://forum.d2learn.org/topic/62) / [PR](https://github.com/d2learn/xlings/pull/60) - 2025/1/1
 - xpkg增加自动匹配github上release的url功能 - [文章](http://forum.d2learn.org/post/208) - 2024/12/30
 - xlings跨平台短命令 - [视频](https://www.bilibili.com/video/BV1dH6sYKEdB) - 2024/12/29
 - xim模块: 重构&分离框架代码和包文件 - [包索引仓库](https://github.com/d2learn/xim-pkgindex) / [PR](https://github.com/d2learn/xlings/pull/49) -- 2024/12/16
@@ -33,7 +35,6 @@
 - 增加windows模块和安装器自动加载功能, 以及WSL和ProjectGraph的安装支持 - [详情](http://forum.d2learn.org/post/96)
 - 软件安装模块增加deps依赖配置和"递归"安装实现
 - 初步xdeps项目依赖功能实现和配置文件格式初步确定
-- install模块添加info功能并支持Rust安装
 - 更多动态和讨论 -> [More](https://forum.d2learn.org/category/9/xlings)
 
 [![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
