@@ -37,6 +37,16 @@ cd core
 xmake xlings unused install xlings
 cd ..
 
+REM 4. install xvm
+xlings install xvm -y
+
+REM 5. config xlings
+nvm add xim 0.0.2 --alias "xlings install"
+nvm add xinstall 0.0.2 --alias "xlings install"
+nvm add xrun 0.0.2 --alias "xlings run"
+nvm add xchecker 0.0.2 --alias "xlings checker"
+
+
 REM 4. install info
 echo [xlings]: xlings installed
 echo.

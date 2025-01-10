@@ -185,7 +185,7 @@ fn shim_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str) {
         sfile = format!("{}/{}.bat", dir, target);
     } else {
         header = "#!/bin/sh";
-        args_placeholder = "$@";
+        args_placeholder = "\"$@\"";
         sfile = format!("{}/{}", dir, target);
     }
 
