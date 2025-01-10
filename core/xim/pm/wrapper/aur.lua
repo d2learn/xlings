@@ -30,6 +30,7 @@ function install(name)
         cprint("${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
         os.run("git pull")
+        os.exec("rm *.pkg.tar.zst")
     end
 
     -- 构建并安装包
@@ -45,7 +46,12 @@ end
 
 function info(name)
 
-    if installed(name) then
+    local already_installed = try {
+        function() return installed(name) end,
+        catch = function() return false end
+    }
+
+    if already_installed then
         return pacman.info(name)
     end
 
