@@ -28,7 +28,7 @@ end
 
 function PkgManagerWrapper:info(pkg)
     local info = self.pm.info(pkg.name)
-    print(info)
+    cprint(info)
     cprint([[
 
 --- ${cyan}info${clear}
