@@ -30,7 +30,7 @@ function install(name)
         cprint("${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
         os.run("git pull")
-        os.exec("rm *.pkg.tar.zst")
+        os.tryrm("*.pkg.tar.zst")
     end
 
     -- 构建并安装包
@@ -57,6 +57,7 @@ function info(name)
 
     local info = aur_info(name)
     return format([[
+
     ${bright}[ XVM-AUR Package Info ]${clear}
 
 Name: ${dim}%s${clear}
