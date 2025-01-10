@@ -23,16 +23,18 @@ function install(name)
     -- 克隆 AUR 仓库
     if not os.isdir(name) then
         local git_url = to_git_url(name)
+        cprint("cloning %s...", git_url)
         os.run("git clone %s", git_url)
         os.cd(name)
     else
-        cpint("%s already exists, try to update...", name)
+        cprint("${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
         os.run("git pull")
     end
 
     -- 构建并安装包
-    os.run("makepkg -si")
+    cprint("building %s...", name)
+    os.exec("makepkg -si")
 
     return true
 end
@@ -42,6 +44,11 @@ function uninstall(name)
 end
 
 function info(name)
+
+    if installed(name) then
+        return pacman.info(name)
+    end
+
     local info = aur_info(name)
     return format([[
     ${bright}[ XVM-AUR Package Info ]${clear}

@@ -114,7 +114,7 @@ function local_package_manager()
         pm = "winget"
     elseif osinfo.name == "ubuntu" then
         pm = "apt"
-    elseif osinfo.name == "archlinux" then
+    elseif osinfo.name == "archlinux" or osinfo.name == "manjaro" then
         pm = "pacman"
     elseif is_host("macosx") then
         -- TODO
