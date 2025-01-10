@@ -1,3 +1,5 @@
+import("core.base.json")
+
 import("xim.base.runtime")
 import("xim.pm.wrapper.pacman")
 
@@ -42,35 +44,35 @@ end
 function info(name)
     local info = aur_info(name)
     return format([[
-\t[ XVM-AUR Package Info]
+    ${bright}[ XVM-AUR Package Info ]${clear}
 
-Name: %s
-Version: %s
-License: %s
-Maintainer: %s
-URL: %s
-Popularity: %s
+Name: ${dim}%s${clear}
+Version: ${dim}%s${clear}
+License: ${dim}%s${clear}
+Maintainer: ${dim}%s${clear}
+URL: ${dim}%s${clear}
+Popularity: ${dim}%s${clear}
 
-\t%s
+    ${green bright}%s${clear}
 
-        ]], info["Name"], info["Version"], info["License"], info["Maintainer"],
-        info["URL"], info["Popularity"], info["Description"]
+        ]], info["Name"], info["Version"], table.concat(info["License"], ", "),
+        info["Maintainer"], info["URL"], tostring(info["Popularity"]), info["Description"]
     )
 end
 
 function aur_info(name)
     -- check cache
-    if aur_pkgs_info["results"] == nil or aur_pkgs_info["results"]["PackageBase"] ~= name then
+    if aur_pkgs_info["results"] == nil or aur_pkgs_info["results"][1]["PackageBase"] ~= name then
         -- https://github.com/d2learn/xlings/pull/67#issuecomment-2580867360
         local curl_cmd = format([[curl -X 'GET' 'https://aur.archlinux.org/rpc/v5/info/%s' -H 'accept: application/json']], name)
-        local ok, out = os.iorun(curl_cmd)
-        if ok then
-            aur_pkgs_info = json.decode(out)
+        local data, _ = os.iorun(curl_cmd)
+        if data then
+            aur_pkgs_info = json.decode(data)
         else
-            cprint("Failed to get AUR package info: %s", out)
+            cprint("Failed to get AUR package info - %s", name)
         end
     end
-    return aur_pkgs_info["results"]
+    return aur_pkgs_info["results"][1]
 end
 
 function to_git_url(name)
