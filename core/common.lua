@@ -248,20 +248,48 @@ function xlings_install()
     cprint("[xlings]: create bindir %s", bindir)
     os.cp(path.join(install_dir, "bin"), bindir, {force = true})
 
+    -- copy profile to rcachedir
+    cprint("[xlings]: copy profile to rcachedir...")
+    os.cp(path.join(install_dir, "tools", "shell", "xlings-profile.*"), rcachedir, {force = true})
+
     -- add bin to linux bashrc and windows's path env
     cprint("[xlings]: add bin to linux's .bashrc or windows's path env")
 
     if is_host("linux") then
-        local bashrc = os.getenv("HOME") .. "/.bashrc"
-        local content = string.format("\nexport PATH=%s:$PATH", platform.get_config_info().bindir)
-        -- append to bashrc when not include xlings str in .bashrc
-        if not os.isfile(bashrc) then
-            xlings_create_file_and_write(bashrc, content)
-        else
-            local bashrc_content = io.readfile(bashrc)
-            if not string.find(bashrc_content, content, 1, true) then
-                xlings_file_append(bashrc, content)
+        local source_cmd_template = "\ntest -f %s && source %s"
+        local posix_profile = path.join(rcachedir, "xlings-profile.sh")
+        local fish_profile = path.join(rcachedir, "xlings-profile.fish")
+        local shells = {
+            bash = {
+                profile = ".bashrc",
+                command = format(source_cmd_template, posix_profile, posix_profile)
+            },
+            zsh = {
+                profile = ".zshrc",
+                command = format(source_cmd_template, posix_profile, posix_profile)
+            },
+            fish = {
+                profile = ".config/fish/config.fish",
+                command = format("\ntest -f %s; and source %s", fish_profile, fish_profile)
+            }
+        }
+
+        function config_shell(shell)
+            local profile = path.join(os.getenv("HOME"), shells[shell].profile)
+            local command = shells[shell].command
+            if os.isfile(profile) then
+                cprint("[xlings]: config [%s] shell - %s", shell, profile)
+                local profile_content = io.readfile(profile)
+                if not string.find(profile_content, command, 1, true) then
+                    xlings_file_append(profile, command)
+                else
+                    cprint("[xlings]: [%s] already configed", shell)
+                end
             end
+        end
+
+        for shell, _ in pairs(shells) do
+            config_shell(shell)
         end
     else
         local path_env = os.getenv("PATH")
