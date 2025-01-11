@@ -70,6 +70,9 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
     // If no version is provided, remove all versions
     let version = matches.get_one::<String>("version");
     let mut vdb = xvmlib::get_versiondb().clone();
+    let mut workspace = xvmlib::get_global_workspace().clone();
+    let workspace_version = workspace.version(target);
+    let mut global_version_removed = false;
 
     if version.is_none() { // 检查 version 是否为 None
         helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y");
@@ -79,17 +82,29 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
         let version = version.unwrap();
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
         vdb.remove_vdata(target, version);
+        // if removed version is current version, set update flag
+        if workspace_version == Some(version) {
+            global_version_removed = true;
+        }
     }
 
     vdb.save_to_local().context("Failed to save VersionDB")?;
 
-    if vdb.is_empty(target) {
-        let mut workspace = xvmlib::get_global_workspace().clone();
+    // only update global workspace - system config file
+    // local workspace update by user - user config file
+    if vdb.is_empty(target) { // if is empty delete from workspace
         workspace.remove(target);
-        workspace.save_to_local().context("Failed to save Workspace")?;
-        println!("remove [{}] from workspace", target.green().bold());
+        println!("remove [{}] from [{}] workspace", target.green().bold(), "global".bold().bright_purple());
         xvmlib::shims::delete(target, &baseinfo::platform::bindir());
         println!("delete shim [{}] ...", target.green().bold());
+        workspace.save_to_local().context("Failed to save Workspace")?;
+    } else if global_version_removed {
+        let first_version = vdb.get_first_version(target).unwrap();
+        workspace.set_version(target, first_version);
+        println!("set [{} {}] as default", target.green().bold(), first_version.cyan());
+        workspace.save_to_local().context("Failed to save Workspace")?;
+    } else {
+        // vdb not empty and global version not removed
     }
 
     Ok(())
@@ -109,7 +124,11 @@ pub fn xvm_use(matches: &ArgMatches) -> Result<()> {
 
     if !vdb.has_version(target, &version) {
         version = vdb.match_first_version(target, &version).unwrap_or_else(|| {
-            println!("{}\n", "try to use a correct version...".yellow());
+            println!("[{} {}] not found in the xvm database",
+                target.yellow(),
+                version.yellow()
+            );
+            println!("\n\t[{} {}]\n", "xvm list".bold().cyan(), target.bold().cyan());
             let matches = cmdprocessor::parse_from_string(&["xvm", "list", target]);
             cmdprocessor::run(&matches).unwrap();
             std::process::exit(1);

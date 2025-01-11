@@ -60,18 +60,20 @@ pub fn runtime_check_and_tips() -> bool {
     let path_to_check = baseinfo::bindir();
     let path_var = env::var("PATH").unwrap_or_default();
     let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-    let first_path = path_var.split(separator).next();
 
-    if let Some(first) = first_path {
-        if first == path_to_check {
-            true
-        } else {
+    let mut paths = path_var.split(separator).filter(|p| !p.is_empty());
+
+    match paths.next() {
+        Some(first) if first == path_to_check =>  true,
+        _ => {
             print_commands(&path_to_check);
-            false
+
+            if paths.any(|p| { p == path_to_check }) {
+                true
+            } else {
+                false
+            }
         }
-    } else {
-        print_commands(&path_to_check);
-        false
     }
 }
 

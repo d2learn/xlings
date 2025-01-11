@@ -78,6 +78,11 @@ impl VersionDB {
             .collect()
     }
 
+    // get first version
+    pub fn get_first_version(&self, name: &str) -> Option<&String> {
+        self.root.get(name)?.keys().next()
+    }
+
     // get first version matched by version-str
     pub fn match_first_version(&self, name: &str, version: &str) -> Option<&String> {
 

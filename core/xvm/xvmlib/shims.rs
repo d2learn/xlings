@@ -130,8 +130,13 @@ impl Program {
         let new_path = if current_path.is_empty() {
             self.path.to_string()
         } else {
-            let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-            format!("{}{}{}", self.path, separator, current_path)
+            // if self.path is empty, then use current_path
+            if self.path.is_empty() {
+                current_path
+            } else {
+                let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+                format!("{}{}{}", self.path, separator, current_path)
+            }
         };
 
         new_path
