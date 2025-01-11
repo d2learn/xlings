@@ -7,7 +7,7 @@ import("platform")
 pkginfo = {
     version = "0.0.0",
     install_file = "xim-0.0.0.exe",
-    projectdir = "repo",
+    install_dir = "name/version",
 }
 
 xim_data_dir = {
@@ -16,6 +16,7 @@ xim_data_dir = {
 }
 
 xim_data_dir = xim_data_dir[os.host()]
+xim_install_basedir = path.join(xim_data_dir, "xpkgs")
 
 if not os.isdir(xim_data_dir) then
     os.mkdir(xim_data_dir)
@@ -32,8 +33,8 @@ function set_pkginfo(info)
     if info.install_file then
         pkginfo.install_file = info.install_file
     end
-    if info.projectdir then
-        pkginfo.projectdir = info.projectdir
+    if info.install_dir then
+        pkginfo.install_dir = info.install_dir
     end
 end
 
@@ -47,6 +48,10 @@ end
 
 function get_xim_data_dir()
     return xim_data_dir
+end
+
+function get_xim_install_basedir()
+    return xim_install_basedir
 end
 
 function main()

@@ -17,9 +17,7 @@ end
 
 function XPkgManager:installed(xpkg)
 
-    _set_install_file(xpkg)
-
-    local ret = _try_execute_hook(xpkg.name, xpkg.hooks, "installed")
+    local ret = _try_execute_hook(xpkg.name, xpkg, "installed")
     if type(ret) == "boolean" then
         return ret
     elseif type(ret) == "string" then
@@ -53,7 +51,6 @@ function XPkgManager:download(xpkg)
     if string.find(url, "%.git$") then
         local pdir = path.join(download_dir, path.basename(url))
         os.exec("git clone --depth=1 " .. url .. " " .. pdir)
-        runtime.set_pkginfo({ projectdir = pdir })
     else
         local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         if not ok then -- retry download
@@ -86,20 +83,21 @@ function XPkgManager:deps(xpkg)
 end
 
 function XPkgManager:build(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg.hooks, "build")
+    return _try_execute_hook(xpkg.name, xpkg, "build")
 end
 
 function XPkgManager:install(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg.hooks, "install")
+    return _try_execute_hook(xpkg.name, xpkg, "install")
 end
 
 function XPkgManager:config(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg.hooks, "config")
+    return _try_execute_hook(xpkg.name, xpkg, "config")
 end
 
 function XPkgManager:uninstall(xpkg)
-    _set_install_file(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg.hooks, "uninstall")
+    local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
+    os.tryrm(runtime.get_pkginfo().install_dir)
+    return ret
 end
 
 function XPkgManager:info(xpkg)
@@ -139,25 +137,34 @@ function XPkgManager:info(xpkg)
     cprint("")
 end
 
-function _set_install_file(xpkg)
-    local url = xpkg:get_xpm_resources().url
-    if url then
-        local datadir = runtime.get_xim_data_dir()
-        if string.find(url, ".git", 1, true) then
-            local pdir = path.join(datadir, path.basename(url))
-            runtime.set_pkginfo({ projectdir = pdir })
-        else
-            local filename = path.join(datadir, path.filename(url))
-            runtime.set_pkginfo({ install_file = filename })
-        end
-    end
-end
-
-function _try_execute_hook(name, hooks, action)
-    if hooks[action] then
-        return hooks[action]()
+function _try_execute_hook(name, xpkg, action)
+    if xpkg.hooks[action] then
+        _set_runtime_info(xpkg)
+        return xpkg.hooks[action]()
     else
         cprint("[xlings:xim]: ${dim}package %s no implement${clear} %s", action, name)
     end
     return false
+end
+
+local _set_runtime_info_called = false
+function _set_runtime_info(xpkg)
+    if _set_runtime_info_called then return end
+
+    local url = xpkg:get_xpm_resources().url
+    local datadir = runtime.get_xim_data_dir()
+    local install_dir = path.join(runtime.get_xim_install_basedir(), xpkg.name, xpkg.version)
+
+    if url then
+        local filename = path.join(datadir, path.filename(url))
+        runtime.set_pkginfo({ install_file = filename })
+    end
+
+    if not os.isdir(install_dir) then
+        os.mkdir(install_dir)
+    end
+
+    runtime.set_pkginfo({ install_dir = install_dir })
+
+    _set_runtime_info_called = true
 end
