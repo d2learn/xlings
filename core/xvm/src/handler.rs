@@ -238,21 +238,34 @@ pub fn xvm_list(matches: &ArgMatches) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 
     let vdb = xvmlib::get_versiondb();
+    let workspace = helper::load_workspace_and_merge();
+
+    let versions_print = |template: &str, tv: (&str, Vec<String>)| {
+        let (target, versions) = tv;
+        let current_version = workspace.version(target);
+
+        for version in versions {
+            let formatted_version = if current_version.as_deref() == Some(&version) {
+                format!("{}", version.cyan().bold())
+            } else {
+                format!("{}", version)
+            };
+
+            let output = template.replace("{}", &formatted_version);
+
+            println!("{}", output);
+        }
+    };
 
     if vdb.has_target(target) {
         let versions = vdb.get_all_version(target).unwrap_or_default();
-
-        for version in versions {
-            println!("{}", version);
-        }
+        versions_print("{}", (&target, versions));
     } else { // print all matched targets
         let matches = vdb.match_by(target);
 
         for (name, versions) in matches {
             println!("{}:", name.bold());
-            for version in versions {
-                println!("  {}", version.cyan());
-            }
+            versions_print("  {}", (&name, versions));
         }
     }
 
