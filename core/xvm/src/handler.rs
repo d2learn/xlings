@@ -80,6 +80,13 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
         vdb.remove_all_vdata(target);
     } else {
         let version = version.unwrap();
+        if !vdb.has_version(target, &version) {
+            println!("[{} {}] not found in the xvm database, or already removed",
+                target.yellow(),
+                version.yellow()
+            );
+            return Ok(());
+        }
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
         vdb.remove_vdata(target, version);
         // if removed version is current version, set update flag
