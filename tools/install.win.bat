@@ -1,5 +1,6 @@
 @echo off
 
+set XMAKE_BIN_DIR=%USERPROFILE%\xmake
 set XLINGS_BIN_DIR=C:\Users\Public\.xlings_data\bin
 
 set arg1=%1
@@ -23,7 +24,6 @@ echo %UserPath% | findstr /i "xlings_data" >nul
 if %errorlevel% neq 0 (
     echo [xlings]: set xlings to PATH
     setx PATH "%XLINGS_BIN_DIR%;%UserPath%"
-    set "PATH=%XLINGS_BIN_DIR%;%PATH%"
 ) else (
     echo [xlings]: xlings is already in PATH.
 )
@@ -32,22 +32,23 @@ if exist "%cd%/install.win.bat" (
     cd ..
 )
 
+set "PATH=%XLINGS_BIN_DIR%;%XMAKE_BIN_DIR%;%PATH%"
+
 REM 3. install xlings
 cd core
 xmake xlings unused install xlings
+REM 4. install xvm
+xmake xlings unused install xvm -y
 cd ..
 
-REM 4. install xvm
-xlings install xvm -y
-
 REM 5. config xlings
-nvm add xim 0.0.2 --alias "xlings install"
-nvm add xinstall 0.0.2 --alias "xlings install"
-nvm add xrun 0.0.2 --alias "xlings run"
-nvm add xchecker 0.0.2 --alias "xlings checker"
+xvm add xim 0.0.2 --alias "xlings install"
+xvm add xinstall 0.0.2 --alias "xlings install"
+xvm add xrun 0.0.2 --alias "xlings run"
+xvm add xchecker 0.0.2 --alias "xlings checker"
 
 
-REM 4. install info
+REM 6. install info
 echo [xlings]: xlings installed
 echo.
 echo     run xlings help get more information

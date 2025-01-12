@@ -66,11 +66,10 @@ pub fn runtime_check_and_tips() -> bool {
     match paths.next() {
         Some(first) if first == path_to_check =>  true,
         _ => {
-            print_commands(&path_to_check);
-
             if paths.any(|p| { p == path_to_check }) {
                 true
             } else {
+                print_commands(&path_to_check);
                 false
             }
         }
@@ -83,12 +82,15 @@ fn print_commands(path_to_check: &str) {
 
     if cfg!(target_os = "windows") {
         println!("\n# For PowerShell:");
-        println!(r#"[System.Environment]::SetEnvironmentVariable("PATH", "{}" + $env:PATH, "User")"#, path_to_check);
+        println!(
+            r#"[System.Environment]::SetEnvironmentVariable("Path", "{};" + [System.Environment]::GetEnvironmentVariable("Path", "User"), "User")"#,
+            path_to_check
+        );
 
         println!("\n# For cmd:");
-        println!(r#"setx PATH "{};%PATH%""#, path_to_check);
+        println!(r#"set PATH "{};%PATH%""#, path_to_check);
 
-        println!("\n-- {}", "run this command in cmd or PowerShell.".yellow());
+        println!("\n-- {}", "run command in cmd or PowerShell.".yellow());
     } else {
         println!("\n# For bash/zsh:");
         println!(r#"export PATH="{}:$PATH""#, path_to_check);
