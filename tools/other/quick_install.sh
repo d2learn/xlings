@@ -116,14 +116,8 @@ check_and_install_tool() {
     fi
 }
 
-if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
-    check_and_install_tool curl
-fi
-
-if ! command -v unzip &> /dev/null && ! command -v jar &> /dev/null && ! command -v 7z &> /dev/null; then
-    check_and_install_tool unzip
-fi
-
+check_and_install_tool curl
+check_and_install_tool unzip
 
 # ------------------------------
 
