@@ -63,57 +63,40 @@ Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt
 
 > **注: 更多安装方法 -> [xlings安装](https://d2learn.github.io/docs/xlings/chapter_1.html)**
 
-## 用法简介
+## 工具用法简介
 
-> - `xlings install`命令缩写: `xinstall`, `xim`
-> - `xlings run`命令缩写: `xrun`
+### XIM | 包管理工具
 
-### XIM | 软件安装和环境自动配置
-
-> XIM(Xlings Installation Manager)是xlings的安装管理模块,可以使用`xim`进行软件的安装和环境的配置
-
-**编程环境安装配置**
-
-> 一键安装配置对应的开发环境(python/java/rust/...)
+> 一个支持**多版本共存**的包管理工具 - 不仅支持软件/工具安装、还支持**一键环境配置**
 
 ```bash
+# 配置环境
 xim c
-xim cpp
 xim python
-```
-
-**软件安装**
-
-> 一键安装工具软件(vscode/vs/devcpp/nvm...)
-
-```bash
+# 安装工具
+xim devcpp
 xim vscode
 ```
 
-**卸载软件和移除配置**
+更多用法见 -> [xim-readme](https://github.com/d2learn/xlings/tree/main/core/xim)
+
+### XVM | 版本管理工具
+
+> 一个简单且通用的版本管理工具 - 支持多版本管理、支持**工作空间和环境隔离**、支持多版本的命令别名
 
 ```bash
-xim -r vscode
+# xvm add [target] [version] --path [bin-path] --alias [command/bin-file]
+xvm add python 2.7.18 --alias python2
+xvm add python 3.12.3 --alias python3
+xvm use python 3
+python --version # 验证python实际是否为python2
+xvm use python 2
+python --version # 验证python实际是否为python3
 ```
 
-**搜索支持的软件或配置**
+更多用法见 -> [xvm-readme](https://github.com/d2learn/xlings/tree/main/core/xvm)
 
-> xim模块支持模糊搜索, 如查询包含`vs`字符串的软件以及所有可以安装的版本
-
-```bash
-xim -s vs
-```
-
-**如何添加软件安装/环境配置文件到XIM的包索引仓库?**
-
-> 通过添加一个XPackage包文件, 所有人就都能通过xim安装对应软件和配置功能
-
-- 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
-- 添加XPackage文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
-
-> **注:** 使用`xim -h`命令, 可以获取XIM模块所有的命令行参数的使用和帮助信息
-
-### XRUN | 运行代码
+### XRUN | 代码运行器
 
 > 使用`xrun`可以运行代码。xlings会自动匹配编程语言, 并实时检查代码变化
 
