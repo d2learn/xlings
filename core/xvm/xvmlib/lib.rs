@@ -10,6 +10,7 @@ use colored::*;
 // public api
 
 pub mod shims;
+pub mod desktop;
 
 pub use versiondb::VersionDB;
 pub use workspace::Workspace;
