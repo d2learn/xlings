@@ -7,6 +7,7 @@ pub struct VData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alias: Option<String>,
     pub path: String,
+    pub icon: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub envs: Option<IndexMap<String, String>>,
 }

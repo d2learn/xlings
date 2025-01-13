@@ -63,6 +63,13 @@ fn build_command() -> Command {
                     .help("Specify a alias for the target"),
             )
             .arg(
+                Arg::new("icon")
+                    .long("icon")
+                    .value_name("ICON")
+                    .action(ArgAction::Set)
+                    .help("Specify the icon path for the target"),
+            )
+            .arg(
                 Arg::new("env")
                     .long("env")
                     .value_name("ENV")

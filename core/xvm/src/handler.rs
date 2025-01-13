@@ -16,6 +16,8 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
     let alias = matches.get_one::<String>("alias");
+    let icon = matches.get_one::<String>("icon");
+
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
         .unwrap_or_default()
@@ -32,6 +34,12 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
 
     if let Some(c) = alias {
         program.set_alias(c);
+    }
+
+    if let Some(i) = icon {
+        program.set_icon_path(i);
+        // create desktop shortcut
+        
     }
 
     if !env_vars.is_empty() {

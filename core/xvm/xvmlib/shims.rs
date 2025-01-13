@@ -15,10 +15,12 @@ pub enum Type {
 pub struct Program {
     name: String,
     version: String,
+    args: Vec<String>,
+    // vdata
     alias: Option<String>,
     path: String,
+    icon: Option<String>,
     envs: Vec<(String, String)>,
-    args: Vec<String>,
 }
 
 impl Program {
@@ -27,6 +29,7 @@ impl Program {
             name: name.to_string(),
             version: version.to_string(),
             alias: None,
+            icon: None,
             path: String::new(),
             envs: Vec::new(),
             args: Vec::new(),
@@ -41,8 +44,28 @@ impl Program {
         &self.version
     }
 
+    pub fn bin_path(&self) -> Option<String> {
+        if !self.path.is_empty() {
+            if let Some(alias) = &self.alias {
+                Some(format!("{}/{}", self.path, alias))
+            } else {
+                Some(format!("{}/{}", self.path, self.name))
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn icon_path(&self) -> Option<&String> {
+        self.icon.as_ref()
+    }
+
     pub fn set_alias(&mut self, alias: &str) {
         self.alias = Some(alias.to_string());
+    }
+
+    pub fn set_icon_path(&mut self, icon: &str) {
+        self.icon = Some(icon.to_string());
     }
 
     pub fn add_env(&mut self, key: &str, value: &str) {
@@ -73,6 +96,7 @@ impl Program {
         VData {
             alias: self.alias.clone(),
             path: self.path.clone(),
+            icon: self.icon.clone(),
             envs: if self.envs.is_empty() {
                 None
             } else {
@@ -87,6 +111,7 @@ impl Program {
             self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
         }
         self.alias = vdata.alias.clone();
+        self.icon = vdata.icon.clone();
     }
 
     pub fn run(&self) {

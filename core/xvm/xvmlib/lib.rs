@@ -4,6 +4,7 @@ mod workspace;
 
 use std::fs;
 use std::sync::OnceLock;
+use std::path::PathBuf;
 
 use colored::*;
 
@@ -67,4 +68,38 @@ pub fn get_versiondb() -> &'static VersionDB {
 
 pub fn get_global_workspace() -> &'static Workspace {
     GLOBAL_WORKSPACE.get().expect("Global Workspace not initialized")
+}
+
+pub fn update_default_desktop_shortcut(program: &shims::Program) {
+
+    let icon_path = if let Some(icon) = program.icon_path() {
+        PathBuf::from(icon)
+    } else {
+        return;
+    };
+
+    if icon_path.exists() {
+        let desktop_dir = desktop::shortcut_userdir();
+        let exec_path = if let Some(epath) = program.bin_path() {
+            PathBuf::from(epath)
+        } else {
+            return;
+        };
+        // check exec_path exists
+        if exec_path.exists() {
+            let options = desktop::ShortcutOptions {
+                name: program.name().to_string(),
+                exec_path: exec_path.clone(),
+                icon_path: Some(icon_path),
+                terminal: false,
+                working_dir: Some(exec_path.parent().unwrap().to_path_buf()),
+                description: None,
+            };
+            desktop::create_shortcut(options, &desktop_dir).expect("Failed to create desktop shortcut");
+        } else {
+            println!("Program not found: {}", exec_path.display());
+        }
+    } else {
+        println!("Icon not found: {}", icon_path.display());
+    }
 }
