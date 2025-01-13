@@ -1,3 +1,5 @@
+use colored::Colorize;
+
 use std::fs;
 use std::path::PathBuf;
 
@@ -15,14 +17,7 @@ pub struct ShortcutOptions {
 mod windows_desktop {
     use super::ShortcutOptions;
     use std::path::PathBuf;
-    use windows::{
-        core::PCWSTR,
-        Win32::{
-            Foundation::S_OK,
-            System::Com::{CoInitializeEx, CoCreateInstance, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED},
-            UI::Shell::{IShellLinkW, ShellLink, IPersistFile},
-        },
-    };
+    use std::process::Command;
 
     pub static SHORTCUT_ROOT_DIR: &str = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs";
 
@@ -36,59 +31,44 @@ mod windows_desktop {
 
     pub fn create_shortcut(options: ShortcutOptions, shortcut_dir: &PathBuf) -> Result<(), String> {
         let shortcut_path = shortcut_path_format(shortcut_dir, &options.name);
-        unsafe {
-            // Initialize COM library
-            CoInitializeEx(None, COINIT_APARTMENTTHREADED)
-                .map_err(|e| format!("Failed to initialize COM library: {:?}", e))?;
 
-            // Create an instance of IShellLink
-            let shell_link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
-                .map_err(|e| format!("Failed to create IShellLink instance: {:?}", e))?;
+        // 构建 PowerShell 脚本命令
+        let mut command = format!(
+            r#"
+            $WshShell = New-Object -ComObject WScript.Shell;
+            $Shortcut = $WshShell.CreateShortcut('{}');
+            $Shortcut.TargetPath = '{}';
+            "#,
+            shortcut_path.display(),
+            options.exec_path.display()
+        );
 
-            // Set the target path for the shortcut
-            shell_link
-                .SetPath(PCWSTR::from_raw(
-                    options.exec_path.as_os_str().encode_wide().collect::<Vec<u16>>().as_ptr(),
-                ))
-                .map_err(|e| format!("Failed to set shortcut target path: {:?}", e))?;
-
-            // Set the description (optional)
-            if let Some(desc) = options.description {
-                shell_link
-                    .SetDescription(PCWSTR::from_raw(desc.encode_utf16().collect::<Vec<u16>>().as_ptr()))
-                    .map_err(|e| format!("Failed to set shortcut description: {:?}", e))?;
-            }
-
-            // Set the working directory (optional)
-            if let Some(dir) = options.working_dir {
-                shell_link
-                    .SetWorkingDirectory(PCWSTR::from_raw(
-                        dir.as_os_str().encode_wide().collect::<Vec<u16>>().as_ptr(),
-                    ))
-                    .map_err(|e| format!("Failed to set working directory: {:?}", e))?;
-            }
-
-            // Set the icon (optional)
-            if let Some(icon) = options.icon_path {
-                shell_link
-                    .SetIconLocation(PCWSTR::from_raw(
-                        icon.as_os_str().encode_wide().collect::<Vec<u16>>().as_ptr(),
-                    ), 0)
-                    .map_err(|e| format!("Failed to set shortcut icon: {:?}", e))?;
-            }
-
-            // Query IPersistFile to save the shortcut as a .lnk file
-            let persist_file: IPersistFile = shell_link.cast().map_err(|e| format!("{:?}", e))?;
-
-            // Convert the shortcut path to UTF-16 and save it
-            let shortcut_path_wide: Vec<u16> =
-                shortcut_path.as_os_str().encode_wide().chain(Some(0)).collect();
-            persist_file
-                .Save(PCWSTR::from_raw(shortcut_path_wide.as_ptr()), true)
-                .map_err(|e| format!("Failed to save shortcut file: {:?}", e))?;
+        // 设置可选字段
+        if let Some(description) = &options.description {
+            command.push_str(&format!(r"$Shortcut.Description = '{}';", description));
+        }
+        if let Some(working_dir) = &options.working_dir {
+            command.push_str(&format!(r"$Shortcut.WorkingDirectory = '{}';", working_dir.display()));
+        }
+        if let Some(icon_path) = &options.icon_path {
+            command.push_str(&format!(r"$Shortcut.IconLocation = '{}';", icon_path.display()));
         }
 
-        Ok(())
+        // 保存快捷方式
+        command.push_str(r"$Shortcut.Save();");
+
+        // 调用 PowerShell 执行命令
+        let status = Command::new("powershell")
+            .arg("-Command")
+            .arg(command)
+            .status()
+            .map_err(|e| format!("Failed to execute PowerShell command: {:?}", e))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("PowerShell returned non-zero exit code: {:?}", status))
+        }
     }
 }
 
@@ -161,7 +141,9 @@ pub use linux_desktop::{create_shortcut, SHORTCUT_ROOT_DIR, shortcut_path_format
 pub fn delete_shortcut(dir: &PathBuf, name: &str) -> Result<(), String> {
     let path = shortcut_path_format(dir, name);
     if path.exists() {
+        println!("try to remove [{}] desktop shortcut...", name.green());
         fs::remove_file(&path).map_err(|e| format!("Failed to delete shortcut: {:?}", e))?;
+        println!("shortcut deleted: {}", path.display());
     }
 
     Ok(())

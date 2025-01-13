@@ -39,7 +39,7 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
     if let Some(i) = icon {
         program.set_icon_path(i);
         // create desktop shortcut
-        
+        xvmlib::update_desktop_shortcut(&program);
     }
 
     if !env_vars.is_empty() {
@@ -85,7 +85,12 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
     if version.is_none() { // 检查 version 是否为 None
         helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y");
         println!("removing...");
-        vdb.remove_all_vdata(target);
+        let versions = vdb.get_all_version(target).unwrap_or_default();
+        for version in versions {
+            vdb.remove_vdata(target, &version);
+            // remove desktop shortcut
+            xvmlib::remove_desktop_shortcut(target, &version);
+        }
     } else {
         let version = version.unwrap();
         if !vdb.has_version(target, &version) {
@@ -97,6 +102,9 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
         }
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
         vdb.remove_vdata(target, version);
+        // remove desktop shortcut
+        xvmlib::remove_desktop_shortcut(target, &version);
+
         // if removed version is current version, set update flag
         if workspace_version == Some(version) {
             global_version_removed = true;

@@ -70,7 +70,11 @@ pub fn get_global_workspace() -> &'static Workspace {
     GLOBAL_WORKSPACE.get().expect("Global Workspace not initialized")
 }
 
-pub fn update_default_desktop_shortcut(program: &shims::Program) {
+pub fn update_desktop_shortcut(program: &shims::Program) {
+
+    let shortcut_name = format!("{} {}", program.name(), program.version());
+
+    println!("update desktop shortcut for [{}]...", shortcut_name.green());
 
     let icon_path = if let Some(icon) = program.icon_path() {
         PathBuf::from(icon)
@@ -80,15 +84,23 @@ pub fn update_default_desktop_shortcut(program: &shims::Program) {
 
     if icon_path.exists() {
         let desktop_dir = desktop::shortcut_userdir();
+
+        if !desktop_dir.exists() {
+            println!("create desktop shortcut directory: {}", desktop_dir.display());
+            fs::create_dir_all(&desktop_dir).expect("Failed to create desktop shortcut directory");
+        }
+
         let exec_path = if let Some(epath) = program.bin_path() {
             PathBuf::from(epath)
         } else {
+            // maybe is a alias
             return;
         };
+
         // check exec_path exists
         if exec_path.exists() {
             let options = desktop::ShortcutOptions {
-                name: program.name().to_string(),
+                name: shortcut_name,
                 exec_path: exec_path.clone(),
                 icon_path: Some(icon_path),
                 terminal: false,
@@ -102,4 +114,9 @@ pub fn update_default_desktop_shortcut(program: &shims::Program) {
     } else {
         println!("Icon not found: {}", icon_path.display());
     }
+}
+
+pub fn remove_desktop_shortcut(target: &str, version: &str) {
+    let desktop_dir = desktop::shortcut_userdir();
+    desktop::delete_shortcut(&desktop_dir, &format!("{} {}", target, version)).expect("Failed to remove desktop shortcut");
 }
