@@ -5,6 +5,7 @@
 import("platform")
 
 pkginfo = {
+    name = "xpkg-name",
     version = "0.0.0",
     install_file = "xim-0.0.0.exe",
     install_dir = "name/version",
@@ -27,6 +28,9 @@ function get_pkginfo()
 end
 
 function set_pkginfo(info)
+    if info.name then
+        pkginfo.name = info.name
+    end
     if info.version then
         pkginfo.version = info.version
     end

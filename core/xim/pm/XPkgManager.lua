@@ -147,9 +147,8 @@ function _try_execute_hook(name, xpkg, action)
     return false
 end
 
-local _set_runtime_info_called = false
 function _set_runtime_info(xpkg)
-    if _set_runtime_info_called then return end
+    if runtime.get_pkginfo().name == xpkg.name then return end
 
     local url = xpkg:get_xpm_resources().url
     local datadir = runtime.get_xim_data_dir()
@@ -164,7 +163,9 @@ function _set_runtime_info(xpkg)
         os.mkdir(install_dir)
     end
 
-    runtime.set_pkginfo({ install_dir = install_dir })
+    runtime.set_pkginfo({
+        name = xpkg.name,
+        install_dir = install_dir
+    })
 
-    _set_runtime_info_called = true
 end

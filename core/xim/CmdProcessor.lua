@@ -8,6 +8,7 @@ import("xim.index.IndexManager")
 
 local index_manager = IndexManager.new()
 local pm_service = PkgManagerService.new()
+local runtime_stack = { }
 
 --- class definition
 
@@ -28,12 +29,14 @@ function new(target, cmds) --- create new object
 end
 
 function CmdProcessor:run()
+    table.insert(runtime_stack, utils.deep_copy(runtime.get_pkginfo()))
     if self.target and self.target ~= "" then
         self:run_target_cmds()
     else
         self:run_nontarget_cmds()
     end
     index_manager:update()
+    runtime.set_pkginfo(table.remove(runtime_stack))
 end
 
 function CmdProcessor:run_target_cmds()
