@@ -240,20 +240,30 @@ function xlings_install()
 
     -- create rcachedir
     local rcachedir = platform.get_config_info().rcachedir
-    cprint("[xlings]: create rcachedir %s", rcachedir)
-    os.mkdir(platform.get_config_info().rcachedir)
 
-    -- create bin dir
-    local bindir = platform.get_config_info().bindir
-    cprint("[xlings]: create bindir %s", bindir)
-    os.cp(path.join(install_dir, "bin"), bindir, {force = true})
+    -- TODO: check cache data is valid
+    if not os.isfile(path.join(rcachedir, "xlings.json")) then
+        cprint("[xlings]: create rcachedir %s", rcachedir)
+        os.mkdir(platform.get_config_info().rcachedir)
 
-    -- copy profile to rcachedir
-    cprint("[xlings]: copy profile to rcachedir...")
-    os.cp(path.join(install_dir, "tools", "shell", "xlings-profile.*"), rcachedir, {force = true})
+        -- create bin dir
+        local bindir = platform.get_config_info().bindir
+        cprint("[xlings]: create bindir %s", bindir)
+        os.cp(path.join(install_dir, "bin"), bindir, {force = true})
+
+        -- copy profile to rcachedir
+        cprint("[xlings]: copy profile to rcachedir...")
+        os.cp(path.join(install_dir, "config", "shell", "xlings-profile.*"), rcachedir, {force = true})
+
+        -- copy xlings config file to rcachedir
+        cprint("[xlings]: copy xlings config file to rcachedir...")
+        os.cp(path.join(install_dir, "config", "xlings.json"), rcachedir, {force = true})
+    else
+        cprint("[xlings]: use local cache data - %s", rcachedir)
+    end
 
     -- add bin to linux bashrc and windows's path env
-    cprint("[xlings]: add bin to linux's .bashrc or windows's path env")
+    cprint("[xlings]: config system environment...")
 
     if is_host("linux") then
         local source_cmd_template = "\ntest -f %s && source %s"
@@ -308,8 +318,18 @@ function xlings_uninstall()
     try
     {
         function()
+            cprint("[xlings]: start to uninstall xlings...")
             os.rm(install_dir)
-            os.rm(rcachedir)
+            cprint("[xlings]: remove %s - ok", install_dir)
+            -- check rcachedir not empty by xlings.json
+            if os.isfile(path.join(rcachedir, "xlings.json")) then
+                cprint("${cyan blink}-> ${clear}${yellow}delete local cache data?(y/n)")
+                local confirm = io.read()
+                if confirm == "y" then
+                    cprint("[xlings]: remove %s - ok", rcachedir)
+                    os.rm(rcachedir)
+                end
+            end
         end,
         catch
         {
@@ -320,7 +340,7 @@ function xlings_uninstall()
         }
     }
 
-    cprint("[xlings]: xlings uninstalled(" .. install_dir .. ") - ok")
+    cprint("[xlings]: xlings uninstalled - ok")
 
 end
 
