@@ -3,16 +3,29 @@ use anyhow::Result;
 
 use crate::handler;
 
+#[derive(Debug)]
+pub struct CommandState {
+    pub yes: bool,
+    //pub verbose: bool,
+}
+
 pub fn run(matches: &ArgMatches) -> Result<()> {
 
+    let cmd_state = CommandState {
+        yes: matches.get_flag("yes"),
+        //verbose: matches.get_flag("verbose"),
+    };
+
+    //println!("Command state: {:?}", cmd_state);
+
     match matches.subcommand() {
-        Some(("add", sub_matches)) => handler::xvm_add(sub_matches)?,
-        Some(("remove", sub_matches)) => handler::xvm_remove(sub_matches)?,
-        Some(("use", sub_matches)) => handler::xvm_use(sub_matches)?,
-        Some(("current", sub_matches)) => handler::xvm_current(sub_matches)?,
-        Some(("run", sub_matches)) => handler::xvm_run(sub_matches)?,
-        Some(("list", sub_matches)) => handler::xvm_list(sub_matches)?,
-        Some(("workspace", sub_matches)) => handler::xvm_workspace(sub_matches)?,
+        Some(("add", sub_matches)) => handler::xvm_add(sub_matches, &cmd_state)?,
+        Some(("remove", sub_matches)) => handler::xvm_remove(sub_matches, &cmd_state)?,
+        Some(("use", sub_matches)) => handler::xvm_use(sub_matches, &cmd_state)?,
+        Some(("current", sub_matches)) => handler::xvm_current(sub_matches, &cmd_state)?,
+        Some(("run", sub_matches)) => handler::xvm_run(sub_matches, &cmd_state)?,
+        Some(("list", sub_matches)) => handler::xvm_list(sub_matches, &cmd_state)?,
+        Some(("workspace", sub_matches)) => handler::xvm_workspace(sub_matches, &cmd_state)?,
         _ => println!("Unknown command. Use --help for usage information."),
     }
 
@@ -36,6 +49,13 @@ fn build_command() -> Command {
     .version("prev-0.0.2")
     .author("d2learn <dev@d2learn.com>")
     .about("a simple and generic version management tool")
+    .arg(
+        Arg::new("yes")
+            .long("yes")
+            .action(ArgAction::SetTrue)
+            .global(true)
+            .help("Automatically confirm prompts without asking"),
+    )
     .subcommand(
         Command::new("add")
             .about("Add a target")

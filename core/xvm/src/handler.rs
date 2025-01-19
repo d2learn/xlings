@@ -11,7 +11,7 @@ use crate::cmdprocessor;
 use crate::baseinfo;
 use crate::helper;
 
-pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
@@ -64,7 +64,7 @@ pub fn xvm_add(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 
     // If no version is provided, remove all versions
@@ -75,7 +75,9 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
     let mut global_version_removed = false;
 
     if version.is_none() { // 检查 version 是否为 None
-        helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y");
+        if !_cmd_state.yes && !helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y") {
+            return Ok(());
+        }
         println!("removing...");
         vdb.remove_all_vdata(target);
     } else {
@@ -117,7 +119,7 @@ pub fn xvm_remove(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_use(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let mut version = matches.get_one::<String>("version").context("Version is required")?;
 
@@ -154,7 +156,7 @@ pub fn xvm_use(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_current(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_current(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 
     let workspace = helper::load_workspace_and_merge();
@@ -199,7 +201,7 @@ pub fn xvm_current(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_run(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_run(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let args: Vec<String> = matches
             .get_many::<String>("args")
@@ -241,7 +243,7 @@ pub fn xvm_run(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_list(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_list(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 
     let vdb = xvmlib::get_versiondb();
@@ -281,7 +283,7 @@ pub fn xvm_list(matches: &ArgMatches) -> Result<()> {
     Ok(())
 }
 
-pub fn xvm_workspace(matches: &ArgMatches) -> Result<()> {
+pub fn xvm_workspace(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let active = matches.get_one::<bool>("active");
     let inherit = matches.get_one::<bool>("inherit");
