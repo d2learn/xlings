@@ -3,6 +3,8 @@
 -- 2. multi-repo support
 -- 3. private repo support
 
+import("config.xconfig")
+
 import("xim.base.runtime")
 
 local data_dir = runtime.get_xim_data_dir()
@@ -10,16 +12,11 @@ local data_dir = runtime.get_xim_data_dir()
 local RepoManager = {}
 RepoManager.__index = RepoManager
 
-local gitee_repo = "https://gitee.com/sunrisepeak/xim-pkgindex.git"
-local github_repo = "https://github.com/d2learn/xim-pkgindex.git"
-
 function new()
-    RepoManager.repos = { }
-    if is_host("windows") then
-        table.insert(RepoManager.repos, gitee_repo)
-    else
-        table.insert(RepoManager.repos, github_repo)
-    end
+    local config = xconfig.load()
+    RepoManager.repos = {
+        config.xim["index-repo"],
+    }
     RepoManager.updateSchedule = 30   -- days
     return RepoManager
 end

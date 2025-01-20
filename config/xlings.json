@@ -1,0 +1,9 @@
+{
+  "xim": {
+    "index-repo": "xconfig-placeholder",
+    "index-repo-mirrors": [
+        "https://github.com/d2learn/xim-pkgindex.git",
+        "https://gitee.com/sunrisepeak/xim-pkgindex.git"
+    ]
+  }
+}
