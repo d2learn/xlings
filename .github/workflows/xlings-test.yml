@@ -3,8 +3,13 @@ name: Xlings Test - CI
 on: [push]
 
 jobs:
+
   linux-job:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: tools
 
     steps:
       - name: Checkout Repository
@@ -13,8 +18,8 @@ jobs:
       - name: Install curl and git
         run: sudo apt-get install -y curl git
 
-      - name: Installation
-        run: ./tools/install.unix.sh
+      - name: Installation Xlings on Ubuntu
+        run: ./install.unix.sh
 
       - name: XIM Test on Ubuntu
         run: |
@@ -29,22 +34,53 @@ jobs:
           xim -l
           xim -r vim -y
           xim -l
-# TODO
-#  windows-job:
-#    runs-on: windows-latest
-#
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v2
-#
-#      - name: Execute PowerShell script on Windows
-#        run: |
-#          $script = Invoke-WebRequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing
-#          Invoke-Expression $script.Content
-#          xlings -h
-#          xim -h
-#        shell: pwsh
-#
-#      - name: XIM Test on Windows
-#        run: xim --detect
-#        shell: pwsh
+      - name: XVM Test on Ubuntu
+        run: |
+          export PATH=/home/runner/.xlings_data/bin:$PATH
+          xvm --version
+          xvm -h
+          xvm add cls 0.0.1 --alias=clear
+          xvm list c
+          xvm remove cls --yes
+
+  windows-job:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: tools
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+
+      - name: Installation Xlings on Windows
+        run: install.win.bat
+        shell: cmd
+
+      - name: XIM Test on Windows
+        run: |
+          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          xlings -h
+          xim -h
+          xim -l
+          xim --detect
+          xim -s v
+          xim -i vim -y
+          xim -l
+          xim -r vim -y
+          xim -l
+        shell: cmd
+
+      - name: XVM Test on Windows
+        run: |
+          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          xvm --version
+          xvm -h
+          xvm add clear 0.0.1 --alias=cls
+          xvm list c
+          xvm remove clear --yes
+        shell: cmd
