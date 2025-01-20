@@ -318,7 +318,6 @@ function xlings_uninstall()
     try
     {
         function()
-            cprint("[xlings]: start to uninstall xlings...")
             os.rm(install_dir)
             cprint("[xlings]: remove %s - ok", install_dir)
             -- check rcachedir not empty by xlings.json
