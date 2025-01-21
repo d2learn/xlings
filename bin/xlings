@@ -4,40 +4,19 @@ XLINGS_DIR=~/.xlings
 XLINGS_RUN_DIR=`pwd`
 XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
 
-arg1=$1
-arg2=$2
-
-if [[ -z $arg1 || $arg1 == "help" || $arg1 == "-h" || $arg1 == "uninstall" || $arg1 == "update" || $arg1 == "drepo" || $arg1 == "config" ]]; then
-    cd $XLINGS_DIR/core
-    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2 $3 $4 $5
-    exit 0
-fi
-
-if [ $arg1 == "run" ]; then
-    mkdir -p $XLINGS_CACHE_DIR
-    cd $XLINGS_DIR/core
-    xmake xlings $XLINGS_RUN_DIR run $arg2 $3 $4 $5
-    exit 0
-fi
-
-if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
-    cd $XLINGS_DIR/core
-    if [ $arg1 == "install" ]; then
-        xmake xlings $XLINGS_RUN_DIR install $arg2 $3 $4 $5
-        exit 0
-    else
+if [ "$1" = "checker" ]; then
+    if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
         echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
+        exit 1
+    else
+        mkdir -p $XLINGS_CACHE_DIR
+        cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
+        cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
+        cd $XLINGS_CACHE_DIR
+        xmake l config-xlings.lua || exit $?
     fi
-    xmake xlings $XLINGS_RUN_DIR
 else
-    # generate xlings cache file - .xlings
-    mkdir -p $XLINGS_CACHE_DIR
-    cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
-    cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
-
-    cd $XLINGS_CACHE_DIR
-
-    xmake l config-xlings.lua || exit $?
-
-    xmake xlings $XLINGS_RUN_DIR $arg1 $arg2 $3 $4 $5
+    cd $XLINGS_DIR/core
 fi
+
+xmake xlings $XLINGS_RUN_DIR "$@"

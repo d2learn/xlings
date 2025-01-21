@@ -1,6 +1,5 @@
 import("common")
 import("platform")
-import("checker")
 
 import("templates.templates_interface")
 

@@ -3,13 +3,13 @@ import("core.base.option")
 
 import("platform")
 import("common")
-import("checker")
 import("init")
 import("drepo")
 import("config")
 
 local xinstall = import("xim.xim")
-local xrun = import("xrun.xrun")
+local xrun = import("xchecker.run")
+local xchecker = import("xchecker.checker")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.2")
@@ -144,7 +144,7 @@ function main()
     if command == "checker" or command == xname then
         if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
         xinstall(xlings_lang, "-y", "--disable-info")
-        checker.main(cmd_target) -- TODO -s cmd_target
+        xchecker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
         xrun(cmd_target)
     elseif command == "init" then
