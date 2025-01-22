@@ -1,4 +1,4 @@
-import("CmdProcessor")
+import("xim.CmdProcessor")
 
 function _input_process(args)
 

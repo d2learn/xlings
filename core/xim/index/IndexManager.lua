@@ -9,7 +9,7 @@ IndexManager.__index = IndexManager
 IndexManager.status_changed_pkg = {}
 
 local index_store = nil
-local repo_manager = RepoManager.new()
+local repo_manager = nil
 
 function new()
     -- singleton
@@ -18,6 +18,7 @@ end
 
 function IndexManager:init()
     if index_store == nil then
+        repo_manager = RepoManager.new()
         index_store = IndexStore.new(repo_manager:repodirs())
         self.index = index_store:get_index_data()
     end
