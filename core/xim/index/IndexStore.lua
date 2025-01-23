@@ -14,6 +14,8 @@ function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
     instance.indexdirs = indexdirs or default_repo_dir
+    instance._index_data = { }
+    instance._pkg_reflist = { }
     instance:init()
     return instance
 end
@@ -39,11 +41,29 @@ end
 function IndexStore:rebuild()
     cprint("[xlings:xim]: rebuild index database")
     self._index_data = { }
+    self._pkg_reflist = {
+        -- [name_maintainer] = pkg.ref
+    }
+
     os.tryrm(index_db_file)
     for _, indexdir in ipairs(self.indexdirs) do
         self:build_xpkgs_index(indexdir)
         self:build_pmwrapper_index(indexdir)
     end
+
+    -- merge pkg_reflist to index_data
+    for pkg_name, pkg_ref in pairs(self._pkg_reflist) do
+        -- if pkg_ref is valid
+        if self._index_data[pkg_ref] then
+            self._index_data[pkg_name] = {
+                ref = pkg_ref
+            }
+        else
+            cprint("[xlings:xim]: ${yellow}xpackage ref-[%s] invalid, skip - ${clear}%s", pkg_ref, pkg_name)
+        end
+    end
+
+
     _save_index_data(self._index_data)
     return self._index_data
 end
@@ -67,9 +87,14 @@ function IndexStore:build_xpkg_index(xpkg_file)
 
             -- TODO: name_maintainer@version@arch
             if pkg.ref then
-                self._index_data[name_maintainer] = {
-                    ref = pkg.ref
-                }
+                if self._index_data[pkg.ref] then
+                    self._index_data[name_maintainer] = {
+                        ref = pkg.ref
+                    }
+                else
+                    -- check/merge to indexdata after all index data generated
+                    self._pkg_reflist[name_maintainer] = pkg.ref
+                end
             elseif pkg.xpm[os_info.name] then
                 local os_key = pkg.xpm[os_info.name].ref or os_info.name
                 for version, _ in pairs(pkg.xpm[os_key]) do
