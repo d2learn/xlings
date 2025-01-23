@@ -87,19 +87,25 @@ function IndexManager:search(query, opt)
 end
 
 function IndexManager:match_package_version(target)
+
+    local target_match_str = target
+
     if not target:find("@", 1, true) then
-        target = target .. "@"
+        target_match_str = target .. "@"
     end
 
     local target_versions = {}
     for name, pkg in pairs(self.index) do
-        if name:find(target, 1, true) == 1 then
+        if name:find(target_match_str, 1, true) == 1 then
             if pkg.installed then return name end
             table.insert(target_versions, name)
         end
     end
 
-    if #target_versions > 0 then
+    if self.index[target] then
+        -- not found in installed packages
+        return target -- exact match to default(latest) version
+    elseif #target_versions > 0 then
         -- TODO: sort by version number
         table.sort(target_versions)
         return target_versions[1]
