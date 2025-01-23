@@ -1,5 +1,7 @@
 -- xim user interface and core-program entry point
 
+import("lib.detect.find_tool")
+
 import("xim.base.utils")
 import("xim.base.runtime")
 import("xim.pm.XPackage")
@@ -45,17 +47,38 @@ function CmdProcessor:run_target_cmds()
         cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
         self:search()
     else
-        local pkg = index_manager:load_package(self.target)
-        if pkg then
-            cprint("${dim}[xlings:xim]: create pm executor for %s ... ${clear}", self.target)
+        local target_pkgname = index_manager:match_package_version(self.target)
+        if target_pkgname then
+            cprint("${dim}[xlings:xim]: create pm executor for <%s> ... ${clear}", self.target)
+
+            local input_target = self.target
+            local pkg = index_manager:load_package(target_pkgname)
             self._pm_executor = pm_service:create_pm_executor(pkg)
+            self.target = target_pkgname
+
             if self.cmds.remove then
                 self:remove()
             elseif self.cmds.update then
                 self:update()
-            else
-                self:install()
-                self:_feedback()
+            else -- install
+                -- if dont care for version, try to find installed version
+                local installed_version = nil
+                if not input_target:find("@", 1, true) then
+                    if self._pm_executor:installed() then
+                        installed_version = target_pkgname
+                    end
+                    -- only support tips system version, but dont manage it
+                    if not installed_version and find_tool(input_target) then
+                        installed_version = input_target .. "@system"
+                    end
+                end
+
+                if installed_version then
+                    cprint("[xlings:xim]: ${green bright}%s${clear} - already installed", installed_version)
+                else
+                    self:install()
+                    self:_feedback()
+                end
             end
         else
             cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
@@ -81,7 +104,7 @@ end
 
 function CmdProcessor:install()
     if self._pm_executor:support() then
-        local is_installed = self._pm_executor:installed(xpkg)
+        local is_installed = self._pm_executor:installed()
 
         self:info()
 
@@ -97,7 +120,7 @@ function CmdProcessor:install()
                 end
             end
 
-            local deps_list = self._pm_executor:deps(xpkg)
+            local deps_list = self._pm_executor:deps()
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
