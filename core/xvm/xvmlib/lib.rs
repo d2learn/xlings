@@ -53,11 +53,7 @@ pub fn init_global_workspace(yaml_file: &str) {
 }
 
 pub fn init_shims(bindir : &str) {
-    shims::create_shim_file(
-        shims::XVM_ALIAS_WRAPPER,
-        bindir,
-        ""
-    );
+    shims::init(bindir);
 }
 
 pub fn get_versiondb() -> &'static VersionDB {

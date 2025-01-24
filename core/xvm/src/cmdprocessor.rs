@@ -46,7 +46,7 @@ pub fn parse_from_string(args: &[&str]) -> ArgMatches {
 
 fn build_command() -> Command {
     Command::new("xvm")
-    .version("prev-0.0.2")
+    .version("0.0.2") // prev-0.0.2
     .author("d2learn <dev@d2learn.com>")
     .about("a simple and generic version management tool")
     .arg(
