@@ -4,7 +4,6 @@ set XLINGS_DIR=C:\Users\Public\xlings
 set XLINGS_RUN_DIR=%cd%
 set XLINGS_CACHE_DIR=%XLINGS_RUN_DIR%\.xlings
 
-:: 如果第一个参数为 "checker"
 if "%1"=="checker" (
     if not exist "%XLINGS_RUN_DIR%\config.xlings" (
         echo.
@@ -25,6 +24,6 @@ if "%1"=="checker" (
     cd /d "%XLINGS_DIR%\core"
 )
 
-:: 执行 xlings 命令
+:: xlings command
 xmake xlings "%XLINGS_RUN_DIR%" %*
 cd /d "%XLINGS_RUN_DIR%"
