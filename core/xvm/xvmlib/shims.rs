@@ -1,9 +1,11 @@
 use std::fs;
 use std::process::Command;
+use std::sync::OnceLock;
 
 use crate::versiondb::VData;
 
 pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
+pub static XVM_SHIM_BIN: OnceLock<String> = OnceLock::new();
 
 // TODO: shim-mode, direct-mode
 pub enum Type {
@@ -143,24 +145,38 @@ impl Program {
     }
 }
 
-pub fn try_create(target: &str, dir: &str) {
-    create_shim_file(
-        target, dir,
-        &format!("xvm run {} --args", target)
-    );
+pub fn init(bindir: &str) {
+    XVM_SHIM_BIN.get_or_init(|| {
+        let bin = shim_file("xvm-shim", bindir);
+        bin
+    });
+
+    create_shim_script_file(XVM_ALIAS_WRAPPER, bindir, "");
 }
 
-pub fn delete(target: &str, dir: &str) {
-    let (filename, _, _) = shim_file(target, dir);
+pub fn try_create(target: &str, dir: &str) {
+    let target_shim = shim_file(target, dir);
+    if !fs::metadata(&target_shim).is_ok() {
+        // check dir
+        if !fs::metadata(dir).is_ok() {
+            fs::create_dir_all(dir).unwrap();
+        }
 
-    if fs::metadata(&filename).is_ok() {
-        fs::remove_file(&filename).unwrap();
+        // cp bindir/xvm-shim to target_shim
+        fs::copy(XVM_SHIM_BIN.get().unwrap(), &target_shim).unwrap();
     }
 }
 
-pub fn create_shim_file(target: &str, dir: &str, content: &str) {
+pub fn delete(target: &str, dir: &str) {
+    let target_shim = shim_file(target, dir);
+    if fs::metadata(&target_shim).is_ok() {
+        fs::remove_file(&target_shim).unwrap();
+    }
+}
 
-    let (sfile, args_placeholder, header) = shim_file(target, dir);
+fn create_shim_script_file(target: &str, dir: &str, content: &str) {
+
+    let (sfile, args_placeholder, header) = shim_script_file(target, dir);
 
     if !fs::metadata(&sfile).is_ok() {
 
@@ -180,7 +196,16 @@ pub fn create_shim_file(target: &str, dir: &str, content: &str) {
     }
 }
 
-fn shim_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str) {
+fn shim_file(target: &str, dir: &str) -> String {
+    // if is windows, then use .exe
+    if cfg!(target_os = "windows") {
+        format!("{}/{}.exe", dir, target)
+    } else {
+        format!("{}/{}", dir, target)
+    }
+}
+
+fn shim_script_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str) {
     let sfile: String;
     let args_placeholder: &str;
     let header: &str;
