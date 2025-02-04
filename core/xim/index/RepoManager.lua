@@ -107,6 +107,18 @@ function RepoManager:add_subrepo(namespace, repo)
 
     cprint("[xlings: xim]: add sub-indexrepo: ${yellow}%s${clear} => ${yellow}%s", namespace, repo)
 
+    try {
+        function()
+            _sync_repo(repo, index_reposdir)
+        end,
+        catch {
+            function(errors)
+                cprint("[xlings: xim]: ${red}add sub-indexrepo failed: %s", repo)
+                raise(errors)
+            end
+        }
+    }
+
     local subrepos_file = path.join(index_reposdir, "xim-indexrepos.json")
 
     local subrepos = { }
@@ -118,6 +130,8 @@ function RepoManager:add_subrepo(namespace, repo)
     subrepos[namespace] = repo
 
     json.savefile(subrepos_file, subrepos)
+
+    return _to_repodir(repo, index_reposdir)
 end
 
 function _sync_repo(repo, rootdir)

@@ -258,8 +258,6 @@ end
 function CmdProcessor:sys_add_indexrepo()
     local indexrepo = self.cmds.sysadd_indexrepo
     index_manager:add_subrepo(indexrepo)
-    self.cmds.sysupdate = "index"
-    self:sys_update()
 end
 
 --- module function
