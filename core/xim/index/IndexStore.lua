@@ -172,7 +172,10 @@ function IndexStore:build_pmwrapper_index(indexdir)
                 target_key, target_pm = utils.deref(pmwrapper, pm.ref)
                 if target_pm[os_info.name] then
                     local version = target_pm[os_info.name][1]
-                    key = name .. "@" .. version
+                    key = string.format("%s@%s", name, version)
+                    if self.namespace then
+                        key = self.namespace .. "::" .. key
+                    end
                     self._index_data[key] = {
                         ref = target_key .. "@" .. version
                     }
@@ -181,6 +184,9 @@ function IndexStore:build_pmwrapper_index(indexdir)
                 local version = pm[os_info.name][1]
                 local pkgname = pm[os_info.name][2]
                 key = string.format("%s@%s", name, version)
+                if self.namespace then
+                    key = self.namespace .. "::" .. key
+                end
                 self._index_data[key] = {
                     pmwrapper = version,
                     name = pkgname,
