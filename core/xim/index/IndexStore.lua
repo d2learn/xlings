@@ -13,7 +13,10 @@ local default_repo_dir = {
 function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
-    instance.indexdirs = indexdirs or default_repo_dir
+
+    instance.main_repodir = indexdirs["main"]
+    instance.subrepos = indexdirs["subrepos"] or { }
+
     instance._index_data = { }
     instance._pkg_reflist = { }
     instance:init()
@@ -46,9 +49,13 @@ function IndexStore:rebuild()
     }
 
     os.tryrm(index_db_file)
-    for _, indexdir in ipairs(self.indexdirs) do
-        self:build_xpkgs_index(indexdir)
-        self:build_pmwrapper_index(indexdir)
+
+    -- rebuild main repo
+    self:rebuild_from_indexdir(self.main_repodir)
+
+    -- rebuild subrepos
+    for namespace, indexdir in pairs(self.subrepos) do
+        self:rebuild_from_indexdir(indexdir, namespace)
     end
 
     -- merge pkg_reflist to index_data
@@ -63,9 +70,22 @@ function IndexStore:rebuild()
         end
     end
 
-
     _save_index_data(self._index_data)
     return self._index_data
+end
+
+function IndexStore:rebuild_from_indexdir(indexdir, namespace)
+
+    -- init namespace
+    self.namespace = namespace
+
+    cprint("[xlings:xim]: rebuild index for [%s] namespace", namespace or "main")
+
+    self:build_xpkgs_index(indexdir)
+    self:build_pmwrapper_index(indexdir)
+
+    -- set to nil to avoid side effect
+    self.namespace = nil
 end
 
 function IndexStore:build_xpkgs_index(indexdir)
@@ -80,6 +100,11 @@ function IndexStore:build_xpkg_index(xpkg_file)
     return try {
         function()
             local name_maintainer = path.basename(xpkg_file)
+
+            if self.namespace then
+                name_maintainer = self.namespace .. "::" .. name_maintainer
+            end
+
             local pkg = utils.load_module(
                 xpkg_file,
                 path.directory(xpkg_file)

@@ -24,6 +24,7 @@ function _input_process(args)
         ["-l"] = false,  -- -list (string)
         ["--update"] = false,  -- --update (string)
         ["--add-xpkg"] = false,  -- --add-xpkg (string)
+        ["--add-indexrepo"] = false,  -- --add-indexrepo (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -60,6 +61,7 @@ function _input_process(args)
         list = kv_cmds["-l"],
         sysupdate = kv_cmds["--update"],
         sysadd_xpkg = kv_cmds["--add-xpkg"],
+        sysadd_indexrepo = kv_cmds["--add-indexrepo"],
     }
 
     return main_target, cmds
