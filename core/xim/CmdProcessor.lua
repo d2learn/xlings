@@ -97,6 +97,8 @@ function CmdProcessor:run_nontarget_cmds()
         self:sys_update()
     elseif self.cmds.sysadd_xpkg then
         self:sys_add_xpkg()
+    elseif self.cmds.sysadd_indexrepo then
+        self:sys_add_indexrepo()
     else
         self:help()
     end
@@ -253,6 +255,11 @@ function CmdProcessor:sys_add_xpkg()
     end
 end
 
+function CmdProcessor:sys_add_indexrepo()
+    local indexrepo = self.cmds.sysadd_indexrepo
+    index_manager:add_subrepo(indexrepo)
+end
+
 --- module function
 
 function _target_parse(target)
@@ -290,6 +297,7 @@ function CmdProcessor:help()
     cprint("  ${magenta}--detect${clear},        detect local software/packages")
     cprint("  ${magenta}--update${clear},        update [self | index]")
     cprint("  ${magenta}--add-xpkg${clear},      add xpkg file to index database")
+    cprint("  ${magenta}--add-indexrepo${clear}, add indexrepo to repo manager")
     cprint("  ${magenta}--disable-info${clear},  disable info display")
     cprint("")
 

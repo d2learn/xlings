@@ -158,6 +158,21 @@ function IndexManager:add_xpkg(xpkg_file)
     end
 end
 
+function IndexManager:add_subrepo(indexrepo)
+    indexrepo = indexrepo:split("::", {plain = true})
+
+    local namespace = indexrepo[1]
+    local repo = indexrepo[2]
+
+    if repo == nil then
+        cprint("[xlings:xim]: ${red}invalid indexrepo format: ${clear}%s", indexrepo)
+        cprint("\n\t${yellow}xim --add-indexrepo namespace::repo.git\n")
+        return
+    end
+
+    repo_manager:add_subrepo(namespace, repo)
+end
+
 function main()
     local index_manager = new()
     index_manager.status_changed_pkg["vscode"] = {installed = false}
