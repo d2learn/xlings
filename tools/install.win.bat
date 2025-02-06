@@ -36,17 +36,12 @@ set "PATH=%XLINGS_BIN_DIR%;%XMAKE_BIN_DIR%;%PATH%"
 
 REM 3. install xlings
 cd core
-xmake xlings unused install xlings
-REM 4. install xvm
-xmake xlings unused install xvm -y
+xmake xlings unused self enforce-install
 cd ..
 
+REM 4. install xvm
 REM 5. config xlings
-xvm add xim 0.0.2 --alias "xlings install"
-xvm add xinstall 0.0.2 --alias "xlings install"
-xvm add xrun 0.0.2 --alias "xlings run"
-xvm add xchecker 0.0.2 --alias "xlings checker"
-
+xlings self init
 
 REM 6. install info
 echo [xlings]: xlings installed

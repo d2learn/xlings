@@ -1,0 +1,27 @@
+# Maintainer: sunrisepeak <speakshen@163.com>
+pkgname=xlings
+pkgver=0.0.2
+pkgrel=1
+pkgdesc="A Developer's Toolkit for Programming Learning, Development, and Tutorial Creation"
+arch=('x86_64')
+url="https://github.com/d2learn/xlings"
+license=('Apache-2.0')
+depends=('xmake')
+makedepends=('git')
+source=("git+https://github.com/d2learn/xlings.git")
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir/$pkgname"
+
+  # Install binary
+  install -Dm755 bin/xlings "$pkgdir/usr/bin/xlings"
+
+  # Install all files to /usr/share/xlings
+  install -d "$pkgdir/usr/share/$pkgname"
+  cp -r . "$pkgdir/usr/share/$pkgname"
+
+  # Set permissions for files
+  # find "$pkgdir/usr/share/$pkgname" -type f -exec chmod 644 {} +
+  # find "$pkgdir/usr/share/$pkgname" -type d -exec chmod 755 {} +
+}

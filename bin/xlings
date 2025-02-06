@@ -1,8 +1,13 @@
 #!/bin/bash
 
-XLINGS_DIR=~/.xlings
+XLINGS_DIR=~/.xlings # default use home's xlings
 XLINGS_RUN_DIR=`pwd`
 XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
+
+# check XLINGS_DIR, if not exist, use /usr/share/xlings
+if ! [ -d $XLINGS_DIR ]; then
+    XLINGS_DIR=/usr/share/xlings
+fi
 
 if [ "$1" = "checker" ]; then
     if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
