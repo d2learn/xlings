@@ -138,7 +138,7 @@ end
 
 -- TODO: optmize
 function prompt(message, value)
-    cprint("${cyan blink}-> ${clear}%s", message)
+    cprintf("${cyan blink}-> ${clear}%s ", message)
     local confirm = io.read()
     if confirm ~= value then
         return false

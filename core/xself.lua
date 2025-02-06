@@ -118,7 +118,7 @@ function uninstall()
             cprint("[xlings]: remove %s - ok", install_dir)
             -- check rcachedir not empty by xlings.json
             if os.isfile(path.join(rcachedir, "xlings.json")) then
-                cprint("${cyan blink}-> ${clear}${yellow}delete local cache data?(y/n)")
+                cprintf("${cyan blink}-> ${clear}${yellow}delete local cache data?(y/n) ")
                 local confirm = io.read()
                 if confirm == "y" then
                     cprint("[xlings]: remove %s - ok", rcachedir)
