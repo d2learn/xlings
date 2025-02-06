@@ -30,18 +30,12 @@ fi
 
 # 2. install xlings
 cd $RUN_DIR/core
-xmake xlings unused install xlings
+xmake xlings unused self enforce-install
 
 export PATH="$HOME/.xlings_data/bin:$PATH"
 
-# 3. install xvm
-xlings install -i xvm -y
-
-# 4. config xlings by xvm
-xvm add xim 0.0.2 --alias "xlings install"
-xvm add xinstall 0.0.2 --alias "xlings install"
-xvm add xrun 0.0.2 --alias "xlings run"
-xvm add xchecker 0.0.2 --alias "xlings checker"
+# 3. init: install xvm and create xim, xinstall...
+xlings self init
 
 # 5. install info
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"

@@ -7,6 +7,8 @@ import("init")
 import("drepo")
 import("config")
 
+import("xself")
+
 local xinstall = import("xim.xim")
 local xrun = import("xchecker.run")
 local xchecker = import("xchecker.checker")
@@ -20,8 +22,7 @@ function xlings_help()
     cprint("\t ${magenta}run${clear},      \t easy to run ${magenta}target${clear} - sourcecode file")
     cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
     cprint("\t ${magenta}drepo${clear},    \t print drepo info or download drepo(${magenta}target${clear})")
-    cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
-    cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
+    cprint("\t ${magenta}self${clear},     \t self management")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
 
@@ -140,6 +141,14 @@ function main()
     --print(xdeps)
     --print(cmd_args)
 
+    if command ~= "self" and not os.isdir(platform.get_config_info().install_dir) then
+        cprint("\n${yellow bright}>>>>>>>>[xlings init start]>>>>>>>>\n")
+        xself.install()
+        cprint("\n${yellow}--------------------------------------------\n")
+        xself.init()
+        cprint("\n${yellow bright}<<<<<<<<[xlings init end]<<<<<<<<\n")
+    end
+
     -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "checker" or command == xname then
         if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
@@ -154,15 +163,10 @@ function main()
         --os.exec("mdbook build --open book") -- book is default folder
         xinstall("mdbook", "-y", "--disable-info")
         os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
-    elseif command == "update" then
-        common.xlings_update(xname, xlings_lang)
-        xlings_help()
     elseif command == "config" then
         config.llm()
     elseif command == "install" then
-        if cmd_target == "xlings" then
-            common.xlings_install() -- TODO: only for first install
-        elseif cmd_target then
+        if cmd_target then
             if cmd_args then
                 xinstall(cmd_target, unpack(cmd_args))
             else
@@ -173,8 +177,6 @@ function main()
         else
             xinstall()
         end
-    elseif command == "uninstall" then
-        common.xlings_uninstall()
     elseif command == "drepo" then
         -- TODO drepo local-project management
         if cmd_target and cmd_target ~= "xlings_name" then
@@ -186,6 +188,8 @@ function main()
             drepo.print_all_drepo_info()
             cprint("\n\trun ${cyan}xlings drepo [drepo_name]${clear} to download\n")
         end
+    elseif command == "self" then
+        xself(cmd_target)
     else
         xlings_help()
     end
