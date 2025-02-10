@@ -9,17 +9,15 @@ if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
 fi
 
-if [ "$1" = "checker" ]; then
-    if ! [ -f $XLINGS_RUN_DIR/config.xlings ]; then
-        echo -e "\n\t**command not support | not found config.xlings in current folder**\n"
-        exit 1
-    else
-        mkdir -p $XLINGS_CACHE_DIR
-        cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
-        cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
-        cd $XLINGS_CACHE_DIR
-        xmake l config-xlings.lua || exit $?
-    fi
+if [ -f $XLINGS_RUN_DIR/config.xlings ]; then
+    mkdir -p $XLINGS_CACHE_DIR
+    cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
+    cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
+fi
+
+if [ "$1" = "checker" ] || ([ "$1" = "install" ] && [ -z "$2" ] && [ -f $XLINGS_RUN_DIR/config.xlings ]); then
+    cd $XLINGS_CACHE_DIR
+    xmake l config-xlings.lua || exit $?
 else
     cd $XLINGS_DIR/core
 fi

@@ -3,8 +3,6 @@ import("core.base.option")
 
 import("platform")
 import("common")
-import("init")
-import("drepo")
 import("config")
 
 import("xself")
@@ -21,14 +19,11 @@ function xlings_help()
     cprint("${bright}Commands:${clear}")
     cprint("\t ${magenta}run${clear},      \t easy to run ${magenta}target${clear} - sourcecode file")
     cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
-    cprint("\t ${magenta}drepo${clear},    \t print drepo info or download drepo(${magenta}target${clear})")
     cprint("\t ${magenta}self${clear},     \t self management")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
 
     cprint("${bright}Project Commands:${clear} ${dim}(need config.xlings)${clear}")
-    cprint("\t ${magenta}init${clear},     \t init project by ${blue}config.xlings${clear}")
-    cprint("\t ${magenta}book${clear},     \t open project's book in default browser")
     cprint("\t ${magenta}checker${clear},  \t start project's auto-exercises from ${magenta}target${clear}")
     cprint("")
 
@@ -109,6 +104,7 @@ function main()
     -- config info - config.xlings
     local xname = option.get("xname")
     local xdeps = option.get("xdeps")
+    local xchecker_config = option.get("xchecker_config")
 
     -- TODO: rename
     local xlings_lang = option.get("xlings_lang")
@@ -117,6 +113,7 @@ function main()
 
     -- init platform config
     platform.set_name(xname)
+    platform.set_xchecker_config(xchecker_config)
     platform.set_lang(xlings_lang)
     platform.set_rundir(run_dir)
     platform.set_editor(xlings_editor)
@@ -135,7 +132,6 @@ function main()
     --print(run_dir)
     --print(command)
     --print(cmd_target)
-    --print(xlings_name)
     --print(xlings_lang)
     --print(xname)
     --print(xdeps)
@@ -150,19 +146,12 @@ function main()
     end
 
     -- TODO: optimize auto-deps install - xinstall(xx)
-    if command == "checker" or command == xname then
+    if command == "checker" then
         if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
         xinstall(xlings_lang, "-y", "--disable-info")
         xchecker.main(cmd_target) -- TODO -s cmd_target
     elseif command == "run" then
         xrun(cmd_target)
-    elseif command == "init" then
-        xinstall("mdbook", "-y", "--disable-info")
-        init.xlings_init(xname, xlings_lang)
-    elseif command == "book" then
-        --os.exec("mdbook build --open book") -- book is default folder
-        xinstall("mdbook", "-y", "--disable-info")
-        os.exec("mdbook serve --open " .. platform.get_config_info().bookdir) -- book is default folder
     elseif command == "config" then
         config.llm()
     elseif command == "install" then
@@ -176,17 +165,6 @@ function main()
             deps_check_and_install(xdeps)
         else
             xinstall()
-        end
-    elseif command == "drepo" then
-        -- TODO drepo local-project management
-        if cmd_target and cmd_target ~= "xlings_name" then
-            drepo.print_drepo_info(cmd_target)
-            cprint("[xlings]: try to download drepo - ${magenta}" .. cmd_target .. "${clear}")
-            drepo.download_drepo(cmd_target)
-        else
-            cprint("\n\t${bright}drepo lists${clear}\n")
-            drepo.print_all_drepo_info()
-            cprint("\n\trun ${cyan}xlings drepo [drepo_name]${clear} to download\n")
         end
     elseif command == "self" then
         xself(cmd_target)

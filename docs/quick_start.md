@@ -41,11 +41,8 @@ xlings version: pre-v0.0.2
 Usage: $ xlings [command] [target]
 
 Commands:
-         init,           init projects by config.xlings
          checker,        start auto-exercises from target
-         book,           open book in your default browser
          update,         update xlings to the latest version
-         drepo,          print drepo info or download drepo(target)
          uninstall,      uninstall xlings
          help,           help info
 

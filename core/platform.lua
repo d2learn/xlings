@@ -25,22 +25,24 @@ local command_wrapper = {
     windows = xlings_install_dir.windows .. "/tools/win_cmd_wrapper.bat ",
 }
 
-local xlings_sourcedir = os.scriptdir() .. "/../"
-local xlings_projectdir = "../" -- xlings_rundir TODO: optimize
-local xlings_bookdir = xlings_projectdir .. "book/"
-local xlings_drepodir = xlings_sourcedir .. "drepo/"
-
+local xlings_sourcedir = path.directory(os.scriptdir())
+local xlings_projectdir = xlings_sourcedir
 
 -- user config.xlings
 -- Note: need init in xlings.lua
-local xlings_name
+local xname
+local xchecker_config
 local xlings_rundir
 local xlings_lang
-local xlings_cachedir = xlings_projectdir .. ".xlings/"
+local xlings_cachedir = path.join(xlings_projectdir, ".xlings")
 local xlings_editor
 
 function set_name(name)
-    xlings_name = name
+    xname = name
+end
+
+function set_xchecker_config(config)
+    xchecker_config = config
 end
 
 function set_lang(lang)
@@ -129,13 +131,12 @@ function get_config_info()
         cmd_wrapper = command_wrapper[os.host()],
         projectdir = xlings_projectdir,
         bindir = xlings_bin_dir,
-        drepodir = xlings_drepodir,
         rundir = xlings_rundir,
-        bookdir = xlings_bookdir,
         rcachedir = xlings_root_cache_dir[os.host()],
         cachedir = xlings_cachedir,
         editor = xlings_editor,
-        name = xlings_name,
+        name = xname,
+        xchecker = xchecker_config,
         lang = xlings_lang,
         runmode = xlings_runmode,
         llm_config = {
