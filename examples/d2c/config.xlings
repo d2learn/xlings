@@ -1,5 +1,0 @@
-xlings_name = "clings"
-xlings_lang = "c"
-xlings_editor = "vscode"
-xdeps = "c, vscode, mdbook"
-xlings_llm_config = "../.xlings/llm.config.xlings"

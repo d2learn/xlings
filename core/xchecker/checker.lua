@@ -42,7 +42,8 @@ function print_info(target_name, built_targets, total_targets, target_files, out
 
     -- format path(remove prefix) for output
     output = tostring(output):gsub(current_file_path_old, current_file_path)
-    if config.name ~= "xlings_name" and output then
+    -- becuase xchecker is running in the .xlings cache directory
+    if config.xchecker and output then
         output = output:gsub(path.join("%.%.\\", config.name), config.name)
             :gsub(path.join("%.%./", config.name), config.name)
     end
@@ -171,8 +172,8 @@ function main(start_target)
     local config = platform.get_config_info()
     local detect_dir = config.rundir
     local detect_recursion = false
-    if config.name ~= "xlings_name" then -- is d2x project
-        detect_dir = detect_dir .. "/" .. config.name
+    if config.xchecker then -- is d2x project
+        detect_dir = path.join(detect_dir, config.xchecker.name)
         detect_recursion = true
     else -- is xrun - TODO: optimize
         --detect_recursion = false
