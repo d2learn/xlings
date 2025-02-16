@@ -1,3 +1,4 @@
+import("devel.git")
 import("utils.archive")
 
 import("xim.base.github")
@@ -50,7 +51,7 @@ function XPkgManager:download(xpkg)
     -- 1. git clone
     if string.find(url, "%.git$") then
         local pdir = path.join(download_dir, path.basename(url))
-        os.exec("git clone --depth=1 " .. url .. " " .. pdir)
+        git.clone(url, {depth = 1, outputdir = pdir})
     else
         local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         if not ok then -- retry download

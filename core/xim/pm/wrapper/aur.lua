@@ -1,3 +1,4 @@
+import("devel.git")
 import("core.base.json")
 
 import("xim.base.runtime")
@@ -24,13 +25,13 @@ function install(name)
     if not os.isdir(name) then
         local git_url = to_git_url(name)
         cprint("cloning %s...", git_url)
-        os.run("git clone %s", git_url)
+        git.clone(git_url)
         os.cd(name)
     else
         cprint("${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
-        os.run("git pull")
-        os.exec("git clean -dfx")
+        git.pull()
+        git.clean({force = true})
     end
 
     -- 构建并安装包

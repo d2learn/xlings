@@ -3,6 +3,7 @@
 -- 2. multi-repo support
 -- 3. private repo support
 
+import("devel.git")
 import("core.base.json")
 
 import("config.xconfig")
@@ -147,11 +148,10 @@ function _sync_repo(repo, rootdir)
     local repodir = _to_repodir(repo, rootdir)
 
     if os.isdir(repodir) then
-        os.cd(repodir)
-        os.exec("git pull")
+        git.pull({repodir = repodir})
     else
         os.cd(rootdir)
-        os.exec("git clone " .. repo)
+        git.clone(repo)
     end
 
 end
