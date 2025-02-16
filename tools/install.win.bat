@@ -18,6 +18,16 @@ IF %ERRORLEVEL% EQU 0 (
     powershell -Command "Invoke-Expression ((Invoke-WebRequest 'https://xmake.io/psget.text' -UseBasicParsing).Content)"
 )
 
+REM install git
+where git >nul 2>&1
+
+IF %ERRORLEVEL% EQU 0 (
+    echo [xlings]: git installed
+) else (
+    echo [xlings]: start install git...
+    winget install git.git --accept-source-agreements
+)
+
 REM 2. set xlings to PATH
 for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set UserPath=%%b
 echo %UserPath% | findstr /i "xlings_data" >nul
