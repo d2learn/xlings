@@ -45,7 +45,7 @@ function IndexStore:rebuild()
     cprint("[xlings:xim]: rebuild index database")
     self._index_data = { }
     self._pkg_reflist = {
-        -- [name_maintainer] = pkg.ref
+        -- [package_name] = pkg.ref
     }
 
     os.tryrm(index_db_file)
@@ -99,37 +99,39 @@ end
 function IndexStore:build_xpkg_index(xpkg_file)
     return try {
         function()
-            local name_maintainer = path.basename(xpkg_file)
-
-            if self.namespace then
-                name_maintainer = self.namespace .. "::" .. name_maintainer
-            end
+            local package_name = path.basename(xpkg_file)
 
             local pkg = utils.load_module(
                 xpkg_file,
                 path.directory(xpkg_file)
             ).package
 
-            -- TODO: name_maintainer@version@arch
+            if pkg.namespace then
+                package_name = pkg.namespace .. "::" .. package_name
+            elseif self.namespace then
+                package_name = self.namespace .. "::" .. package_name
+            end
+
+            -- TODO: package_name@version@arch
             if pkg.ref then
                 if self._index_data[pkg.ref] then
-                    self._index_data[name_maintainer] = {
+                    self._index_data[package_name] = {
                         ref = pkg.ref
                     }
                 else
                     -- check/merge to indexdata after all index data generated
-                    self._pkg_reflist[name_maintainer] = pkg.ref
+                    self._pkg_reflist[package_name] = pkg.ref
                 end
             elseif pkg.xpm[os_info.name] then
                 local os_key = pkg.xpm[os_info.name].ref or os_info.name
                 for version, _ in pairs(pkg.xpm[os_key]) do
 
                     if version ~= "deps" then
-                        local key = string.format("%s@%s", name_maintainer, version)
+                        local key = string.format("%s@%s", package_name, version)
 
                         if pkg.xpm[os_key][version].ref then
                             self._index_data[key] = {
-                                ref = name_maintainer .. "@" .. pkg.xpm[os_key][version].ref
+                                ref = package_name .. "@" .. pkg.xpm[os_key][version].ref
                             }
                         else 
                             self._index_data[key] = {
@@ -140,7 +142,7 @@ function IndexStore:build_xpkg_index(xpkg_file)
                         end
 
                         if version == "latest" then
-                            self._index_data[name_maintainer] = {
+                            self._index_data[package_name] = {
                                 ref = key
                             }
                         end
