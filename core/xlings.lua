@@ -8,8 +8,7 @@ import("config")
 import("xself")
 
 local xinstall = import("xim.xim")
-local xrun = import("xchecker.run")
-local xchecker = import("xchecker.checker")
+local d2x = import("d2x.d2x")
 
 function xlings_help()
     cprint("${bright}xlings version:${clear} pre-v0.0.2")
@@ -149,9 +148,9 @@ function main()
     if command == "checker" then
         if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
         xinstall(xlings_lang, "-y", "--disable-info")
-        xchecker.main(cmd_target) -- TODO -s cmd_target
+        d2x("checker", cmd_target)
     elseif command == "run" then
-        xrun(cmd_target)
+        d2x("run", cmd_target)
     elseif command == "config" then
         config.llm()
     elseif command == "install" then

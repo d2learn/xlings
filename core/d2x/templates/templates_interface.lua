@@ -1,6 +1,6 @@
-import("templates.c_language")
-import("templates.cpp_language")
-import("templates.py_language")
+import("d2x.templates.c_language")
+import("d2x.templates.cpp_language")
+import("d2x.templates.py_language")
 
 function get_template(type)
     if type == "c" then
