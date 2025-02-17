@@ -16,19 +16,16 @@ function xlings_help()
     cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
 
     cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}run${clear},      \t easy to run ${magenta}target${clear} - sourcecode file")
+    cprint("\t ${magenta}d2x${clear},      \t d2x project command")
     cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
     cprint("\t ${magenta}self${clear},     \t self management")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
 
-    cprint("${bright}Project Commands:${clear} ${dim}(need config.xlings)${clear}")
-    cprint("\t ${magenta}checker${clear},  \t start project's auto-exercises from ${magenta}target${clear}")
-    cprint("")
-
-    cprint("${bright}Short Commands:${clear} ${dim}(command alias)${clear}")
-    cprint("\t ${green}xinstall/xim${clear}, \t xlings install")
-    cprint("\t ${green}xrun${clear},     \t xlings run")
+    cprint("${bright}Tools:${clear}")
+    cprint("\t ${green}xim${clear},     \t xlings installation manager")
+    cprint("\t ${green}xvm${clear},     \t xlings version manager")
+    cprint("\t ${green}d2x${clear},     \t xlings d2x project tool")
     cprint("")
     cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
     cprint("")
@@ -145,12 +142,15 @@ function main()
     end
 
     -- TODO: optimize auto-deps install - xinstall(xx)
-    if command == "checker" then
-        if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
-        xinstall(xlings_lang, "-y", "--disable-info")
-        d2x("checker", cmd_target)
-    elseif command == "run" then
-        d2x("run", cmd_target)
+    if command == "d2x" then
+        -- TODO: support d2x command args
+        --if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
+        --xinstall(xlings_lang, "-y", "--disable-info")
+        if cmd_args then
+            d2x(cmd_target, unpack(cmd_args))
+        else
+            d2x(cmd_target)
+        end
     elseif command == "config" then
         config.llm()
     elseif command == "install" then

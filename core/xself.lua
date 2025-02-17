@@ -96,6 +96,8 @@ function init()
     os.exec([[xvm add xinstall 0.0.2 --alias "xlings install"]])
     os.exec([[xvm add xrun 0.0.2 --alias "xlings run"]])
     os.exec([[xvm add xchecker 0.0.2 --alias "xlings checker"]])
+    os.exec([[xvm add xself 0.0.2 --alias "xlings self"]])
+    os.exec([[xvm add d2x 0.0.2 --alias "xlings d2x"]])
     os.exec([[xim --detect]])
     cprint("[xlings]: init xlings - ok")
 end

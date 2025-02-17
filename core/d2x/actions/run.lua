@@ -39,6 +39,8 @@ end
 
 function main(source_file)
 
+    source_file = tostring(source_file)
+
     if os.isfile(tostring(source_file)) then
         source_file = path.absolute(source_file)
     else
@@ -56,6 +58,6 @@ function main(source_file)
     os.exec(
         "xmake xlings " ..
         platform.get_config_info().rundir ..
-        " checker " .. target_name
+        " d2x checker " .. target_name
     )
 end
