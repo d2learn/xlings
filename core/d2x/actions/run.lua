@@ -1,7 +1,7 @@
 import("common")
 import("platform")
 
-import("templates.templates_interface")
+import("d2x.templates.templates_interface")
 
 -- detect file type exa: .c .cpp .java .py .lua
 function detect_file_type(source_file)
@@ -39,7 +39,9 @@ end
 
 function main(source_file)
 
-    if os.isfile(source_file) then
+    source_file = tostring(source_file)
+
+    if os.isfile(tostring(source_file)) then
         source_file = path.absolute(source_file)
     else
         source_file = path.join(platform.get_config_info().rundir, source_file)
@@ -56,6 +58,6 @@ function main(source_file)
     os.exec(
         "xmake xlings " ..
         platform.get_config_info().rundir ..
-        " checker " .. target_name
+        " d2x checker " .. target_name
     )
 end

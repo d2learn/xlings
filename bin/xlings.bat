@@ -11,7 +11,7 @@ if exist "%XLINGS_RUN_DIR%\config.xlings" (
 )
 
 set "NEED_LOAD_PROJECT_FILE="
-if "%1"=="checker" set "NEED_LOAD_PROJECT_FILE=1"
+if "%1"=="d2x" if "%2"=="checker" set "NEED_LOAD_PROJECT_FILE=1"
 if "%1"=="install" if "%2"=="" if exist "%XLINGS_RUN_DIR%\config.xlings" set "NEED_LOAD_PROJECT_FILE=1"
 
 if defined IS_PROJECT (

@@ -1,38 +1,42 @@
-_exercises_file = "exercises/clings.h"
+_exercises_file = "exercises/cpplings.hpp"
 _exercises_file_template = [[
-#ifndef CLINGS_H
-#define CLINGS_H
+#ifndef CPPLINGS_HPP
+#define CPPLINGS_HPP
 
-static int add(int a, int b) {
-    return a + b
+namespace d2cpp {
+
+class Hello {
+
+}
+
 }
 
 #endif
 ]]
 
-_tests_file = "tests/clings.c"
+_tests_file = "tests/cpplings.cpp"
 _tests_file_template = [[
-#include <stdio.h>
+#include <iostream>
 
-#include "exercises/clings.h"
+#include "exercises/cpplings.hpp"
 
 int mian() {
-    print("hello clings - 1 + 2 = %d\n", add(1, 2))
+    d2cpp::Hello hello
     return 0;
 }
 ]]
 
 _build_file = "xmake.lua"
 _build_file_template = [[
-target("clings-demo")
+target("cpplings-demo")
     set_kind("binary")
-    add_files("tests/clings.c")
+    add_files("tests/cpplings.cpp")
 ]]
 
 --- xrun config template
 
 _xmake_file_template = [[
-xlings_editor = "vscode"
+
 xlings_runmode = "loop"
 xlings_lang = "%s" -- 0.lang
 

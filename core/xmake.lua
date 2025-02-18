@@ -24,9 +24,8 @@ task("xlings")
             -- args - default
             {nil, "xname", "v", xname, "xlings's name"},
             {nil, "xdeps", "v", xdeps, "project dependencies auto install"},
-            {nil, "xchecker_config", "v", xchecker, "xlings's checker config"},
+            {nil, "d2x_config", "v", d2x, "d2x project config"},
             {nil, "xlings_lang", "v", xlings_lang, "xlings's programming languages"},
-            {nil, "xlings_editor", "v", xlings_editor, "xlings's programming languages"},
             {nil, "xlings_llm_config", "v", xlings_llm_config, "xlings's llm config file path"},
             {nil, "xlings_runmode", "v", xlings_runmode, "xlings's run mode"},
         }

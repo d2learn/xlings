@@ -42,8 +42,8 @@ function print_info(target_name, built_targets, total_targets, target_files, out
 
     -- format path(remove prefix) for output
     output = tostring(output):gsub(current_file_path_old, current_file_path)
-    -- becuase xchecker is running in the .xlings cache directory
-    if config.xchecker and output then
+    -- becuase d2x is running in the .xlings cache directory
+    if config.d2x and output then
         output = output:gsub(path.join("%.%.\\", config.name), config.name)
             :gsub(path.join("%.%./", config.name), config.name)
     end
@@ -157,11 +157,14 @@ function run_with_error_handling(target)
 end
 
 -- main start
-function main(start_target)
+function main(start_target, opt)
+
+    opt = opt or {}
+
     local checker_pass = false
     --local start_target = option.get("start_target")
 
-    if start_target == nil then start_target = "" end -- TODO: optimize
+    if not start_target then start_target = "" end -- TODO: optimize
 
     common.xlings_clear_screen()
 
@@ -172,8 +175,8 @@ function main(start_target)
     local config = platform.get_config_info()
     local detect_dir = config.rundir
     local detect_recursion = false
-    if config.xchecker then -- is d2x project
-        detect_dir = path.join(detect_dir, config.xchecker.name)
+    if config.d2x then -- is d2x project
+        detect_dir = path.join(detect_dir, config.d2x.checker.name)
         detect_recursion = true
     else -- is xrun - TODO: optimize
         --detect_recursion = false
@@ -185,12 +188,6 @@ function main(start_target)
     end
     fwatcher.add(detect_dir, {recursion = detect_recursion})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
-
-    --if platform.get_config_info().editor == "vscode" then
-        --os.exec("code " .. detect_dir)
-    --else
-        -- TODO3: support more editor?
-    --end
 
     -- 获取 project 中所有 target
     local targets = project.targets()
@@ -274,7 +271,7 @@ function main(start_target)
                         else
                             -- TODO1: -> TODO-X
                             -- TODO2: skip to file-line? code -g file:line
-                            if platform.get_config_info().editor == "vscode" then
+                            if opt.editor == "vscode" then
                                 if open_target_file == false then
                                     for  _, file in ipairs((files)) do
                                         file = path.absolute(file)

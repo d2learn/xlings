@@ -32,7 +32,7 @@ target("pylings-demo")
 --- xrun config template
 
 _xmake_file_template = [[
-xlings_editor = "vscode"
+
 xlings_runmode = "loop"
 xlings_lang = "%s" -- 0.lang
 

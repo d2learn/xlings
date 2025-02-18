@@ -31,18 +31,17 @@ local xlings_projectdir = xlings_sourcedir
 -- user config.xlings
 -- Note: need init in xlings.lua
 local xname
-local xchecker_config
+local d2x_config
 local xlings_rundir
 local xlings_lang
 local xlings_cachedir = path.join(xlings_projectdir, ".xlings")
-local xlings_editor
 
 function set_name(name)
     xname = name
 end
 
-function set_xchecker_config(config)
-    xchecker_config = config
+function set_d2x_config(config)
+    d2x_config = config
 end
 
 function set_lang(lang)
@@ -52,10 +51,6 @@ end
 function set_rundir(rundir)
     xlings_rundir = rundir
     xlings_cachedir = rundir .. "/.xlings/"
-end
-
-function set_editor(editor)
-    xlings_editor = editor
 end
 
 -- llm config
@@ -134,9 +129,8 @@ function get_config_info()
         rundir = xlings_rundir,
         rcachedir = xlings_root_cache_dir[os.host()],
         cachedir = xlings_cachedir,
-        editor = xlings_editor,
         name = xname,
-        xchecker = xchecker_config,
+        d2x = d2x_config,
         lang = xlings_lang,
         runmode = xlings_runmode,
         llm_config = {
