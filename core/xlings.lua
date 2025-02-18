@@ -18,6 +18,7 @@ function xlings_help()
     cprint("${bright}Commands:${clear}")
     cprint("\t ${magenta}d2x${clear},      \t d2x project command")
     cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
+    cprint("\t ${magenta}vm${clear},      \t xlings version manager")
     cprint("\t ${magenta}self${clear},     \t self management")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
@@ -90,6 +91,23 @@ function deps_check_and_install(xdeps)
 
 end
 
+function _command_call(command, target, cmd_args)
+    if cmd_args then
+        command(target, unpack(cmd_args))
+    else
+        command(target)
+    end
+end
+
+function xlings_vm(cmd_target, cmd_args)
+    if cmd_args then
+        os.execv("xvm", { cmd_target, unpack(cmd_args) })
+    else
+        cmd_target = cmd_target or "--help"
+        os.execv("xvm", { cmd_target })
+    end
+end
+
 function main()
 
     local run_dir = option.get("run_dir")
@@ -100,19 +118,17 @@ function main()
     -- config info - config.xlings
     local xname = option.get("xname")
     local xdeps = option.get("xdeps")
-    local xchecker_config = option.get("xchecker_config")
+    local d2x_config = option.get("d2x_config")
 
     -- TODO: rename
     local xlings_lang = option.get("xlings_lang")
-    local xlings_editor = option.get("xlings_editor")
     local xlings_runmode = option.get("xlings_runmode")
 
     -- init platform config
     platform.set_name(xname)
-    platform.set_xchecker_config(xchecker_config)
+    platform.set_d2x_config(d2x_config)
     platform.set_lang(xlings_lang)
     platform.set_rundir(run_dir)
-    platform.set_editor(xlings_editor)
     platform.set_runmode(xlings_runmode)
 
     -- llm config info - llm.config.xlings
@@ -144,27 +160,20 @@ function main()
     -- TODO: optimize auto-deps install - xinstall(xx)
     if command == "d2x" then
         -- TODO: support d2x command args
-        --if xlings_editor then xinstall(xlings_editor, "-y", "--disable-info") end
         --xinstall(xlings_lang, "-y", "--disable-info")
-        if cmd_args then
-            d2x(cmd_target, unpack(cmd_args))
-        else
-            d2x(cmd_target)
-        end
+        _command_call(d2x, cmd_target, cmd_args)
     elseif command == "config" then
         config.llm()
     elseif command == "install" then
         if cmd_target then
-            if cmd_args then
-                xinstall(cmd_target, unpack(cmd_args))
-            else
-                xinstall(cmd_target)
-            end
+            _command_call(xinstall, cmd_target, cmd_args)
         elseif xdeps then
             deps_check_and_install(xdeps)
         else
             xinstall()
         end
+    elseif command == "vm" then
+        xlings_vm(cmd_target, cmd_args)
     elseif command == "self" then
         xself(cmd_target)
     else
