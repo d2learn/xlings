@@ -34,6 +34,7 @@ jobs:
           xim -l
           xim -r vim -y
           xim -l
+
       - name: XVM Test on Ubuntu
         run: |
           export PATH=/home/runner/.xlings_data/bin:$PATH
@@ -42,6 +43,12 @@ jobs:
           xvm add cls 0.0.1 --alias=clear
           xvm list c
           xvm remove cls --yes
+
+      - name: D2X Test on Ubuntu
+        run: |
+          export PATH=/home/runner/.xlings_data/bin:$PATH
+          d2x -h
+          d2x init helloworld
 
   windows-job:
     runs-on: windows-latest
@@ -83,4 +90,11 @@ jobs:
           xvm add clear 0.0.1 --alias=cls
           xvm list c
           xvm remove clear --yes
+        shell: cmd
+
+      - name: D2X Test on Windows
+        run: |
+          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          d2x -h
+          d2x init helloworld
         shell: cmd
