@@ -163,7 +163,7 @@ function main(name, dslings, lang)
     __dslingsdir = path.join(__projectdir, dslings)
 
     if not find_tool("mdbook") then
-        os.iorun("xim mdbook --yes")
+        os.exec("xim mdbook -y")
     end
 
     init_project_base(name)

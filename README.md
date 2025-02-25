@@ -19,12 +19,13 @@
 
 <div align=center>一个用于编程学习、开发和课程搭建的开发者工具集🛠️</div>
 <div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、练习代码自动检测、Demos示例集⌋</div>
-<div align=center>⌈XIM - 跨平台包管理器、XVM - 通用多版本管理工具、 XRUN - 代码自动检测运行、 XDEPS - 项目依赖管理⌋</div>
+<div align=center>⌈XIM - 跨平台包管理器、XVM - 通用多版本管理工具、 D2X - 公开课/教程项目工具⌋</div>
 
 ---
 
 ## 最近动态
 
+- d2x: 重构公开课/教程项目相关命令, 形成独立的d2x工具 - [PR](https://github.com/d2learn/xlings/pull/79) - 2025/2/19
 - xim: 增加archlinux上aur的支持 - [PR](https://github.com/d2learn/xlings/pull/67) - 2025/1/10
 - xvm: 增加版本管理模块 - [文章](https://forum.d2learn.org/topic/62) / [PR](https://github.com/d2learn/xlings/pull/60) - 2025/1/1
 - xpkg增加自动匹配github上release的url功能 - [文章](http://forum.d2learn.org/post/208) - 2024/12/30
@@ -96,15 +97,21 @@ python --version # 验证python实际是否为python3
 
 更多用法见 -> [xvm-readme](https://github.com/d2learn/xlings/tree/main/core/xvm)
 
-### XRUN | 代码运行器
+### D2X | 公开课/教程工具
 
-> 使用`xrun`可以运行代码。xlings会自动匹配编程语言, 并实时检查代码变化
+> 可以创建[Book + Code]结构的公开课或教程项目, 并支持自动练习代码检命令
 
 ```bash
-xlings run your_code.py
-xrun your_code.c
-xrun your_code.cpp
+# 创建hello教程项目
+d2x new hello
+cd hello
+# 安装项目依赖
+xlings install
+# 启动自动代码检测
+d2x checker
 ```
+
+更多用法见 -> [d2x-readme](https://github.com/d2learn/xlings/tree/main/core/d2x)
 
 ### XDEPS | 项目依赖管理
 
