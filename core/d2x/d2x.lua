@@ -34,8 +34,10 @@ function help()
     cprint("${bright}Usage: $ ${cyan}d2x [command] [target]\n")
 
     cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}run${clear},      \t run source code file")
-    cprint("\t ${magenta}checker${clear},  \t run checker d2x project's exercises")
+    cprint("\t ${magenta}new${clear},      \t create new d2x project")
+    cprint("\t ${magenta}book${clear},     \t open project's book")
+    cprint("\t ${magenta}run${clear},      \t run sourcecode file")
+    cprint("\t ${magenta}checker${clear},  \t run checker for d2x project's exercises")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
 
@@ -51,10 +53,16 @@ function main(action, ...)
     --print("main_target: " .. main_target)
     --print(cmds)
 
-    if action == "init" then
-        print("TODO: init")
+    if action == "new" then
+        actions.init(main_target)
     elseif action == "book" then
-        print("TODO: book")
+        local rundir = platform.get_config_info().rundir or os.curdir()
+        local bookdir = path.join(rundir, "book")
+        if os.isdir(bookdir) then
+            os.iorun("mdbook serve --open " .. bookdir)
+        else
+            cprint("[d2x]: ${yellow}book directory already exists.")
+        end
     elseif action == "run" then
         actions.run(main_target)
     elseif action == "checker" then
