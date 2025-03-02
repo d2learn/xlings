@@ -39,10 +39,10 @@ function install()
     end
 
     -- config user environment
-    __config_environment(rcachedir)
+    __config_environment(rcachedir, install_dir)
 end
 
-function __config_environment(rcachedir)
+function __config_environment(rcachedir, installdir)
     -- add bin to linux bashrc and windows's path env
     cprint("[xlings]: config user environment...")
 
@@ -84,9 +84,9 @@ function __config_environment(rcachedir)
         end
     else
         local path_env = os.getenv("PATH")
-        if not string.find(path_env, install_dir, 1, true) then
+        if not string.find(path_env, installdir, 1, true) then
 
-            path_env = path_env .. ";" .. install_dir
+            path_env = path_env .. ";" .. installdir
             -- os.setenv("PATH", path_env) -- only tmp, move to install.win.bat
             -- os.exec("setx PATH " .. path_env)
         end
