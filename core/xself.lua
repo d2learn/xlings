@@ -38,8 +38,13 @@ function install()
         cprint("[xlings]: use local cache data - %s", rcachedir)
     end
 
+    -- config user environment
+    __config_environment(rcachedir)
+end
+
+function __config_environment(rcachedir)
     -- add bin to linux bashrc and windows's path env
-    cprint("[xlings]: config system environment...")
+    cprint("[xlings]: config user environment...")
 
     if is_host("linux") then
         local source_cmd_template = "\ntest -f %s && source %s"
@@ -78,19 +83,22 @@ function install()
             config_shell(shell)
         end
     else
-        local path_env = os.getenv("PATH")
-        if not string.find(path_env, install_dir, 1, true) then
+        --local path_env = os.getenv("PATH")
+        --if not string.find(path_env, installdir, 1, true) then
 
-            path_env = path_env .. ";" .. install_dir
+            --path_env = path_env .. ";" .. installdir
             -- os.setenv("PATH", path_env) -- only tmp, move to install.win.bat
             -- os.exec("setx PATH " .. path_env)
-        end
+        --end
     end
 end
 
 function init()
     cprint("[xlings]: init xlings...")
     os.addenv("PATH", platform.get_config_info().bindir)
+
+    __config_environment(platform.get_config_info().rcachedir)
+
     common.xlings_exec([[xlings install xvm -y]])
     os.exec([[xvm add xim 0.0.2 --alias "xlings install"]])
     os.exec([[xvm add xinstall 0.0.2 --alias "xlings install"]])

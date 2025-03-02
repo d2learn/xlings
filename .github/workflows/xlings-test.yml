@@ -23,7 +23,7 @@ jobs:
 
       - name: XIM Test on Ubuntu
         run: |
-          export PATH=/home/runner/.xlings_data/bin:$PATH
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
           xlings -h
           xim -h
           xim -l
@@ -37,7 +37,7 @@ jobs:
 
       - name: XVM Test on Ubuntu
         run: |
-          export PATH=/home/runner/.xlings_data/bin:$PATH
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
           xvm --version
           xvm -h
           xvm add cls 0.0.1 --alias=clear
@@ -46,7 +46,7 @@ jobs:
 
       - name: D2X Test on Ubuntu
         run: |
-          export PATH=/home/runner/.xlings_data/bin:$PATH
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
           d2x -h
           d2x init helloworld
 

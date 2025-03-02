@@ -1,17 +1,12 @@
 local xlings_install_dir = {
-    linux = ".xlings",
+    linux = "/home/xlings/.xlings",
     windows = "C:/Users/Public/xlings",
 }
 
 local xlings_root_cache_dir = {
-    linux =".xlings_data",
+    linux ="/home/xlings/.xlings_data",
     windows = "C:/Users/Public/.xlings_data",
 }
-
-if os.host() == "linux" then
-    xlings_install_dir.linux = os.getenv("HOME") .. "/" .. xlings_install_dir.linux
-    xlings_root_cache_dir.linux = os.getenv("HOME") .. "/" .. xlings_root_cache_dir.linux
-end
 
 local xlings_bin_dir = path.join(xlings_root_cache_dir[os.host()], "bin")
 

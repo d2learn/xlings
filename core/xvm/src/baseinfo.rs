@@ -42,6 +42,7 @@ pub fn print_baseinfo() {
 
 pub mod platform {
     //use std::env;
+/*
     use super::*;
 
     static HOMEDIR: OnceLock<String> = OnceLock::new();
@@ -59,12 +60,12 @@ pub mod platform {
             }
         }).clone()
     }
-
+*/
     pub fn bindir() -> String {
         if cfg!(target_os = "windows") {
             r#"C:\Users\Public\.xlings_data\bin"#.to_string()
         } else {
-            format!("{}/.xlings_data/bin", homedir())
+            "/home/xlings/.xlings_data/bin".to_string()
         }
     }
 
@@ -72,7 +73,7 @@ pub mod platform {
         if cfg!(target_os = "windows") {
             "C:/users/public/.xlings_data/xvm".to_string()
         } else {
-            format!("{}/.xlings_data/xvm", homedir())
+            "/home/xlings/.xlings_data/xvm".to_string()
         }
     }
 }
