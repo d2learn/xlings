@@ -12,7 +12,7 @@ pkginfo = {
 }
 
 xim_data_dir = {
-    linux = tostring(os.getenv("HOME")) .. "/.xlings_data/xim",
+    linux = "/home/xlings/.xlings_data/xim",
     windows = "C:/Users/Public/.xlings_data/xim",
 }
 

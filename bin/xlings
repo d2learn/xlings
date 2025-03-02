@@ -1,12 +1,24 @@
 #!/bin/bash
 
-XLINGS_DIR=~/.xlings # default use home's xlings
+XLINGS_DIR=/home/xlings/.xlings # default use home's xlings
 XLINGS_RUN_DIR=`pwd`
 XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
 
 # check XLINGS_DIR, if not exist, use /usr/share/xlings
 if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
+fi
+
+if [ "$UID" -eq 0 ]; then
+    echo -e "\n\t**Warning: don't recommend run xlings as root**\n"
+    export XMAKE_ROOT=y
+else
+    if [ "$(stat -c %U /home/xlings/.xlings)" != "$(whoami)" ]; then
+        echo "change xlings to current user - $(whoami)"
+        sudo chown "$(whoami):$(whoami)" /home/xlings
+        sudo chown -R "$(whoami):$(whoami)" /home/xlings/.xlings
+        sudo chown -R "$(whoami):$(whoami)" /home/xlings/.xlings_data
+    fi
 fi
 
 if [ -f $XLINGS_RUN_DIR/config.xlings ]; then

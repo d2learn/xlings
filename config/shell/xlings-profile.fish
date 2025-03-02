@@ -1,7 +1,7 @@
 # Xlings
-set -x XLINGS_HOME "$HOME/.xlings"
-set -x XLINGS_DATA "$HOME/.xlings_data"
-set -x XLINGS_BIN "$HOME/.xlings_data/bin"
+set -x XLINGS_HOME "/home/xlings/.xlings"
+set -x XLINGS_DATA "/home/xlings/.xlings_data"
+set -x XLINGS_BIN "/home/xlings/.xlings_data/bin"
 set -x PATH "$XLINGS_BIN" $PATH
 
 # XVM

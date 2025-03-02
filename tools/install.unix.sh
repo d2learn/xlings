@@ -28,11 +28,20 @@ if [ -f $RUN_DIR/install.unix.sh ]; then
     RUN_DIR=`pwd`
 fi
 
+if [ "$UID" -eq 0 ];
+then
+    export XMAKE_ROOT=y
+else
+    echo -e "[xlings]: create /home/xlings ..."
+    sudo mkdir -p /home/xlings
+    sudo chown -R $USER:$USER /home/xlings
+fi
+
 # 2. install xlings
 cd $RUN_DIR/core
 xmake xlings unused self enforce-install
 
-export PATH="$HOME/.xlings_data/bin:$PATH"
+export PATH="/home/xlings/.xlings_data/bin:$PATH"
 
 # 3. init: install xvm and create xim, xinstall...
 xlings self init
