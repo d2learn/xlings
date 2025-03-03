@@ -1,5 +1,6 @@
 #!/bin/bash
 
+XLINGS_HOME_DIR=/home/xlings
 XLINGS_DIR=/home/xlings/.xlings # default use home's xlings
 XLINGS_RUN_DIR=`pwd`
 XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
@@ -7,17 +8,20 @@ XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
 # check XLINGS_DIR, if not exist, use /usr/share/xlings
 if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
+    sudo mkdir -p $XLINGS_HOME_DIR
+    sudo chown -R $USER:$USER $XLINGS_HOME_DIR
 fi
 
 if [ "$UID" -eq 0 ]; then
     echo -e "\n\t**Warning: don't recommend run xlings as root**\n"
     export XMAKE_ROOT=y
 else
-    if [ "$(stat -c %U /home/xlings/.xlings)" != "$(whoami)" ]; then
-        echo "change xlings to current user - $(whoami)"
-        sudo chown "$(whoami):$(whoami)" /home/xlings
-        sudo chown -R "$(whoami):$(whoami)" /home/xlings/.xlings
-        sudo chown -R "$(whoami):$(whoami)" /home/xlings/.xlings_data
+    if [ -d $XLINGS_HOME_DIR ] && [ "$(stat -c %U $XLINGS_HOME_DIR)" != "$(whoami)" ]; then
+        echo "[xlings]: switch xlings to current user - $(whoami)"
+        sudo chown -R "$(whoami):$(whoami)" $XLINGS_HOME_DIR
+        xlings self init
+        echo -e "\n\t**run [ source ~/.bashrc ] to refresh environment**\n"
+        exit 0
     fi
 fi
 
