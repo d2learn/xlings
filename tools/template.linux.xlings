@@ -5,4 +5,4 @@ if d2x then
     includes("../" .. d2x.checker.name)
 end
 
-includes("~/.xlings/core/xmake.lua")
+includes("/home/xlings/.xlings/core/xmake.lua")
