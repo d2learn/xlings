@@ -81,6 +81,16 @@ function IndexStore:rebuild_from_indexdir(indexdir, namespace)
 
     cprint("[xlings:xim]: rebuild index for [%s] namespace", namespace or "main")
 
+    local pkgindex_build_file = path.join(indexdir, "pkgindex-build.lua")
+    if os.isfile(pkgindex_build_file) then
+        cprint("[xlings:xim]: local pkgindex-build file found, start building...")
+        local pkgindex_build = utils.load_module(
+            pkgindex_build_file,
+            indexdir
+        )
+        pkgindex_build.install()
+    end
+
     self:build_xpkgs_index(indexdir)
     self:build_pmwrapper_index(indexdir)
 
