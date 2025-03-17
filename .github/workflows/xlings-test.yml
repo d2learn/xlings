@@ -29,10 +29,10 @@ jobs:
           xim -l
           xim --detect
           xim -s v
-          xim -i vim -y
+          xim -i d2x::d2ds -y
           source ~/.bashrc
           xim -l
-          xim -r vim -y
+          xim -r d2x::d2ds -y
           xim -l
 
       - name: XVM Test on Ubuntu
@@ -48,7 +48,7 @@ jobs:
         run: |
           export PATH=/home/xlings/.xlings_data/bin:$PATH
           d2x -h
-          d2x init helloworld
+          d2x new helloworld
 
   windows-job:
     runs-on: windows-latest
@@ -76,9 +76,9 @@ jobs:
           xim -l
           xim --detect
           xim -s v
-          xim -i vim -y
+          xim -i d2x::d2ds -y
           xim -l
-          xim -r vim -y
+          xim -r d2x::d2ds -y
           xim -l
         shell: cmd
 
@@ -96,5 +96,5 @@ jobs:
         run: |
           set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
           d2x -h
-          d2x init helloworld
+          d2x new helloworld
         shell: cmd
