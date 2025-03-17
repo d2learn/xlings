@@ -118,6 +118,12 @@ function config()
     cprint("[xlings]: config xlings - todo")
 end
 
+function clean()
+    os.tryrm(path.join(platform.get_config_info().install_dir, "core", ".xmake"))
+    os.iorun("xmake g -c")
+    cprint("[xlings]: clean xlings tmp files - ${green}ok${clear}")
+end
+
 function uninstall()
     local install_dir = platform.get_config_info().install_dir
     local rcachedir = platform.get_config_info().rcachedir
@@ -159,6 +165,7 @@ function help()
     cprint("${bright}Commands:${clear}")
     cprint("\t ${magenta}init${clear},     \t init xlings")
     cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
+    cprint("\t ${magenta}clean${clear},    \t clean xlings tmp files")
     cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
@@ -171,6 +178,8 @@ function main(action)
         init()
     elseif action == "config" then
         config()
+    elseif action == "clean" then
+        clean()
     elseif action == "update" then
         update()
     elseif action == "uninstall" then
