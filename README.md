@@ -15,11 +15,11 @@
   <a href="https://github.com/d2learn/xim-pkgindex" target="_blank">Package Index</a>
   |
   <a href="https://github.com/orgs/d2learn/projects/5" target="_blank">开发看板</a>
+  |
+  <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
 
-<div align=center>一个用于编程学习、开发和课程搭建的开发者工具集🛠️</div>
-<div align=center>⌈实时编译运行、AI代码提示、教程教学项目搭建、练习代码自动检测、Demos示例集⌋</div>
-<div align=center>⌈XIM - 跨平台包管理器、XVM - 通用多版本管理工具、 D2X - 公开课/教程项目工具⌋</div>
+<div align=center><b>一个跨平台的开发者工具集</b> - XIM跨平台包管理器、XVM通用多版本管理工具、 D2X公开课/教程项目搭建工具</div>
 
 ---
 
@@ -62,8 +62,6 @@ wget https://d2learn.org/xlings-install.sh -O - | bash
 Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content
 ```
 
-> **注: 更多安装方法 -> [xlings安装](https://d2learn.github.io/docs/xlings/chapter_1.html)**
-
 ## 工具用法简介
 
 ### XIM | 包管理工具
@@ -90,16 +88,18 @@ xim vscode
 xvm add python 2.7.18 --alias python2
 xvm add python 3.12.3 --alias python3
 xvm use python 3
-python --version # 验证python实际是否为python2
-xvm use python 2
 python --version # 验证python实际是否为python3
+xvm use python 2
+python --version # 验证python实际是否为python2
 ```
 
 更多用法见 -> [xvm-readme](https://github.com/d2learn/xlings/tree/main/core/xvm)
 
 ### D2X | 公开课/教程工具
 
-> 可以创建[Book + Code]结构的公开课或教程项目, 并支持自动练习代码检命令
+> 可以搭建交互式的公开课或教程项目, 支持电子书、练习代码自动检测...
+>
+> 示例项目: [d2ds | 动手学数据结构](https://github.com/d2learn/d2ds)
 
 ```bash
 # 创建hello教程项目
@@ -138,15 +138,9 @@ xdeps = {
 xlings install
 ```
 
-### 搭建交互式教程或课程实验
-
-- [项目搭建](https://d2learn.github.io/docs/xlings/chapter_3.html)
-- [d2ds项目示例](https://github.com/d2learn/d2ds)
-- [更多文档](https://d2learn.org/docs/xlings/chapter_0.html)
-
 ## 社区 & 交流
 
-- 社区论坛: [d2learn-xlings](https://forum.d2learn.org/category/9/xlings)
+- 社区论坛: [xlings讨论版块](https://forum.d2learn.org/category/9/xlings)
 - 交流群(Q): 1006282943
 
 ## 相关链接
