@@ -52,7 +52,10 @@ function os_type()
     return os_type
 end
 
+local __os_info = nil
 function os_info()
+    if __os_info ~= nil then return __os_info end
+
     local os_type = os.host()
     local name, version, upstream = "", "unknown-todo", "unknown-todo"
 
@@ -74,10 +77,12 @@ function os_info()
         version = macos.version()
     end
 
-    return {
+    __os_info = {
         name = name,
         version = version
     }
+
+    return __os_info
 end
 
 function try_download_and_check(url, dir, sha256)
@@ -188,6 +193,18 @@ function append_bashrc(content)
             common.xlings_file_append(bashrc, content)
         end
     end
+end
+
+-- TODO: optimize xpm os match
+-- for support default match(linux) in xpackage's xpm
+function xpm_target_os_helper(xpm)
+    local os_name = os_info().name
+    if xpm[os_name] then
+        return os_name
+    elseif is_host("linux") and xpm["linux"] then
+        return "linux"
+    end
+    return nil
 end
 
 function main()

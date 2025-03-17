@@ -58,7 +58,9 @@ function XPackage:get_deps()
 end
 
 function _dereference(version, package)
-    local _, entry = utils.deref(package.xpm, os_info.name)
+    local real_os_key = utils.xpm_target_os_helper(package.xpm)
+    local _, entry = utils.deref(package.xpm, real_os_key)
+    -- if xpm[os_info.name] is not found or is ref, add/update it
     package.xpm[os_info.name] = entry
     version, _ = utils.deref(package.xpm[os_info.name], version)
     return version, package

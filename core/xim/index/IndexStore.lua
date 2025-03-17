@@ -4,7 +4,6 @@ import("xim.base.runtime")
 local IndexStore = {}
 IndexStore.__index = IndexStore
 
-local os_info = utils.os_info()
 local index_db_file = path.join(runtime.get_xim_data_dir(), "xim-index-db.lua")
 local default_repo_dir = {
     path.join(path.directory(os.scriptdir()), "pkgindex")
@@ -132,32 +131,36 @@ function IndexStore:build_xpkg_index(xpkg_file)
                     -- check/merge to indexdata after all index data generated
                     self._pkg_reflist[package_name] = pkg.ref
                 end
-            elseif pkg.xpm[os_info.name] then
-                local os_key = pkg.xpm[os_info.name].ref or os_info.name
-                for version, _ in pairs(pkg.xpm[os_key]) do
+            else
+                local target_os = utils.xpm_target_os_helper(pkg.xpm)
+                -- if target_os is nil, skip this package
+                if target_os then
+                    local os_key = pkg.xpm[target_os].ref or target_os
+                    for version, _ in pairs(pkg.xpm[os_key]) do
 
-                    if version ~= "deps" then
-                        local key = string.format("%s@%s", package_name, version)
+                        if version ~= "deps" then
+                            local key = string.format("%s@%s", package_name, version)
 
-                        if pkg.xpm[os_key][version].ref then
-                            self._index_data[key] = {
-                                ref = package_name .. "@" .. pkg.xpm[os_key][version].ref
-                            }
-                        else 
-                            self._index_data[key] = {
-                                version = version,
-                                installed = false,
-                                path = xpkg_file
-                            }
+                            if pkg.xpm[os_key][version].ref then
+                                self._index_data[key] = {
+                                    ref = package_name .. "@" .. pkg.xpm[os_key][version].ref
+                                }
+                            else 
+                                self._index_data[key] = {
+                                    version = version,
+                                    installed = false,
+                                    path = xpkg_file
+                                }
+                            end
+
+                            if version == "latest" then
+                                self._index_data[package_name] = {
+                                    ref = key
+                                }
+                            end
                         end
-
-                        if version == "latest" then
-                            self._index_data[package_name] = {
-                                ref = key
-                            }
-                        end
-                    end
-                end
+                    end -- for end
+                end -- if target_os
             end
             return true
         end,
@@ -172,6 +175,7 @@ function IndexStore:build_xpkg_index(xpkg_file)
 end
 
 function IndexStore:build_pmwrapper_index(indexdir)
+    local os_info = utils.os_info()
     local pmwrapper_file = path.join(indexdir, "pmwrapper.lua")
     if os.isfile(pmwrapper_file) then
         local pmwrapper = utils.load_module(
