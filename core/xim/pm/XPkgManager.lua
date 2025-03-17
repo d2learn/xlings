@@ -52,7 +52,7 @@ function XPkgManager:download(xpkg)
     if string.find(url, "%.git$") then
         local pdir = path.join(download_dir, path.basename(url))
         cprint("[xlings:xim]: clone %s...", url)
-        git.clone(url, {depth = 1, recursive = true, outputdir = pdir})
+        git.clone(url, {verbose = true, depth = 1, recursive = true, outputdir = pdir})
     else
         local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         if not ok then -- retry download
