@@ -143,6 +143,21 @@ function __xlings_usergroup_checker()
             -- set default acl, new file will inherit acl(group default rw)
             -- sudo.exec("setfacl -d -m g::rwx " .. xlings_homedir)
         end
+
+        -- TODO: optimize this issue
+        -- set files permission
+        local files = {
+            path.join(rcachedir, "xim", "xim-index-db.lua"),
+            path.join(rcachedir, "xim", "xim-index-repos"),
+        }
+        for _, file in ipairs(files) do
+            if os.isfile(file) then
+                sudo.exec("chmod g+rwx " .. file)
+            elseif os.isdir(file) then
+                sudo.exec("chmod -R g+rwx " .. file)
+            end
+        end
+
     end
 end
 
@@ -151,7 +166,7 @@ function init()
     os.addenv("PATH", platform.get_config_info().bindir)
 
     local rcachedir = platform.get_config_info().rcachedir
-    __config_environment(prcachedir)
+    __config_environment(rcachedir)
 
     __xlings_usergroup_checker()
 
@@ -163,20 +178,6 @@ function init()
     os.exec([[xvm add xself 0.0.2 --alias "xlings self"]])
     os.exec([[xvm add d2x 0.0.2 --alias "xlings d2x"]])
     os.exec([[xim --detect]])
-
-    -- TODO: optimize this issue
-    -- set files permission
-    local files = {
-        path.join(rcachedir, "xim", "xim-index-db.lua"),
-        path.join(rcachedir, "xim", "xim-index-repos"),
-    }
-    for _, file in ipairs(files) do
-        if os.isfile(file) then
-            sudo.exec("chmod g+rwx " .. file)
-        elseif os.isdir(file) then
-            sudo.exec("chmod -R g+rwx " .. file)
-        end
-    end
 
     cprint("[xlings]: init xlings - ok")
 end
