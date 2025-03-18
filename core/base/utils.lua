@@ -69,6 +69,27 @@ function low_latency_urls(urls)
     return min_url
 end
 
+function remove_user_group_linux(group)
+    local members = {}
+    local result = os.iorun("getent group " .. group)
+    -- format：xlings:x:1001:user1,user2,user3
+    local users = result:match("^[^:]+:[^:]+:[^:]+:(.*)")
+
+    if users then
+        for user in users:gmatch("[^,]+") do
+            table.insert(members, user:match("^%s*(.-)%s*$"))
+        end
+    end
+
+    for _, user in ipairs(members) do
+        os.iorun("sudo deluser " .. user .. " " .. group)
+    end
+
+    os.exec("sudo delgroup " .. group)
+
+    cprint("[xlings]: ${bright}removed group " .. group .. ":${clear} " .. table.concat(members, ", "))
+end
+
 function main()
     -- test cases
     local urls = {

@@ -1,5 +1,8 @@
+import("privilege.sudo")
+
 import("platform")
 import("common")
+import("base.utils")
 
 local xinstall = import("xim.xim")
 
@@ -93,11 +96,64 @@ function __config_environment(rcachedir)
     end
 end
 
+function __xlings_usergroup_checker()
+    cprint("[xlings]: check xlings user group...")
+
+    if is_host("linux") then
+        local xlings_homedir = "/home/xlings"
+        local current_user = os.getenv("USER")
+
+        local exist_xlings_group = try {
+            function()
+                return os.iorun("getent group xlings")
+            end,
+            catch
+            {
+                function(e)
+                    return nil
+                end
+            }
+        }
+
+        if not exist_xlings_group then
+            -- only run once
+            cprint("[xlings]: ${yellow dim}create group xlings and add current user [%s] to it(only-first)", current_user)
+            sudo.exec("groupadd xlings")
+            sudo.exec("usermod -aG xlings " .. current_user)
+        elseif not string.find(os.iorun("groups " .. current_user), "xlings", 1, true) then
+            cprint("")
+            cprint("${yellow bright}Warning: current user [%s] is not in group xlings", current_user)
+            cprint("")
+            cprint("\t${cyan}sudo usermod -aG xlings %s${clear}", current_user)
+            cprint("")
+            --os.raise("please run command to add it")
+            sudo.exec("usermod -aG xlings " .. current_user)
+            cprint("[xlings]: add current user [%s] to group xlings - ${green}ok", current_user)
+        else
+            cprint("[xlings]: current user [%s] is in group xlings - ${green}ok", current_user)
+        end
+
+        if os.iorun("stat -c %G " .. xlings_homedir):trim() ~= "xlings" then
+            cprint("[xlings]: ${yellow dim}change %s owner to xlings group(only-first)", xlings_homedir)
+            sudo.exec("chown -R :xlings " .. xlings_homedir)
+            sudo.exec("chmod -R 775 " .. xlings_homedir)
+            --sudo.exec("chmod g+x " .. xlings_homedir) -- directory's execute permission
+            -- set gid, new file will inherit group
+            sudo.exec("chmod -R g+s " .. xlings_homedir)
+            -- set default acl, new file will inherit acl(group default rw)
+            -- sudo.exec("setfacl -d -m g::rwx " .. xlings_homedir)
+        end
+    end
+end
+
 function init()
     cprint("[xlings]: init xlings...")
     os.addenv("PATH", platform.get_config_info().bindir)
 
-    __config_environment(platform.get_config_info().rcachedir)
+    local rcachedir = platform.get_config_info().rcachedir
+    __config_environment(prcachedir)
+
+    __xlings_usergroup_checker()
 
     common.xlings_exec([[xlings install xvm -y]])
     os.exec([[xvm add xim 0.0.2 --alias "xlings install"]])
@@ -107,6 +163,21 @@ function init()
     os.exec([[xvm add xself 0.0.2 --alias "xlings self"]])
     os.exec([[xvm add d2x 0.0.2 --alias "xlings d2x"]])
     os.exec([[xim --detect]])
+
+    -- TODO: optimize this issue
+    -- set files permission
+    local files = {
+        path.join(rcachedir, "xim", "xim-index-db.lua"),
+        path.join(rcachedir, "xim", "xim-index-repos"),
+    }
+    for _, file in ipairs(files) do
+        if os.isfile(file) then
+            sudo.exec("chmod g+rwx " .. file)
+        elseif os.isdir(file) then
+            sudo.exec("chmod -R g+rwx " .. file)
+        end
+    end
+
     cprint("[xlings]: init xlings - ok")
 end
 
@@ -141,6 +212,10 @@ function uninstall()
                     cprint("[xlings]: remove %s - ok", rcachedir)
                     os.rm(rcachedir)
                 end
+            end
+            if is_host("linux") then
+                utils.remove_user_group_linux("xlings")
+                cprint("[xlings]: remove xlings user group - ${green}ok")
             end
         end,
         catch
