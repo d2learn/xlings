@@ -210,8 +210,8 @@ function uninstall()
                 io.stdout:flush()
                 local confirm = io.read()
                 if confirm == "y" then
-                    cprint("[xlings]: remove %s - ok", rcachedir)
                     os.rm(rcachedir)
+                    cprint("[xlings]: remove %s - ok", rcachedir)
                 end
             end
             if is_host("linux") then

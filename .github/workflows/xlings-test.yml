@@ -4,7 +4,7 @@ on: [push]
 
 jobs:
 
-  linux-job:
+  linux-test:
     runs-on: ubuntu-latest
 
     defaults:
@@ -50,7 +50,7 @@ jobs:
           d2x -h
           d2x new helloworld
 
-  windows-job:
+  windows-test:
     runs-on: windows-latest
 
     defaults:
@@ -98,3 +98,26 @@ jobs:
           d2x -h
           d2x new helloworld
         shell: cmd
+
+# only test install
+#
+#  archlinux-test:
+#    runs-on: ubuntu-latest
+#    container: archlinux
+#
+#    steps:
+#      - name: Install Xlings on ArchLinux
+#        run: |
+#          pacman -Sy --noconfirm curl git sudo
+#          useradd -m builduser
+#          passwd -d builduser
+#          git clone https://aur.archlinux.org/xlings.git
+#          cd xlings
+#          sudo -u builduser makepkg -si --noconfirm
+#
+#      - name: Base Test on ArchLinux
+#        run: |
+#          xlings
+#          xim -i d2x::d2ds -y
+#          d2x -h
+#          d2x new helloworld

@@ -10,6 +10,7 @@ if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
     sudo mkdir -p $XLINGS_HOME_DIR
     sudo chown -R $USER:$USER $XLINGS_HOME_DIR
+    export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
 fi
 
 if [ "$UID" -eq 0 ]; then

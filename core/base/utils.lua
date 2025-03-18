@@ -73,7 +73,7 @@ function remove_user_group_linux(group)
     local members = {}
     local result = os.iorun("getent group " .. group)
     -- format：xlings:x:1001:user1,user2,user3
-    local users = result:match("^[^:]+:[^:]+:[^:]+:(.*)")
+    local users = result:match("^[^:]+:[^:]+:[^:]+:(.*)"):trim()
 
     if users then
         for user in users:gmatch("[^,]+") do
@@ -82,10 +82,10 @@ function remove_user_group_linux(group)
     end
 
     for _, user in ipairs(members) do
-        os.iorun("sudo deluser " .. user .. " " .. group)
+        os.iorun("sudo gpasswd -d " .. user .. " " .. group)
     end
 
-    os.exec("sudo delgroup " .. group)
+    os.exec("sudo groupdel " .. group)
 
     cprint("[xlings]: ${bright}removed group " .. group .. ":${clear} " .. table.concat(members, ", "))
 end
