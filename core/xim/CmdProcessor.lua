@@ -81,8 +81,30 @@ function CmdProcessor:run_target_cmds()
                 end
             end
         else
-            cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
-            self:target_tips()
+            local target_list = ""
+            local matched_target = index_manager:search(self.target)
+            for name, _ in pairs(matched_target) do
+                target_list = target_list .. name .. "\n"
+            end
+            -- fzf installed, use fzf to select target
+            if target_list ~= "" and find_tool("fzf") then
+                os.addenv("FZF_DEFAULT_COMMAND", string.format([[echo -e "%s"]], target_list))
+                --os.exec(string.format([[fzf --preview "xim -i {}"]], target_list))
+                local tmpfile = path.join(runtime.get_xim_data_dir(), ".xim_fzf_out")
+                io.writefile(tmpfile, "")
+                try {
+                    function()
+                        os.execv("fzf", {"--print-query", "--preview", "xim -i {}"}, {stdout = tmpfile})
+                        self.target = io.readfile(tmpfile):trim()
+                        self:run_target_cmds()
+                    end, catch {
+                        function() end
+                    }
+                }
+            else
+                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
+                self:target_tips()
+            end
         end
     end
 end
