@@ -47,6 +47,11 @@ function CmdProcessor:run_target_cmds()
         cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
         self:search()
     else
+
+        -- support namespace::pkgname
+        -- support namespace:pkgname
+        self.target = self.target:replace("::", ":")
+
         local target_pkgname = index_manager:match_package_version(self.target)
         if target_pkgname then
             cprint("${dim}[xlings:xim]: create pm executor for <%s> ... ${clear}", self.target)
