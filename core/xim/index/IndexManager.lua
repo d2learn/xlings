@@ -159,14 +159,19 @@ function IndexManager:add_xpkg(xpkg_file)
 end
 
 function IndexManager:add_subrepo(indexrepo)
-    indexrepo = indexrepo:split("::", {plain = true})
+    -- avoid the case of "namespace:http://repo.git" - ':' issues
+    if indexrepo:find("http", 1, true) then
+        indexrepo = indexrepo:replace(":http", "::http"):split("::", {plain = true})
+    else
+        indexrepo = indexrepo:replace(":git", "::git"):split("::", {plain = true})
+    end
 
     local namespace = indexrepo[1]
     local repo = indexrepo[2]
 
     if repo == nil then
         cprint("[xlings:xim]: ${red}invalid indexrepo format: ${clear}%s", indexrepo)
-        cprint("\n\t${yellow}xim --add-indexrepo namespace::repo.git\n")
+        cprint("\n\t${yellow}xim --add-indexrepo namespace:repo.git\n")
         return
     end
 

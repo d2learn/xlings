@@ -116,9 +116,9 @@ function IndexStore:build_xpkg_index(xpkg_file)
             ).package
 
             if pkg.namespace then
-                package_name = pkg.namespace .. "::" .. package_name
+                package_name = pkg.namespace .. ":" .. package_name
             elseif self.namespace then
-                package_name = self.namespace .. "::" .. package_name
+                package_name = self.namespace .. ":" .. package_name
             end
 
             -- TODO: package_name@version@arch
@@ -190,7 +190,7 @@ function IndexStore:build_pmwrapper_index(indexdir)
                     local version = target_pm[os_info.name][1]
                     key = string.format("%s@%s", name, version)
                     if self.namespace then
-                        key = self.namespace .. "::" .. key
+                        key = self.namespace .. ":" .. key
                     end
                     self._index_data[key] = {
                         ref = target_key .. "@" .. version
@@ -201,7 +201,7 @@ function IndexStore:build_pmwrapper_index(indexdir)
                 local pkgname = pm[os_info.name][2]
                 key = string.format("%s@%s", name, version)
                 if self.namespace then
-                    key = self.namespace .. "::" .. key
+                    key = self.namespace .. ":" .. key
                 end
                 self._index_data[key] = {
                     pmwrapper = version,
