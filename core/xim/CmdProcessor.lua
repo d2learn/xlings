@@ -2,6 +2,8 @@
 
 import("lib.detect.find_tool")
 
+import("common")
+
 import("xim.base.utils")
 import("xim.base.runtime")
 import("xim.pm.XPackage")
@@ -93,13 +95,21 @@ function CmdProcessor:run_target_cmds()
             end
             -- fzf installed, use fzf to select target
             if target_list ~= "" and find_tool("fzf") then
-                os.addenv("FZF_DEFAULT_COMMAND", string.format([[echo -e "%s"]], target_list))
-                --os.exec(string.format([[fzf --preview "xim -i {}"]], target_list))
                 local tmpfile = path.join(runtime.get_xim_data_dir(), ".xim_fzf_out")
-                io.writefile(tmpfile, "")
+                if is_host("windows") then
+                    io.writefile(tmpfile, target_list)
+                    os.addenv("FZF_DEFAULT_COMMAND", string.format([[type %s]], tmpfile))
+                else
+                    io.writefile(tmpfile, "")
+                    os.addenv("FZF_DEFAULT_COMMAND", string.format([[echo -e "%s"]], target_list))
+                end
                 try {
                     function()
-                        os.execv("fzf", {"--print-query", "--preview", "xim -i {}"}, {stdout = tmpfile})
+                        if is_host("windows") then
+                            common.xlings_exec([[fzf --preview "xim -i {}" > ]] .. tmpfile)
+                        else
+                            os.execv("fzf", {"--print-query", "--preview", "xim -i {}"}, {stdout = tmpfile})
+                        end
                         self.target = io.readfile(tmpfile):trim()
                         self:run_target_cmds()
                     end, catch {
