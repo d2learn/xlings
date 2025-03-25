@@ -10,6 +10,15 @@ function install()
 
     uninstall() -- TODO: avoid delete mdbook?
 
+    if is_host("linux") then
+        -- create xlings home dir
+        local xlings_homedir = "/home/xlings"
+        cprint("[xlings]: create xlings home dir %s", xlings_homedir)
+        local current_user = os.getenv("USER")
+        sudo.exec("mkdir -p " .. xlings_homedir)
+        sudo.exec(string.format("chown %s:%s %s", current_user, current_user, xlings_homedir))
+    end
+
     cprint("[xlings]: install xlings to %s", platform.get_config_info().install_dir)
 
     local install_dir = platform.get_config_info().install_dir
@@ -73,6 +82,8 @@ function __config_environment(rcachedir)
             local command = shells[shell].command
             if os.isfile(profile) then
                 cprint("[xlings]: config [%s] shell - %s", shell, profile)
+                -- backup
+                os.cp(profile, profile .. ".xlings.bak", {force = true})
                 local profile_content = io.readfile(profile)
                 if not string.find(profile_content, command, 1, true) then
                     common.xlings_file_append(profile, command)
@@ -97,7 +108,7 @@ function __config_environment(rcachedir)
 end
 
 function __xlings_usergroup_checker()
-    cprint("[xlings]: check xlings user group...")
+    cprint("[xlings]: check xlings user group(only unix)...")
 
     if is_host("linux") then
         local xlings_homedir = "/home/xlings"
@@ -120,21 +131,7 @@ function __xlings_usergroup_checker()
             cprint("[xlings]: ${yellow dim}create group xlings and add current user [%s] to it(only-first)", current_user)
             sudo.exec("groupadd xlings")
             sudo.exec("usermod -aG xlings " .. current_user)
-        elseif not string.find(os.iorun("groups " .. current_user), "xlings", 1, true) then
-            cprint("")
-            cprint("${yellow bright}Warning: current user [%s] is not in group xlings", current_user)
-            cprint("")
-            cprint("\t${cyan}sudo usermod -aG xlings %s${clear}", current_user)
-            cprint("")
-            --os.raise("please run command to add it")
-            sudo.exec("usermod -aG xlings " .. current_user)
-            cprint("[xlings]: add current user [%s] to group xlings - ${green}ok", current_user)
-        else
-            cprint("[xlings]: current user [%s] is in group xlings - ${green}ok", current_user)
-        end
-
-        if os.iorun("stat -c %G " .. xlings_homedir):trim() ~= "xlings" then
-            cprint("[xlings]: ${yellow dim}change %s owner to xlings group(only-first)", xlings_homedir)
+            cprint("[xlings]: ${yellow dim}add current %s owner to xlings group(only-first)", xlings_homedir)
             sudo.exec("chown -R :xlings " .. xlings_homedir)
             sudo.exec("chmod -R 775 " .. xlings_homedir)
             --sudo.exec("chmod g+x " .. xlings_homedir) -- directory's execute permission
@@ -142,13 +139,26 @@ function __xlings_usergroup_checker()
             sudo.exec("chmod -R g+s " .. xlings_homedir)
             -- set default acl, new file will inherit acl(group default rw)
             -- sudo.exec("setfacl -d -m g::rwx " .. xlings_homedir)
+        elseif not string.find(os.iorun("groups " .. current_user), "xlings", 1, true) then
+            cprint("")
+            cprint("${yellow bright}Warning: current user [%s] is not in group xlings", current_user)
+            cprint("")
+            cprint("\t${cyan}sudo usermod -aG xlings %s${clear}", current_user)
+            cprint("")
+            --os.raise("please run command to add it")
+            config({["config--adduser"] = current_user})
+        else
+            cprint("[xlings]: current user [%s] is in group xlings - ${green}ok", current_user)
         end
 
         -- TODO: optimize this issue
         -- set files permission
+        local rcachedir = platform.get_config_info().rcachedir
         local files = {
+            path.join(rcachedir, "xim", ".xim_fzf_out"),
             path.join(rcachedir, "xim", "xim-index-db.lua"),
             path.join(rcachedir, "xim", "xim-index-repos"),
+            path.join(xlings_homedir, ".xmake"),
         }
         for _, file in ipairs(files) do
             if os.isfile(file) then
@@ -156,6 +166,7 @@ function __xlings_usergroup_checker()
             elseif os.isdir(file) then
                 sudo.exec("chmod -R g+rwx " .. file)
             end
+            --cprint("[xlings]: ${dim}%s (permission) - ${green}ok", file)
         end
 
     end
@@ -177,7 +188,11 @@ function init()
     os.exec([[xvm add xchecker 0.0.2 --alias "xlings checker"]])
     os.exec([[xvm add xself 0.0.2 --alias "xlings self"]])
     os.exec([[xvm add d2x 0.0.2 --alias "xlings d2x"]])
-    os.exec([[xim --detect]])
+    --os.exec([[xim --detect]])
+
+    cprint("")
+    cprint("\t${bright yellow}restart cmd/shell to update env")
+    cprint("")
 
     cprint("[xlings]: init xlings - ok")
 end
@@ -186,8 +201,11 @@ function update()
     cprint("[xlings]: update xlings - todo")
 end
 
-function config()
-    cprint("[xlings]: config xlings - todo")
+function config(cmds)
+    if cmds["config--adduser"] then
+        sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
+        cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
+    end
 end
 
 function clean()
@@ -202,7 +220,7 @@ function uninstall()
     try
     {
         function()
-            os.rm(install_dir)
+            os.tryrm(install_dir)
             cprint("[xlings]: remove %s - ok", install_dir)
             -- check rcachedir not empty by xlings.json
             if os.isfile(path.join(rcachedir, "xlings.json")) then
@@ -238,8 +256,11 @@ function help()
     cprint("${bright}\t[ xlings self ]${clear} - xlings self sub-command")
     cprint("")
     cprint("${bright}Usage: $ ${cyan}xlings self [command]\n")
+    cprint("${bright}Usage: $ ${cyan}xself [command]\n")
+    cprint("")
     cprint("${bright}Commands:${clear}")
     cprint("\t ${magenta}init${clear},     \t init xlings")
+    cprint("\t ${magenta}config${clear},   \t config xlings")
     cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
     cprint("\t ${magenta}clean${clear},    \t clean xlings tmp files")
     cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
@@ -247,13 +268,21 @@ function help()
     cprint("")
 end
 
-function main(action)
+function main(action, ...)
+    local args = {...} or { "" }
+    local kv_cmds = {
+        -- config
+        [action .. "--adduser"] = false,
+    }
+
+    local _, cmds = common.xlings_input_process(action, args, kv_cmds)
+
     if action == "enforce-install" then
         install()
     elseif action == "init" then
         init()
     elseif action == "config" then
-        config()
+        config(cmds)
     elseif action == "clean" then
         clean()
     elseif action == "update" then

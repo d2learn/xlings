@@ -31,10 +31,6 @@ fi
 if [ "$UID" -eq 0 ];
 then
     export XMAKE_ROOT=y
-else
-    echo -e "[xlings]: create /home/xlings ..."
-    sudo mkdir -p /home/xlings
-    sudo chown -R $USER:$USER /home/xlings
 fi
 
 # 2. install xlings
@@ -51,15 +47,8 @@ xlings self init
 echo -e "${GREEN}[xlings]: xlings installed${RESET}"
 
 echo -e ""
-echo -e "\t run $YELLOW xlings help $RESET get more information"
-echo -e "\t after run $YELLOW source ~/.bashrc $RESET to reload"
+echo -e "\t run $YELLOW `xlings help` $RESET get more information"
+echo -e "\t after restart $YELLOW cmd/shell $RESET to refresh environment"
 echo -e ""
 
 cd $RUN_DIR
-
-# if $1 is nil
-if [ -n "$1" ] && [ "$1" = "disable_reopen" ]; then
-    echo -e "[xlings]: exec bash - disable reopen"
-else
-    exec bash # update env
-fi

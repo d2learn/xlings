@@ -278,4 +278,29 @@ function get_linux_distribution()
     }
 end
 
+
+function xlings_input_process(action, args, kv_cmds)
+
+    local main_target = ""
+
+    action = tostring(action)
+    args = args or {}
+
+    kv_cmds = kv_cmds or {
+        ["--default"] = false,  -- -list (string)
+    }
+
+    if #args > 0 and args[1]:sub(1, 1) ~= '-' then
+        main_target = args[1]
+    end
+
+    for i = 1, #args do
+        if kv_cmds[action .. args[i]] == false then
+            kv_cmds[action .. args[i]] = args[i + 1] or ""
+        end
+    end
+
+    return main_target, kv_cmds
+end
+
 --return common
