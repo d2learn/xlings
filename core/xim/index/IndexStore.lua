@@ -47,7 +47,9 @@ function IndexStore:rebuild()
         -- [package_name] = pkg.ref
     }
 
-    os.tryrm(index_db_file)
+    --os.tryrm(index_db_file)
+    -- avoid re-create index_db_file and permission changed
+    _save_index_data(self._index_data)
 
     -- rebuild main repo
     self:rebuild_from_indexdir(self.main_repodir)
