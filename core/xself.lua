@@ -202,10 +202,18 @@ function update()
 end
 
 function config(cmds)
-    if cmds["config--adduser"] then
+
+    local target_user = cmds["config--adduser"] or cmds["config--deluser"] or "unknown-user-flag"
+    local user_included = string.find(os.iorun("groups " .. target_user), "xlings", 1, true)
+
+    if not user_included and cmds["config--adduser"] then
         sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
         cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
+    elseif cmds["config--deluser"] and user_included then
+        sudo.exec("gpasswd -d " .. cmds["config--deluser"] .. " xlings")
+        cprint("[xlings]: del user [%s] from group ${yellow}xlings${clear} - ${green}ok", cmds["config--deluser"])
     end
+
 end
 
 function clean()
@@ -269,10 +277,14 @@ function help()
 end
 
 function main(action, ...)
+
+    action = action or ""
+
     local args = {...} or { "" }
     local kv_cmds = {
         -- config
         [action .. "--adduser"] = false,
+        [action .. "--deluser"] = false,
     }
 
     local _, cmds = common.xlings_input_process(action, args, kv_cmds)
