@@ -20,7 +20,7 @@ xim_data_dir = xim_data_dir[os.host()]
 xim_install_basedir = path.join(xim_data_dir, "xpkgs")
 
 if not os.isdir(xim_data_dir) then
-    os.mkdir(xim_data_dir)
+    --os.mkdir(xim_data_dir)
 end
 
 function get_pkginfo()

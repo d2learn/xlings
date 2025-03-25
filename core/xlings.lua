@@ -175,7 +175,7 @@ function main()
     elseif command == "vm" then
         xlings_vm(cmd_target, cmd_args)
     elseif command == "self" then
-        xself(cmd_target)
+        _command_call(xself, cmd_target, cmd_args)
     else
         xlings_help()
     end
