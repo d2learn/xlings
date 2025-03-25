@@ -9,7 +9,7 @@ export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
 # check XLINGS_DIR, if not exist, use /usr/share/xlings
 if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
-    XMAKE_CONFIGDIR = /tmp
+    XMAKE_CONFIGDIR=/tmp
 fi
 
 if [ "$UID" -eq 0 ]; then
