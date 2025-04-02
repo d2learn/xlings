@@ -51,7 +51,7 @@ function install()
     end
 
     -- config user environment
-    __config_environment(rcachedir)
+    --__config_environment(rcachedir)
 end
 
 function __config_environment(rcachedir)
@@ -236,13 +236,18 @@ function uninstall()
                 io.stdout:flush()
                 local confirm = io.read()
                 if confirm == "y" then
-                    os.rm(rcachedir)
-                    cprint("[xlings]: remove %s - ok", rcachedir)
+                    if is_host("linux") then
+                        utils.remove_user_group_linux("xlings")
+                        cprint("[xlings]: remove xlings user group - ${green}ok")
+                        local current_user = os.getenv("USER")
+                        sudo.exec("chown -R " .. current_user .. ":" .. current_user .. " " .. rcachedir)
+                    end
+                    if os.tryrm(rcachedir) then
+                        cprint("[xlings]: remove %s - ${green}ok", rcachedir)
+                    end
+                else
+                    cprint("[xlings]: keep local cache data: %s", rcachedir)
                 end
-            end
-            if is_host("linux") then
-                utils.remove_user_group_linux("xlings")
-                cprint("[xlings]: remove xlings user group - ${green}ok")
             end
         end,
         catch
