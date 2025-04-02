@@ -1,5 +1,6 @@
 import("devel.git")
 import("utils.archive")
+import("lib.detect.find_tool")
 
 import("xim.base.github")
 import("xim.base.utils")
@@ -17,8 +18,16 @@ function new()
 end
 
 function XPkgManager:installed(xpkg)
+    local ret = nil
 
-    local ret = _try_execute_hook(xpkg.name, xpkg, "installed")
+    if xpkg.hooks["installed"] then
+        ret = _try_execute_hook(xpkg.name, xpkg, "installed")
+    else
+        if find_tool("xvm") then
+            ret = os.iorun("xvm list " .. xpkg.name)
+        end
+    end
+
     if type(ret) == "boolean" then
         return ret
     elseif type(ret) == "string" then
