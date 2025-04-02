@@ -12,7 +12,7 @@ import("xim.base.runtime")
 import("xim.base.utils")
 
 local data_dir = runtime.get_xim_data_dir()
-local index_reposdir = path.join(data_dir, "xim-index-repos")
+local index_reposdir = runtime.get_xim_index_reposdir()
 
 local RepoManager = {}
 RepoManager.__index = RepoManager

@@ -139,7 +139,7 @@ function xlings_clear_screen()
 end
 
 function xlings_download(url, dest)
-    cprint("[xlings]: downloading %s to %s", url, dest)
+    cprint("[xlings]: downloading: ${dim}%s to %s", url, dest)
 
     try
     {

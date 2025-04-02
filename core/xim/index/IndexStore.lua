@@ -78,7 +78,7 @@ end
 function IndexStore:rebuild_from_indexdir(indexdir, namespace)
 
     -- init namespace
-    self.namespace = namespace
+    self._namespace = namespace
 
     cprint("[xlings:xim]: rebuild index for [%s] namespace", namespace or "main")
 
@@ -96,7 +96,7 @@ function IndexStore:rebuild_from_indexdir(indexdir, namespace)
     self:build_pmwrapper_index(indexdir)
 
     -- set to nil to avoid side effect
-    self.namespace = nil
+    self._namespace = nil
 end
 
 function IndexStore:build_xpkgs_index(indexdir)
@@ -119,8 +119,8 @@ function IndexStore:build_xpkg_index(xpkg_file)
 
             if pkg.namespace then
                 package_name = pkg.namespace .. ":" .. package_name
-            elseif self.namespace then
-                package_name = self.namespace .. ":" .. package_name
+            elseif self._namespace then
+                package_name = self._namespace .. ":" .. package_name
             end
 
             -- TODO: package_name@version@arch
@@ -191,8 +191,8 @@ function IndexStore:build_pmwrapper_index(indexdir)
                 if target_pm[os_info.name] then
                     local version = target_pm[os_info.name][1]
                     key = string.format("%s@%s", name, version)
-                    if self.namespace then
-                        key = self.namespace .. ":" .. key
+                    if self._namespace then
+                        key = self._namespace .. ":" .. key
                     end
                     self._index_data[key] = {
                         ref = target_key .. "@" .. version
@@ -202,8 +202,8 @@ function IndexStore:build_pmwrapper_index(indexdir)
                 local version = pm[os_info.name][1]
                 local pkgname = pm[os_info.name][2]
                 key = string.format("%s@%s", name, version)
-                if self.namespace then
-                    key = self.namespace .. ":" .. key
+                if self._namespace then
+                    key = self._namespace .. ":" .. key
                 end
                 self._index_data[key] = {
                     pmwrapper = version,

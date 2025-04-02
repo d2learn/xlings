@@ -33,18 +33,30 @@ function new(target, cmds) --- create new object
 end
 
 function CmdProcessor:run()
+    -- push runtime stack
     table.insert(runtime_stack, utils.deep_copy(runtime.get_pkginfo()))
+    table.insert(runtime_stack, self.cmds)
+
+    runtime.init()
+
     if self.target and self.target ~= "" then
         self:run_target_cmds()
     else
         self:run_nontarget_cmds()
     end
     index_manager:update()
+
+    -- Note: pop sequence is important
+    -- pop runtime stack
+    self.cmds = table.remove(runtime_stack)
     runtime.set_pkginfo(table.remove(runtime_stack))
 end
 
 function CmdProcessor:run_target_cmds()
 -- target isnt nil - [is a package name]
+
+    runtime.set_pkginfo({ input_args = self.cmds.sysxpkg_args })
+
     if self.cmds.search then
         cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
         self:search()
@@ -279,8 +291,21 @@ end
 function CmdProcessor:sys_add_xpkg()
     local xpkg_file = self.cmds.sysadd_xpkg
     if not os.isfile(xpkg_file) then
-        cprint("[xlings:xim]: ${dim}convert xpkg-file to runtime path${clear} - %s", xpkg_file)
-        xpkg_file = path.join(runtime.get_rundir(), xpkg_file)
+        if xpkg_file:find("http", 1, true) and xpkg_file:find(".lua", 1, true) then
+            local index_repodir = runtime.get_xim_local_index_repodir()
+            local local_xpkg_file = path.join(index_repodir, path.filename(xpkg_file))
+            if os.isfile(local_xpkg_file) then
+                cprint("[xlings:xim]: ${yellow}remove old xpkg-file: %s${clear}", local_xpkg_file)
+                os.tryrm(local_xpkg_file)
+            end
+            --cprint("[xlings:xim]: download xpkg-file from:${dim} - %s", xpkg_file)
+            _, local_xpkg_file = utils.try_download_and_check(xpkg_file, index_repodir)
+            cprint("[xlings:xim]: %s - ${green}ok", local_xpkg_file)
+            xpkg_file = local_xpkg_file
+        else
+            cprint("[xlings:xim]: ${dim}convert xpkg-file to runtime path${clear} - %s", xpkg_file)
+            xpkg_file = path.join(runtime.get_rundir(), xpkg_file)
+        end
     else
         xpkg_file = path.absolute(xpkg_file)
     end
@@ -334,6 +359,7 @@ function CmdProcessor:help()
     cprint("  ${magenta}--detect${clear},        detect local software/packages")
     cprint("  ${magenta}--update${clear},        update [self | index]")
     cprint("  ${magenta}--add-xpkg${clear},      add xpkg file to index database")
+    cprint("  ${magenta}--xpkg-args${clear},     xpkg args")
     cprint("  ${magenta}--add-indexrepo${clear}, add indexrepo to repo manager")
     cprint("  ${magenta}--disable-info${clear},  disable info display")
     cprint("")

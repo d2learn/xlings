@@ -153,9 +153,11 @@ end
 
 function IndexManager:add_xpkg(xpkg_file)
     cprint("[xlings:xim]: add xpkg - ${clear}%s", xpkg_file)
+    index_store._namespace = "local"
     if index_store:build_xpkg_index(xpkg_file) then
         index_store:save_to_local(true)
     end
+    index_store._namespace = nil
 end
 
 function IndexManager:add_subrepo(indexrepo)
