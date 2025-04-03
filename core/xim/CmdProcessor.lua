@@ -34,28 +34,28 @@ end
 
 function CmdProcessor:run()
     -- push runtime stack
-    table.insert(runtime_stack, utils.deep_copy(runtime.get_pkginfo()))
-    table.insert(runtime_stack, self.cmds)
+    table.insert(runtime_stack, utils.deep_copy(runtime.get_runtime_data()))
 
-    runtime.init()
+        runtime.init()
+        runtime.set_runtime_data({input_args = self.cmds})
 
-    if self.target and self.target ~= "" then
-        self:run_target_cmds()
-    else
-        self:run_nontarget_cmds()
-    end
-    index_manager:update()
+        if self.target and self.target ~= "" then
+            self:run_target_cmds()
+        else
+            self:run_nontarget_cmds()
+        end
+        index_manager:update()
 
     -- Note: pop sequence is important
     -- pop runtime stack
-    self.cmds = table.remove(runtime_stack)
-    runtime.set_pkginfo(table.remove(runtime_stack))
+    runtime_data = table.remove(runtime_stack)
+
+        runtime.set_runtime_data(runtime_data)
+        self.cmds = runtime_data.input_args
 end
 
 function CmdProcessor:run_target_cmds()
 -- target isnt nil - [is a package name]
-
-    runtime.set_pkginfo({ input_args = self.cmds.sysxpkg_args })
 
     if self.cmds.search then
         cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)

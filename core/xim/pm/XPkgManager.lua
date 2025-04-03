@@ -23,8 +23,9 @@ function XPkgManager:installed(xpkg)
     if xpkg.hooks["installed"] then
         ret = _try_execute_hook(xpkg.name, xpkg, "installed")
     else
-        if find_tool("xvm") then
-            ret = os.iorun("xvm list " .. xpkg.name)
+        local xvm_bin = path.join(runtime.get_bindir(), "xvm")
+        if os.isfile(xvm_bin) then
+            ret = os.iorun([[%s list %s]], xvm_bin, xpkg.name):trim()
         end
     end
 

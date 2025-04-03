@@ -96,7 +96,8 @@ function IndexManager:match_package_version(target)
 
     local target_versions = {}
     for name, pkg in pairs(self.index) do
-        if name:find(target_match_str, 1, true) == 1 then
+        local match_index = name:find(target_match_str, 1, true)
+        if match_index == 1 or (match_index and string.sub(name, match_index - 1, match_index - 1) == ":") then
             if pkg.installed then return name end
             table.insert(target_versions, name)
         end
