@@ -8,6 +8,8 @@ function _input_process(args)
         ["-y"] = false, -- -yes (boolean)
         ["--detect"] = false, -- -detect local installed software
         ["--disable-info"] = false, -- -feedback (boolean)
+        ["-g"] = false,
+        ["--global"] = false,
     }
 
     -- Mutually Exclusive Commands 
@@ -58,6 +60,7 @@ function _input_process(args)
         yes = boolean_cmds["-y"],
         sysdetect = boolean_cmds["--detect"],
         disable_info = boolean_cmds["--disable-info"],
+        enable_global = boolean_cmds["--global"] or boolean_cmds["-g"],
 
         list = kv_cmds["-l"],
         sysupdate = kv_cmds["--update"],

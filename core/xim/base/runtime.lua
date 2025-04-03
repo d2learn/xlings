@@ -4,27 +4,26 @@
 -- TODO: optimize, use other method provide runtime info for package hooks
 import("platform")
 
-pkginfo = {
-    name = "xpkg-name",
-    version = "0.0.0",
-    install_file = "xim-0.0.0.exe",
-    install_dir = "name/version",
-    input_args = "",
-}
-
 xim_data_dir = {
     linux = "/home/xlings/.xlings_data/xim",
     windows = "C:/Users/Public/.xlings_data/xim",
+}
+
+xim_runtime_data = {
+    pkginfo = {
+        name = "xpkg-name",
+        version = "0.0.0",
+        install_file = "xim-0.0.0.exe",
+        install_dir = "name/version",
+    },
+    input_args = {},
+    --rundir = "",
 }
 
 xim_data_dir = xim_data_dir[os.host()]
 xim_install_basedir = path.join(xim_data_dir, "xpkgs")
 xim_index_reposdir = path.join(xim_data_dir, "xim-index-repos")
 xim_local_index_repodir = path.join(xim_data_dir, "local-indexrepo")
-
-if not os.isdir(xim_data_dir) then
-    --os.mkdir(xim_data_dir)
-end
 
 function init()
     -- create xim data dir
@@ -45,25 +44,35 @@ function init()
     end
 end
 
+function get_runtime_data()
+    return xim_runtime_data
+end
+
+function set_runtime_data(data)
+    if data.pkginfo then
+        set_pkginfo(data.pkginfo)
+    end
+    if data.input_args then
+        xim_runtime_data.input_args = data.input_args
+    end
+end
+
 function get_pkginfo()
-    return pkginfo
+    return xim_runtime_data.pkginfo
 end
 
 function set_pkginfo(info)
     if info.name then
-        pkginfo.name = info.name
+        xim_runtime_data.pkginfo.name = info.name
     end
     if info.version then
-        pkginfo.version = info.version
+        xim_runtime_data.pkginfo.version = info.version
     end
     if info.install_file then
-        pkginfo.install_file = info.install_file
+        xim_runtime_data.pkginfo.install_file = info.install_file
     end
     if info.install_dir then
-        pkginfo.install_dir = info.install_dir
-    end
-    if info.input_args then
-        pkginfo.input_args = info.input_args
+        xim_runtime_data.pkginfo.install_dir = info.install_dir
     end
 end
 
@@ -73,6 +82,10 @@ function get_rundir()
         rundir = path.absolute(".")
     end
     return rundir
+end
+
+function get_bindir()
+    return platform.get_config_info().bindir
 end
 
 function get_xim_data_dir()
