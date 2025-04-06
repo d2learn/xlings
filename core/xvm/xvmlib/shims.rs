@@ -91,7 +91,7 @@ impl Program {
         self.alias = vdata.alias.clone();
     }
 
-    pub fn run(&self) {
+    pub fn run(&self) -> i32 {
         //println!("Running Program [{}], version {:?}", self.name, self.version);
         //println!("Args: {:?}", self.args);
         //println!("Envs: {:?}", self.envs);
@@ -108,13 +108,22 @@ impl Program {
             alias_args = alias.split_whitespace().collect();
         }
 
-        Command::new(&target)
+        let status = Command::new(&target)
             .args(alias_args)
             .args(&self.args)
             .env("PATH", self.get_path_env())
             .envs(self.envs.iter().cloned())
-            .status()
-            .expect("failed to execute process");
+            .status();
+
+        match status {
+            Ok(status) => {
+                status.code().unwrap_or(1)
+            },
+            Err(e) => {
+                eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+                1
+            }
+        }
 
         //println!("Program [{}] finished", self.name);
     }

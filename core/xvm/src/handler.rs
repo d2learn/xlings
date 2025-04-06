@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::exit;
 
 use clap::ArgMatches;
 use anyhow::{Result, Context};
@@ -238,9 +239,7 @@ pub fn xvm_run(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         program.add_args(&args);
     }
 
-    program.run();
-
-    Ok(())
+    exit(program.run());
 }
 
 pub fn xvm_list(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
