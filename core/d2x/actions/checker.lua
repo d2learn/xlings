@@ -14,8 +14,12 @@ import("llm.llm_interface")
 -- TODO: optimze
 target_to_code_file = { }
 
+-- don't use this, deprecated
 XLINGS_WAIT = "XLINGS_WAIT"
 XLINGS_RETURN = "XLINGS_RETURN"
+
+-- d2x flag
+D2X_WAIT = "D2X_WAIT"
 
 -- remove ../ or ..\
 function delete_path_prefix(path)
@@ -44,8 +48,8 @@ function print_info(target_name, built_targets, total_targets, target_files, out
     output = tostring(output):gsub(current_file_path_old, current_file_path)
     -- becuase d2x is running in the .xlings cache directory
     if config.d2x and output then
-        output = output:gsub(path.join("%.%.\\", config.name), config.name)
-            :gsub(path.join("%.%./", config.name), config.name)
+        output = output:replace([[../]] .. config.d2x.checker.name, config.d2x.checker.name)
+            :replace([[..\]] .. config.d2x.checker.name, config.d2x.checker.name)
     end
 
     -- print progress_bar
@@ -257,7 +261,8 @@ function main(start_target, opt)
                             if string.find(output, "❌", 1, true) then
                                 status = false
                                 build_success = false
-                            elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) then
+                            -- TODO: optimize, remove XLINGS_*
+                            elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) or string.find(output, D2X_WAIT) then
                                 build_success = false
                             end
                         end
@@ -303,7 +308,15 @@ function main(start_target, opt)
                         --      old_output_llm_req ~= output will be to true ?
                         if old_output_llm_req ~= output then
                             if compile_bypass_counter >= 1 and output then
-                                llm_interface.send_request(output)
+                                local sourcecode = "[sourcecode]: \n"
+                                for  _, file in ipairs((files)) do
+                                    sourcecode = sourcecode .. "--" .. file .. "\n"
+                                    file = path.absolute(file)
+                                    local file_content = io.readfile(file)
+                                    sourcecode = sourcecode .. file_content .. "\n"
+                                end
+                                local llm_request = sourcecode .. "\n\n [compiler output]: \n" .. output
+                                llm_interface.send_request(llm_request)
                                 old_output_llm_req = output
                             else
                                 platform.set_llm_response("...")
