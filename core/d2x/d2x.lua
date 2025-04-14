@@ -61,7 +61,7 @@ function main(action, ...)
         if os.isdir(bookdir) then
             os.iorun("mdbook serve --open " .. bookdir)
         else
-            cprint("[d2x]: ${yellow}book directory already exists.")
+            cprint("[xligns:d2x]: ${yellow}book directory already exists.")
         end
     elseif action == "run" then
         actions.run(main_target)
