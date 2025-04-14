@@ -3,7 +3,6 @@
 export XLINGS_HOME_DIR=/home/xlings
 export XLINGS_DIR=/home/xlings/.xlings # default use home's xlings
 export XLINGS_RUN_DIR=`pwd`
-export XLINGS_CACHE_DIR=$XLINGS_RUN_DIR/.xlings
 export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
 
 # check XLINGS_DIR, if not exist, use /usr/share/xlings
@@ -17,17 +16,5 @@ if [ "$UID" -eq 0 ]; then
     export XMAKE_ROOT=y
 fi
 
-if [ -f $XLINGS_RUN_DIR/config.xlings ]; then
-    mkdir -p $XLINGS_CACHE_DIR
-    cp -f $XLINGS_RUN_DIR/config.xlings $XLINGS_CACHE_DIR/config-xlings.lua
-    cp -f $XLINGS_DIR/tools/template.linux.xlings $XLINGS_CACHE_DIR/xmake.lua
-fi
-
-if ([ "$1" = "d2x" ] && [ "$2" == "checker" ]) || ([ "$1" = "install" ] && [ -z "$2" ] && [ -f $XLINGS_RUN_DIR/config.xlings ]); then
-    cd $XLINGS_CACHE_DIR
-    xmake l config-xlings.lua || exit $?
-else
-    cd $XLINGS_DIR/core
-fi
-
+cd $XLINGS_DIR/core
 xmake xlings $XLINGS_RUN_DIR "$@"

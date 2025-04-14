@@ -218,6 +218,10 @@ end
 
 function clean()
     os.tryrm(path.join(platform.get_config_info().install_dir, "core", ".xmake"))
+    if is_host("linux") then
+        -- TODO: fix homedir issue for windows/linux
+        os.tryrm(path.join("/home/xlings", ".xmake"))
+    end
     os.iorun("xmake g -c")
     cprint("[xlings]: clean xlings tmp files - ${green}ok${clear}")
 end

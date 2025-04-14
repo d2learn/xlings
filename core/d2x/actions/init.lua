@@ -15,8 +15,8 @@ local __dslingsdir = nil
 project_config_template = [[
 xname = "%s" -- project name
 
--- xim-deps
-xdeps = {
+-- xim-deps / xdeps (deprecated)
+xim = {
     mdbook = "",
     vscode = "",
     %s = "", -- language
@@ -54,10 +54,10 @@ function init_project_base(name)
     local projectfile = path.join(__projectdir, "config.xlings")
     local project_ignore = path.join(__projectdir, ".gitignore")
 
-    cprint("[d2x]: create [%s] project...", name)
+    cprint("[xligns:d2x]: create [%s] project...", name)
     os.mkdir(__projectdir)
 
-    cprint("[d2x]: init project config file...")
+    cprint("[xligns:d2x]: init project config file...")
     common.xlings_create_file_and_write(
         projectfile,
         string.format(project_config_template, name, __projectlang)
@@ -71,7 +71,7 @@ function init_project_base(name)
 ]]
 
     if os.isfile(project_ignore) then
-        cprint("[d2x]: add .gitignore...")
+        cprint("[xligns:d2x]: add .gitignore...")
         common.xlings_file_append(project_ignore, gitignore_content)
     else
         common.xlings_create_file_and_write(project_ignore, gitignore_content)
@@ -81,7 +81,7 @@ end
 
 function init_book()
 
-    cprint("[d2x]: init book...")
+    cprint("[xligns:d2x]: init book...")
 
     if not os.isdir(__book_folder_name) then
         os.mkdir(__book_folder_name)
@@ -91,14 +91,14 @@ function init_book()
     --os.iorun("mdbook serve " .. __book_folder_name)
 
     -- add .gitignore
-    cprint("[d2x]: add .gitignore...")
+    cprint("[xligns:d2x]: add .gitignore...")
     common.xlings_create_file_and_write(
         path.join(__book_folder_name, ".gitignore"),
         "book"
     )
 
     -- add book config file
-    cprint("[d2x]: add book.toml...")
+    cprint("[xligns:d2x]: add book.toml...")
     common.xlings_create_file_and_write(
         path.join(__book_folder_name, "book.toml"),
         book_config_template
@@ -109,7 +109,7 @@ function init_book()
 end
 
 function init_exercises()
-    cprint("[d2x]: init exercises...")
+    cprint("[xligns:d2x]: init exercises...")
 
     local file
     local x_template
@@ -170,5 +170,5 @@ function main(name, dslings, lang)
     init_book()
     init_exercises()
 
-    cprint("[d2x]: ${green}%s${clear} | ${yellow}%s${clear}", name, __projectdir)
+    cprint("[xligns:d2x]: ${green}%s${clear} | ${yellow}%s${clear}", name, __projectdir)
 end

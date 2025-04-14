@@ -1,3 +1,5 @@
+[![Xlings Test - CI](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml/badge.svg?branch=main)](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml)
+
 <div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
 
 <div align="center">
@@ -14,17 +16,16 @@
   |
   <a href="https://github.com/d2learn/xim-pkgindex" target="_blank">Package Index</a>
   |
-  <a href="https://github.com/orgs/d2learn/projects/5" target="_blank">开发看板</a>
-  |
   <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
 
-<div align=center><b>一个跨平台的开发者工具集</b> - XIM跨平台包管理器、XVM通用多版本管理工具、 D2X公开课/教程项目搭建工具</div>
+<div align=center><b>一个跨平台的开发者工具</b> - 包管理器 + 多版本管理 + 项目搭建工具</div>
 
 ---
 
 ## 最近动态
 
+- 优化命令行使用体验: 常用命令支持xlings调用, 高级功能使用子命令xim/xvm/d2x - [PR](https://github.com/d2learn/xlings/pull/86) - 2025/4/15
 - d2x: 重构公开课/教程项目相关命令, 形成独立的d2x工具 - [PR](https://github.com/d2learn/xlings/pull/79) - 2025/2/19
 - xim: 增加archlinux上aur的支持 - [PR](https://github.com/d2learn/xlings/pull/67) - 2025/1/10
 - xvm: 增加版本管理模块 - [文章](https://forum.d2learn.org/topic/62) / [PR](https://github.com/d2learn/xlings/pull/60) - 2025/1/1
@@ -64,56 +65,47 @@ Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt
 
 ## 工具用法简介
 
-### XIM | 包管理工具
+### 多版本软件安装及管理
 
-> 一个支持**多版本共存**的包管理工具 - 不仅支持软件/工具安装、还支持**一键环境配置**
+> 支持**多版本共存**的包管理 - 不仅支持软件/工具安装、还支持**环境配置**
 
 ```bash
 # 配置环境
-xim c
-xim python
+xlings install c
+xlings install python
 # 安装工具
-xim devcpp
-xim vscode
+xlings install devcpp
+xlings install vscode
+
+# 安装指定版本package@version和版本切换
+xlings install vscode@1.93.1
+xlings use vscode 1.93.1
+
+# 卸载指定版本
+xlings remove vscode@1.93.1
 ```
 
-更多用法见 -> [xim-readme](https://github.com/d2learn/xlings/tree/main/core/xim)
+高级用法见 -> [xim-readme](https://github.com/d2learn/xlings/tree/main/core/xim) / [xvm-readme](https://github.com/d2learn/xlings/tree/main/core/xvm)
 
-### XVM | 版本管理工具
+### 项目搭建
 
-> 一个简单且通用的版本管理工具 - 支持多版本管理、支持**工作空间和环境隔离**、支持多版本的命令别名
-
-```bash
-# xvm add [target] [version] --path [bin-path] --alias [command/bin-file]
-xvm add python 2.7.18 --alias python2
-xvm add python 3.12.3 --alias python3
-xvm use python 3
-python --version # 验证python实际是否为python3
-xvm use python 2
-python --version # 验证python实际是否为python2
-```
-
-更多用法见 -> [xvm-readme](https://github.com/d2learn/xlings/tree/main/core/xvm)
-
-### D2X | 公开课/教程工具
-
-> 可以搭建交互式的公开课或教程项目, 支持电子书、练习代码自动检测...
+> 搭建交互式的公开课或教程项目, 支持环境自动配置、电子书、练习代码自动检测...
 >
 > 示例项目: [d2ds | 动手学数据结构](https://github.com/d2learn/d2ds)
 
 ```bash
-# 创建hello教程项目
-d2x new hello
+# 创建项目模板 - hello教程项目
+xlings new hello
 cd hello
 # 安装项目依赖
 xlings install
-# 启动自动代码检测
-d2x checker
+# 启动自动代码检测(编译器驱动开发模式)
+xlings checker
 ```
 
-更多用法见 -> [d2x-readme](https://github.com/d2learn/xlings/tree/main/core/d2x)
+高级用法见 -> [d2x-readme](https://github.com/d2learn/xlings/tree/main/core/d2x)
 
-### XDEPS | 项目依赖管理
+### 项目依赖管理
 
 > 在配置文件所在目录运行install命令安装项目依赖(`config.xlings`配置文件一般放到项目根目录)
 
@@ -121,7 +113,7 @@ d2x checker
 
 ```lua
 xname = "ProjectName"
-xdeps = {
+xim = {
     cpp = "",
     python = "3.12",
     vs = "2022",

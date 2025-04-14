@@ -16,9 +16,11 @@ function xlings_help()
     cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
 
     cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}d2x${clear},      \t d2x project command")
-    cprint("\t ${magenta}install${clear},  \t install software/env(${magenta}target${clear})")
-    cprint("\t ${magenta}vm${clear},      \t xlings version manager")
+    cprint("\t ${magenta}new${clear},      \t create project template")
+    cprint("\t ${magenta}install${clear},  \t install packages or project dependencies")
+    cprint("\t ${magenta}use${clear},      \t swtich target version")
+    cprint("\t ${magenta}remove${clear},   \t remove packages")
+    cprint("\t ${magenta}checker${clear},  \t run project's exercise checker")
     cprint("\t ${magenta}self${clear},     \t self management")
     cprint("\t ${magenta}help${clear},     \t help info")
     cprint("")
@@ -27,6 +29,7 @@ function xlings_help()
     cprint("\t ${green}xim${clear},     \t xlings installation manager")
     cprint("\t ${green}xvm${clear},     \t xlings version manager")
     cprint("\t ${green}d2x${clear},     \t xlings d2x project tool")
+    cprint("\t ${green}xself${clear},   \t xlings self management")
     cprint("")
     cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
     cprint("")
@@ -91,20 +94,100 @@ function deps_check_and_install(xdeps)
 
 end
 
-function _command_call(command, target, cmd_args)
+function _submodule_call(command, action, cmd_args)
     if cmd_args then
-        command(target, unpack(cmd_args))
+        command(action, unpack(cmd_args))
     else
-        command(target)
+        command(action)
     end
 end
 
-function xlings_vm(cmd_target, cmd_args)
-    if cmd_args then
-        os.execv("xvm", { cmd_target, unpack(cmd_args) })
-    else
-        cmd_target = cmd_target or "--help"
-        os.execv("xvm", { cmd_target })
+function _command_dispatch(command, action, target, cmd_args)
+    local args = cmd_args or {}
+    if target then
+        table.insert(args, 1, target)
+    end
+    _submodule_call(command, action, args)
+end
+
+function xlings_xvm_use(cmd_target, cmd_args)
+    try {
+        function()
+            if cmd_target and cmd_args then
+                os.execv("xvm", { "use", cmd_target, unpack(cmd_args) })
+            elseif cmd_target then
+                os.execv("xvm", { "list", cmd_target })
+            else
+                cprint("[xlings]: ${red}switch version failed...")
+                cprint("")
+                cprint("\t${cyan bright}xlings use [target] [version] ${clear}")
+                cprint("")
+            end
+        end,
+        catch {
+            function()
+                os.execv("xvm", { "--help" })
+            end
+        }
+    }
+end
+
+function recall_if(rundir, command, cmd_target, args)
+    local config_file = path.join(rundir, "config.xlings")
+    if os.isfile(config_file) then
+
+        -- 0.generate xlings config file and verify
+        local local_config_dir = path.join(rundir, ".xlings")
+        if not os.isdir(local_config_dir) then os.mkdir(local_config_dir) end
+        local tmp_file = path.join(local_config_dir, "config-xlings.lua")
+        os.tryrm(tmp_file)
+        os.cp(config_file, tmp_file)
+        try { -- TODO: config file verify
+            function ()
+                import("config-xlings", {rootdir = local_config_dir})
+            end,
+            catch {
+                function (e)
+                    cprint("[xlings]: ${yellow}load local ${red bright}config.xlings${clear} ${yellow}failed...")
+                    print("\n" .. tostring(e) .. "\n")
+                    os.raise("please check: [ %s ]", config_file)
+                end
+            }
+        }
+
+        -- 1. copy project file (xmake)
+        local xmake_template_file = path.join(
+            platform.get_config_info().install_dir,
+            "tools",
+            "template." .. os.host() .. ".xlings"
+        )
+        local xmake_file = path.join(local_config_dir, "xmake.lua")
+
+        os.tryrm(xmake_file)
+        os.cp(xmake_template_file, xmake_file)
+
+        local need_recall = false
+
+        if os.projectdir() ~= local_config_dir then
+            cmd_target = cmd_target or ""
+            if command == "checker" then need_recall = true
+            elseif command == "install" and cmd_target == "" then need_recall = true
+            elseif command == "d2x" and cmd_target == "checker" then need_recall = true
+            end
+        end
+
+        --print("command: " .. command)
+        --print("need_recall: " .. tostring(need_recall))
+        --print([[%s - %s]], os.projectdir(), local_config_dir)
+
+        if need_recall then
+            local xlings_args = args or {}
+            if cmd_target ~= "" then table.insert(xlings_args, 1, cmd_target) end
+            table.insert(xlings_args, 1, command)
+            os.cd(local_config_dir)
+            os.execv("xmake", { "xlings", rundir, unpack(xlings_args) })
+            os.exit()
+        end
     end
 end
 
@@ -117,7 +200,10 @@ function main()
 
     -- config info - config.xlings
     local xname = option.get("xname")
-    local xdeps = option.get("xdeps")
+    local xdeps = option.get("xdeps") -- TODO: deprecated, use xim
+    if option.get("xim_deps") then
+        xdeps = option.get("xim_deps")
+    end
     local d2x_config = option.get("d2x_config")
 
     -- TODO: rename
@@ -141,6 +227,9 @@ function main()
         platform.set_llm_system_bg(xlings_llm_config.bg)
     end
 
+    -- TODO: optimize
+    recall_if(run_dir, command, cmd_target, cmd_args)
+
     --print(run_dir)
     --print(command)
     --print(cmd_target)
@@ -158,25 +247,37 @@ function main()
     end
 
     -- TODO: optimize auto-deps install - xinstall(xx)
-    if command == "d2x" then
-        -- TODO: support d2x command args
-        --xinstall(xlings_lang, "-y", "--disable-info")
-        _command_call(d2x, cmd_target, cmd_args)
-    elseif command == "config" then
-        config.llm()
+    if command == "new" then
+        _command_dispatch(d2x, "new", cmd_target, cmd_args)
     elseif command == "install" then
+        -- TODO: only support install, and move deps to xinstall/xim
         if cmd_target then
-            _command_call(xinstall, cmd_target, cmd_args)
+            _submodule_call(xinstall, cmd_target, cmd_args)
         elseif xdeps then
             deps_check_and_install(xdeps)
         else
             xinstall()
         end
-    elseif command == "vm" then
-        xlings_vm(cmd_target, cmd_args)
-    elseif command == "self" then
-        _command_call(xself, cmd_target, cmd_args)
-    else
-        xlings_help()
+    elseif command == "use" then
+        xlings_xvm_use(cmd_target, cmd_args)
+    elseif command == "checker" then
+        _command_dispatch(d2x, "checker", cmd_target, cmd_args)
+    elseif command == "remove" then
+        _command_dispatch(xinstall, "-r", cmd_target, cmd_args)
+    elseif command == "config" then
+        config.llm()
+    else -- submodule
+        local submodule_map = {
+            ["d2x"] = d2x,
+            --["im"] = xinstall,
+            ["self"] = xself,
+        }
+
+        if submodule_map[command] then
+            _submodule_call(submodule_map[command], cmd_target, cmd_args)
+        else
+            xlings_help()
+        end
+        
     end
 end
