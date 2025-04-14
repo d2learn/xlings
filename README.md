@@ -1,3 +1,5 @@
+[![Xlings Test - CI](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml/badge.svg?branch=main)](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml)
+
 <div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
 
 <div align="center">
@@ -13,8 +15,6 @@
   <a href="README.en.md" target="_blank">English</a>
   |
   <a href="https://github.com/d2learn/xim-pkgindex" target="_blank">Package Index</a>
-  |
-  <a href="https://github.com/orgs/d2learn/projects/5" target="_blank">开发看板</a>
   |
   <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
