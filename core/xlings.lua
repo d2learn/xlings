@@ -136,36 +136,7 @@ function recall_if(rundir, command, cmd_target, args)
     local config_file = path.join(rundir, "config.xlings")
     if os.isfile(config_file) then
 
-        -- 0.generate xlings config file and verify
         local local_config_dir = path.join(rundir, ".xlings")
-        if not os.isdir(local_config_dir) then os.mkdir(local_config_dir) end
-        local tmp_file = path.join(local_config_dir, "config-xlings.lua")
-        os.tryrm(tmp_file)
-        os.cp(config_file, tmp_file)
-        try { -- TODO: config file verify
-            function ()
-                import("config-xlings", {rootdir = local_config_dir})
-            end,
-            catch {
-                function (e)
-                    cprint("[xlings]: ${yellow}load local ${red bright}config.xlings${clear} ${yellow}failed...")
-                    print("\n" .. tostring(e) .. "\n")
-                    os.raise("please check: [ %s ]", config_file)
-                end
-            }
-        }
-
-        -- 1. copy project file (xmake)
-        local xmake_template_file = path.join(
-            platform.get_config_info().install_dir,
-            "tools",
-            "template." .. os.host() .. ".xlings"
-        )
-        local xmake_file = path.join(local_config_dir, "xmake.lua")
-
-        os.tryrm(xmake_file)
-        os.cp(xmake_template_file, xmake_file)
-
         local need_recall = false
 
         if os.projectdir() ~= local_config_dir then
@@ -181,6 +152,36 @@ function recall_if(rundir, command, cmd_target, args)
         --print([[%s - %s]], os.projectdir(), local_config_dir)
 
         if need_recall then
+            -- 0.generate xlings config file and verify
+            if not os.isdir(local_config_dir) then os.mkdir(local_config_dir) end
+            local tmp_file = path.join(local_config_dir, "config-xlings.lua")
+            os.tryrm(tmp_file)
+            os.cp(config_file, tmp_file)
+            try { -- TODO: config file verify
+                function ()
+                    import("config-xlings", {rootdir = local_config_dir})
+                end,
+                catch {
+                    function (e)
+                        cprint("[xlings]: ${yellow}load local ${red bright}config.xlings${clear} ${yellow}failed...")
+                        print("\n" .. tostring(e) .. "\n")
+                        os.raise("please check: [ %s ]", config_file)
+                    end
+                }
+            }
+
+            -- 1. copy project file (xmake)
+            local xmake_template_file = path.join(
+                platform.get_config_info().install_dir,
+                "tools",
+                "template." .. os.host() .. ".xlings"
+            )
+            local xmake_file = path.join(local_config_dir, "xmake.lua")
+
+            os.tryrm(xmake_file)
+            os.cp(xmake_template_file, xmake_file)
+
+            -- 2. recall xlings in local config dir
             local xlings_args = args or {}
             if cmd_target ~= "" then table.insert(xlings_args, 1, cmd_target) end
             table.insert(xlings_args, 1, command)
