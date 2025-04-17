@@ -170,8 +170,6 @@ function main(start_target, opt)
 
     if not start_target then start_target = "" end -- TODO: optimize
 
-    common.xlings_clear_screen()
-
     -- xlings project's cache dir(xmake.lua)
     local base_dir = os.projectdir()
     os.cd(base_dir) -- avoid other module's side effect
@@ -184,12 +182,16 @@ function main(start_target, opt)
         detect_recursion = true
     else -- is xrun - TODO: optimize
         --detect_recursion = false
+        if start_target == "" then os.raise("target is empty, please run in d2x-project's root directory") end
         local files = project.targets()[start_target]:sourcefiles()
         if #files > 0 then
             local file = path.absolute(files[1])
             detect_dir = path.directory(file)
         end
     end
+
+    common.xlings_clear_screen()
+
     fwatcher.add(detect_dir, {recursion = detect_recursion})
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
 

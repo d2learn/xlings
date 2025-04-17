@@ -16,7 +16,7 @@ function install()
         cprint("[xlings]: create xlings home dir %s", xlings_homedir)
         local current_user = os.getenv("USER")
         sudo.exec("mkdir -p " .. xlings_homedir)
-        sudo.exec(string.format("chown %s:%s %s", current_user, current_user, xlings_homedir))
+        sudo.exec(string.format("chown %s %s", current_user, xlings_homedir))
     end
 
     cprint("[xlings]: install xlings to %s", platform.get_config_info().install_dir)
@@ -208,6 +208,7 @@ function config(cmds)
 
     if not user_included and cmds["config--adduser"] then
         sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
+        sudo.exec("chmod -R g+rwx " .. path.join("/home/xlings", ".xmake"))
         cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
     elseif cmds["config--deluser"] and user_included then
         sudo.exec("gpasswd -d " .. cmds["config--deluser"] .. " xlings")
