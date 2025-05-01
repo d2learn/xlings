@@ -211,6 +211,14 @@ function IndexStore:build_pmwrapper_index(indexdir)
                     installed = false,
                 }
             end
+
+            -- TODO: optimize name@pmwrapper namespace issues
+            if key and self._index_data[name .. "@pmwrapper"] == nil then
+                self._index_data[name .. "@pmwrapper"] = {
+                    ref = key
+                }
+            end
+
             -- (key)os support and not exist xpm index
             if key and self._index_data[name] == nil then
                 self._index_data[name] = { ref = key }

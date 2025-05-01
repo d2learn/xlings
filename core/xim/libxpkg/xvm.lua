@@ -32,7 +32,7 @@ function add(name, config)
 
     local envs_args = ""
     for k, v in pairs(envs) do
-        envs_args = envs_str .. string.format([[ --env "%s=%s" ]], k, v)
+        envs_args = envs_args .. string.format([[ --env "%s=%s" ]], k, v)
     end
 
     __xvm_run(string.format(
