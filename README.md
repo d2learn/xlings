@@ -14,7 +14,7 @@
   -
   <a href="README.en.md" target="_blank">English</a>
   |
-  <a href="https://github.com/d2learn/xim-pkgindex" target="_blank">Package Index</a>
+  <a href="https://d2learn.github.io/xim-pkgindex" target="_blank">Package Index</a>
   |
   <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
