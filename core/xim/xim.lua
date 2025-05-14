@@ -10,6 +10,7 @@ function _input_process(args)
         ["--disable-info"] = false, -- -feedback (boolean)
         ["-g"] = false,
         ["--global"] = false,
+        ["--info-json"] = false, -- TODO: optimize this
     }
 
     -- Mutually Exclusive Commands 
@@ -67,6 +68,8 @@ function _input_process(args)
         sysadd_xpkg = kv_cmds["--add-xpkg"],
         sysadd_indexrepo = kv_cmds["--add-indexrepo"],
         sysxpkg_args = kv_cmds["--xpkg-args"],
+
+        info_json = boolean_cmds["--info-json"],
     }
 
     return main_target, cmds

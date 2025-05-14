@@ -68,14 +68,25 @@ function CmdProcessor:run_target_cmds()
 
         local target_pkgname = index_manager:match_package_version(self.target)
         if target_pkgname then
-            cprint("${dim}[xlings:xim]: create pm executor for <%s> ... ${clear}", self.target)
+            if not self.cmds.info_json then
+                cprint("${dim}[xlings:xim]: create pm executor for <%s> ... ${clear}", self.target)
+            end
 
             local input_target = self.target
             local pkg = index_manager:load_package(target_pkgname)
             self._pm_executor = pm_service:create_pm_executor(pkg)
             self.target = target_pkgname
 
-            if self.cmds.remove then
+            if self.cmds.info_json then
+                local pkginfo = self._pm_executor._pkg:info()
+                local deps_list = self._pm_executor:deps()
+                pkginfo["dependencies"] = {}
+                for _, dep_name in ipairs(deps_list) do
+                    pkginfo.dependencies[dep_name] = ""
+                end
+                import("core.base.json")
+                print(json.encode(pkginfo))
+            elseif self.cmds.remove then
                 self:remove()
             elseif self.cmds.update then
                 self:update()
