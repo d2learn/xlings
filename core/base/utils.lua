@@ -59,7 +59,7 @@ function low_latency_urls(urls)
 
     for _, url in ipairs(urls) do
         local latency = url_latency(url)
-        cprint("${dim}Latency of URL '" .. url .. "': ${green}" .. latency .. "ms")
+        cprint("${dim}[xlings]: Latency of URL '" .. url .. "': ${green}" .. latency .. "ms")
         if latency and latency < min_latency then
             min_latency = latency
             min_url = url

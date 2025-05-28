@@ -9,7 +9,7 @@ local os_info = utils.os_info()
 function new(pkg)
     local instance = {}
     debug.setmetatable(instance, XPackage)
-    instance.version, instance.pdata = _dereference(pkg.version, pkg.data.package)
+    instance:_init(pkg.version, pkg.data.package)
     instance.name = instance.pdata.name
     instance.hooks = {
         installed = pkg.data.installed,
@@ -59,13 +59,19 @@ function XPackage:get_deps()
     return self.pdata.xpm[os_info.name].deps or {}
 end
 
-function _dereference(version, package)
+-- _derefence for data
+function XPackage:_init(version, package)
     local real_os_key = utils.xpm_target_os_helper(package.xpm)
     local _, entry = utils.deref(package.xpm, real_os_key)
     -- if xpm[os_info.name] is not found or is ref, add/update it
     package.xpm[os_info.name] = entry
     version, _ = utils.deref(package.xpm[os_info.name], version)
-    return version, package
+
+    self._real_os_key = real_os_key
+    self.version = version
+    self.pdata = package
+
+    --return version, package
 end
 
 --- XPackage Spec

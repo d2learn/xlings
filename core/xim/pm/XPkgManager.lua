@@ -2,6 +2,8 @@ import("devel.git")
 import("utils.archive")
 import("lib.detect.find_tool")
 
+import("config.xconfig")
+
 import("xim.base.github")
 import("xim.base.utils")
 import("xim.base.runtime")
@@ -40,8 +42,29 @@ end
 
 function XPkgManager:download(xpkg)
     local res = xpkg:get_xpm_resources()
-    local url = res.url
-    local sha256 = res.sha256
+    local url
+    local sha256
+
+    if res == "XLINGS_RES" then
+        --"https://github.com/xlings-res/xvm/releases/download/0.0.2/xvm-0.0.2-linux.tar.gz"
+        --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.2/xvm-0.0.2-linux.tar.gz"
+        local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s.%s]]
+        local res_server = xconfig.load().xim["res-server"]
+        local pkgname = xpkg.name
+        local pkgver = xpkg.version
+        local osname = xpkg._real_os_key -- TODO: optimize this
+        local file_ext = (osname == "windows") and "zip" or "tar.gz"
+        url = string.format(
+            res_url_template,
+            res_server,
+            pkgname,
+            pkgver,
+            pkgname, pkgver, osname, file_ext
+        )
+    else
+        url = res.url
+        sha256 = res.sha256
+    end
 
     if not url then
         cprint("[xlings:xim]: ${dim}skip download (url is nil)${clear}")
