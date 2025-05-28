@@ -3,6 +3,8 @@ import("privilege.sudo")
 import("platform")
 import("common")
 import("base.utils")
+import("base.log")
+import("config.i18n")
 
 local xinstall = import("xim.xim")
 
@@ -268,24 +270,6 @@ function uninstall()
 
 end
 
-function help()
-    -- xlings self [install|init|update|uninstall]
-    -- please help me generate by copilot
-    cprint("${bright}\t[ xlings self ]${clear} - xlings self sub-command")
-    cprint("")
-    cprint("${bright}Usage: $ ${cyan}xlings self [command]\n")
-    cprint("${bright}Usage: $ ${cyan}xself [command]\n")
-    cprint("")
-    cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}init${clear},     \t init xlings")
-    cprint("\t ${magenta}config${clear},   \t config xlings")
-    cprint("\t ${magenta}update${clear},   \t update xlings to the latest version")
-    cprint("\t ${magenta}clean${clear},    \t clean xlings tmp files")
-    cprint("\t ${magenta}uninstall${clear},\t uninstall xlings")
-    cprint("\t ${magenta}help${clear},     \t help info")
-    cprint("")
-end
-
 function main(action, ...)
 
     action = action or ""
@@ -312,6 +296,6 @@ function main(action, ...)
     elseif action == "uninstall" then
         uninstall()
     else
-        help()
+        log.i18n_print(i18n.data()["xself"].help, action)
     end
 end

@@ -1,4 +1,6 @@
 import("platform")
+import("base.log")
+import("config.i18n")
 
 import("d2x.actions")
 
@@ -26,23 +28,6 @@ function _input_process(action, args)
     end
 
     return main_target, kv_cmds
-end
-
-function help()
-    cprint("${bright}d2x version:${clear} pre-v0.0.2")
-    cprint("")
-    cprint("${bright}Usage: $ ${cyan}d2x [command] [target]\n")
-
-    cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}new${clear},      \t create new d2x project")
-    cprint("\t ${magenta}book${clear},     \t open project's book")
-    cprint("\t ${magenta}run${clear},      \t run sourcecode file")
-    cprint("\t ${magenta}checker${clear},  \t run checker for d2x project's exercises")
-    cprint("\t ${magenta}help${clear},     \t help info")
-    cprint("")
-
-    cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
-    cprint("")
 end
 
 function main(action, ...)
@@ -73,6 +58,6 @@ function main(action, ...)
         end
         actions.checker(main_target, { editor = cmds["checker--editor"] })
     else
-        help()
+        log.i18n_print(i18n.data()["d2x"].help, action)
     end
 end

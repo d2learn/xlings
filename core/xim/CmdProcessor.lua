@@ -4,6 +4,9 @@ import("lib.detect.find_tool")
 
 import("common")
 
+import("base.log")
+import("config.i18n")
+
 import("xim.base.utils")
 import("xim.base.runtime")
 import("xim.pm.XPackage")
@@ -347,43 +350,7 @@ function _target_parse(target)
 end
 
 function CmdProcessor:help()
-    cprint("")
-    cprint("\t${bright}XIM - Xlings Installation Manager${clear}")
-    cprint("")
-
-    cprint("${bright}xim version:${clear} pre-v0.0.2")
-    cprint("")
-    cprint("${bright}Usage1: $ ${cyan}xlings install [command] [target]")
-    cprint("${bright}Usage2: $ ${cyan}xim [command] [target]")
-    cprint("")
-
-    cprint("${bright}Commands:${clear}")
-    cprint("  ${magenta}-i${clear},   install,   install software/package/env")
-    cprint("  ${magenta}-r${clear},   remove,    remove the software/package/env")
-    cprint("  ${magenta}-u${clear},   update,    update the software/package/env")
-    cprint("  ${magenta}-l${clear},   list,      list all installed software/packages/env")
-    cprint("  ${magenta}-s${clear},   search,    search for a software/package")
-    cprint("  ${magenta}-h${clear},   help,      display this help message")
-    cprint("")
-
-    cprint("${bright}SysCommands:${clear}")
-    cprint("  ${magenta}--detect${clear},        detect local software/packages")
-    cprint("  ${magenta}--update${clear},        update [self | index]")
-    cprint("  ${magenta}--add-xpkg${clear},      add xpkg file to index database")
-    cprint("  ${magenta}--xpkg-args${clear},     xpkg args")
-    cprint("  ${magenta}--add-indexrepo${clear}, add indexrepo to repo manager")
-    cprint("  ${magenta}--disable-info${clear},  disable info display")
-    cprint("")
-
-    cprint("${bright}Examples:${clear}")
-    cprint("  ${cyan}xim vscode${clear}     -- install vscode")
-    cprint("  ${cyan}xim -r vscode${clear}  -- remove/uninstall vscode")
-    cprint("  ${cyan}xim -l${clear}         -- list all installed software/packages")
-    cprint("  ${cyan}xim -s code${clear}    -- search for software/package with 'code'")
-
-    cprint("")
-    cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
-    cprint("")
+    log.i18n_print(i18n.data()["xim"].help)
 end
 
 function CmdProcessor:target_tips(opt)
