@@ -5,35 +5,13 @@ import("platform")
 import("common")
 import("config")
 
+import("base.log")
+import("config.i18n")
+
 import("xself")
 
 local xinstall = import("xim.xim")
 local d2x = import("d2x.d2x")
-
-function xlings_help()
-    cprint("${bright}xlings version:${clear} pre-v0.0.2")
-    cprint("")
-    cprint("${bright}Usage: $ ${cyan}xlings [command] [target]\n")
-
-    cprint("${bright}Commands:${clear}")
-    cprint("\t ${magenta}new${clear},      \t create project template")
-    cprint("\t ${magenta}install${clear},  \t install packages or project dependencies")
-    cprint("\t ${magenta}use${clear},      \t swtich target version")
-    cprint("\t ${magenta}remove${clear},   \t remove packages")
-    cprint("\t ${magenta}checker${clear},  \t run project's exercise checker")
-    cprint("\t ${magenta}self${clear},     \t self management")
-    cprint("\t ${magenta}help${clear},     \t help info")
-    cprint("")
-
-    cprint("${bright}Tools:${clear}")
-    cprint("\t ${green}xim${clear},     \t xlings installation manager")
-    cprint("\t ${green}xvm${clear},     \t xlings version manager")
-    cprint("\t ${green}d2x${clear},     \t xlings d2x project tool")
-    cprint("\t ${green}xself${clear},   \t xlings self management")
-    cprint("")
-    cprint("更多(More): ${underline}https://d2learn.org/xlings${clear}")
-    cprint("")
-end
 
 function deps_check_and_install(xdeps)
 
@@ -277,7 +255,7 @@ function main()
         if submodule_map[command] then
             _submodule_call(submodule_map[command], cmd_target, cmd_args)
         else
-            xlings_help()
+            log.i18n_print(i18n.data()["help"])
         end
         
     end
