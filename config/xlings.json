@@ -1,5 +1,10 @@
 {
   "need_update": true,
+  "homedir": {
+    "linux": "/home/xlings",
+    "macosx": "/Users/xlings",
+    "windows": "C:/Users/Public"
+  },
   "xim": {
     "index-repo": "https://github.com/d2learn/xim-pkgindex.git",
     "res-server": "https://github.com/xlings-res",

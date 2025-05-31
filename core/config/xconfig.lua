@@ -1,6 +1,5 @@
 import("core.base.json")
 
-import("platform")
 import("base.utils")
 
 local xlings_config = {
@@ -12,8 +11,8 @@ local xlings_config = {
 }
 
 function load()
-    local config = platform.get_config_info()
-    local xlings_config_file = path.join(config.rcachedir, "xlings.json")
+    local projectdir = path.directory(path.directory(os.scriptdir()))
+    local xlings_config_file = path.join(path.join(projectdir, "config"), "xlings.json")
     if xlings_config.need_load_flag and os.isfile(xlings_config_file) then
         xlings_config = json.loadfile(xlings_config_file)
         if xlings_config["need_update"] then
