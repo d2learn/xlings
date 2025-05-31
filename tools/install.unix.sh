@@ -1,6 +1,9 @@
 #!/bin/bash
 
 RUN_DIR=`pwd`
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+XMAKE_BIN="$ROOT_DIR/bin/xmake"
 
 # ANSI color codes
 RED='\033[31m'
@@ -17,8 +20,8 @@ echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${
 if ! command -v xmake &> /dev/null
 then
     echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
-    curl -fsSL https://xmake.io/shget.text | bash
-    source ~/.xmake/profile
+    curl -L https://github.com/xlings-res/xmake/releases/download/2.9.9/xmake -o $XMAKE_BIN
+    chmod +x $XMAKE_BIN
 else
     echo -e "${GREEN}[xlings]: xmake installed${RESET}"
 fi
@@ -34,8 +37,8 @@ then
 fi
 
 # 2. install xlings
-cd $RUN_DIR/core
-xmake xlings unused self enforce-install
+cd $ROOT_DIR/core
+$XMAKE_BIN xlings unused self enforce-install
 sudo ln -sf /home/xlings/.xlings_data/bin/xlings /usr/bin/xlings
 
 export PATH="/home/xlings/.xlings_data/bin:$PATH"

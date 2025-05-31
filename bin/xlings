@@ -11,6 +11,8 @@ if ! [ -d $XLINGS_DIR ]; then
     XMAKE_CONFIGDIR=/tmp
 fi
 
+export PATH=$XLINGS_DIR/bin:$PATH
+
 if [ "$UID" -eq 0 ]; then
     echo -e "\n\t**Warning: don't recommend run xlings as root**\n"
     export XMAKE_ROOT=y
