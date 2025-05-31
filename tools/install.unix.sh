@@ -6,9 +6,11 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 XMAKE_BIN="$ROOT_DIR/bin/xmake"
 
 XLINGS_HOME="/home/xlings"
+XLINGS_SYMLINK="/usr/bin/xlings"
 
 if [ "$(uname)" = "Darwin" ]; then
     XLINGS_HOME="/Users/xlings"
+    XLINGS_SYMLINK="/usr/local/bin/xlings"
 fi
 
 # ANSI color codes
@@ -45,7 +47,7 @@ fi
 # 2. install xlings
 cd $ROOT_DIR/core
 xmake xlings unused self enforce-install
-sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings /usr/local/bin/xlings
+sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings $XLINGS_SYMLINK
 
 export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
 
