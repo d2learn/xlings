@@ -1,7 +1,12 @@
 #!/bin/bash
 
 export XLINGS_HOME_DIR=/home/xlings
-export XLINGS_DIR=/home/xlings/.xlings # default use home's xlings
+
+if [ "$(uname)" == "Darwin" ]; then
+    export XLINGS_HOME_DIR=/Users/xlings
+fi
+
+export XLINGS_DIR=$XLINGS_HOME_DIR/.xlings # default use home's xlings
 export XLINGS_RUN_DIR=`pwd`
 export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
 

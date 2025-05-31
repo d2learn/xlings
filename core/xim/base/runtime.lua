@@ -4,10 +4,7 @@
 -- TODO: optimize, use other method provide runtime info for package hooks
 import("platform")
 
-xim_data_dir = {
-    linux = "/home/xlings/.xlings_data/xim",
-    windows = "C:/Users/Public/.xlings_data/xim",
-}
+xim_data_dir = path.join(platform.get_config_info().rcachedir, "xim")
 
 xim_runtime_data = {
     pkginfo = {
@@ -20,7 +17,6 @@ xim_runtime_data = {
     --rundir = "",
 }
 
-xim_data_dir = xim_data_dir[os.host()]
 xim_install_basedir = path.join(xim_data_dir, "xpkgs")
 xim_index_reposdir = path.join(xim_data_dir, "xim-index-repos")
 xim_local_index_repodir = path.join(xim_data_dir, "local-indexrepo")

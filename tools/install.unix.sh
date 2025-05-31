@@ -5,6 +5,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 XMAKE_BIN="$ROOT_DIR/bin/xmake"
 
+XLINGS_HOME="/home/xlings"
+
+if [ "$(uname)" = "Darwin" ]; then
+    XLINGS_HOME="/Users/xlings"
+fi
+
 # ANSI color codes
 RED='\033[31m'
 GREEN='\033[32m'
@@ -39,9 +45,9 @@ fi
 # 2. install xlings
 cd $ROOT_DIR/core
 $XMAKE_BIN xlings unused self enforce-install
-sudo ln -sf /home/xlings/.xlings_data/bin/xlings /usr/bin/xlings
+sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings /usr/bin/xlings
 
-export PATH="/home/xlings/.xlings_data/bin:$PATH"
+export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
 
 # 3. init: install xvm and create xim, xinstall...
 xlings self init

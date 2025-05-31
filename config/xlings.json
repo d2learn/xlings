@@ -1,17 +1,1 @@
-{
-  "need_update": true,
-  "xim": {
-    "index-repo": "https://github.com/d2learn/xim-pkgindex.git",
-    "res-server": "https://github.com/xlings-res",
-    "mirrors" : {
-      "index-repo": {
-        "GLOBAL": "https://github.com/d2learn/xim-pkgindex.git",
-        "CN": "https://gitee.com/sunrisepeak/xim-pkgindex.git"
-      },
-      "res-server": {
-        "GLOBAL": "https://github.com/xlings-res",
-        "CN": "https://gitcode.com/xlings-res"
-      }
-    }
-  }
-}
+{"xim":{"index-repo":"https:\/\/gitee.com\/sunrisepeak\/xim-pkgindex.git","mirrors":{"res-server":{"CN":"https:\/\/gitcode.com\/xlings-res","GLOBAL":"https:\/\/github.com\/xlings-res"},"index-repo":{"CN":"https:\/\/gitee.com\/sunrisepeak\/xim-pkgindex.git","GLOBAL":"https:\/\/github.com\/d2learn\/xim-pkgindex.git"}},"res-server":"https:\/\/gitcode.com\/xlings-res"},"homedir":{"linux":"\/home\/xlings","macos":"\/Users\/xlings","windows":"C:\/Users\/Public"},"need_update":false}

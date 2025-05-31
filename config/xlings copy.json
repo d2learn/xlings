@@ -1,0 +1,22 @@
+{
+  "need_update": true,
+  "homedir": {
+    "linux": "/home/xlings",
+    "macos": "/Users/xlings",
+    "windows": "C:/Users/Public"
+  },
+  "xim": {
+    "index-repo": "https://github.com/d2learn/xim-pkgindex.git",
+    "res-server": "https://github.com/xlings-res",
+    "mirrors" : {
+      "index-repo": {
+        "GLOBAL": "https://github.com/d2learn/xim-pkgindex.git",
+        "CN": "https://gitee.com/sunrisepeak/xim-pkgindex.git"
+      },
+      "res-server": {
+        "GLOBAL": "https://github.com/xlings-res",
+        "CN": "https://gitcode.com/xlings-res"
+      }
+    }
+  }
+}
