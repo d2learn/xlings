@@ -6,13 +6,13 @@ local homedir = baseconfig["homedir"][os.host()]
 
 local xlings_install_dir = {
     linux = path.join(homedir, ".xlings"),
-    macos = path.join(homedir, ".xlings"),
+    macosx = path.join(homedir, ".xlings"),
     windows = path.join(homedir, "xlings"),
 }
 
 local xlings_root_cache_dir = {
     linux = path.join(homedir, ".xlings_data"),
-    macos = path.join(homedir, ".xlings_data"),
+    macosx = path.join(homedir, ".xlings_data"),
     windows = path.join(homedir, ".xlings_data"),
 }
 
@@ -26,6 +26,7 @@ local command_clear = {
 local command_wrapper = {
     linux = "",
     windows = xlings_install_dir.windows .. "/tools/win_cmd_wrapper.bat ",
+    macosx = ""
 }
 
 local xlings_sourcedir = path.directory(os.scriptdir())

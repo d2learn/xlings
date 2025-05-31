@@ -44,8 +44,8 @@ fi
 
 # 2. install xlings
 cd $ROOT_DIR/core
-$XMAKE_BIN xlings unused self enforce-install
-sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings /usr/bin/xlings
+xmake xlings unused self enforce-install
+sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings /usr/local/bin/xlings
 
 export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
 
