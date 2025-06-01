@@ -3,6 +3,7 @@ import("core.base.json")
 import("base.utils")
 
 local xlings_config = {
+    mirror = "GLOBAL",
     need_load_flag = true,
     xim = {
         ["index-repo"] = "https://github.com/d2learn/xim-pkgindex.git",
@@ -33,6 +34,7 @@ function load()
             xlings_config["xim"]["res-server"] = xlings_config["xim"]["mirrors"]["res-server"][target_mirror]
 
             xlings_config["need_update"] = false
+            xlings_config["mirror"] = target_mirror
 
             -- TODO: optmize json file format issue
             json.savefile(xlings_config_file, xlings_config)

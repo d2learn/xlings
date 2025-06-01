@@ -14,7 +14,7 @@ function install()
 
     local pconfig = platform.get_config_info()
 
-    if is_host("linux") then
+    if is_host("linux") or is_host("macosx") then
         -- create xlings home dir
         local xlings_homedir = pconfig.homedir
         cprint("[xlings]: create xlings home dir %s", xlings_homedir)
@@ -62,7 +62,7 @@ function __config_environment(rcachedir)
     -- add bin to linux bashrc and windows's path env
     cprint("[xlings]: config user environment...")
 
-    if is_host("linux") then
+    if is_host("linux") or is_host("macosx") then
         local source_cmd_template = "\ntest -f %s && source %s"
         local posix_profile = path.join(rcachedir, "xlings-profile.sh")
         local fish_profile = path.join(rcachedir, "xlings-profile.fish")

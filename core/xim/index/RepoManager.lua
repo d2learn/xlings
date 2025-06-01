@@ -41,7 +41,12 @@ function RepoManager:sync()
             main_indexrepos_file, main_repo_dir
         ).xim_indexrepos
         for namespace, repo in pairs(main_indexrepos) do
-            xim_indexrepos[namespace] = repo
+            if type(repo) == "string" then
+                xim_indexrepos[namespace] = repo
+            else
+                local config = xconfig.load()
+                xim_indexrepos[namespace] = repo[config["mirror"]]
+            end
         end
     end
 
