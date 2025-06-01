@@ -1,7 +1,8 @@
 #!/bin/bash
 
 RUN_DIR=`pwd`
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+#SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" # avoid source script.sh issue
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
 XMAKE_BIN="xmake"
