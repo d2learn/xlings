@@ -12,9 +12,11 @@ function install()
 
     uninstall() -- TODO: avoid delete mdbook?
 
-    if is_host("linux") then
+    local pconfig = platform.get_config_info()
+
+    if is_host("linux") or is_host("macosx") then
         -- create xlings home dir
-        local xlings_homedir = "/home/xlings"
+        local xlings_homedir = pconfig.homedir
         cprint("[xlings]: create xlings home dir %s", xlings_homedir)
         local current_user = os.getenv("USER")
         sudo.exec("mkdir -p " .. xlings_homedir)
@@ -23,7 +25,7 @@ function install()
 
     cprint("[xlings]: install xlings to %s", platform.get_config_info().install_dir)
 
-    local install_dir = platform.get_config_info().install_dir
+    local install_dir = pconfig.install_dir
 
     -- cp xliings to install_dir(local xlings dir) and force overwrite
     os.cp(platform.get_config_info().sourcedir, install_dir, {force = true})
@@ -60,7 +62,7 @@ function __config_environment(rcachedir)
     -- add bin to linux bashrc and windows's path env
     cprint("[xlings]: config user environment...")
 
-    if is_host("linux") then
+    if is_host("linux") or is_host("macosx") then
         local source_cmd_template = "\ntest -f %s && source %s"
         local posix_profile = path.join(rcachedir, "xlings-profile.sh")
         local fish_profile = path.join(rcachedir, "xlings-profile.fish")
@@ -113,7 +115,7 @@ function __xlings_usergroup_checker()
     cprint("[xlings]: check xlings user group(only unix)...")
 
     if is_host("linux") then
-        local xlings_homedir = "/home/xlings"
+        local xlings_homedir = platform.get_config_info().homedir
         local current_user = os.getenv("USER")
 
         local exist_xlings_group = try {
@@ -210,7 +212,7 @@ function config(cmds)
 
     if not user_included and cmds["config--adduser"] then
         sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
-        sudo.exec("chmod -R g+rwx " .. path.join("/home/xlings", ".xmake"))
+        sudo.exec("chmod -R g+rwx " .. path.join(platform.get_config_info().homedir, ".xmake"))
         cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
     elseif cmds["config--deluser"] and user_included then
         sudo.exec("gpasswd -d " .. cmds["config--deluser"] .. " xlings")
@@ -223,7 +225,7 @@ function clean()
     os.tryrm(path.join(platform.get_config_info().install_dir, "core", ".xmake"))
     if is_host("linux") then
         -- TODO: fix homedir issue for windows/linux
-        os.tryrm(path.join("/home/xlings", ".xmake"))
+        os.tryrm(path.join(platform.get_config_info().homedir, ".xmake"))
     end
     os.iorun("xmake g -c")
     cprint("[xlings]: clean xlings tmp files - ${green}ok${clear}")

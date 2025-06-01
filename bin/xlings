@@ -1,7 +1,12 @@
 #!/bin/bash
 
 export XLINGS_HOME_DIR=/home/xlings
-export XLINGS_DIR=/home/xlings/.xlings # default use home's xlings
+
+if [ "$(uname)" == "Darwin" ]; then
+    export XLINGS_HOME_DIR=/Users/xlings
+fi
+
+export XLINGS_DIR=$XLINGS_HOME_DIR/.xlings # default use home's xlings
 export XLINGS_RUN_DIR=`pwd`
 export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
 
@@ -10,6 +15,8 @@ if ! [ -d $XLINGS_DIR ]; then
     XLINGS_DIR=/usr/share/xlings
     XMAKE_CONFIGDIR=/tmp
 fi
+
+export PATH=$XLINGS_DIR/bin:$PATH
 
 if [ "$UID" -eq 0 ]; then
     echo -e "\n\t**Warning: don't recommend run xlings as root**\n"

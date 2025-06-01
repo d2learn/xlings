@@ -1,11 +1,19 @@
+import("config.xconfig")
+
+local baseconfig = xconfig.load()
+
+local homedir = baseconfig["homedir"][os.host()]
+
 local xlings_install_dir = {
-    linux = "/home/xlings/.xlings",
-    windows = "C:/Users/Public/xlings",
+    linux = path.join(homedir, ".xlings"),
+    macosx = path.join(homedir, ".xlings"),
+    windows = path.join(homedir, "xlings"),
 }
 
 local xlings_root_cache_dir = {
-    linux ="/home/xlings/.xlings_data",
-    windows = "C:/Users/Public/.xlings_data",
+    linux = path.join(homedir, ".xlings_data"),
+    macosx = path.join(homedir, ".xlings_data"),
+    windows = path.join(homedir, ".xlings_data"),
 }
 
 local xlings_bin_dir = path.join(xlings_root_cache_dir[os.host()], "bin")
@@ -18,6 +26,7 @@ local command_clear = {
 local command_wrapper = {
     linux = "",
     windows = xlings_install_dir.windows .. "/tools/win_cmd_wrapper.bat ",
+    macosx = ""
 }
 
 local xlings_sourcedir = path.directory(os.scriptdir())
@@ -115,6 +124,7 @@ end
 
 function get_config_info()
     return {
+        homedir = homedir,
         install_dir = xlings_install_dir[os.host()],
         sourcedir = xlings_sourcedir,
         cmd_clear = command_clear[os.host()],

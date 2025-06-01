@@ -1,7 +1,12 @@
 # Xlings
 export XLINGS_HOME="/home/xlings/.xlings"
-export XLINGS_DATA="/home/xlings/.xlings_data"
-export XLINGS_BIN="/home/xlings/.xlings_data/bin"
+
+if [ "$(uname)" = "Darwin" ]; then
+    export XLINGS_HOME="/Users/xlings"
+fi
+
+export XLINGS_DATA="$XLINGS_HOME/.xlings_data"
+export XLINGS_BIN="$XLINGS_HOME/.xlings_data/bin"
 export PATH="$XLINGS_BIN:$PATH"
 
 # XVM

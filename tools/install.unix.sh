@@ -1,6 +1,19 @@
 #!/bin/bash
 
 RUN_DIR=`pwd`
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
+XMAKE_BIN="xmake"
+
+XLINGS_HOME="/home/xlings"
+XLINGS_SYMLINK="/usr/bin/xlings"
+
+if [ "$(uname)" == "Darwin" ]; then
+    XLINGS_HOME="/Users/xlings"
+    XLINGS_SYMLINK="/usr/local/bin/xlings"
+    XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.macos.arm64
+fi
 
 # ANSI color codes
 RED='\033[31m'
@@ -17,8 +30,12 @@ echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${
 if ! command -v xmake &> /dev/null
 then
     echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
-    curl -fsSL https://xmake.io/shget.text | bash
-    source ~/.xmake/profile
+    XMAKE_BIN="$ROOT_DIR/bin/xmake"
+    curl -sSL $XMAKE_BIN_URL -o $XMAKE_BIN
+    chmod +x $XMAKE_BIN
+    if [ "$(uname)" == "Darwin" ]; then
+        xattr -d com.apple.quarantine $XMAKE_BIN
+    fi
 else
     echo -e "${GREEN}[xlings]: xmake installed${RESET}"
 fi
@@ -34,11 +51,11 @@ then
 fi
 
 # 2. install xlings
-cd $RUN_DIR/core
-xmake xlings unused self enforce-install
-sudo ln -sf /home/xlings/.xlings_data/bin/xlings /usr/bin/xlings
+cd $ROOT_DIR/core
+$XMAKE_BIN xlings unused self enforce-install
+sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings $XLINGS_SYMLINK
 
-export PATH="/home/xlings/.xlings_data/bin:$PATH"
+export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
 
 # 3. init: install xvm and create xim, xinstall...
 xlings self init
