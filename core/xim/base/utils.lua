@@ -1,4 +1,5 @@
 import("common")
+import("config.xconfig")
 
 local installer_base_dir = path.directory(os.scriptdir())
 
@@ -205,6 +206,20 @@ function xpm_target_os_helper(xpm)
         return "linux"
     end
     return nil
+end
+
+function try_mirror_match_for_url(url)
+
+    if type(url) == "string" then
+        return url
+    elseif type(url) == "table" then
+        local mirror = xconfig.load()["mirror"]
+        return mirror[url] or mirror["GLOBAL"] or mirror["DEFAULT"]
+    else
+        print("Error: Invalid URL type! Expected string or table.")
+        return nil
+    end
+
 end
 
 function main()

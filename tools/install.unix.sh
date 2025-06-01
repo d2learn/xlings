@@ -9,6 +9,8 @@ XMAKE_BIN="xmake"
 XLINGS_HOME="/home/xlings"
 XLINGS_SYMLINK="/usr/bin/xlings"
 
+trap "echo 'Ctrl+C or killed...'; exit 1" INT TERM
+
 if [ "$(uname)" == "Darwin" ]; then
     XLINGS_HOME="/Users/xlings"
     XLINGS_SYMLINK="/usr/local/bin/xlings"

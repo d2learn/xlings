@@ -48,7 +48,7 @@ function XPkgManager:download(xpkg)
     if res == "XLINGS_RES" then
         --"https://github.com/xlings-res/xvm/releases/download/0.0.2/xvm-0.0.2-linux.tar.gz"
         --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.2/xvm-0.0.2-linux.tar.gz"
-        local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s.%s]]
+        local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s-%s.%s]]
         local res_server = xconfig.load().xim["res-server"]
         local pkgname = xpkg.name
         local pkgver = xpkg.version
@@ -59,10 +59,10 @@ function XPkgManager:download(xpkg)
             res_server,
             pkgname,
             pkgver,
-            pkgname, pkgver, osname, file_ext
+            pkgname, pkgver, osname, os.arch(), file_ext
         )
     else
-        url = res.url
+        url = utils.try_mirror_match_for_url(res.url)
         sha256 = res.sha256
     end
 
