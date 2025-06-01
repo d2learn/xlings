@@ -1,5 +1,6 @@
 {
   "need_update": true,
+  "mirror": "GLOBAL",
   "homedir": {
     "linux": "/home/xlings",
     "macosx": "/Users/xlings",
