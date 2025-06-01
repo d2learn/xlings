@@ -54,12 +54,14 @@ function XPkgManager:download(xpkg)
         local pkgver = xpkg.version
         local osname = xpkg._real_os_key -- TODO: optimize this
         local file_ext = (osname == "windows") and "zip" or "tar.gz"
+        local os_arch = os.arch()
+        if os_arch == "x64" then os_arch = "x86_64" end
         url = string.format(
             res_url_template,
             res_server,
             pkgname,
             pkgver,
-            pkgname, pkgver, osname, os.arch(), file_ext
+            pkgname, pkgver, osname, os_arch, file_ext
         )
     else
         url = utils.try_mirror_match_for_url(res.url)
