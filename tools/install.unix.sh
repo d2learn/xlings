@@ -3,6 +3,7 @@
 RUN_DIR=`pwd`
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
 XMAKE_BIN="xmake"
 
 XLINGS_HOME="/home/xlings"
@@ -11,6 +12,7 @@ XLINGS_SYMLINK="/usr/bin/xlings"
 if [ "$(uname)" == "Darwin" ]; then
     XLINGS_HOME="/Users/xlings"
     XLINGS_SYMLINK="/usr/local/bin/xlings"
+    XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.macos.arm64
 fi
 
 # ANSI color codes
@@ -29,8 +31,11 @@ if ! command -v xmake &> /dev/null
 then
     echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
     XMAKE_BIN="$ROOT_DIR/bin/xmake"
-    curl -sSL https://github.com/xlings-res/xmake/releases/download/2.9.9/xmake -o $XMAKE_BIN
+    curl -sSL $XMAKE_BIN_URL -o $XMAKE_BIN
     chmod +x $XMAKE_BIN
+    if [ "$(uname)" == "Darwin" ]; then
+        xattr -d com.apple.quarantine $XMAKE_BIN
+    fi
 else
     echo -e "${GREEN}[xlings]: xmake installed${RESET}"
 fi
