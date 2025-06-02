@@ -21,6 +21,7 @@ local xlings_bin_dir = path.join(xlings_root_cache_dir[os.host()], "bin")
 local command_clear = {
     linux = "clear",
     windows = xlings_install_dir.windows .. "/tools/xlings_clear.bat",
+    macosx = "clear",
 }
 
 local command_wrapper = {

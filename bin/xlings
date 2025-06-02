@@ -19,6 +19,7 @@ if ! [ -d $XLINGS_DIR ]; then
 fi
 
 export PATH=$XLINGS_DIR/bin:$PATH
+export PATH=$XLINGS_HOME_DIR/.xlings_data/bin:$PATH
 
 if [ "$UID" -eq 0 ]; then
     echo -e "\n\t**Warning: don't recommend run xlings as root**\n"

@@ -214,7 +214,7 @@ function try_mirror_match_for_url(url)
         return url
     elseif type(url) == "table" then
         local mirror = xconfig.load()["mirror"]
-        return mirror[url] or mirror["GLOBAL"] or mirror["DEFAULT"]
+        return url[mirror] or url["GLOBAL"] or url["DEFAULT"]
     else
         print("Error: Invalid URL type! Expected string or table.")
         return nil

@@ -4,7 +4,8 @@ RUN_DIR=`pwd`
 #SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" # avoid source script.sh issue
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
+#XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
+XMAKE_BIN_URL=https://gitcode.com/xlings-res/xmake/releases/download/2.9.9/xmake-2.9.9-linux-x86_64
 XMAKE_BIN="xmake"
 
 XLINGS_HOME="/home/xlings"
@@ -15,7 +16,7 @@ trap "echo 'Ctrl+C or killed...'; exit 1" INT TERM
 if [ "$(uname)" == "Darwin" ]; then
     XLINGS_HOME="/Users/xlings"
     XLINGS_SYMLINK="/usr/local/bin/xlings"
-    XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.macos.arm64
+    XMAKE_BIN_URL=https://gitcode.com/xlings-res/xmake/releases/download/2.9.9/xmake-2.9.9-macos-arm64
 fi
 
 # ANSI color codes
