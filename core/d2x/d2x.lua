@@ -15,6 +15,7 @@ function _input_process(action, args)
         -- TODo: add kv cmds
         [action .. "-s"] = false,  -- -search (string)
         [action .. "--editor"] = false,  -- -list (string)
+        [action .. "--template"] = false, -- -template (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -39,7 +40,11 @@ function main(action, ...)
     --print(cmds)
 
     if action == "new" then
-        actions.init(main_target)
+        if cmds["new--template"] then
+            actions.templates(main_target, cmds["new--template"])
+        else
+            actions.init(main_target)
+        end
     elseif action == "book" then
         local rundir = platform.get_config_info().rundir or os.curdir()
         local bookdir = path.join(rundir, "book")
