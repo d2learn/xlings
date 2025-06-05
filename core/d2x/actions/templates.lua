@@ -1,6 +1,16 @@
 import ("platform")
 
 function main(target, template)
+
+    if target == nil or target == "" then
+        target = template
+    end
+
+    if template == nil or template == "" then
+        cprint("[xlings]: ${red}--template [name] is required${clear}")
+        return
+    end
+
     cprintf("[xligns]: checking templates cache... ")
     io.stdout:flush()
 
@@ -28,7 +38,7 @@ $ ${cyan}xlings install xlings-project-templates
     )
     local templates = template:split("-")
     local templatedir = path.join(templates_rootdir, table.concat(templates, "/"))
-    local projectdir = path.join(config.rundir, target or template[1])
+    local projectdir = path.join(config.rundir, target)
 
     if not os.isdir(templatedir) then
         cprint("[xlings]: ${red bright}template [%s] not found...", template)
