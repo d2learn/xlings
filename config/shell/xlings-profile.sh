@@ -1,5 +1,5 @@
 # Xlings
-export XLINGS_HOME="/home/xlings/.xlings"
+export XLINGS_HOME="/home/xlings"
 
 if [ "$(uname)" = "Darwin" ]; then
     export XLINGS_HOME="/Users/xlings"
