@@ -48,9 +48,11 @@ $ ${cyan}xlings install xlings-project-templates
         else
             cprint("[xlings]: create project...")
             if os.trycp(templatedir, projectdir) then
-                cprint("[xlings]: install project dependencies...")
                 os.cd(projectdir)
-                os.exec("xim")--os.exec("xim -y")
+                if os.isfile("config.xlings") then
+                    cprint("[xlings]: install project dependencies...")
+                    os.exec("xim")--os.exec("xim -y")
+                end
                 cprint("[xligns:d2x]: ${green}%s${clear} | ${yellow}%s${clear}", target, projectdir)
             else
                 cprint("[xlings]: ${red bright}failed to create project${clear} from template [%s]", template)

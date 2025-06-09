@@ -164,7 +164,7 @@ function recall_if(rundir, command, cmd_target, args)
             if cmd_target ~= "" then table.insert(xlings_args, 1, cmd_target) end
             table.insert(xlings_args, 1, command)
             os.cd(local_config_dir)
-            os.execv("xmake", { "xlings", rundir, unpack(xlings_args) })
+            os.execv("xmake", { "xlings", "--project=.", rundir, unpack(xlings_args) })
             os.exit()
         end
     end
