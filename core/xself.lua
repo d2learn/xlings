@@ -202,7 +202,15 @@ function init()
 end
 
 function update()
-    cprint("[xlings]: update xlings - todo")
+    cprint("")
+    cprint("\t\t${bright}[xlings update command]")
+    cprint("")
+    if is_host("windows") then
+        cprint("${cyan}Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content")
+    else
+        cprint("${cyan}curl -fsSL https://d2learn.org/xlings-install.sh | bash")
+    end
+    cprint("")
 end
 
 function config(cmds)

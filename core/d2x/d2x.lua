@@ -55,6 +55,35 @@ function user_commands_help(user_commands)
     end
 end
 
+function user_commands_run(user_commands, action, args)
+    
+    cprint("[xligns:d2x]: ${yellow}run user command: ${cyan}" .. action)
+    
+    os.cd(platform.get_config_info().rundir)
+    
+    function __try_run(cmd)
+        try {
+            function() os.exec(cmd) end,
+            catch {
+                function(e)
+                    print(e)
+                    cprint("[xligns:d2x]: ${red}runtime error: ${cyan}" .. cmd)
+                end
+            }
+        }
+    end
+    
+    if (action == "build" or action == "run") and user_commands[action] then
+        __try_run(string.format(user_commands[action] .. " " .. table.concat(args, " ")))
+    else
+        if user_commands[action] then
+            __try_run(string.format(user_commands[action] .. " " .. table.concat(args, " ")))
+        else
+            cprint("[xligns:d2x]: ${red}command not found: ${cyan}" .. action)
+        end
+    end
+end
+
 function main(action, ...)
     local args = {...} or { "" }
 
@@ -87,17 +116,7 @@ function main(action, ...)
         end
         actions.checker(main_target, { editor = cmds["checker--editor"] })
     elseif (action ~= nil and action ~= "") and d2x_config.commands then
-        os.cd(platform.get_config_info().rundir)
-        if (action == "build" or action == "run") and d2x_config.commands[action] then
-            os.exec(string.format(d2x_config.commands[action] .. " " .. table.concat(args, " ")))
-        else
-            cprint("[xligns:d2x]: ${yellow}run user command: ${cyan}" .. action)
-            if d2x_config.commands[action] then
-                os.exec(string.format(d2x_config.commands[action] .. " " .. table.concat(args, " ")))
-            else
-                cprint("[xligns:d2x]: ${red}command not found: ${cyan}" .. action)
-            end
-        end
+        user_commands_run(d2x_config.commands, action, args)
     elseif action == "run" then
         actions.run(main_target)
     else
