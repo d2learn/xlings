@@ -117,11 +117,12 @@ function recall_if(rundir, command, cmd_target, args)
         local local_config_dir = path.join(rundir, ".xlings")
         local need_recall = false
 
+        -- avoid recursive call
         if os.projectdir() ~= local_config_dir then
             cmd_target = cmd_target or ""
             if command == "checker" then need_recall = true
             elseif command == "install" and cmd_target == "" then need_recall = true
-            elseif command == "d2x" and cmd_target == "checker" then need_recall = true
+            elseif command == "d2x" then need_recall = true
             end
         end
 

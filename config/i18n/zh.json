@@ -58,9 +58,6 @@
       "  ${cyan}xim -r vscode${clear}  -- 卸载 vscode",
       "  ${cyan}xim -l${clear}         -- 列出所有已安装软件包",
       "  ${cyan}xim -s code${clear}    -- 搜索包含 'code' 的软件包",
-      "",
-
-      "更多信息: ${underline}https://d2learn.org/xlings${clear}",
       ""
     ]
   },
@@ -76,9 +73,6 @@
       "\t ${magenta}run${clear},      \t 运行源代码文件",
       "\t ${magenta}checker${clear},  \t 运行 d2x 项目的练习检查器",
       "\t ${magenta}help${clear},     \t 显示帮助信息",
-      "",
-
-      "更多信息: ${underline}https://d2learn.org/xlings${clear}",
       ""
     ]
   },

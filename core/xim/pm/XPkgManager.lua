@@ -151,7 +151,7 @@ function XPkgManager:info(xpkg)
         { key = "authors",      label = "authors" },
         { key = "maintainers",  label = "maintainers" },
         { key = "contributors", label = "contributors" },
-        { key = "license",      label = "license" },
+        { key = "licenses",     label = "licenses" },
         { key = "repo",         label = "repo" },
         { key = "docs",         label = "docs" },
         { key = "forum",        label = "forum" },

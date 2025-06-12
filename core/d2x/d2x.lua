@@ -31,11 +31,37 @@ function _input_process(action, args)
     return main_target, kv_cmds
 end
 
+function user_commands_help(user_commands)
+    if user_commands then
+        cprint("${yellow bright}User Commands:")
+
+        local user_commands_list = {}
+        for cmd, _ in pairs(user_commands) do
+            table.insert(user_commands_list, cmd)
+        end
+
+        table.sort(user_commands_list)
+
+        for _, cmd in pairs(user_commands_list) do
+            -- desc limit to 30 characters
+            local desc = user_commands[cmd]
+            if #desc > 30 then
+                desc = desc:sub(1, 30) .. "..."
+            end
+            cprint("\t ${magenta}" .. cmd .. "${clear},      \t${cyan bright}" .. desc)
+        end
+
+        cprint("")
+    end
+end
+
 function main(action, ...)
     local args = {...} or { "" }
 
     local main_target, cmds = _input_process(action, args)
-
+    local d2x_config = platform.get_config_info().d2x or { }
+    
+    --print(d2x_config)
     --print("main_target: " .. main_target)
     --print(cmds)
 
@@ -51,10 +77,8 @@ function main(action, ...)
         if os.isdir(bookdir) then
             os.iorun("mdbook serve --open " .. bookdir)
         else
-            cprint("[xligns:d2x]: ${yellow}book directory already exists.")
+            cprint("[xligns:d2x]: ${yellow}book not found.")
         end
-    elseif action == "run" then
-        actions.run(main_target)
     elseif action == "checker" then
         -- TODO: support to checker exercises directory, but haven't config file
         local d2x_config = platform.get_config_info().d2x
@@ -62,7 +86,22 @@ function main(action, ...)
             cmds["checker--editor"] = d2x_config.checker.editor
         end
         actions.checker(main_target, { editor = cmds["checker--editor"] })
+    elseif (action ~= nil and action ~= "") and d2x_config.commands then
+        os.cd(platform.get_config_info().rundir)
+        if (action == "build" or action == "run") and d2x_config.commands[action] then
+            os.exec(string.format(d2x_config.commands[action] .. " " .. table.concat(args, " ")))
+        else
+            cprint("[xligns:d2x]: ${yellow}run user command: ${cyan}" .. action)
+            if d2x_config.commands[action] then
+                os.exec(string.format(d2x_config.commands[action] .. " " .. table.concat(args, " ")))
+            else
+                cprint("[xligns:d2x]: ${red}command not found: ${cyan}" .. action)
+            end
+        end
+    elseif action == "run" then
+        actions.run(main_target)
     else
         log.i18n_print(i18n.data()["d2x"].help, action)
+        user_commands_help(d2x_config.commands)
     end
 end
