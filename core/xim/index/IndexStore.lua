@@ -42,7 +42,9 @@ end
 
 function IndexStore:rebuild()
     cprint("[xlings:xim]: rebuild index database")
-    self._index_data = { }
+    self._index_data = {
+        __mutex_group = { },
+    }
     self._pkg_reflist = {
         -- [package_name] = pkg.ref
     }
@@ -149,6 +151,7 @@ function IndexStore:build_xpkg_index(xpkg_file)
                                 }
                             else 
                                 self._index_data[key] = {
+                                    mutex_group = pkg.mutex_group,
                                     version = version,
                                     installed = false,
                                     path = xpkg_file
@@ -162,6 +165,12 @@ function IndexStore:build_xpkg_index(xpkg_file)
                             end
                         end
                     end -- for end
+                    for _, mgroup_name in ipairs(pkg.mutex_group or {}) do
+                        if not self._index_data.__mutex_group[mgroup_name] then
+                            self._index_data.__mutex_group[mgroup_name] = { }
+                        end
+                        table.insert(self._index_data.__mutex_group[mgroup_name], package_name)
+                    end
                 end -- if target_os
             end
             return true
@@ -238,7 +247,10 @@ end
 
 function IndexStore:get_index_data()
     -- create deep copy of index data
-    return utils.deep_copy(self._index_data)
+    local idata = utils.deep_copy(self._index_data)
+    local mutex_group = idata.__mutex_group
+    idata.__mutex_group = nil
+    return idata, mutex_group
 end
 
 function IndexStore:update_index_data(name, status)
