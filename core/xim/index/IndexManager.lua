@@ -183,7 +183,7 @@ end
 
 function IndexManager:mutex_package(pkgname)
 
-    cprint("[xlings:xim]: checking for mutex groups...", pkgname)
+    cprint("[xlings:xim]: checking [%s] for mutex groups...", pkgname)
 
     local mutex_pkgs = {}
     if self.index[pkgname] and self.__mutex_group then

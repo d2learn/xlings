@@ -301,10 +301,8 @@ function CmdProcessor:sys_detect()
     cprint("[xlings:xim]: start detect local packages...")
     local names_table = index_manager:search()
     for name, alias in pairs(names_table) do
-        print("---- %s %s start", name, alias)
         local pkg = index_manager:load_package(name)
         local pme = pm_service:create_pm_executor(pkg)
-        print("---- %s %s end", name, alias)
         if pme:installed() then
             alias_str = table.concat(alias, ", ")
             cprint("${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)", name, alias_str)
