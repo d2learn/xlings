@@ -185,6 +185,28 @@ function CmdProcessor:install()
                 end
             end
 
+            local mutex_pkgs = index_manager:mutex_package(self.target)
+            if #mutex_pkgs > 0 then
+                cprint("[xlings:xim]: ${yellow bright}mutex package found, need remove them first${clear}")
+                for _, pkgname in ipairs(mutex_pkgs) do
+                    cprint("${dim bright} - ${green bright}%s${clear}", pkgname)
+                end
+                local msg = string.format("${bright yellow}remove all? (y/n)", self.target)
+                if not utils.prompt(msg, "y") then
+                    return
+                else
+                    for _, pkgname in ipairs(mutex_pkgs) do
+                        cprint("${dim}---${clear}" .. pkgname)
+                        new(pkgname, {
+                            remove = true,
+                            yes = true,
+                            disable_info = true
+                        }):run()
+                        cprint("${dim}---${clear}")
+                    end
+                end
+            end
+
             local deps_list = self._pm_executor:deps()
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
@@ -250,7 +272,7 @@ end
 function CmdProcessor:remove()
     if self._pm_executor:installed() then
 
-        self._pm_executor:info()
+        self:info()
 
         local confirm = self.cmds.yes
         if not confirm then
@@ -279,8 +301,10 @@ function CmdProcessor:sys_detect()
     cprint("[xlings:xim]: start detect local packages...")
     local names_table = index_manager:search()
     for name, alias in pairs(names_table) do
+        print("---- %s %s start", name, alias)
         local pkg = index_manager:load_package(name)
         local pme = pm_service:create_pm_executor(pkg)
+        print("---- %s %s end", name, alias)
         if pme:installed() then
             alias_str = table.concat(alias, ", ")
             cprint("${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)", name, alias_str)

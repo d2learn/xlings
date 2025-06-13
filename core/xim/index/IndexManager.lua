@@ -20,7 +20,7 @@ function IndexManager:init()
     if index_store == nil then
         repo_manager = RepoManager.new()
         index_store = IndexStore.new(repo_manager:repodirs())
-        self.index = index_store:get_index_data()
+        self.index, self.__mutex_group = index_store:get_index_data()
     end
 end
 
@@ -38,7 +38,7 @@ end
 
 function IndexManager:rebuild()
     index_store:rebuild()
-    self.index = index_store:get_index_data()
+    self.index, self.__mutex_group = index_store:get_index_data()
 end
 
 function IndexManager:search(query, opt)
@@ -179,6 +179,29 @@ function IndexManager:add_subrepo(indexrepo)
     end
 
     repo_manager:add_subrepo(namespace, repo)
+end
+
+function IndexManager:mutex_package(pkgname)
+
+    cprint("[xlings:xim]: checking for mutex groups...", pkgname)
+
+    local mutex_pkgs = {}
+    if self.index[pkgname] and self.__mutex_group then
+        local _, pkg = utils.deref(self.index, pkgname)
+        if pkg and pkg.mutex_group then
+            for _, mgroup_name in pairs(pkg.mutex_group) do
+                local mgroup = self.__mutex_group[mgroup_name]
+                for _, pkgname in pairs(mgroup) do
+                    pkgname = self:match_package_version(pkgname)
+                    if self.index[pkgname] and self.index[pkgname].installed then
+                        cprint("[xlings:xim]: ${dim yellow}mutex package found - ${green}%s", pkgname)
+                        table.insert(mutex_pkgs, pkgname)
+                    end
+                end
+            end
+        end
+    end
+    return mutex_pkgs
 end
 
 function main()
