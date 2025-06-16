@@ -7,7 +7,7 @@ local homedir = baseconfig["homedir"][os.host()]
 local xlings_install_dir = {
     linux = path.join(homedir, ".xlings"),
     macosx = path.join(homedir, ".xlings"),
-    windows = path.join(homedir, "xlings"),
+    windows = path.join(homedir, ".xlings"),
 }
 
 local xlings_root_cache_dir = {

@@ -21,6 +21,13 @@ function install()
         local current_user = os.getenv("USER")
         sudo.exec("mkdir -p " .. xlings_homedir)
         sudo.exec(string.format("chown %s %s", current_user, xlings_homedir))
+    elseif is_host("windows") then
+        if os.isdir(pconfig.homedir) then
+            cprint("[xlings]: xlings home dir %s already exists - [win]", pconfig.homedir)
+        else
+            cprint("[xlings]: create xlings home dir %s - [win]", pconfig.homedir)
+            os.mkdir(pconfig.homedir)
+        end
     end
 
     cprint("[xlings]: install xlings to %s", platform.get_config_info().install_dir)
@@ -185,13 +192,13 @@ function init()
 
     __xlings_usergroup_checker()
 
-    common.xlings_exec([[xlings install xvm -y]])
-    os.exec([[xvm add xim 0.0.2 --alias "xlings install"]])
-    os.exec([[xvm add xinstall 0.0.2 --alias "xlings install"]])
-    os.exec([[xvm add xrun 0.0.2 --alias "xlings run"]])
-    os.exec([[xvm add xchecker 0.0.2 --alias "xlings checker"]])
-    os.exec([[xvm add xself 0.0.2 --alias "xlings self"]])
-    os.exec([[xvm add d2x 0.0.2 --alias "xlings d2x"]])
+    common.xlings_exec([[xlings install xvm@0.0.3 -y]])
+    os.exec([[xvm add xim 0.0.3 --alias "xlings install"]])
+    os.exec([[xvm add xinstall 0.0.3 --alias "xlings install"]])
+    os.exec([[xvm add xrun 0.0.3 --alias "xlings run"]])
+    os.exec([[xvm add xchecker 0.0.3 --alias "xlings checker"]])
+    os.exec([[xvm add xself 0.0.3 --alias "xlings self"]])
+    os.exec([[xvm add d2x 0.0.3 --alias "xlings d2x"]])
     --os.exec([[xim --detect]])
 
     cprint("")
@@ -270,7 +277,7 @@ function uninstall()
         catch
         {
             function (e)
-                -- TODO: error: cannot remove directory C:\Users\Public\xlings Unknown Error (145)
+                -- TODO: error: cannot remove directory C:\Users\xlings\.xlings Unknown Error (145)
                 cprint("[xlings]: uninstall: " .. e)
             end
         }

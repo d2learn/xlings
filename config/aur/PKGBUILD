@@ -1,6 +1,6 @@
 # Maintainer: sunrisepeak <speakshen@163.com>
 pkgname=xlings
-pkgver=0.0.2
+pkgver=0.0.3
 pkgrel=1
 pkgdesc="A Developer's Toolkit for Programming Learning, Development, and Tutorial Creation"
 arch=('x86_64')

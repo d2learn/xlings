@@ -1,0 +1,51 @@
+name: xlings-ci-linux
+
+on: [push]
+
+jobs:
+
+  linux-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: tools
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Install curl and git
+        run: sudo apt-get install -y curl git
+
+      - name: Installation Xlings on Ubuntu
+        run: ./install.unix.sh
+
+      - name: XIM Test on Ubuntu
+        run: |
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          xlings -h
+          xim -h
+          xim -l
+          xim --detect
+          xim -s v
+          xim -i d2x::d2ds -y
+          source ~/.bashrc
+          xim -l
+          xim -r d2x::d2ds -y
+          xim -l
+
+      - name: XVM Test on Ubuntu
+        run: |
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          xvm --version
+          xvm -h
+          xvm add cls 0.0.1 --alias=clear
+          xvm list c
+          xvm remove cls --yes
+
+      - name: D2X Test on Ubuntu
+        run: |
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          d2x -h
+          d2x new helloworld

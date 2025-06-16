@@ -1,4 +1,4 @@
-[![Xlings Test - CI](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml/badge.svg?branch=main)](https://github.com/d2learn/xlings/actions/workflows/xlings-test.yml)
+[![Xlings Test - CI](https://github.com/d2learn/xlings/actions/workflows/gitee-sync.yml/badge.svg?branch=main)](https://github.com/d2learn/xlings/actions/workflows/gitee-sync.yml)
 
 <div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
 
@@ -40,11 +40,11 @@
 
 [![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
 
-| 平台 | 使用体验 | 备注 |
-| --- | --- | --- |
-| linux | ⭐⭐⭐ | **欢迎参与文档编写** |
-| windows | ⭐⭐ | 欢迎WIN用户参与贡献 |
-| macos | ⭐ | 初步支持 |
+| 平台 | 使用体验 | 构建状态 | 备注 |
+| --- | --- | --- | --- |
+| linux | ⭐⭐⭐ | [![xlings-ci-linux](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-linux.yml/badge.svg)](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-linux.yml) | **欢迎参与文档编写** |
+| windows | ⭐⭐ | [![xlings-ci-windows](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-windows.yml/badge.svg)](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-windows.yml) | 欢迎WIN用户参与贡献 |
+| macos | ⭐ | [![xlings-ci-macos](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-macos.yml/badge.svg)](https://github.com/d2learn/xlings/actions/workflows/xlings-ci-macos.yml) | 初步支持 |
 
 | 使用场景 | 简介 |
 | --- | --- |

@@ -1,6 +1,6 @@
 {
     "help": [
-        "${bright}xlings version:${clear} 0.0.2",
+        "${bright}xlings version:${clear} 0.0.3",
         "",
         "${bright}Usage: $ ${cyan}xlings [command] [target]\n",
 
@@ -29,7 +29,7 @@
             "\t${bright}XIM - Xlings Installation Manager${clear}",
             "",
 
-            "${bright}xim version:${clear} pre-v0.0.2",
+            "${bright}xim version:${clear} pre-v0.0.3",
             "",
             "${bright}Usage1: $ ${cyan}xlings install [command] [target]",
             "${bright}Usage2: $ ${cyan}xim [command] [target]",
@@ -64,7 +64,7 @@
 
     "d2x": {
         "help":[
-            "${bright}d2x version:${clear} pre-v0.0.2",
+            "${bright}d2x version:${clear} pre-v0.0.3",
             "",
             "${bright}Usage: $ ${cyan}d2x [command] [target]\n",
 

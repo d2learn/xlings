@@ -1,0 +1,43 @@
+name: xlings-ci-macos
+
+on: [push]
+
+jobs:
+
+  macos-test:
+    runs-on: macos-latest
+
+    defaults:
+      run:
+        working-directory: tools
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Install curl and git
+        run: brew install curl git
+
+      - name: Installation Xlings on macOS
+        run: ./install.unix.sh
+
+      - name: XIM Test on macOS
+        run: |
+          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          xlings -h
+          xim -h
+
+      - name: XVM Test on macOS
+        run: |
+          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          xvm --version
+          xvm -h
+          xvm add cls 0.0.1 --alias=clear
+          xvm list c
+          xvm remove cls --yes
+
+      - name: D2X Test on macOS
+        run: |
+          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          d2x -h
+          d2x new helloworld
