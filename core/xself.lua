@@ -21,6 +21,13 @@ function install()
         local current_user = os.getenv("USER")
         sudo.exec("mkdir -p " .. xlings_homedir)
         sudo.exec(string.format("chown %s %s", current_user, xlings_homedir))
+    elseif is_host("windows") then
+        if os.isdir(pconfig.homedir) then
+            cprint("[xlings]: xlings home dir %s already exists - [win]", pconfig.homedir)
+        else
+            cprint("[xlings]: create xlings home dir %s - [win]", pconfig.homedir)
+            os.mkdir(pconfig.homedir)
+        end
     end
 
     cprint("[xlings]: install xlings to %s", platform.get_config_info().install_dir)
@@ -270,7 +277,7 @@ function uninstall()
         catch
         {
             function (e)
-                -- TODO: error: cannot remove directory C:\Users\Public\xlings Unknown Error (145)
+                -- TODO: error: cannot remove directory C:\Users\xlings\.xlings Unknown Error (145)
                 cprint("[xlings]: uninstall: " .. e)
             end
         }

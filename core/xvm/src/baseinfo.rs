@@ -73,7 +73,7 @@ pub mod platform {
 
     pub fn xvm_homedir() -> String {
         if cfg!(target_os = "windows") {
-            "C:/users/public/.xlings_data/xvm".to_string()
+            "C:/users/xlings/.xlings_data/xvm".to_string()
         } else if cfg!(target_os = "macos") {
             "/Users/xlings/.xlings_data/xvm".to_string()
         } else {
