@@ -1,6 +1,6 @@
 {
   "help": [
-    "${bright}xlings 版本:${clear} 0.0.2",
+    "${bright}xlings 版本:${clear} 0.0.3",
     "",
     "${bright}用法: $ ${cyan}xlings [命令] [目标]\n",
 
@@ -29,7 +29,7 @@
       "\t${bright}XIM - Xlings 安装管理器${clear}",
       "",
 
-      "${bright}xim 版本:${clear} 0.0.2",
+      "${bright}xim 版本:${clear} 0.0.3",
       "",
       "${bright}用法1: $ ${cyan}xlings install [命令] [目标]",
       "${bright}用法2: $ ${cyan}xim [命令] [目标]",
@@ -63,7 +63,7 @@
   },
   "d2x": {
     "help": [
-      "${bright}d2x 版本:${clear} 0.0.2",
+      "${bright}d2x 版本:${clear} 0.0.3",
       "",
       "${bright}用法: $ ${cyan}d2x [命令] [目标]\n",
 

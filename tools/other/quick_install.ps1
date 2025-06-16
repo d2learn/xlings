@@ -24,7 +24,7 @@ $downloadUrl = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 
 $xlings = @"
  __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.2                
+ \ \ / / | |    (_)    pre-v0.0.3                
   \ V /  | |     _  _ __    __ _  ___ 
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \

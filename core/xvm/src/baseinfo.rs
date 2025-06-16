@@ -63,7 +63,7 @@ pub mod platform {
 */
     pub fn bindir() -> String {
         if cfg!(target_os = "windows") {
-            r#"C:\Users\Public\.xlings_data\bin"#.to_string()
+            r#"C:\Users\xlings\.xlings_data\bin"#.to_string()
         } else if cfg!(target_os = "macos") {
             "/Users/xlings/.xlings_data/bin".to_string()
         } else {

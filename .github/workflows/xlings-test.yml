@@ -70,7 +70,7 @@ jobs:
 
       - name: XIM Test on Windows
         run: |
-          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
           xlings -h
           xim -h
           xim -l
@@ -84,7 +84,7 @@ jobs:
 
       - name: XVM Test on Windows
         run: |
-          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
           xvm --version
           xvm -h
           xvm add clear 0.0.1 --alias=cls
@@ -94,7 +94,7 @@ jobs:
 
       - name: D2X Test on Windows
         run: |
-          set PATH=C:\Users\Public\.xlings_data\bin;%PATH%
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
           d2x -h
           d2x new helloworld
         shell: cmd
