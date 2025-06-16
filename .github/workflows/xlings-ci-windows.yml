@@ -1,0 +1,54 @@
+name: xlings-ci-windows
+
+on: [push]
+
+jobs:
+
+  windows-test:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: tools
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+
+      - name: Installation Xlings on Windows
+        run: install.win.bat
+        shell: cmd
+
+      - name: XIM Test on Windows
+        run: |
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
+          xlings -h
+          xim -h
+          xim -l
+          xim --detect
+          xim -s v
+          xim -i d2x::d2ds -y
+          xim -l
+          xim -r d2x::d2ds -y
+          xim -l
+        shell: cmd
+
+      - name: XVM Test on Windows
+        run: |
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
+          xvm --version
+          xvm -h
+          xvm add clear 0.0.1 --alias=cls
+          xvm list c
+          xvm remove clear --yes
+        shell: cmd
+
+      - name: D2X Test on Windows
+        run: |
+          set PATH=C:\Users\xlings\.xlings_data\bin;%PATH%
+          d2x -h
+          d2x new helloworld
+        shell: cmd
