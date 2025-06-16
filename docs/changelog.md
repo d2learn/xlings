@@ -2,6 +2,18 @@
 
 ## 2025
 
+### 2025-06
+
+- 跨平台: 初步支持MacOS平台、xim添加冲突解决功能(xpkg的`mutex_group`字段实现) - 2025/6
+
+### 2025-05
+
+- 新功能: 增加包索引网站、支持多语言i18n - 2025/5
+
+### 2025-02
+
+- d2x: 重构公开课/教程项目相关命令, 形成独立的d2x工具 - [PR](https://github.com/d2learn/xlings/pull/79) - 2025/2/19
+
 ### 2025-01
 
 - xim: 增加archlinux上aur的支持 - [PR](https://github.com/d2learn/xlings/pull/67) - 2025/1/10
