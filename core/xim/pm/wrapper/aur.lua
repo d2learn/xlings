@@ -8,6 +8,8 @@ local aur_pkgs_dir = path.join(runtime.get_xim_data_dir(), "aur_pkgs")
 local aur_url_template = "https://aur.archlinux.org/%s.git"
 local aur_pkgs_info = {}
 
+local aur_helpers = { "yay", "paru" }
+
 function installed(name)
     return pacman.installed(name)
 end
@@ -19,6 +21,17 @@ function deps(name)
 end
 
 function install(name)
+    for _, aur_helper in ipairs(aur_helpers) do
+        if (os.exists("/usr/bin/" .. aur_helper)) then
+            cprint("AUR Helper ${bright}%s${clear} detected, try to install with it")
+            local ok = os.execv(aur_helper, {"-S", name})
+            return ok == 0
+        end
+    end
+    return install_via_makepkg(name)
+end
+
+function install_via_makepkg(name)
     os.cd(aur_pkgs_dir)
 
     -- 克隆 AUR 仓库

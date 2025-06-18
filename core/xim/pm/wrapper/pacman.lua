@@ -18,7 +18,7 @@ end
 
 -- 安装包（通过 `pacman -S`）
 function install(name)
-    local ok = os.execv("sudo", {"pacman", "-S", name})
+    local ok = os.execv("sudo", {"pacman", "-Sy", name})
     return ok == 0
 end
 
