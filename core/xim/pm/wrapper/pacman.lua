@@ -1,6 +1,6 @@
 -- 检查包是否已安装（通过 `pacman -Q`）
 function installed(name)
-    return try { -- 此更改使得
+    return try { -- 此更改使得未安装此软件包时返回 nil 而不是终止程序
         function() return os.iorunv("pacman", { "-Q", name }) ~= nil end,
         catch { function() end }
     }
