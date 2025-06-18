@@ -5,12 +5,16 @@ local __data = nil
 function data()
     --local config = platform.get_config_info()
     local local_lang = "en" -- Default language
+    local tmp_local_lang = "en"
 
     if is_host("linux") then
         local tmp_local_lang = os.getenv("LANG") or "en"
-        if tmp_local_lang:find("zh") then
-            local_lang = "zh"
-        end
+    elseif is_host("windows") then
+        local tmp_local_lang = os.iorun([[powershell -command "(Get-Culture).Name"]])
+    end
+
+    if tmp_local_lang:find("zh") then
+        local_lang = "zh"
     end
 
     local configdir = path.directory(path.directory(os.scriptdir()))
