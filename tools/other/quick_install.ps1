@@ -13,7 +13,7 @@ function Show-Progress {
     }
 }
 
-$xlingsBinDir = "C:\Users\xlings\.xlings_data\bin"
+$xlingsBinDir = "C:\Users\Public\xlings\.xlings_data\bin"
 $softwareName = "xlings"
 $tempDir = [System.IO.Path]::GetTempPath()
 $installDir = Join-Path $tempDir $softwareName
@@ -24,7 +24,7 @@ $downloadUrl = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
 
 $xlings = @"
  __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.3                
+ \ \ / / | |    (_)    pre-v0.0.4                
   \ V /  | |     _  _ __    __ _  ___ 
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \

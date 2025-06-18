@@ -192,13 +192,13 @@ function init()
 
     __xlings_usergroup_checker()
 
-    common.xlings_exec([[xlings install xvm@0.0.3 -y]])
-    os.exec([[xvm add xim 0.0.3 --alias "xlings install"]])
-    os.exec([[xvm add xinstall 0.0.3 --alias "xlings install"]])
-    os.exec([[xvm add xrun 0.0.3 --alias "xlings run"]])
-    os.exec([[xvm add xchecker 0.0.3 --alias "xlings checker"]])
-    os.exec([[xvm add xself 0.0.3 --alias "xlings self"]])
-    os.exec([[xvm add d2x 0.0.3 --alias "xlings d2x"]])
+    common.xlings_exec([[xlings install xvm@0.0.4 -y]])
+    os.exec([[xvm add xim 0.0.4 --alias "xlings install"]])
+    os.exec([[xvm add xinstall 0.0.4 --alias "xlings install"]])
+    os.exec([[xvm add xrun 0.0.4 --alias "xlings run"]])
+    os.exec([[xvm add xchecker 0.0.4 --alias "xlings checker"]])
+    os.exec([[xvm add xself 0.0.4 --alias "xlings self"]])
+    os.exec([[xvm add d2x 0.0.4 --alias "xlings d2x"]])
     --os.exec([[xim --detect]])
 
     cprint("")
@@ -277,7 +277,7 @@ function uninstall()
         catch
         {
             function (e)
-                -- TODO: error: cannot remove directory C:\Users\xlings\.xlings Unknown Error (145)
+                -- TODO: error: cannot remove directory C:\Users\Public\xlings\.xlings Unknown Error (145)
                 cprint("[xlings]: uninstall: " .. e)
             end
         }
