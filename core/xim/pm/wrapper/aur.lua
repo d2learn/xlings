@@ -61,6 +61,7 @@ end
 
 function is_pkg_installed_or_in_pacman(pkg)
     -- 提取包名
+    -- 软件包名称只能包含字母数字字符以及 @、.、_、+、- 中的任何字符。名称不允许以连字符或点开头。所有字母都应为小写。
     pkg = pkg:match("^[a-z0-9@_+][a-z0-9@._+-]*")
     -- 判断是否已安装 或 在 pacman 中有
     if pacman.installed(pkg) then return true end
@@ -71,10 +72,12 @@ function is_pkg_installed_or_in_pacman(pkg)
     if is_pkg_in_pacman then return true end
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
-    cprint("${bright}%s${clear} not found in pacman", pkg)
-    cprint("If you are a user then please install all dependencies first, or notify the maintainer of this xpkg")
-    cprint("Some dependencies may be located directly at the archlinuxcn source Try to check")
-    cprint("If you are a maintainer then please add all dependencies not in official repo to the deps of xpkg and create xpkg for them")
+    cprint([[
+${bright}%s${yellow} not found in pacman${clear}
+${yellow}If you are a user then please install all dependencies first, or notify the maintainer of this xpkg${clear}
+${yellow}Some dependencies may be located directly at the archlinuxcn source Try to check${clear}
+${yellow}If you are a maintainer then please add all dependencies not in official repo to the deps of xpkg and create xpkg for them${clear}
+    ]], pkg)
     return false
 end
 
