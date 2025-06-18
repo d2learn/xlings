@@ -34,11 +34,29 @@ function install(name)
         git.clean({force = true})
     end
 
+    -- 检查是否有 AUR 依赖
+    local deps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${depends[@]}'")):split(' ')
+    local makedeps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${makedepends[@]}'")):split(' ')
+
+    for _, pkg in ipairs(deps) do if not is_pkg_in_pacman(pkg) then return false end end
+    for _, pkg in ipairs(makedeps) do if not is_pkg_in_pacman(pkg) then return false end end
+
     -- 构建并安装包
     cprint("building %s...", name)
     os.exec("makepkg -si")
 
     return true
+end
+
+function is_pkg_in_pacman(pkg)
+    if pacman.installed(pkg) or os.iorunv("pacman", {"-Si", pkg}) ~= nil then
+        return true
+    end
+    cprint("${bright}%s${clear} not found in pacman", pkg)
+    cprint("If you are a user then please install all AUR dependencies first, or notify the maintainer of this xpkg")
+    cprint("Some dependencies may be located directly at the archlinuxcn source Try to check")
+    cprint("If you are a maintainer then please add all them to the deps of xpkg and create xpkg for them")
+    return false
 end
 
 function uninstall(name)
