@@ -1,7 +1,7 @@
 @echo off
 
 set XMAKE_BIN_DIR=%USERPROFILE%\xmake
-set XLINGS_BIN_DIR=C:\Users\xlings\.xlings_data\bin
+set XLINGS_BIN_DIR=C:\Users\Public\xlings\.xlings_data\bin
 
 set arg1=%1
 

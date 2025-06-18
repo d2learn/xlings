@@ -277,7 +277,7 @@ function uninstall()
         catch
         {
             function (e)
-                -- TODO: error: cannot remove directory C:\Users\xlings\.xlings Unknown Error (145)
+                -- TODO: error: cannot remove directory C:\Users\Public\xlings\.xlings Unknown Error (145)
                 cprint("[xlings]: uninstall: " .. e)
             end
         }
