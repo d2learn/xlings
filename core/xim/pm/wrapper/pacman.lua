@@ -6,9 +6,18 @@ function installed(name)
     }
 end
 
--- 获取包的依赖信息（通过 `pactree -d 1`）
+-- 获取包的依赖信息（通过 `expac -Q %D` 和备用办法 `pactree -d 1` 和终极备用办法...）
 function deps(name)
-    local output = os.iorunv("pactree", {"-d", "1", name})
+    local output = nil
+
+    if os.exists("/usr/bin/expac") then
+        output = os.iorunv("expac", {"-Q", "%D", name})
+    elseif os.exists("/usr/bin/pactree") then
+        output = os.iorunv("pactree", {"-d", "1", name})
+    else
+        output = os.iorunv("bash", {"-c", "LANG=C.UTF-8 pacman -Qi linux | awk '/Depends On/ {print $0}'"})
+    end
+
     if output then
         return output:trim()
     else
@@ -16,7 +25,7 @@ function deps(name)
     end
 end
 
--- 安装包（通过 `pacman -S`）
+-- 安装包（通过 `pacman -Sy`）
 function install(name)
     local ok = os.execv("sudo", {"pacman", "-Sy", name})
     return ok == 0
