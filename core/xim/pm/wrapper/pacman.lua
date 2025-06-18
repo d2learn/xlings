@@ -1,6 +1,9 @@
 -- 检查包是否已安装（通过 `pacman -Q`）
 function installed(name)
-    return os.iorunv("pacman", {"-Q", name}) ~= nil
+    return try { -- 此更改使得
+        function() return os.iorunv("pacman", { "-Q", name }) ~= nil end,
+        catch { function() end }
+    }
 end
 
 -- 获取包的依赖信息（通过 `pactree -d 1`）
@@ -40,6 +43,6 @@ function main()
     print(deps("code"))
     -- print(install("code"))
     print(info("code"))
-    print(info("awa")) -- error: 错误：软件包 'awa' 未找到
+    print(info("awa")) -- nil
 end
 
