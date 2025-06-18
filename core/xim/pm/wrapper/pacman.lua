@@ -6,7 +6,7 @@ function installed(name)
     }
 end
 
--- 获取包的依赖信息（通过 `expac -Q %D` 和备用办法 `pactree -d 1` 和终极备用办法...）
+-- (从本地)获取包的依赖信息（通过 `expac -Q %D` 和备用办法 `pactree -d 1` 和终极备用办法...）
 function deps(name)
     local output = nil
 
@@ -25,7 +25,8 @@ function deps(name)
     end
 end
 
--- 安装包（通过 `pacman -Sy`）
+-- (更新数据库并)安装包（通过 `pacman -Sy`）
+-- 但官方不推荐这样做 此处官方建议使用 `-Syu` 但这样也会进行系统更新 所以还是保留 `-Sy`
 function install(name)
     local ok = os.execv("sudo", {"pacman", "-Sy", name})
     return ok == 0
@@ -37,7 +38,7 @@ function uninstall(name)
     return ok == 0
 end
 
--- 获取包信息（通过 `pacman -Si`）
+-- (从服务器)获取包信息（通过 `pacman -Si`）
 function info(name)
     local output = os.iorunv("pacman", {"-Si", name})
     if output then
