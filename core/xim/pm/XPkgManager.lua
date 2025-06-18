@@ -46,8 +46,8 @@ function XPkgManager:download(xpkg)
     local sha256
 
     if res == "XLINGS_RES" then
-        --"https://github.com/xlings-res/xvm/releases/download/0.0.3/xvm-0.0.3-linux.tar.gz"
-        --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.3/xvm-0.0.3-linux.tar.gz"
+        --"https://github.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
+        --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
         local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s-%s.%s]]
         local res_server = xconfig.load().xim["res-server"]
         local pkgname = xpkg.name
