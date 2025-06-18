@@ -73,7 +73,7 @@ function is_pkg_installed_or_in_pacman(pkg)
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
     cprint([[
-                ${bright}%s${yellow} not found in pacman${clear}
+            ${bright}%s${yellow} not found in pacman${clear}
 ${yellow}
 If you are a user, install all dependencies first,
 or install any AUR Helper such as yay or paru,
