@@ -73,11 +73,20 @@ function is_pkg_installed_or_in_pacman(pkg)
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
     cprint([[
-${bright}%s${yellow} not found in pacman${clear}
-${yellow}If you are a user then please install all dependencies first, or notify the maintainer of this xpkg${clear}
-${yellow}Some dependencies may be located directly at the archlinuxcn source Try to check${clear}
-${yellow}If you are a maintainer then please add all dependencies not in official repo to the deps of xpkg and create xpkg for them${clear}
+                ${bright}%s${yellow} not found in pacman${clear}
+${yellow}
+If you are a user, install all dependencies first,
+or install any AUR Helper such as yay or paru,
+or notify the maintainer of this xpkg.
+
+Some dependencies may be located in the archlinuxcn repo.
+
+If you are a maintainer, add all dependencies that are
+not in the official repos to the deps of the xpkg,
+and create the xpkg for them.
+${clear}
     ]], pkg)
+
     return false
 end
 
