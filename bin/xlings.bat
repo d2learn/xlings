@@ -1,6 +1,6 @@
 @echo off
 
-set XLINGS_DIR=C:\Users\xlings\.xlings
+set XLINGS_DIR=C:\Users\Public\xlings\.xlings
 set XLINGS_RUN_DIR=%cd%
 
 cd /d "%XLINGS_DIR%\core"

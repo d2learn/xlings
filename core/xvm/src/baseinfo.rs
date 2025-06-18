@@ -63,7 +63,7 @@ pub mod platform {
 */
     pub fn bindir() -> String {
         if cfg!(target_os = "windows") {
-            r#"C:\Users\xlings\.xlings_data\bin"#.to_string()
+            r#"C:\Users\Public\xlings\.xlings_data\bin"#.to_string()
         } else if cfg!(target_os = "macos") {
             "/Users/xlings/.xlings_data/bin".to_string()
         } else {
@@ -73,7 +73,7 @@ pub mod platform {
 
     pub fn xvm_homedir() -> String {
         if cfg!(target_os = "windows") {
-            "C:/users/xlings/.xlings_data/xvm".to_string()
+            "C:/Users/Public/xlings/.xlings_data/xvm".to_string()
         } else if cfg!(target_os = "macos") {
             "/Users/xlings/.xlings_data/xvm".to_string()
         } else {

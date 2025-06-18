@@ -1,11 +1,11 @@
 {
     "need_update": true,
-    "version": "0.0.3",
+    "version": "0.0.4",
     "mirror": "GLOBAL",
     "homedir": {
       "linux": "/home/xlings",
       "macosx": "/Users/xlings",
-      "windows": "C:/Users/xlings"
+      "windows": "C:/Users/Public/xlings"
     },
     "xim": {
       "index-repo": "https://github.com/d2learn/xim-pkgindex.git",

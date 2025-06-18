@@ -11,6 +11,11 @@ function data()
         if tmp_local_lang:find("zh") then
             local_lang = "zh"
         end
+    elseif is_host("windows") then
+        local tmp_local_lang = os.iorun([[wmic os get locale]])
+        if tmp_local_lang and tmp_local_lang:find("0804") then
+            local_lang = "zh"
+        end
     end
 
     local configdir = path.directory(path.directory(os.scriptdir()))
