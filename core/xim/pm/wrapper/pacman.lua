@@ -15,7 +15,7 @@ function deps(name)
     elseif os.exists("/usr/bin/pactree") then
         output = os.iorunv("pactree", {"-d", "1", name})
     else
-        output = os.iorunv("bash", {"-c", "LANG=C.UTF-8 pacman -Qi linux | awk '/Depends On/ {print $0}'"})
+        output = os.iorunv("bash", {"-c", "LANG=C.UTF-8 pacman -Qi " .. name .. " | awk '/Depends On/ {print $0}'"})
     end
 
     if output then
