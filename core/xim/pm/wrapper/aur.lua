@@ -23,7 +23,7 @@ end
 function install(name)
     for _, aur_helper in ipairs(aur_helpers) do
         if (os.exists("/usr/bin/" .. aur_helper)) then
-            cprint("AUR Helper ${bright}%s${clear} detected, try to install with it")
+            cprint("AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
             local ok = os.execv(aur_helper, {"-S", name})
             return ok == 0
         end
