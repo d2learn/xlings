@@ -22,6 +22,11 @@ function deps(name)
 end
 
 function install(name)
+    if install_via_helper(name) then return true end
+    return install_via_makepkg(name)
+end
+
+function install_via_helper(name)
     for _, aur_helper in ipairs(aur_helpers) do
         if os.exists("/usr/bin/" .. aur_helper) then
             cprint("AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
@@ -29,7 +34,7 @@ function install(name)
             return ok == 0
         end
     end
-    return install_via_makepkg(name)
+    return false
 end
 
 function install_via_makepkg(name)
@@ -51,7 +56,7 @@ function install_via_makepkg(name)
     -- 检查是否有 AUR 依赖
     -- 此处既然已有 PKGBUILD 就不必网络获取
     local deps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${depends[@]} ${makedepends[@]}'")):split(' ')
-    for _, pkg in ipairs(deps) do if not is_pkg_installed_or_in_pacman(pkg) then return try_install_aur_helper() end end
+    for _, pkg in ipairs(deps) do if not is_pkg_installed_or_in_pacman(pkg) then return try_install_aur_helper(pkg) end end
 
     -- 构建并安装包
     cprint("building %s...", name)
@@ -88,7 +93,7 @@ ${clear}
     return false
 end
 
-function try_install_aur_helper()
+function try_install_aur_helper(retry_pkg)
     local install = utils.prompt("Do you want to install an AUR Helper? (y/n)", "y")
     if not install then return false end
 
@@ -96,7 +101,14 @@ function try_install_aur_helper()
     if pacman.info(default_helper)
     then ok = pacman.install(default_helper)
     else ok = install_via_makepkg(default_helper .. "-bin")
-    end return ok
+    end
+
+    if not ok or not os.exists("/usr/bin/" .. default_helper) then
+        cprint("Install %s failed", default_helper)
+        return false
+    end
+    if retry_pkg then return install_via_helper(retry_pkg) end
+    return true
 end
 
 function uninstall(name)
