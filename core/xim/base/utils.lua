@@ -142,15 +142,27 @@ function deref(tlb, key)
     return key, tlb[key] 
 end
 
---- 请求一个字符串
+-- prompt(message) -> confirm
+-- prompt(message, value) -> bool
+-- prompt(message, value, cmp_func) -> bool
+-- cmp_func: compare function, cmp_func(confirm, value)
 --- @param message string
---- @return string
+--- @param value? string
+--- @param cmp_func? function
+--- @return string|boolean
 --- @nodiscard
-function prompt_value(message)
+function prompt(message, value, cmp_func)
     cprintf("${cyan blink}-> ${clear}%s ", message)
     io.stdout:flush()
     local confirm = io.read()
-    return confirm
+
+    if cmp_func then
+        return cmp_func(confirm, value)
+    elseif value then
+        return confirm == value
+    else
+        return confirm
+    end
 end
 
 --- 请求一个布尔值 当输入不被检测时返回默认值
@@ -163,11 +175,14 @@ function prompt_bool(message, default)
 
     local p = ""
     if default then p = " [Y/n] " else p = " [y/N] " end
-    confirm = string.lower(prompt_value(message .. p)) -- 大小写不敏感
-
-    if confirm == "y" or confirm == "yes" then return true end
-    if confirm == "n" or confirm == "no" then return false end
-    if default then return true else return false end
+    return string.lower( -- 大小写不敏感
+        prompt(message .. p),
+        "", function ()
+            if confirm == "y" or confirm == "yes" then return true end
+            if confirm == "n" or confirm == "no" then return false end
+            if default then return true else return false end
+        end
+    )
 end
 
 function load_module(fullpath, rootdir)

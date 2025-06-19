@@ -93,7 +93,7 @@ function try_install_aur_helper()
     if not install then return false end
 
     cprint("Available AUR Helpers: yay, paru")
-    local name = utils.prompt_value("Please input the name of the AUR Helper:")
+    local name = utils.prompt("Please input the name of the AUR Helper:")
     -- 虽然提示了可用的 但此处暂时不作限制
 
     local ok = false
