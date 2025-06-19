@@ -1,9 +1,6 @@
 -- 检查包是否已安装（通过 `pacman -Q`）
 function installed(name)
-    return try { -- 此更改使得未安装此软件包时返回 nil 而不是终止程序
-        function() return os.iorunv("pacman", { "-Q", name }) ~= nil end,
-        catch { function() end }
-    }
+    return os.iorunv("pacman", { "-Q", name }) ~= nil
 end
 
 -- (从本地)获取包的依赖信息（通过 `expac -Q %D` 和备用办法 `pactree -d 1` 和终极备用办法...）
@@ -40,10 +37,8 @@ end
 
 -- (从服务器)获取包信息（通过 `pacman -Si`）
 function info(name)
-    local output = try {
-        function() return os.iorunv("pacman", {"-Si", name}) end,
-        catch { function() end }
-    }
+    local output = os.iorunv("pacman", {"-Si", name})
+
     if output then
         return output:trim()
     else
