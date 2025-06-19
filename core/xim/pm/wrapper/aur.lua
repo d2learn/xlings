@@ -89,18 +89,13 @@ ${clear}
 end
 
 function try_install_aur_helper()
-    local install = utils.prompt_bool("Do you want to install an AUR Helper?")
+    local install = utils.prompt("Do you want to install an AUR Helper? (y/n)", "y")
     if not install then return false end
 
-    cprint("Available AUR Helpers: yay, paru")
-    local name = utils.prompt("Please input the name of the AUR Helper:")
-    -- 虽然提示了可用的 但此处暂时不作限制
-
-    local ok = false
-    -- 判断 pacman 是否有这个包 否则去下载二进制安装
-    if pacman.info(name)
-    then ok = pacman.install(name)
-    else ok = install_via_makepkg(name .. "-bin")
+    local default_helper = aur_helpers[1]
+    if pacman.info(default_helper)
+    then ok = pacman.install(default_helper)
+    else ok = install_via_makepkg(default_helper .. "-bin")
     end return ok
 end
 

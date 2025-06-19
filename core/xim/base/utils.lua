@@ -165,26 +165,6 @@ function prompt(message, value, cmp_func)
     end
 end
 
---- 请求一个布尔值 当输入不被检测时返回默认值
---- @param message string
---- @param default? boolean 默认为 true
---- @return boolean
---- @nodiscard
-function prompt_bool(message, default)
-    if default == nil then default = true end
-
-    local p = ""
-    if default then p = " [Y/n] " else p = " [y/N] " end
-    return string.lower( -- 大小写不敏感
-        prompt(message .. p),
-        "", function ()
-            if confirm == "y" or confirm == "yes" then return true end
-            if confirm == "n" or confirm == "no" then return false end
-            if default then return true else return false end
-        end
-    )
-end
-
 function load_module(fullpath, rootdir)
     -- rootdir/a/b/c.lua -> a.b.c
     local pattern = "^" .. rootdir:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1") .. "/?"
