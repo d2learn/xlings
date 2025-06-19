@@ -142,16 +142,32 @@ function deref(tlb, key)
     return key, tlb[key] 
 end
 
--- TODO: optmize
-function prompt(message, value)
+--- 请求一个字符串
+--- @param message string
+--- @return string
+--- @nodiscard
+function prompt_value(message)
     cprintf("${cyan blink}-> ${clear}%s ", message)
     io.stdout:flush()
     local confirm = io.read()
-    if confirm ~= value then
-        return false
-    else
-        return true
-    end
+    return confirm
+end
+
+--- 请求一个布尔值 当输入不被检测时返回默认值
+--- @param message string
+--- @param default? boolean 默认为 true
+--- @return boolean
+--- @nodiscard
+function prompt_bool(message, default)
+    if default == nil then default = true end
+
+    local p = ""
+    if default then p = " [Y/n] " else p = " [y/N] " end
+    confirm = string.lower(prompt_value(message .. p)) -- 大小写不敏感
+
+    if confirm == "y" or confirm == "yes" then return true end
+    if confirm == "n" or confirm == "no" then return false end
+    if default then return true else return false end
 end
 
 function load_module(fullpath, rootdir)

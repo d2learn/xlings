@@ -179,8 +179,8 @@ function CmdProcessor:install()
         else
             -- please input y or n
             if self.cmds.yes ~= true then
-                local msg = string.format("${bright}install %s? (y/n)", self.target)
-                if not utils.prompt(msg, "y") then
+                local msg = string.format("${bright}install %s?", self.target)
+                if not utils.prompt_bool(msg, true) then
                     return
                 end
             end
@@ -191,8 +191,8 @@ function CmdProcessor:install()
                 for _, pkgname in ipairs(mutex_pkgs) do
                     cprint("${dim bright} - ${green bright}%s${clear}", pkgname)
                 end
-                local msg = string.format("${bright yellow}remove all? (y/n)", self.target)
-                if not utils.prompt(msg, "y") then
+                local msg = string.format("${bright yellow}remove all?", self.target)
+                if not utils.prompt_bool(msg, true) then
                     return
                 else
                     for _, pkgname in ipairs(mutex_pkgs) do
@@ -276,8 +276,8 @@ function CmdProcessor:remove()
 
         local confirm = self.cmds.yes
         if not confirm then
-            local msg = string.format("${bright}uninstall/remove %s? (y/n)", self.target)
-            confirm = utils.prompt(msg, "y")
+            local msg = string.format("${bright}uninstall/remove %s?", self.target)
+            confirm = utils.prompt_bool(msg, true)
         end
         if confirm then
             if self._pm_executor:uninstall() and not self._pm_executor:installed() then

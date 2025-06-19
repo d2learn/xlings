@@ -2,6 +2,7 @@ import("devel.git")
 import("core.base.json")
 
 import("xim.base.runtime")
+import("xim.base.utils")
 import("xim.pm.wrapper.pacman")
 
 local aur_pkgs_dir = path.join(runtime.get_xim_data_dir(), "aur_pkgs")
@@ -50,11 +51,13 @@ function install_via_makepkg(name)
     -- 检查是否有 AUR 依赖
     -- 此处既然已有 PKGBUILD 就不必网络获取
     local deps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${depends[@]} ${makedepends[@]}'")):split(' ')
-    for _, pkg in ipairs(deps) do if not is_pkg_installed_or_in_pacman(pkg) then return false end end
+    for _, pkg in ipairs(deps) do if not is_pkg_installed_or_in_pacman(pkg) then return try_install_aur_helper() end end
 
     -- 构建并安装包
     cprint("building %s...", name)
     os.exec("makepkg -si")
+
+    os.cd("-")
 
     return true
 end
@@ -63,17 +66,12 @@ function is_pkg_installed_or_in_pacman(pkg)
     -- 提取包名
     -- 软件包名称只能包含字母数字字符以及 @、.、_、+、- 中的任何字符。名称不允许以连字符或点开头。所有字母都应为小写。
     pkg = pkg:match("^[a-z0-9@_+][a-z0-9@._+-]*")
-    -- 判断是否已安装 或 在 pacman 中有
-    if pacman.installed(pkg) then return true end
-    local is_pkg_in_pacman = try {
-        function() return os.iorunv("pacman", {"-Si", pkg}) ~= nil end,
-        catch { function() end }
-    }
-    if is_pkg_in_pacman then return true end
+    -- 判断   是否已安装   或   在 pacman 中有
+    if pacman.installed(pkg) or pacman.info(pkg) then return true end
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
     cprint([[
-            ${bright}%s${yellow} not found in pacman${clear}
+              ${dim cyan bright}%s${clear bright yellow} not found in pacman${clear}
 ${yellow}
 If you are a user, install all dependencies first,
 or install any AUR Helper such as yay or paru,
@@ -88,6 +86,22 @@ ${clear}
     ]], pkg)
 
     return false
+end
+
+function try_install_aur_helper()
+    local install = utils.prompt_bool("Do you want to install an AUR Helper?")
+    if not install then return false end
+
+    cprint("Available AUR Helpers: yay, paru")
+    local name = utils.prompt_value("Please input the name of the AUR Helper:")
+    -- 虽然提示了可用的 但此处暂时不作限制
+
+    local ok = false
+    -- 判断 pacman 是否有这个包 否则去下载二进制安装
+    if pacman.info(name)
+    then ok = pacman.install(name)
+    else ok = install_via_makepkg(name .. "-bin")
+    end return ok
 end
 
 function uninstall(name)
@@ -145,5 +159,6 @@ function to_git_url(name)
 end
 
 function main()
-    local aur_git_url = "https://aur.archlinux.org/yay.git"
+    -- test
+    install_via_makepkg("yay-bin")
 end

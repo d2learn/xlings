@@ -40,7 +40,10 @@ end
 
 -- (从服务器)获取包信息（通过 `pacman -Si`）
 function info(name)
-    local output = os.iorunv("pacman", {"-Si", name})
+    local output = try {
+        function() return os.iorunv("pacman", {"-Si", name}) end,
+        catch { function() end }
+    }
     if output then
         return output:trim()
     else
@@ -53,6 +56,6 @@ function main()
     print(deps("code"))
     -- print(install("code"))
     print(info("code"))
-    print(info("awa")) -- nil
+    print(type(info("awa"))) -- nil
 end
 
