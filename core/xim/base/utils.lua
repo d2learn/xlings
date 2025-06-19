@@ -148,19 +148,19 @@ end
 -- cmp_func: compare function, cmp_func(confirm, value)
 --- @param message string
 --- @param value? string
---- @param cmp_func? function
---- @return string|boolean
+--- @param cmp_func? fun(string, string): boolean
+--- @return string | boolean
 --- @nodiscard
 function prompt(message, value, cmp_func)
     cprintf("${cyan blink}-> ${clear}%s ", message)
     io.stdout:flush()
     local confirm = io.read()
 
-    if cmp_func then
+    if cmp_func then  -- 3 argument
         return cmp_func(confirm, value)
-    elseif value then
+    elseif value then -- 2 argument
         return confirm == value
-    else
+    else              -- 1 argument
         return confirm
     end
 end
