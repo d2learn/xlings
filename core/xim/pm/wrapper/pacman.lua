@@ -12,7 +12,8 @@ function deps(name)
     elseif os.exists("/usr/bin/pactree") then
         output = os.iorunv("pactree", {"-d", "1", name})
     else
-        output = os.iorunv("bash", {"-c", "LANG=C.UTF-8 pacman -Qi " .. name .. " | awk '/Depends On/ {print $0}'"})
+        -- 终极备用办法 使用英文环境执行 `pacman -Qi` 获取信息后 使用 `awk` 提取 `Depends On` 的那一行 ": " 后的部分
+        output = os.iorunv("bash", {"-c", "LANG=C.UTF-8 pacman -Qi " .. name .. " | awk -F': ' '/Depends On/ {print $2}'"})
     end
 
     if output then
