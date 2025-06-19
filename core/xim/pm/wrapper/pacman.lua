@@ -28,13 +28,13 @@ end
 -- (更新数据库并)安装包（通过 `pacman -Sy`）
 -- 但官方不推荐这样做 此处官方建议使用 `-Syu` 但这样也会进行系统更新 所以还是保留 `-Sy`
 function install(name)
-    local ok = os.execv("sudo", {"pacman", "-Sy", name})
+    local ok = os.execv("sudo", {"pacman", "--noconfirm", "-Sy", name})
     return ok == 0
 end
 
 -- 卸载包（通过 `pacman -R`）
 function uninstall(name)
-    local ok = os.execv("sudo", {"pacman", "-R", name})
+    local ok = os.execv("sudo", {"pacman", "--noconfirm", "-R", name})
     return ok == 0
 end
 
