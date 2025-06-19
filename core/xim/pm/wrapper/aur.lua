@@ -23,14 +23,19 @@ end
 
 function install(name)
     if install_via_helper(name) then return true end
+    cprint("${yellow}No AUR Helper found, try install with makepkg")
     return install_via_makepkg(name)
 end
 
-function install_via_helper(name)
+function install_via_helper(name, arguments)
+    local arguments = arguments or {}
+    table.insert(arguments, "-S")
+    table.insert(arguments, name)
+
     for _, aur_helper in ipairs(aur_helpers) do
         if os.exists("/usr/bin/" .. aur_helper) then
             cprint("AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
-            local ok = os.execv(aur_helper, {"-S", name})
+            local ok = os.execv(aur_helper, arguments)
             return ok == 0
         end
     end
@@ -97,7 +102,7 @@ function try_install_aur_helper(retry_pkg)
     local install = utils.prompt("Do you want to install an AUR Helper? (y/n)", "y")
     if not install then return false end
 
-    local default_helper = aur_helpers[1]
+    local default_helper = aur_helpers[1] -- yay
     if pacman.info(default_helper)
     then ok = pacman.install(default_helper)
     else ok = install_via_makepkg(default_helper .. "-bin")
@@ -107,8 +112,11 @@ function try_install_aur_helper(retry_pkg)
         cprint("Install %s failed", default_helper)
         return false
     end
-    if retry_pkg then return install_via_helper(retry_pkg) end
-    return true
+    if retry_pkg then return install_via_helper(
+        -- 为 yay 设置 builddir 以避免重复下载
+        -- 此项在 paru 为 `--clonedir /path/to/dir`
+        retry_pkg, {"--builddir", aur_pkgs_dir}
+    ) else return true end
 end
 
 function uninstall(name)
