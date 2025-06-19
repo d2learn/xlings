@@ -77,7 +77,7 @@ function is_pkg_installed_or_in_pacman(pkg)
     -- 软件包名称只能包含字母数字字符以及 @、.、_、+、- 中的任何字符。名称不允许以连字符或点开头。所有字母都应为小写。
     pkg = pkg:match("^[a-z0-9@_+][a-z0-9@._+-]*")
     -- 判断   是否已安装   或   在 pacman 中有
-    if pacman.installed(pkg) or pacman.info(pkg) then return true end
+    if _try_pacman_installed(pkg) or _try_info_pacman(pkg) then return true end
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
     cprint([[
@@ -103,7 +103,7 @@ function try_install_aur_helper(retry_pkg)
     if not install then return false end
 
     local default_helper = aur_helpers[1] -- yay
-    if pacman.info(default_helper)
+    if _try_info_pacman(default_helper)
     then ok = pacman.install(default_helper)
     else ok = install_via_makepkg(default_helper .. "-bin")
     end
@@ -117,6 +117,20 @@ function try_install_aur_helper(retry_pkg)
         -- 此项在 paru 为 `--clonedir /path/to/dir`
         retry_pkg, {"--builddir", aur_pkgs_dir}
     ) else return true end
+end
+
+function _try_pacman_installed(name)
+    return try {
+        function() return pacman.installed(name) end,
+        catch { function() return false end }
+    }
+end
+
+function _try_info_pacman(name)
+    return try {
+        function() return pacman.info(name) ~= nil end,
+        catch { function() return false end }
+    }
 end
 
 function uninstall(name)
