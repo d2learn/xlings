@@ -23,12 +23,12 @@ end
 
 function install(name)
     if install_via_helper(name) then return true end
-    cprint("${yellow}No AUR Helper found, try install with makepkg")
     return install_via_makepkg(name)
 end
 
 function install_via_helper(name, arguments)
     local arguments = arguments or {}
+    table.insert(arguments, "--noconfirm")
     table.insert(arguments, "-S")
     table.insert(arguments, name)
 
@@ -65,7 +65,7 @@ function install_via_makepkg(name)
 
     -- 构建并安装包
     cprint("building %s...", name)
-    os.exec("makepkg -si")
+    os.exec("makepkg -si --noconfirm")
 
     os.cd("-")
 
@@ -83,8 +83,8 @@ function is_pkg_installed_or_in_pacman(pkg)
     cprint([[
               ${dim cyan bright}%s${clear bright yellow} not found in pacman${clear}
 ${yellow}
-If you are a user, install all dependencies first,
-or install any AUR Helper such as yay or paru,
+If you are a user,
+continue by AUR Helper such as yay or paru,
 or notify the maintainer of this xpkg.
 
 Some dependencies may be located in the archlinuxcn repo.
