@@ -227,7 +227,7 @@ function try_mirror_match_for_url(url)
         local mirror = xconfig.load()["mirror"]
         return url[mirror] or url["GLOBAL"] or url["DEFAULT"]
     else
-        print("Error: Invalid URL type! Expected string or table.")
+        cprint("[xlings:xim]: ${yellow dim}url is not a string or table")
         return nil
     end
 
