@@ -26,6 +26,9 @@ function XPkgManager:installed(xpkg)
         ret = _try_execute_hook(xpkg.name, xpkg, "installed")
     else
         local xvm_bin = path.join(runtime.get_bindir(), "xvm")
+        if is_host("windows") then
+            xvm_bin = path.join(runtime.get_bindir(), "xvm.exe")
+        end
         if os.isfile(xvm_bin) then
             ret = os.iorun([[%s list %s]], xvm_bin, xpkg.name):trim()
         end
@@ -188,6 +191,8 @@ function _set_runtime_info(xpkg)
     if runtime.get_pkginfo().name == xpkg.name then return end
 
     local url = xpkg:get_xpm_resources().url
+    url = utils.try_mirror_match_for_url(url)
+
     local datadir = runtime.get_xim_data_dir()
     local install_dir = path.join(runtime.get_xim_install_basedir(), xpkg.name, xpkg.version)
 

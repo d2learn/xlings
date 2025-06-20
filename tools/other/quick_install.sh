@@ -118,6 +118,7 @@ check_and_install_tool() {
 
 check_and_install_tool curl
 check_and_install_tool unzip
+check_and_install_tool git
 
 # ------------------------------
 

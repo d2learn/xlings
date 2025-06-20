@@ -21,6 +21,8 @@ package() {
   install -d "$pkgdir/usr/share/$pkgname"
   cp -r . "$pkgdir/usr/share/$pkgname"
 
+  chmod 766 "$pkgdir/usr/share/$pkgname/config/xlings.json"
+
   # Set permissions for files
   # find "$pkgdir/usr/share/$pkgname" -type f -exec chmod 644 {} +
   # find "$pkgdir/usr/share/$pkgname" -type d -exec chmod 755 {} +

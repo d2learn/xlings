@@ -75,6 +75,9 @@ end
 
 function __xvm_run(cmd)
     local xvm_path = path.join(system.bindir(), "xvm")
+    if is_host("windows") then
+        xvm_path = path.join(system.bindir(), "xvm.exe")
+    end
     if not os.isfile(xvm_path) then
         os.exec("xlings install xvm -y")
     end
