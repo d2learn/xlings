@@ -44,10 +44,10 @@ jobs:
               pacman -Qii xlings
               pacman -Ql xlings
             echo ::endgroup::
-          
-            echo ::group:: Xlings Add Test User
-              sudo xlings self config --adduser test
           """
+          
+          echo ::group:: Xlings Add Test User
+            sudo xlings self config --adduser test
           
           su test -c """
             groups

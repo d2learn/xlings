@@ -4,6 +4,6 @@ Type = Package
 Target = xlings
 
 [Action]
-Description = xlings self init
+Description = xlings init
 When = PostTransaction
-Exec = /usr/bin/xlings self init
+Exec = /usr/bin/xlings
