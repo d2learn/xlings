@@ -142,15 +142,26 @@ function deref(tlb, key)
     return key, tlb[key] 
 end
 
--- TODO: optmize
-function prompt(message, value)
+-- prompt(message) -> confirm
+-- prompt(message, value) -> bool
+-- prompt(message, value, cmp_func) -> bool
+-- cmp_func: compare function, cmp_func(confirm, value)
+--- @param message string
+--- @param value? string
+--- @param cmp_func? fun(string, string): boolean
+--- @return string | boolean
+--- @nodiscard
+function prompt(message, value, cmp_func)
     cprintf("${cyan blink}-> ${clear}%s ", message)
     io.stdout:flush()
     local confirm = io.read()
-    if confirm ~= value then
-        return false
-    else
-        return true
+
+    if cmp_func then  -- 3 argument
+        return cmp_func(confirm, value)
+    elseif value then -- 2 argument
+        return confirm == value
+    else              -- 1 argument
+        return confirm
     end
 end
 

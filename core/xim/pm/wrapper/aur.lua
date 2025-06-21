@@ -2,11 +2,14 @@ import("devel.git")
 import("core.base.json")
 
 import("xim.base.runtime")
+import("xim.base.utils")
 import("xim.pm.wrapper.pacman")
 
 local aur_pkgs_dir = path.join(runtime.get_xim_data_dir(), "aur_pkgs")
 local aur_url_template = "https://aur.archlinux.org/%s.git"
 local aur_pkgs_info = {}
+
+local aur_helpers = { "yay", "paru" }
 
 function installed(name)
     return pacman.installed(name)
@@ -19,26 +22,126 @@ function deps(name)
 end
 
 function install(name)
+    if install_via_helper(name) then return true end
+    return install_via_makepkg(name)
+end
+
+function install_via_helper(name, arguments)
+    local arguments = arguments or {}
+    table.insert(arguments, "--noconfirm")
+    table.insert(arguments, "-S")
+    table.insert(arguments, name)
+
+    for _, aur_helper in ipairs(aur_helpers) do
+        if os.exists("/usr/bin/" .. aur_helper) then
+            cprint("[xlings:xim:aur]: AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
+            local ok = os.execv(aur_helper, arguments)
+            return ok == 0
+        end
+    end
+    return false
+end
+
+function install_via_makepkg(name)
+
+    if not os.isdir(aur_pkgs_dir) then
+        os.mkdir(aur_pkgs_dir)
+    end
+
     os.cd(aur_pkgs_dir)
 
     -- 克隆 AUR 仓库
     if not os.isdir(name) then
         local git_url = to_git_url(name)
-        cprint("cloning %s...", git_url)
+        cprint("[xlings:xim:aur]: cloning %s...", git_url)
         git.clone(git_url)
         os.cd(name)
     else
-        cprint("${bright}%s${clear} already exists, try to update...", name)
+        cprint("[xlings:xim:aur]: ${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
         git.pull()
         git.clean({force = true})
     end
 
+    -- 检查是否有 AUR 依赖
+    -- 此处既然已有 PKGBUILD 就不必网络获取
+    local deps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${depends[@]} ${makedepends[@]}'")):split(' ')
+    for _, pkg in ipairs(deps) do
+        if not is_pkg_installed_or_in_pacman(pkg) then
+            return try_install_aur_helper(pkg)
+        end
+    end
+
     -- 构建并安装包
-    cprint("building %s...", name)
-    os.exec("makepkg -si")
+    cprint("[xlings:xim:aur]: building %s...", name)
+    os.exec("makepkg -si --noconfirm")
+
+    os.cd("-")
 
     return true
+end
+
+function is_pkg_installed_or_in_pacman(pkg)
+    -- 提取包名
+    -- 软件包名称只能包含字母数字字符以及 @、.、_、+、- 中的任何字符。名称不允许以连字符或点开头。所有字母都应为小写。
+    pkg = pkg:match("^[a-z0-9@_+][a-z0-9@._+-]*")
+    -- 判断   是否已安装   或   在 pacman 中有
+    if _try_pacman_installed(pkg) or _try_info_pacman(pkg) then return true end
+
+    -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
+    cprint([[
+
+    ${dim cyan bright}%s${clear bright yellow} not found in pacman${clear}
+
+${yellow}This package may be in the AUR or archlinuxcn.
+
+▶ If you're a user:
+    Try continuing with an AUR helper (e.g. yay, paru).
+
+▶ If you're a maintainer:
+    Add missing packages to ${underline}https://github.com/d2learn/xim-pkgindex${clear}
+
+Proceeding with AUR helper...${clear}
+      ]], pkg)
+
+    return false
+end
+
+function try_install_aur_helper(retry_pkg)
+    local install = utils.prompt("Install an AUR helper to continue? (y/n)", "y")
+    if not install then return false end
+
+    local ok = false
+    local default_helper = aur_helpers[1] -- yay
+    if _try_info_pacman(default_helper) then
+        ok = pacman.install(default_helper)
+    else
+        ok = install_via_makepkg(default_helper .. "-bin")
+    end
+
+    if not ok or not os.exists("/usr/bin/" .. default_helper) then
+        cprint("[xlings:xim:aur]: Install %s failed", default_helper)
+        return false
+    end
+    if retry_pkg then return install_via_helper(
+        -- 为 yay 设置 builddir 以避免重复下载
+        -- 此项在 paru 为 `--clonedir /path/to/dir`
+        retry_pkg, {"--builddir", aur_pkgs_dir}
+    ) else return true end
+end
+
+function _try_pacman_installed(name)
+    return try {
+        function() return pacman.installed(name) end,
+        catch { function() return false end }
+    }
+end
+
+function _try_info_pacman(name)
+    return try {
+        function() return pacman.info(name) ~= nil end,
+        catch { function() return false end }
+    }
 end
 
 function uninstall(name)
@@ -84,7 +187,7 @@ function aur_info(name)
         if data then
             aur_pkgs_info = json.decode(data)
         else
-            cprint("Failed to get AUR package info - %s", name)
+            cprint("[xlings:xim:aur]: Failed to get AUR package info - %s", name)
         end
     end
     return aur_pkgs_info["results"][1]
@@ -96,5 +199,6 @@ function to_git_url(name)
 end
 
 function main()
-    local aur_git_url = "https://aur.archlinux.org/yay.git"
+    -- test
+    install_via_makepkg("yay-bin")
 end
