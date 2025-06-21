@@ -38,11 +38,19 @@ function url_latency(url)
     local cmd = string.format("curl -o %s -s -w %%{time_total} %s", null_output, url)
 
     -- 执行 curl 命令并捕获结果
-    local result, err = os.iorun(cmd)
+    local result, err = try {
+        function ()
+            return os.iorun(cmd)
+        end, catch {
+            function(e)
+                return false, e
+            end
+        }
+    }
 
     if not result or result == "" then
         print("Error: Failed to execute curl command! (" .. (err or "unknown error") .. ")")
-        return nil
+        return 1000000 - 1
     end
 
     return tonumber(result) * 1000
@@ -54,7 +62,7 @@ function low_latency_urls(urls)
         return nil
     end
 
-    local min_latency = math.huge
+    local min_latency = 1000000
     local min_url = nil
 
     for _, url in ipairs(urls) do
