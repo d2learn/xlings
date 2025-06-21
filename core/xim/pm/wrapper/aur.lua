@@ -200,5 +200,5 @@ end
 
 function main()
     -- test
-    install_via_makepkg("yay-bin")
+    install("wechat")
 end
