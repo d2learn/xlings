@@ -35,7 +35,7 @@ function url_latency(url)
     local null_output = os.host() == "windows" and "NUL" or "/dev/null"
 
     -- 定义 curl 命令，%{time_total} 用于提取总耗时
-    local cmd = string.format("curl -o %s -s -w %%{time_total} %s", null_output, url)
+    local cmd = string.format("bash -c 'curl -o %s -s -w %%{time_total} %s || exit 0'", null_output, url)
 
     -- 执行 curl 命令并捕获结果
     local result, err = os.iorun(cmd)
