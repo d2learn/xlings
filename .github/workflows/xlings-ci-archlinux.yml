@@ -1,0 +1,69 @@
+name: xlings-ci-archlinux
+
+on: [push]
+
+jobs:
+
+  archlinux-test:
+    runs-on: ubuntu-latest
+
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initialization Environment
+        run: |
+          pacman -Syu --noconfirm base-devel git sudo shadow
+          useradd -m test
+          usermod -aG wheel test
+          echo "test ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/test
+          chmod 0440 /etc/sudoers.d/test
+      - name: Installation Xlings on Arch Linux
+        run: |
+          su test -c """
+            set -euo pipefail
+          
+            whoami
+            pwd
+            sudo chown -R test .
+            echo ::group:: Copy Repo
+              mkdir -p /tmp/build/src
+              cp -Rv ./ /tmp/build/src/xlings
+              cp -Rv ./config/aur/* /tmp/build
+              cp -Rv ./config/aur/* /tmp/build/src
+            echo ::endgroup::
+            echo ::group:: Makepkg Xlings
+              cd /tmp/build
+              makepkg -sie --noconfirm
+              cd -
+            echo ::endgroup::
+            echo ::group:: Package Info
+              pacman -Qii xlings
+              pacman -Ql xlings
+            echo ::endgroup::
+          
+            echo ::group:: Xlings Add Test User
+              sudo xlings self config --adduser test
+          """
+          
+          su test -c """
+            groups
+            echo ::endgroup::
+          
+            echo ::group:: Xlings Output
+              xlings --version
+            echo ::endgroup::
+          """
+      - name: XIM Test on Arch linux
+        run: |
+          su test -c """
+            set -euo pipefail
+          
+            echo ::group:: Test XIM AUR Wrapper
+              cd /home/xlings/.xlings/core/xim/pm/wrapper
+              xmake l ./aur.lua
+            echo ::endgroup::
+          """

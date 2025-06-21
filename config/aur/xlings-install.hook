@@ -1,0 +1,9 @@
+[Trigger]
+Operation = Install
+Type = Package
+Target = xlings
+
+[Action]
+Description = xlings self init
+When = PostTransaction
+Exec = /usr/bin/xlings self init

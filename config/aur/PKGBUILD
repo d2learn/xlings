@@ -8,8 +8,12 @@ url="https://github.com/d2learn/xlings"
 license=('Apache-2.0')
 depends=('xmake')
 makedepends=('git')
-source=("git+https://github.com/d2learn/xlings.git")
-sha256sums=('SKIP')
+source=(
+    "git+https://github.com/d2learn/xlings.git"
+    "xlings-install.hook"
+    "xlings-remove.hook"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
   cd "$srcdir/$pkgname"
@@ -26,4 +30,8 @@ package() {
   # Set permissions for files
   # find "$pkgdir/usr/share/$pkgname" -type f -exec chmod 644 {} +
   # find "$pkgdir/usr/share/$pkgname" -type d -exec chmod 755 {} +
+
+  # Add hooks
+  install -Dm644 ../xlings-install.hook "$pkgdir/usr/share/libalpm/hooks/xlings-install.hook"
+  install -Dm644 ../xlings-remove.hook "$pkgdir/usr/share/libalpm/hooks/xlings-remove.hook"
 }
