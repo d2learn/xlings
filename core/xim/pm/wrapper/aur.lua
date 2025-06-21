@@ -34,7 +34,7 @@ function install_via_helper(name, arguments)
 
     for _, aur_helper in ipairs(aur_helpers) do
         if os.exists("/usr/bin/" .. aur_helper) then
-            cprint("AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
+            cprint("[xlings:xim:aur]: AUR Helper ${bright}%s${clear} detected, try to install with it", aur_helper)
             local ok = os.execv(aur_helper, arguments)
             return ok == 0
         end
@@ -43,16 +43,21 @@ function install_via_helper(name, arguments)
 end
 
 function install_via_makepkg(name)
+
+    if not os.isdir(aur_pkgs_dir) then
+        os.mkdir(aur_pkgs_dir)
+    end
+
     os.cd(aur_pkgs_dir)
 
     -- 克隆 AUR 仓库
     if not os.isdir(name) then
         local git_url = to_git_url(name)
-        cprint("cloning %s...", git_url)
+        cprint("[xlings:xim:aur]: cloning %s...", git_url)
         git.clone(git_url)
         os.cd(name)
     else
-        cprint("${bright}%s${clear} already exists, try to update...", name)
+        cprint("[xlings:xim:aur]: ${bright}%s${clear} already exists, try to update...", name)
         os.cd(name)
         git.pull()
         git.clean({force = true})
@@ -61,10 +66,14 @@ function install_via_makepkg(name)
     -- 检查是否有 AUR 依赖
     -- 此处既然已有 PKGBUILD 就不必网络获取
     local deps = string.trim(os.iorun("bash -c 'source PKGBUILD && echo -n ${depends[@]} ${makedepends[@]}'")):split(' ')
-    for _, pkg in ipairs(deps) do if not is_pkg_installed_or_in_pacman(pkg) then return try_install_aur_helper(pkg) end end
+    for _, pkg in ipairs(deps) do
+        if not is_pkg_installed_or_in_pacman(pkg) then
+            return try_install_aur_helper(pkg)
+        end
+    end
 
     -- 构建并安装包
-    cprint("building %s...", name)
+    cprint("[xlings:xim:aur]: building %s...", name)
     os.exec("makepkg -si --noconfirm")
 
     os.cd("-")
@@ -81,35 +90,37 @@ function is_pkg_installed_or_in_pacman(pkg)
 
     -- 提示应将非官方源的依赖包添加至 xpkg 以处理依赖
     cprint([[
-              ${dim cyan bright}%s${clear bright yellow} not found in pacman${clear}
-${yellow}
-If you are a user,
-continue by AUR Helper such as yay or paru,
-or notify the maintainer of this xpkg.
 
-Some dependencies may be located in the archlinuxcn repo.
+    ${dim cyan bright}%s${clear bright yellow} not found in pacman${clear}
 
-If you are a maintainer, add all dependencies that are
-not in the official repos to the deps of the xpkg,
-and create the xpkg for them.
-${clear}
-    ]], pkg)
+${yellow}This package may be in the AUR or archlinuxcn.
+
+▶ If you're a user:
+    Try continuing with an AUR helper (e.g. yay, paru).
+
+▶ If you're a maintainer:
+    Add missing packages to ${underline}https://github.com/d2learn/xim-pkgindex${clear}
+
+Proceeding with AUR helper...${clear}
+      ]], pkg)
 
     return false
 end
 
 function try_install_aur_helper(retry_pkg)
-    local install = utils.prompt("Do you want to install an AUR Helper? (y/n)", "y")
+    local install = utils.prompt("Install an AUR helper to continue? (y/n)", "y")
     if not install then return false end
 
+    local ok = false
     local default_helper = aur_helpers[1] -- yay
-    if _try_info_pacman(default_helper)
-    then ok = pacman.install(default_helper)
-    else ok = install_via_makepkg(default_helper .. "-bin")
+    if _try_info_pacman(default_helper) then
+        ok = pacman.install(default_helper)
+    else
+        ok = install_via_makepkg(default_helper .. "-bin")
     end
 
     if not ok or not os.exists("/usr/bin/" .. default_helper) then
-        cprint("Install %s failed", default_helper)
+        cprint("[xlings:xim:aur]: Install %s failed", default_helper)
         return false
     end
     if retry_pkg then return install_via_helper(
@@ -176,7 +187,7 @@ function aur_info(name)
         if data then
             aur_pkgs_info = json.decode(data)
         else
-            cprint("Failed to get AUR package info - %s", name)
+            cprint("[xlings:xim:aur]: Failed to get AUR package info - %s", name)
         end
     end
     return aur_pkgs_info["results"][1]
