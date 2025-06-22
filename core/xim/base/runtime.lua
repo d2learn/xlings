@@ -17,9 +17,9 @@ xim_runtime_data = {
     --rundir = "",
 }
 
-xim_install_basedir = path.join(xim_data_dir, "xpkgs")
-xim_index_reposdir = path.join(xim_data_dir, "xim-index-repos")
-xim_local_index_repodir = path.join(xim_data_dir, "local-indexrepo")
+xim_install_basedir = path.join(get_xim_data_dir(), "xpkgs")
+xim_index_reposdir = path.join(get_xim_data_dir(), "xim-index-repos")
+xim_local_index_repodir = path.join(get_xim_data_dir(), "local-indexrepo")
 
 function init()
     -- create xim data dir
