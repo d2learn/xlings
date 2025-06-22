@@ -265,6 +265,9 @@ function uninstall()
                         cprint("[xlings]: remove xlings user group - ${green}ok")
                         local current_user = os.getenv("USER")
                         sudo.exec("chown -R " .. current_user .. ":" .. current_user .. " " .. rcachedir)
+                    elseif is_host("windows") then
+                        cprint("[xlings]: try remove [D:/.xlings_data] ...")
+                        os.tryrm("D:/.xlings_data")
                     end
                     if os.tryrm(rcachedir) then
                         cprint("[xlings]: remove %s - ${green}ok", rcachedir)
