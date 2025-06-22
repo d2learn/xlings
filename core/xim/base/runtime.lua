@@ -4,7 +4,7 @@
 -- TODO: optimize, use other method provide runtime info for package hooks
 import("platform")
 
-xim_data_dir = path.join(platform.get_config_info().rcachedir, "xim")
+__xim_data_dir = nil
 
 xim_runtime_data = {
     pkginfo = {
@@ -17,26 +17,26 @@ xim_runtime_data = {
     --rundir = "",
 }
 
-xim_install_basedir = path.join(xim_data_dir, "xpkgs")
-xim_index_reposdir = path.join(xim_data_dir, "xim-index-repos")
-xim_local_index_repodir = path.join(xim_data_dir, "local-indexrepo")
+__xim_install_basedir = nil
+__xim_index_reposdir = nil
+__xim_local_index_repodir = nil
 
 function init()
     -- create xim data dir
-    if not os.isdir(xim_data_dir) then
-        os.mkdir(xim_data_dir)
+    if not os.isdir(get_xim_data_dir()) then
+        os.mkdir(get_xim_data_dir())
     end
     -- create xim install basedir
-    if not os.isdir(xim_install_basedir) then
-        os.mkdir(xim_install_basedir)
+    if not os.isdir(get_xim_install_basedir()) then
+        os.mkdir(get_xim_install_basedir())
     end
     -- create xim index repos dir
-    if not os.isdir(xim_index_reposdir) then
-        os.mkdir(xim_index_reposdir)
+    if not os.isdir(get_xim_index_reposdir()) then
+        os.mkdir(get_xim_index_reposdir())
     end
     -- create xim local index repo dir
-    if not os.isdir(xim_local_index_repodir) then
-        os.mkdir(xim_local_index_repodir)
+    if not os.isdir(get_xim_local_index_repodir()) then
+        os.mkdir(get_xim_local_index_repodir())
     end
 end
 
@@ -85,21 +85,45 @@ function get_bindir()
 end
 
 function get_xim_data_dir()
-    return xim_data_dir
+    if __xim_data_dir == nil then
+        -- default xim data dir
+        __xim_data_dir = path.join(platform.get_config_info().rcachedir, "xim")
+        -- TODO: optimize to support custom data dir by config file
+        if is_host("windows") and os.isdir("D:/") then
+            if not os.isdir("D:/.xlings_data") then os.mkdir("D:/.xlings_data") end
+            __xim_data_dir = path.join("D:/.xlings_data", "xim")
+            if not os.isdir(__xim_data_dir) then
+                os.mkdir(__xim_data_dir)
+            end
+        end
+    end
+    return __xim_data_dir
 end
 
 function get_xim_install_basedir()
-    return xim_install_basedir
+    if __xim_install_basedir == nil then
+        -- default xim install basedir
+        __xim_install_basedir = path.join(get_xim_data_dir(), "xpkgs")
+    end
+    return __xim_install_basedir
 end
 
 function get_xim_index_reposdir()
-    return xim_index_reposdir
+    if __xim_index_reposdir == nil then
+        -- default xim index repos dir
+        __xim_index_reposdir = path.join(get_xim_data_dir(), "xim-index-repos")
+    end
+    return __xim_index_reposdir
 end
 
 function get_xim_local_index_repodir()
-    return xim_local_index_repodir
+    if __xim_local_index_repodir == nil then
+        -- default xim local index repo dir
+        __xim_local_index_repodir = path.join(get_xim_data_dir(), "local-indexrepo")
+    end
+    return __xim_local_index_repodir
 end
 
 function main()
-    print(xim_data_dir)
+    print(get_xim_data_dir())
 end
