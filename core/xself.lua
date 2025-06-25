@@ -213,7 +213,7 @@ function update()
     cprint("\t\t${bright}[xlings update command]")
     cprint("")
     if is_host("windows") then
-        cprint("${cyan}Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content")
+        cprint("${cyan}irm https://d2learn.org/xlings-install.ps1.txt | iex")
     else
         cprint("${cyan}curl -fsSL https://d2learn.org/xlings-install.sh | bash")
     end

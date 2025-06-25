@@ -57,7 +57,7 @@
 
 > 在命令行窗口执行一键安装命令
 
-### Linux
+### Linux/MacOS
 
 ```bash
 curl -fsSL https://d2learn.org/xlings-install.sh | bash
@@ -72,7 +72,7 @@ wget https://d2learn.org/xlings-install.sh -O - | bash
 ### Windows - PowerShell
 
 ```bash
-Invoke-Expression (Invoke-Webrequest 'https://d2learn.org/xlings-install.ps1.txt' -UseBasicParsing).Content
+irm https://d2learn.org/xlings-install.ps1.txt | iex
 ```
 
 ## 用法简介
