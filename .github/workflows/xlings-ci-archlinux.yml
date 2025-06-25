@@ -1,6 +1,9 @@
 name: xlings-ci-archlinux
 
-on: [push]
+on:
+  push:
+    paths:
+      - 'config/aur'
 
 jobs:
 
