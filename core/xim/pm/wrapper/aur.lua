@@ -108,7 +108,13 @@ Proceeding with AUR helper...${clear}
 end
 
 function try_install_aur_helper(retry_pkg)
-    local install = utils.prompt("Install an AUR helper to continue? (y/n)", "y")
+    local install = false
+    if os.getenv("TEST_CI_AUR_NO_CONFIRM") == "true" then
+        cprint("TEST_CI_AUR_NO_CONFIRM == true")
+        install = true
+    else
+        install = utils.prompt("Install an AUR helper to continue? (y/n)", "y")
+    end
     if not install then return false end
 
     local ok = false

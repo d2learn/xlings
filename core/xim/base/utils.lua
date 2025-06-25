@@ -154,12 +154,6 @@ end
 function prompt(message, value, cmp_func)
     cprintf("${cyan blink}-> ${clear}%s ", message)
     io.stdout:flush()
-
-    if os.getenv("TEST_CI_PROMPT_NO_CONFIRM") == "true" then
-        cprint("Y! TEST_CI_PROMPT_NO_CONFIRM")
-        return true
-    end
-
     local confirm = io.read()
 
     if cmp_func then  -- 3 argument
