@@ -62,7 +62,7 @@ jobs:
           """
       - name: XIM Test on Arch linux
         env:
-          TEST_CI_PROMPT_NO_CONFIRM: true
+          TEST_CI_AUR_NO_CONFIRM: true
         run: |
           su test -c """
             set -euo pipefail
