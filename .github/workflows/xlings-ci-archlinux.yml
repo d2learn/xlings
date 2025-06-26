@@ -3,7 +3,7 @@ name: xlings-ci-archlinux
 on:
   push:
     paths:
-      - 'config/aur'
+      - 'config/aur/**'
 
 jobs:
 
@@ -25,8 +25,9 @@ jobs:
           usermod -aG wheel admin
           usermod -aG wheel test
           echo "admin ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/admin
-          echo "admin ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/test
+          echo "test ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/test
           chmod 0440 /etc/sudoers.d/admin
+          chmod 0440 /etc/sudoers.d/test
 
       - name: Installation Xlings on Arch Linux
         run: |
