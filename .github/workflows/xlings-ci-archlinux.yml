@@ -20,13 +20,17 @@ jobs:
       - name: Initialization Environment
         run: |
           pacman -Syu --noconfirm base-devel git sudo shadow
+          useradd -m admin
           useradd -m test
+          usermod -aG wheel admin
           usermod -aG wheel test
-          echo "test ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/test
-          chmod 0440 /etc/sudoers.d/test
+          echo "admin ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/admin
+          echo "admin ALL=(ALL) NOPASSWD:ALL" | tee /etc/sudoers.d/test
+          chmod 0440 /etc/sudoers.d/admin
+
       - name: Installation Xlings on Arch Linux
         run: |
-          su test -c """
+          su admin -c """
             set -euo pipefail
           
             whoami
@@ -47,15 +51,15 @@ jobs:
               pacman -Qii xlings
               pacman -Ql xlings
             echo ::endgroup::
+            echo ::group:: Xlings Init
+              xlings
+            echo ::endgroup::
+            echo ::group:: Xlings Add Test User
+              xlings self config --adduser test
+            echo ::endgroup::
           """
           
-          echo ::group:: Xlings Add Test User
-            sudo xlings self config --adduser test
-          
           su test -c """
-            groups
-            echo ::endgroup::
-          
             echo ::group:: Xlings Output
               xlings --version
             echo ::endgroup::

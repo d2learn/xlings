@@ -190,6 +190,8 @@ function init()
     local rcachedir = platform.get_config_info().rcachedir
     __config_environment(rcachedir)
 
+    __xlings_usergroup_checker()
+
     common.xlings_exec([[xlings install xvm@0.0.4 -y]])
     os.exec([[xvm add xim 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xinstall 0.0.4 --alias "xlings install"]])
@@ -198,8 +200,6 @@ function init()
     os.exec([[xvm add xself 0.0.4 --alias "xlings self"]])
     os.exec([[xvm add d2x 0.0.4 --alias "xlings d2x"]])
     --os.exec([[xim --detect]])
-
-    __xlings_usergroup_checker()
 
     cprint("")
     cprint("\t${bright yellow}restart cmd/shell to update env")

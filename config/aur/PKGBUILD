@@ -10,7 +10,6 @@ depends=('xmake')
 makedepends=('git')
 source=(
     "git+https://github.com/d2learn/xlings.git"
-    "xlings-install.hook"
     "xlings-remove.hook"
 )
 sha256sums=('SKIP' 'SKIP' 'SKIP')
@@ -32,6 +31,5 @@ package() {
   # find "$pkgdir/usr/share/$pkgname" -type d -exec chmod 755 {} +
 
   # Add hooks
-  install -Dm644 ../xlings-install.hook "$pkgdir/usr/share/libalpm/hooks/xlings-install.hook"
   install -Dm644 ../xlings-remove.hook "$pkgdir/usr/share/libalpm/hooks/xlings-remove.hook"
 }

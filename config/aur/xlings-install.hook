@@ -1,9 +1,0 @@
-[Trigger]
-Operation = Install
-Type = Package
-Target = xlings
-
-[Action]
-Description = xlings init
-When = PostTransaction
-Exec = /usr/bin/xlings
