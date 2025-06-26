@@ -46,6 +46,7 @@ function install_via_makepkg(name)
 
     if not os.isdir(aur_pkgs_dir) then
         os.mkdir(aur_pkgs_dir)
+        os.exec("chmod 775 " .. aur_pkgs_dir)
     end
 
     os.cd(aur_pkgs_dir)
