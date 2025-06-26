@@ -55,7 +55,7 @@ jobs:
             echo ::endgroup::
             echo ::group:: Xlings Init and test aur
               xlings
-              xlings install nvm@pmwrapper --yes
+              xlings install nvm@pmwrapper -y
             echo ::endgroup::
             echo ::group:: Xlings Add Test User
               xlings self config --adduser test
@@ -75,6 +75,6 @@ jobs:
             set -euo pipefail
 
             echo ::group:: Test XIM AUR Wrapper
-              xlings install wechat@pmwrapper --yes
+              xlings install wechat@pmwrapper -y
             echo ::endgroup::
           """
