@@ -34,7 +34,7 @@ jobs:
         run: |
           su admin -c """
             set -euo pipefail
-          
+
             whoami
             pwd
             sudo chown -R test .
@@ -53,14 +53,15 @@ jobs:
               pacman -Qii xlings
               pacman -Ql xlings
             echo ::endgroup::
-            echo ::group:: Xlings Init
+            echo ::group:: Xlings Init and test aur
               xlings
+              xlings install nvm@aur
             echo ::endgroup::
             echo ::group:: Xlings Add Test User
               xlings self config --adduser test
             echo ::endgroup::
           """
-          
+
           su test -c """
             echo ::group:: Xlings Output
               xlings --version
@@ -72,9 +73,8 @@ jobs:
         run: |
           su test -c """
             set -euo pipefail
-          
+
             echo ::group:: Test XIM AUR Wrapper
-              cd /home/xlings/.xlings/core/xim/pm/wrapper
-              xmake l ./aur.lua
+              xlings install wechat@aur
             echo ::endgroup::
           """
