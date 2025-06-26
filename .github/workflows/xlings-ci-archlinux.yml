@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'config/aur/**'
-      - '.github/workflows/xlings-arch.yml'
+      - '.github/workflows/xlings-ci-archlinux.yml'
 
 jobs:
 
