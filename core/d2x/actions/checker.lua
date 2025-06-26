@@ -38,6 +38,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
 
     -- TODO: optimize / workaround cls failed on windows
     common.xlings_clear_screen()
+    io.stdout:flush()
     common.xlings_clear_screen()
 
     local config = platform.get_config_info()
