@@ -46,7 +46,7 @@ measure_latency() {
     if command_exists ping; then
         latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F'/' 'END{print $5}')
     elif command_exists curl; then
-        latency=$(curl -o /dev/null -s -w '%{time_total}\n' "$url")
+        latency=$(curl -o /dev/null -s -w "%{time_total}" "$url")
     else
         echo "Error: Neither ping nor curl is available." >&2
         exit 1
