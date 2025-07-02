@@ -11,10 +11,10 @@ INSTALL_SCRIPT="tools/install.unix.sh"
 
 # ------------------------------
 
-echo -e "$(cat << 'EOF'
+cat << 'EOF'
 
  __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.4                
+ \ \ / / | |    (_)    pre-v0.0.4
   \ V /  | |     _  _ __    __ _  ___ 
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \
@@ -26,9 +26,7 @@ repo:  https://github.com/d2learn/xlings
 forum: https://forum.d2learn.org
 
 ---
-
 EOF
-)"
 
 
 SOFTWARE_URL1="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
@@ -40,12 +38,13 @@ command_exists() {
 
 measure_latency() {
     local url="$1"
-    local domain=$(echo "$url" | sed -e "s|^[^/]*//||" -e "s|/.*$||")
+    local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+    local latency
 
     if command_exists ping; then
-        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F/ "END{print \$5}")
+        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F'/' 'END{print $5}')
     elif command_exists curl; then
-        latency=$(curl -o /dev/null -s -w "%{time_total}" "$url")
+        latency=$(curl -o /dev/null -s -w '%{time_total}\n' "$url")
     else
         echo "Error: Neither ping nor curl is available." >&2
         exit 1
