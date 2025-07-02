@@ -40,11 +40,10 @@ command_exists() {
 
 measure_latency() {
     local url="$1"
-    local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
-    local latency
+    local domain=$(echo "$url" | sed -e "s|^[^/]*//||" -e "s|/.*$||")
 
     if command_exists ping; then
-        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F'/' 'END{print $5}')
+        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F/ "END{print \$5}")
     elif command_exists curl; then
         latency=$(curl -o /dev/null -s -w "%{time_total}" "$url")
     else
