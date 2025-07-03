@@ -11,10 +11,10 @@ INSTALL_SCRIPT="tools/install.unix.sh"
 
 # ------------------------------
 
-echo -e "$(cat << 'EOF'
+cat << 'EOF'
 
  __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.4                
+ \ \ / / | |    (_)    pre-v0.0.4
   \ V /  | |     _  _ __    __ _  ___ 
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \
@@ -26,9 +26,7 @@ repo:  https://github.com/d2learn/xlings
 forum: https://forum.d2learn.org
 
 ---
-
 EOF
-)"
 
 
 SOFTWARE_URL1="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
