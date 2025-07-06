@@ -14,7 +14,9 @@
   -
   <a href="README.en.md" target="_blank">English</a>
   |
-  <a href="https://d2learn.github.io/xim-pkgindex" target="_blank">Package Index</a>
+  <a href="https://d2learn.github.io/xim-pkgindex" target="_blank">包索引</a>
+  |
+  <a href="https://xlings.d2learn.org/quick-start/one-click-install.html" target="_blank">文档</a>
   |
   <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
@@ -103,7 +105,7 @@ xlings remove vscode@1.93.1
 
 > 搭建交互式的公开课或教程项目, 支持环境自动配置、电子书、练习代码自动检测...
 >
-> 示例项目: [d2ds | 动手学数据结构](https://github.com/d2learn/d2ds)
+> 示例项目: [d2ds | 动手学数据结构](https://github.com/d2learn/d2ds) / [mcpp-standard | 动手学现代C++](https://github.com/Sunrisepeak/mcpp-standard)
 
 ```bash
 # 创建项目模板 - hello教程项目
@@ -149,6 +151,6 @@ xlings install
 
 ## 相关链接
 
-- [主页](https://d2learn.org/xlings) : 工具动态和核心功能展示
+- [主页](https://xlings.d2learn.org) : 工具动态和核心功能介绍和文档
 - [xim-pkgindex](https://github.com/d2learn/xim-pkgindex) : xlings安装管理模块(XIM)的包索引仓库
 - [xmake](https://github.com/xmake-io/xmake): 为xlings提供基础环境
