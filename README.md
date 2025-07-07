@@ -16,7 +16,7 @@
   |
   <a href="https://d2learn.github.io/xim-pkgindex" target="_blank">包索引</a>
   |
-  <a href="https://xlings.d2learn.org/quick-start/one-click-install.html" target="_blank">文档</a>
+  <a href="https://xlings.d2learn.org/documents/quick-start/one-click-install.html" target="_blank">文档</a>
   |
   <a href="https://forum.d2learn.org/category/9/xlings" target="_blank">论坛</a>
 </div>
