@@ -1,3 +1,5 @@
+import("lib.detect.find_tool")
+
 import("platform")
 import("base.log")
 import("config.i18n")
@@ -104,6 +106,7 @@ function main(action, ...)
         local rundir = platform.get_config_info().rundir or os.curdir()
         local bookdir = path.join(rundir, "book")
         if os.isdir(bookdir) then
+            if not find_tool("mdbook") then os.exec("xim mdbook -y") end
             os.iorun("mdbook serve --open " .. bookdir)
         else
             cprint("[xligns:d2x]: ${yellow}book not found.")
