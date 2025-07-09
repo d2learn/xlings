@@ -24,6 +24,11 @@ function data()
         if tmp_local_lang and tmp_local_lang:find("0804") then
             local_lang = "zh"
         end
+    elseif is_host("macosx") then
+        local tmp_local_lang = os.iorun([[defaults read -g AppleLocale]])
+        if tmp_local_lang and tmp_local_lang:find("zh") then
+            local_lang = "zh"
+        end
     end
 
     local configdir = path.directory(path.directory(os.scriptdir()))
