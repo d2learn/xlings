@@ -1,3 +1,12 @@
+<div align="right" style="font-family: sans-serif; font-size: 14px; padding: 10px;">
+  <b>
+    欢迎把你喜欢的软件、环境 或 配置组合 添加到包索引仓库中 ➤ 
+    <a href="https://xlings.d2learn.org/documents/xim/add-xpkg.html" target="_blank" >
+      Add XPkg
+    </a>
+  </b>
+</div>
+
 [![Xlings Test - CI](https://github.com/d2learn/xlings/actions/workflows/gitee-sync.yml/badge.svg?branch=main)](https://github.com/d2learn/xlings/actions/workflows/gitee-sync.yml)
 
 <div align=center><img width="500" src="https://d2learn.org/xlings/xlings-install.gif"></div>
