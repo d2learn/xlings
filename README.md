@@ -1,6 +1,6 @@
 <div align="right" style="font-family: sans-serif; font-size: 14px; padding: 10px;">
   <b>
-    欢迎把你喜欢的软件、环境 或 配置组合 添加到包索引仓库中 ➤ 
+    添加你喜欢的 [ 软件、配置组合... ] 到包索引仓库 ➤ 
     <a href="https://xlings.d2learn.org/documents/xim/add-xpkg.html" target="_blank" >
       Add XPkg
     </a>
