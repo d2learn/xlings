@@ -5,6 +5,7 @@ import("common")
 import("base.utils")
 import("base.log")
 import("config.i18n")
+import("config.xconfig")
 
 local xinstall = import("xim.xim")
 
@@ -222,16 +223,31 @@ end
 
 function config(cmds)
 
-    local target_user = cmds["config--adduser"] or cmds["config--deluser"] or "unknown-user-flag"
-    local user_included = string.find(os.iorun("groups " .. target_user), "xlings", 1, true)
+    if cmds["config--mirror"] then
+        -- TODO: add https:// support
+    elseif cmds["config--res-server"] then
+        local res_server = cmds["config--res-server"]
+        -- TODO: support ftp/http protocol?
+        if not string.find(res_server, "https", 1, true) then
+            cprint("[xlings]: ${yellow}res-server must be a valid https url")
+            return
+        end
+        local xlings_config = xconfig.load()
+        xlings_config["xim"]["res-server"] = res_server
+        xconfig.save(xlings_config)
+        cprint("[xlings]: set res-server to ${yellow}%s${clear} - ${green}ok", res_server) 
+    else
+        local target_user = cmds["config--adduser"] or cmds["config--deluser"] or "unknown-user-flag"
+        local user_included = string.find(os.iorun("groups " .. target_user), "xlings", 1, true)
 
-    if not user_included and cmds["config--adduser"] then
-        sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
-        sudo.exec("chmod -R g+rwx " .. path.join(platform.get_config_info().homedir, ".xmake"))
-        cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
-    elseif cmds["config--deluser"] and user_included then
-        sudo.exec("gpasswd -d " .. cmds["config--deluser"] .. " xlings")
-        cprint("[xlings]: del user [%s] from group ${yellow}xlings${clear} - ${green}ok", cmds["config--deluser"])
+        if not user_included and cmds["config--adduser"] then
+            sudo.exec("usermod -aG xlings " .. cmds["config--adduser"])
+            sudo.exec("chmod -R g+rwx " .. path.join(platform.get_config_info().homedir, ".xmake"))
+            cprint("[xlings]: add user [%s] to group ${yellow}xlings${clear} - ${green}ok", cmds["config--adduser"])
+        elseif cmds["config--deluser"] and user_included then
+            sudo.exec("gpasswd -d " .. cmds["config--deluser"] .. " xlings")
+            cprint("[xlings]: del user [%s] from group ${yellow}xlings${clear} - ${green}ok", cmds["config--deluser"])
+        end
     end
 
 end
@@ -299,6 +315,9 @@ function main(action, ...)
         -- config
         [action .. "--adduser"] = false,
         [action .. "--deluser"] = false,
+        -- mirror
+        [action .. "--mirror"] = false,
+        [action .. "--res-server"] = false,
     }
 
     local _, cmds = common.xlings_input_process(action, args, kv_cmds)

@@ -11,9 +11,10 @@ local xlings_config = {
     }
 }
 
+local projectdir = path.directory(path.directory(os.scriptdir()))
+local xlings_config_file = path.join(path.join(projectdir, "config"), "xlings.json")
+
 function load()
-    local projectdir = path.directory(path.directory(os.scriptdir()))
-    local xlings_config_file = path.join(path.join(projectdir, "config"), "xlings.json")
     if xlings_config.need_load_flag and os.isfile(xlings_config_file) then
         xlings_config = json.loadfile(xlings_config_file)
         if xlings_config["need_update"] then
@@ -44,6 +45,14 @@ function load()
         --cprint("${color.warning}xlings config file not found, use default config.")
     end
     return xlings_config
+end
+
+function save(config)
+    if config and config["need_update"] ~= nil then
+        json.savefile(xlings_config_file, config)
+    else
+        cprint("[xlings]: save config failed, config is nil.")
+    end
 end
 
 function main()
