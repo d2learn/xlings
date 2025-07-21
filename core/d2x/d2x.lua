@@ -47,10 +47,17 @@ function user_commands_help(user_commands)
         for _, cmd in pairs(user_commands_list) do
             -- desc limit to 30 characters
             local desc = user_commands[cmd]
-            if #desc > 30 then
-                desc = desc:sub(1, 30) .. "..."
+
+            if type(desc) == "table" then
+                desc = desc[os.host()]
             end
-            cprint("\t ${magenta}" .. cmd .. "${clear},      \t${cyan bright}" .. desc)
+
+            if desc then
+                if #desc > 30 then
+                    desc = desc:sub(1, 30) .. "..."
+                end
+                cprint("\t ${magenta}" .. cmd .. "${clear},      \t${cyan bright}" .. desc)
+            end
         end
 
         cprint("")
@@ -60,9 +67,14 @@ end
 function user_commands_run(user_commands, action, args)
     
     cprint("[xligns:d2x]: ${yellow}run user command: ${cyan}" .. action)
-    
+
     os.cd(platform.get_config_info().rundir)
-    
+
+    if type(user_commands[action]) == "table" then
+        -- if user_commands[action] is a table, use the current host as the key
+        user_commands[action] = user_commands[action][os.host()]
+    end
+
     function __try_run(cmd)
         try {
             function() os.exec(cmd) end,
