@@ -119,7 +119,7 @@ function CmdProcessor:run_target_cmds()
                     local exist_system_version = system_tool_detect(input_target)
 
                     if not exist_system_version and self._pm_executor.type == "xpm" then
-                        exist_system_version = system_tool_detect(self._pm_executor._xpg.name)
+                        exist_system_version = system_tool_detect(self._pm_executor._pkg.name)
                     end
 
                     -- only support tips system version, but dont manage it
