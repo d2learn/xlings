@@ -94,6 +94,10 @@ function XPkgManager:download(xpkg)
         git.clone(url, {verbose = true, depth = 1, recursive = true, outputdir = pdir})
     else
         local ok, filename = utils.try_download_and_check(url, download_dir, sha256)
+
+        -- pre-set pkginfo for install_file, avoid clear failed when file currupted
+        runtime.set_pkginfo({ install_file = filename })
+
         if not ok then -- retry download
             ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         end
@@ -109,7 +113,6 @@ function XPkgManager:download(xpkg)
             return false
         end
 
-        runtime.set_pkginfo({ install_file = filename })
     end
 
     return true

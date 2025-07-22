@@ -100,8 +100,30 @@ function CmdProcessor:run_target_cmds()
                     if self._pm_executor:installed() then
                         installed_version = target_pkgname
                     end
+
+                    -- TODO: better way to detect apps for install by other methods
+                    -- for complex detect, it should implemented in xpkg.lua's installed
+                    -- system tool detect helper function
+                    function system_tool_detect(input_target)
+                        local tool = find_tool(input_target)
+                        -- adapt for windows, if not found .exe, try .bat or .cmd
+                        if not tool and is_host("windows") then
+                            tool = find_tool(input_target .. ".bat")
+                            if not tool then
+                                tool = find_tool(input_target .. ".cmd")
+                            end
+                        end
+                        return tool
+                    end
+
+                    local exist_system_version = system_tool_detect(input_target)
+
+                    if not exist_system_version and self._pm_executor.type == "xpm" then
+                        exist_system_version = system_tool_detect(self._pm_executor._xpg.name)
+                    end
+
                     -- only support tips system version, but dont manage it
-                    if not installed_version and find_tool(input_target) then
+                    if not installed_version and exist_system_version then
                         installed_version = input_target .. "@system"
                     end
                 end
