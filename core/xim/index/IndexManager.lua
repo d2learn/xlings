@@ -94,6 +94,17 @@ function IndexManager:match_package_version(target)
         target_match_str = target .. "@"
     end
 
+    -- if target is a pkgname-ref, use the ref name
+    -- Note: it is different for version-ref "code = { ref = "code@latest" }"
+    local pkgnames = target_match_str:split("@", {plain = true})
+    -- #pkgnames >= 1
+    if self.index[pkgnames[1]] then
+        local pkgname_ref = self.index[pkgnames[1]].ref
+        if pkgname_ref and not pkgname_ref:find("@", 1, true) then
+            target_match_str = pkgname_ref .. "@" .. (pkgnames[2] or "")
+        end
+    end
+
     local target_versions = {}
     for name, pkg in pairs(self.index) do
         local match_index = name:find(target_match_str, 1, true)
