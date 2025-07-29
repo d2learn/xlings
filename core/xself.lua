@@ -254,7 +254,7 @@ end
 
 function clean()
     os.tryrm(path.join(platform.get_config_info().install_dir, "core", ".xmake"))
-    if is_host("linux") then
+    if is_host("linux") or is_host("macosx") then
         -- TODO: fix homedir issue for windows/linux
         os.tryrm(path.join(platform.get_config_info().homedir, ".xmake"))
     end
