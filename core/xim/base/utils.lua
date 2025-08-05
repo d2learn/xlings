@@ -207,14 +207,47 @@ function append_bashrc(content)
     end
 end
 
+local function automatch_closest_distro(distro, values)
+    local seen = {}
+    local distro_map = {
+        manjaro = "archlinux",
+        archlinux = "linux",
+        ubuntu = "debian",
+        debian = "linux",
+        fedora = "linux",
+        centos = "rhel",
+        rhel = "linux",
+    }
+    while distro do
+        if values[distro] then
+            return values[distro], distro
+        end
+
+        -- 防止死循环
+        if seen[distro] then
+            cprint("[xlings:xim]: ${red dim}distro circle-ref detected: %s", distro)
+            break
+        end
+
+        seen[distro] = true
+        distro = distro_map[distro]
+    end
+    return nil, nil
+end
+
 -- TODO: optimize xpm os match
 -- for support default match(linux) in xpackage's xpm
 function xpm_target_os_helper(xpm)
     local os_name = os_info().name
     if xpm[os_name] then
         return os_name
-    elseif is_host("linux") and xpm["linux"] then
-        return "linux"
+    elseif is_host("linux") then
+        local distro_value, distro = automatch_closest_distro(os_name, xpm)
+        if distro_value then
+            return distro
+        --elseif xpm["linux"] then
+        --    return "linux"
+        end
     end
     return nil
 end
