@@ -195,10 +195,12 @@ function IndexStore:build_pmwrapper_index(indexdir)
         ).pmwrapper
         for name, pm in pairs(pmwrapper) do
             local key = nil
+            local target_os = os_info.name
             if pm.ref then
-                target_key, target_pm = utils.deref(pmwrapper, pm.ref)
-                if target_pm[os_info.name] then
-                    local version = target_pm[os_info.name][1]
+                local target_key, target_pm = utils.deref(pmwrapper, pm.ref)
+                target_os = utils.xpm_target_os_helper(target_pm)
+                if target_pm[target_os] then
+                    local version = target_pm[target_os][1]
                     key = string.format("%s@%s", name, version)
                     if self._namespace then
                         key = self._namespace .. ":" .. key
@@ -207,18 +209,22 @@ function IndexStore:build_pmwrapper_index(indexdir)
                         ref = target_key .. "@" .. version
                     }
                 end
-            elseif pm[os_info.name] then
-                local version = pm[os_info.name][1]
-                local pkgname = pm[os_info.name][2]
-                key = string.format("%s@%s", name, version)
-                if self._namespace then
-                    key = self._namespace .. ":" .. key
+            else
+                -- automatch, example: manjaro -> archlinux -> linux by pm 
+                target_os = utils.xpm_target_os_helper(pm)
+                if pm[target_os] then
+                    local version = pm[target_os][1]
+                    local pkgname = pm[target_os][2]
+                    key = string.format("%s@%s", name, version)
+                    if self._namespace then
+                        key = self._namespace .. ":" .. key
+                    end
+                    self._index_data[key] = {
+                        pmwrapper = version,
+                        name = pkgname,
+                        installed = false,
+                    }
                 end
-                self._index_data[key] = {
-                    pmwrapper = version,
-                    name = pkgname,
-                    installed = false,
-                }
             end
 
             -- TODO: optimize name@pmwrapper namespace issues
