@@ -1,7 +1,7 @@
 <div align="right" style="font-family: sans-serif; font-size: 14px; padding: 10px;">
   <b>
     添加你喜欢的 [ 软件、配置组合... ] 到包索引仓库 ➤ 
-    <a href="https://xlings.d2learn.org/documents/xim/add-xpkg.html" target="_blank" >
+    <a href="https://xlings.d2learn.org/documents/community/contribute/add-xpkg.html" target="_blank" >
       Add XPkg
     </a>
   </b>
@@ -37,6 +37,8 @@
 
 ## 最近动态
 
+- **文档:** 初步完善文档: [快速开始](https://xlings.d2learn.org/documents/quick-start/one-click-install.html)、[常用命令](https://xlings.d2learn.org/documents/commands/install.html)、 [xpkg包](https://xlings.d2learn.org/documents/xpkg/intro.html)、[参与贡献](https://xlings.d2learn.org/documents/community/contribute/issues.html) - [PR](https://github.com/d2learn/xlings-docs/commit/122b060855e4c41cd7f95801f2656bca0a5a6fc1) - 2025/8
+- **代码优化:** 修复一些bug并优化相关代码、适配macos - [commits](https://github.com/d2learn/xlings/commits/main/?since=2025-07-01&until=2025-07-31) - 2025/7
 - **跨平台:** 初步支持MacOS平台、xim添加冲突解决功能(xpkg的`mutex_group`字段实现) - 2025/6
 - **新功能:** 增加包索引网站、支持多语言i18n - 2025/5
 - 优化命令行使用体验: 常用命令支持xlings调用, 高级功能使用子命令xim/xvm/d2x - [PR](https://github.com/d2learn/xlings/pull/86) - 2025/4/15
@@ -44,9 +46,6 @@
 - xim: 增加archlinux上aur的支持 - [PR](https://github.com/d2learn/xlings/pull/67) - 2025/1/10
 - xvm: 增加版本管理模块 - [文章](https://forum.d2learn.org/topic/62) / [PR](https://github.com/d2learn/xlings/pull/60) - 2025/1/1
 - xpkg增加自动匹配github上release的url功能 - [文章](http://forum.d2learn.org/post/208) - 2024/12/30
-- xlings跨平台短命令 - [视频](https://www.bilibili.com/video/BV1dH6sYKEdB) - 2024/12/29
-- xim模块: 重构&分离框架代码和包文件 - [包索引仓库](https://github.com/d2learn/xim-pkgindex) / [PR](https://github.com/d2learn/xlings/pull/49) -- 2024/12/16
-- 增加DotNet/C#和java/jdk8环境的支持
 - 更多动态和讨论 -> [More](https://forum.d2learn.org/category/9/xlings)
 
 [![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
@@ -153,10 +152,13 @@ xim = {
 xlings install
 ```
 
-## 社区 & 交流
+## 社区交流 & 参与贡献
 
-- 社区论坛: [xlings讨论版块](https://forum.d2learn.org/category/9/xlings)
 - 交流群(Q): 167535744 / 1006282943
+- [社区论坛](https://forum.d2learn.org/category/9/xlings): 相关技术、功能、问题的交流讨论
+- [参与贡献](https://xlings.d2learn.org/documents/community/contribute/issues.html): 问题处理、文档编写、添加新xpkg包、项目维护
+
+> 注: 复杂性问题(技术、环境等问题)推荐在论坛发帖, 并详细描述问题细节, 能更有效于问题的解决和复用
 
 ## 相关链接
 
