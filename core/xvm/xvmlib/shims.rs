@@ -129,6 +129,40 @@ impl Program {
         //println!("Program [{}] finished", self.name);
     }
 
+    // TODO: 
+    pub fn link_to(&self, dir: &str, recover: bool) {
+        let libname = self.alias.clone().unwrap();
+        let lib_real_path = format!("{}/{}", self.path, libname);
+        let lib_path = format!("{}/{}", dir, libname);
+
+        // try create dir
+        if !fs::metadata(dir).is_ok() {
+            fs::create_dir_all(dir).unwrap();
+        }
+        
+        // check if the symlink already exists, remove it
+        if fs::symlink_metadata(&lib_path).is_ok() && recover {
+            fs::remove_file(&lib_path).unwrap();
+        } else {
+            // if symlink does not exist and recover is false, do nothing
+            return;
+        }
+
+        // try to create a symlink
+        #[cfg(unix)]
+        {
+            if let Err(e) = std::os::unix::fs::symlink(&lib_real_path, &lib_path) {
+                eprintln!("Failed to create symlink for {}: {}", libname, e);
+            }
+        }
+        #[cfg(windows)]
+        {
+            if let Err(e) = std::os::windows::fs::symlink_file(&lib_real_path, &lib_path) {
+                eprintln!("Failed to create symlink for {}: {}", libname, e);
+            }
+        }
+    }
+
     pub fn save_to(&self, dir: &str) {
         // TODO: optimize - shim-mode, direct-mode
         try_create(&self.name, dir);

@@ -15,26 +15,32 @@ pub fn rundir() {
 }
 
 pub fn versiondb_file() -> String {
-    format!("{}/versions.xvm.yaml", platform::xvm_homedir())
+    format!("{}/versions.xvm.yaml", platform::xvm_datadir())
 }
 
 pub fn workspace_file() -> String {
-    format!("{}/{}", platform::xvm_homedir(), WORKSPACE_FILE)
+    format!("{}/{}", platform::xvm_datadir(), WORKSPACE_FILE)
 }
 
 #[allow(dead_code)]
 pub fn bindir() -> String {
-    platform::bindir()
+    format!("{}/bin", platform::xvm_homedir())
+}
+
+#[allow(dead_code)]
+pub fn libdir() -> String {
+    format!("{}/lib", platform::xvm_homedir())
 }
 
 #[allow(dead_code)]
 pub fn shimdir() -> String {
-    format!("{}/shims", platform::xvm_homedir())
+    format!("{}/shims", platform::xvm_datadir())
 }
 
 #[allow(dead_code)]
 pub fn print_baseinfo() {
     println!("XVM Home: {}", platform::xvm_homedir());
+    println!("XVM Data: {}", platform::xvm_datadir());
     println!("XVM Bindir: {}", bindir());
     println!("XVM VersionDB: {}", versiondb_file());
     println!("XVM Workspace: {}", workspace_file());
@@ -61,17 +67,17 @@ pub mod platform {
         }).clone()
     }
 */
-    pub fn bindir() -> String {
+    pub fn xvm_homedir() -> String {
         if cfg!(target_os = "windows") {
-            r#"C:\Users\Public\xlings\.xlings_data\bin"#.to_string()
+            r#"C:\Users\Public\xlings\.xlings_data"#.to_string()
         } else if cfg!(target_os = "macos") {
-            "/Users/xlings/.xlings_data/bin".to_string()
+            "/Users/xlings/.xlings_data".to_string()
         } else {
-            "/home/xlings/.xlings_data/bin".to_string()
+            "/home/xlings/.xlings_data".to_string()
         }
     }
 
-    pub fn xvm_homedir() -> String {
+    pub fn xvm_datadir() -> String {
         if cfg!(target_os = "windows") {
             "C:/Users/Public/xlings/.xlings_data/xvm".to_string()
         } else if cfg!(target_os = "macos") {
