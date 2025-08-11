@@ -95,6 +95,7 @@ impl Program {
         //println!("Running Program [{}], version {:?}", self.name, self.version);
         //println!("Args: {:?}", self.args);
         //println!("Envs: {:?}", self.envs);
+        //println!("Extended Envs: {:?}", build_extended_envs(self.envs.clone()));
 
         let mut target = self.name.clone();
         let mut alias_args: Vec<&str> = Vec::new();
@@ -112,7 +113,7 @@ impl Program {
             .args(alias_args)
             .args(&self.args)
             .env("PATH", self.get_path_env())
-            .envs(self.envs.iter().cloned())
+            .envs(build_extended_envs(self.envs.clone()))
             .status();
 
         match status {
@@ -229,4 +230,18 @@ fn shim_script_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str
     }
 
     (sfile, args_placeholder, header)
+}
+
+fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
+    let sep = if cfg!(windows) { ";" } else { ":" };
+
+    envs.into_iter()
+        .map(|(key, val)| {
+            let new_val = match std::env::var(&key) {
+                Ok(existing_val) => format!("{}{}{}", val, sep, existing_val),
+                Err(_) => val,
+            };
+            (key, new_val)
+        })
+        .collect()
 }

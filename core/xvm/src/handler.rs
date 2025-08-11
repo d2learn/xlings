@@ -17,6 +17,8 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
     let alias = matches.get_one::<String>("alias");
+    let vtype = matches.get_one::<String>("type");
+
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
         .unwrap_or_default()
@@ -57,6 +59,9 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         workspace.save_to_local().context("Failed to save Workspace")?;
     }
 
+    if let Some(t) = vtype {
+        vdb.set_type(target, t);
+    }
     vdb.set_vdata(target, version, program.vdata());
     vdb.save_to_local().context("Failed to save VersionDB")?;
 

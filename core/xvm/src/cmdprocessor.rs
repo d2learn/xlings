@@ -46,7 +46,7 @@ pub fn parse_from_string(args: &[&str]) -> ArgMatches {
 
 fn build_command() -> Command {
     Command::new("xvm")
-    .version("0.0.4") // prev-0.0.4
+    .version("0.0.5") // prev-0.0.4
     .author("d2learn <dev@d2learn.com>")
     .about("a simple and generic version management tool")
     .arg(
@@ -81,6 +81,12 @@ fn build_command() -> Command {
                     .long("alias")
                     .action(ArgAction::Set)
                     .help("Specify a alias for the target"),
+            )
+            .arg(
+                Arg::new("type")
+                    .long("type")
+                    .action(ArgAction::Set)
+                    .help("Specify a type for the target"),
             )
             .arg(
                 Arg::new("env")
