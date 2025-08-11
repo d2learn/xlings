@@ -5,13 +5,14 @@
 import("platform")
 
 __xim_data_dir = nil
+__xim_runtime_dir = nil
 
 xim_runtime_data = {
     pkginfo = {
         name = "xpkg-name",
         version = "0.0.0",
         install_file = "xim-0.0.0.exe",
-        install_dir = "name/version",
+        install_dir = "namespace@name/version",
     },
     input_args = {},
     --rundir = "",
@@ -26,6 +27,11 @@ function init()
     if not os.isdir(get_xim_data_dir()) then
         os.mkdir(get_xim_data_dir())
     end
+
+    if not os.isdir(get_runtime_dir()) then
+        os.mkdir(get_runtime_dir())
+    end
+
     -- create xim install basedir
     if not os.isdir(get_xim_install_basedir()) then
         os.mkdir(get_xim_install_basedir())
@@ -122,6 +128,14 @@ function get_xim_local_index_repodir()
         __xim_local_index_repodir = path.join(get_xim_data_dir(), "local-indexrepo")
     end
     return __xim_local_index_repodir
+end
+
+function get_runtime_dir()
+    if __xim_runtime_dir == nil then
+        -- default xim runtime dir
+        __xim_runtime_dir = path.join(get_xim_data_dir(), "runtimedir")
+    end
+    return __xim_runtime_dir
 end
 
 function main()

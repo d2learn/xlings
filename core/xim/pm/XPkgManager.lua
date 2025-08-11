@@ -84,7 +84,7 @@ function XPkgManager:download(xpkg)
     end
 
     -- TODO: impl independent download dir for env/vm
-    local download_dir = runtime.get_xim_data_dir()
+    local download_dir = runtime.get_runtime_dir()
 
     -- 1. git clone
     if string.find(url, "%.git$") then
@@ -184,6 +184,13 @@ end
 function _try_execute_hook(name, xpkg, action)
     if xpkg.hooks[action] then
         _set_runtime_info(xpkg)
+        if action == "install" then
+            local install_dir = runtime.get_pkginfo().install_dir
+            if not os.isdir(install_dir) then
+                cprint("[xlings:xim]: ${dim}create install dir %s${clear}", install_dir)
+                os.mkdir(install_dir)
+            end
+        end
         return xpkg.hooks[action]()
     else
         cprint("[xlings:xim]: ${dim}package %s no implement${clear} %s", action, name)
@@ -197,16 +204,16 @@ function _set_runtime_info(xpkg)
     local url = xpkg:get_xpm_resources().url
     url = utils.try_mirror_match_for_url(url)
 
-    local datadir = runtime.get_xim_data_dir()
-    local install_dir = path.join(runtime.get_xim_install_basedir(), xpkg.name, xpkg.version)
+    local runtimedir = runtime.get_runtime_dir()
+    local pkgname = xpkg.name
+    if xpkg.namespace then
+        pkgname = xpkg.namespace .. "@" .. pkgname
+    end
+    local install_dir = path.join(runtime.get_xim_install_basedir(), pkgname, xpkg.version)
 
     if url then
-        local filename = path.join(datadir, path.filename(url))
+        local filename = path.join(runtimedir, path.filename(url))
         runtime.set_pkginfo({ install_file = filename })
-    end
-
-    if not os.isdir(install_dir) then
-        os.mkdir(install_dir)
     end
 
     runtime.set_pkginfo({

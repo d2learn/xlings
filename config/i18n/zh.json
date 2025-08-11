@@ -23,6 +23,8 @@
     ""
   ],
 
+  "command-not-found": "${bright yellow}未找到命令:${clear} ${red}%s${clear}, 请检查你的输入...",
+
   "xim": {
     "help": [
       "",

@@ -256,6 +256,8 @@ function main()
         if submodule_map[command] then
             _submodule_call(submodule_map[command], cmd_target, cmd_args)
         else
+            log.i18n_print(i18n.data()["command-not-found"], command)
+            print("\n---\n")
             log.i18n_print(i18n.data()["help"])
         end
         

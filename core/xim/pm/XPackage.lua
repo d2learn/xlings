@@ -11,6 +11,9 @@ function new(pkg)
     debug.setmetatable(instance, XPackage)
     instance:_init(pkg.version, pkg.data.package)
     instance.name = instance.pdata.name
+    if instance.pdata.namespace then
+        instance.namespace = instance.pdata.namespace
+    end
     instance.hooks = {
         installed = pkg.data.installed,
         build = pkg.data.build,

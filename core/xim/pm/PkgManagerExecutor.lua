@@ -20,7 +20,7 @@ function PkgManagerExecutor:support()
 end
 
 function PkgManagerExecutor:installed()
-    os.cd(runtime.get_xim_data_dir())
+    os.cd(runtime.get_runtime_dir())
     return _try_execute(self, "installed")
 end
 
@@ -46,7 +46,7 @@ end
 function PkgManagerExecutor:install()
     -- reset to data dir
 
-    os.cd(runtime.get_xim_data_dir())
+    os.cd(runtime.get_runtime_dir())
 
     if self.type == "xpm" then
         if not self:_download() or not self:_build() then
@@ -81,7 +81,7 @@ function PkgManagerExecutor:_config()
 end
 
 function PkgManagerExecutor:uninstall()
-    os.cd(runtime.get_xim_data_dir())
+    os.cd(runtime.get_runtime_dir())
     return _try_execute(self, "uninstall")
 end
 
