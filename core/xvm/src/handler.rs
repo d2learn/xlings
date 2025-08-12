@@ -91,10 +91,21 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
     let mut vtype: Option<String> = Option::None;
     let mut alias: Option<String> = Option::None;
 
+    if vdb.has_target(target) {
+        vtype = vdb.get_type(target).cloned();
+    }
+
     if version.is_none() { // 检查 version 是否为 None
         if !_cmd_state.yes && !helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y") {
             return Ok(());
         }
+
+        // TODO: optimize for libname (only one)?
+        let first_version = vdb.get_first_version(target).unwrap();
+        if let Some(vdata) = vdb.get_vdata(target, &first_version) {
+            alias = vdata.alias.clone();
+        }
+
         println!("removing...");
         vdb.remove_all_vdata(target);
     } else {
@@ -108,7 +119,6 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
         }
 
         // TODO: optimize for lib
-        vtype = vdb.get_type(target).cloned();
         // if type is lib, remove link from libdir
         if let Some(vdata) = vdb.get_vdata(target, &version) {
             alias = vdata.alias.clone();
@@ -138,11 +148,12 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
             if fs::symlink_metadata(&lib_path).is_ok() {
                 fs::remove_file(&lib_path).unwrap();
             }
+            println!("remove link [{}] - {} ...", target.green().bold(), lib_path);
         } else {
             // remove bin shim
             xvmlib::shims::delete(target, &baseinfo::bindir());
+            println!("remove shim [{}] ...", target.green().bold());
         }
-        println!("remove shim/link [{}] ...", target.green().bold());
         workspace.save_to_local().context("Failed to save Workspace")?;
     } else if global_version_removed {
         let first_version = vdb.get_first_version(target).unwrap();
@@ -163,7 +174,7 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
 
             program.set_vdata(vdata);
             let libdir = baseinfo::libdir();
-            println!("relink [{} {}] to [{}] ...", target, first_version, libdir.bright_purple());
+            println!("relink [{} {}] to [{}] ...", target.green().bold(), first_version.cyan(), libdir.bright_purple());
             program.link_to(&libdir, true);
         }
         workspace.save_to_local().context("Failed to save Workspace")?;
@@ -206,7 +217,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         if let Some(vdata) = vdb.get_vdata(target, version) {
             if vdb.get_type(target) == Some(&"lib".to_string()) {
                 let libdir = baseinfo::libdir();
-                println!("relink [{} {}] to [{}] ...", target, version, libdir.bright_purple());
+                println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
                 let mut program = shims::Program::new(target, version);
                 program.set_vdata(vdata);
                 program.link_to(&libdir, true);

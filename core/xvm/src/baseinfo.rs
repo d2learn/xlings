@@ -33,6 +33,11 @@ pub fn libdir() -> String {
 }
 
 #[allow(dead_code)]
+pub fn workspacedir() -> String {
+    platform::xvm_homedir()
+}
+
+#[allow(dead_code)]
 pub fn shimdir() -> String {
     format!("{}/shims", platform::xvm_datadir())
 }
@@ -67,6 +72,7 @@ pub mod platform {
         }).clone()
     }
 */
+    // TODO: to support workspace dir, .xlings/xvm-workspace
     pub fn xvm_homedir() -> String {
         if cfg!(target_os = "windows") {
             r#"C:\Users\Public\xlings\.xlings_data"#.to_string()
@@ -77,6 +83,7 @@ pub mod platform {
         }
     }
 
+    // fixed path for xvm data directory
     pub fn xvm_datadir() -> String {
         if cfg!(target_os = "windows") {
             "C:/Users/Public/xlings/.xlings_data/xvm".to_string()
