@@ -18,6 +18,7 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let path = matches.get_one::<String>("path");
     let alias = matches.get_one::<String>("alias");
     let vtype = matches.get_one::<String>("type");
+    let filename = matches.get_one::<String>("filename");
 
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
@@ -28,6 +29,34 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     println!("adding target: {}, version: {}", target.green().bold(), version.cyan());
 
     let mut program = shims::Program::new(target, version);
+    let mut vdb = xvmlib::get_versiondb().clone();
+
+    if vdb.is_empty(target) {
+        println!("set [{} {}] as default", target.green().bold(), version.cyan());
+        let mut workspace = xvmlib::get_global_workspace().clone();
+        workspace.set_version(target, version);
+        workspace.save_to_local().context("Failed to save Workspace")?;
+    } else {
+        // set type and filename by vdb
+        let vtype_tmp = vdb.get_type(target).cloned();
+        if vtype_tmp.is_some() {
+            program.set_type(&vtype_tmp.clone().unwrap());
+        }
+        let filename_tmp = vdb.get_filename(target).cloned();
+        if filename_tmp.is_some() {
+            program.set_filename(&filename_tmp.clone().unwrap());
+        }
+    }
+
+    if let Some(t) = vtype {
+        program.set_type(t);
+        vdb.set_type(target, t);
+    }
+
+    if let Some(f) = filename {
+        program.set_filename(f);
+        vdb.set_filename(target, f);
+    }
 
     if let Some(p) = path {
         program.set_path(p);
@@ -50,18 +79,6 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         );
     }
 
-    let mut vdb = xvmlib::get_versiondb().clone();
-
-    if vdb.is_empty(target) {
-        println!("set [{} {}] as default", target.green().bold(), version.cyan());
-        let mut workspace = xvmlib::get_global_workspace().clone();
-        workspace.set_version(target, version);
-        workspace.save_to_local().context("Failed to save Workspace")?;
-    }
-
-    if let Some(t) = vtype {
-        vdb.set_type(target, t);
-    }
     vdb.set_vdata(target, version, program.vdata());
     vdb.save_to_local().context("Failed to save VersionDB")?;
 
@@ -89,9 +106,10 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
     let mut global_version_removed = false;
 
     let mut vtype: Option<String> = Option::None;
-    let mut alias: Option<String> = Option::None;
+    let mut libname: Option<String> = Option::None;
 
     if vdb.has_target(target) {
+        libname = vdb.get_filename(target).cloned();
         vtype = vdb.get_type(target).cloned();
     }
 
@@ -99,13 +117,6 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
         if !_cmd_state.yes && !helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y") {
             return Ok(());
         }
-
-        // TODO: optimize for libname (only one)?
-        let first_version = vdb.get_first_version(target).unwrap();
-        if let Some(vdata) = vdb.get_vdata(target, &first_version) {
-            alias = vdata.alias.clone();
-        }
-
         println!("removing...");
         vdb.remove_all_vdata(target);
     } else {
@@ -116,12 +127,6 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
                 version.yellow()
             );
             return Ok(());
-        }
-
-        // TODO: optimize for lib
-        // if type is lib, remove link from libdir
-        if let Some(vdata) = vdb.get_vdata(target, &version) {
-            alias = vdata.alias.clone();
         }
 
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
@@ -143,8 +148,7 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
         if vtype.is_some_and(|t| t == "lib") {
             let libdir = baseinfo::libdir();
             // TODO: to support windows
-            let libname = alias.unwrap_or_else(|| format!("{}.so", target));
-            let lib_path = format!("{}/{}", libdir, libname);
+            let lib_path = format!("{}/{}", libdir, libname.unwrap_or_else(|| format!("{}.so", target)));
             if fs::symlink_metadata(&lib_path).is_ok() {
                 fs::remove_file(&lib_path).unwrap();
             }
@@ -172,6 +176,7 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
                     std::process::exit(1);
                 });
 
+            program.set_filename(vdb.get_filename(target).unwrap());
             program.set_vdata(vdata);
             let libdir = baseinfo::libdir();
             println!("relink [{} {}] to [{}] ...", target.green().bold(), first_version.cyan(), libdir.bright_purple());
@@ -219,6 +224,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
                 let libdir = baseinfo::libdir();
                 println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
                 let mut program = shims::Program::new(target, version);
+                program.set_filename(vdb.get_filename(target).unwrap());
                 program.set_vdata(vdata);
                 program.link_to(&libdir, true);
             }

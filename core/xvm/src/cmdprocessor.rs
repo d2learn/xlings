@@ -89,6 +89,12 @@ fn build_command() -> Command {
                     .help("Specify a type for the target"),
             )
             .arg(
+                Arg::new("filename")
+                    .long("filename")
+                    .action(ArgAction::Set)
+                    .help("Specify a filename for the target"),
+            )
+            .arg(
                 Arg::new("env")
                     .long("env")
                     .value_name("ENV")

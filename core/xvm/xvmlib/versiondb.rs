@@ -17,6 +17,8 @@ pub struct VInfo {
     // vtype -> type avoid conflict with Rust keyword
     #[serde(skip_serializing_if = "Option::is_none", rename = "type")]
     pub vtype: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
     pub vdata_list: IndexMap<String, VData>,
 }
 
@@ -60,6 +62,7 @@ impl VersionDB {
                     .map(|(name, vdata_list)| {
                         let vinfo = VInfo {
                             vtype: None,
+                            filename: None,
                             vdata_list,
                         };
                         (name, vinfo)
@@ -92,6 +95,30 @@ impl VersionDB {
         self.root.get(name).map(|info| info.vdata_list.keys().cloned().collect())
     }
 
+    pub fn get_filename (&self, name: &str) -> Option<&String> {
+        self.root.get(name)?.filename.as_ref()
+    }
+
+    pub fn set_filename(&mut self, name: &str, filename: &str) {
+        let info = self.root.entry(name.to_string());
+        
+        if let Entry::Vacant(entry) = info {
+            entry.insert(VInfo {
+                vtype: None,
+                filename: Some(filename.to_string()),
+                vdata_list: IndexMap::new()
+            });
+        } else if let Entry::Occupied(mut entry) = info {
+            // if exist old filename and isn't new filename then print info
+            if let Some(old_filename) = entry.get().filename.as_ref() {
+                if old_filename != filename {
+                    println!("xvm-warning: changing filename of '{}' from '{}' to '{}'", name, old_filename, filename);
+                }
+            }
+            entry.get_mut().filename = Some(filename.to_string());
+        }
+    }
+
     pub fn get_type(&self, name: &str) -> Option<&String> {
         self.root.get(name)?.vtype.as_ref()
     }
@@ -100,7 +127,11 @@ impl VersionDB {
         let info = self.root.entry(name.to_string());
         
         if let Entry::Vacant(entry) = info {
-            entry.insert(VInfo { vtype: Some(vtype.to_string()), vdata_list: IndexMap::new() });
+            entry.insert(VInfo {
+                vtype: Some(vtype.to_string()),
+                filename: None,
+                vdata_list: IndexMap::new()
+            });
         } else if let Entry::Occupied(mut entry) = info {
             // if exist old type and isn't new type then print info
             if let Some(old_type) = entry.get().vtype.as_ref() {
@@ -120,7 +151,7 @@ impl VersionDB {
     pub fn set_vdata(&mut self, name: &str, version: &str, vdata: VData) {
         self.root
             .entry(name.to_string())
-            .or_insert_with(|| VInfo { vtype: None, vdata_list: IndexMap::new() })
+            .or_insert_with(|| VInfo { vtype: None, filename: None, vdata_list: IndexMap::new() })
             .vdata_list
             .insert(version.to_string(), vdata);
     }

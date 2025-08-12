@@ -27,7 +27,9 @@ pub enum Type {
 pub struct Program {
     name: String,
     version: String,
-    alias: Option<String>,
+    vtype: Option<String>,
+    filename: Option<String>, // lib: target file
+    alias: Option<String>, // source file
     path: String,
     path_env: String,
     ld_library_path_env: Option<String>,
@@ -40,6 +42,8 @@ impl Program {
         Self {
             name: name.to_string(),
             version: version.to_string(),
+            vtype: None,
+            filename: None,
             alias: None,
             path: String::new(),
             path_env: String::new(),
@@ -55,6 +59,14 @@ impl Program {
 
     pub fn version(&self) -> &str {
         &self.version
+    }
+
+    pub fn set_type(&mut self, vtype: &str) {
+        self.vtype = Some(vtype.to_string());
+    }
+
+    pub fn set_filename(&mut self, filename: &str) {
+        self.filename = Some(filename.to_string());
     }
 
     pub fn set_alias(&mut self, alias: &str) {
@@ -174,9 +186,10 @@ impl Program {
 
     // TODO: 
     pub fn link_to(&self, dir: &str, recover: bool) {
-        let libname = self.alias.clone().unwrap();
-        let lib_real_path = format!("{}/{}", self.path, libname);
-        let lib_path = format!("{}/{}", dir, libname);
+        let source_libname = self.alias.clone().unwrap();
+        let target_libname = self.filename.clone().unwrap_or_else(|| source_libname.clone());
+        let lib_real_path = format!("{}/{}", self.path, source_libname);
+        let lib_path = format!("{}/{}", dir, target_libname);
 
         //println!("link_to: {} -> {}", lib_real_path, lib_path);
 
@@ -184,7 +197,7 @@ impl Program {
         if !fs::metadata(dir).is_ok() {
             fs::create_dir_all(dir).unwrap();
         }
-        
+
         // check if the symlink already exists, remove it
         if fs::symlink_metadata(&lib_path).is_ok() {
             if recover {
@@ -199,9 +212,9 @@ impl Program {
         // try to create a symlink
         #[cfg(unix)]
         {
-            //println!("link_to: creating symlink for {} -> {}", libname, lib_real_path);
+            //println!("link_to: creating symlink for {} -> {}", source_libname, lib_real_path);
             if let Err(e) = std::os::unix::fs::symlink(&lib_real_path, &lib_path) {
-                eprintln!("Failed to create symlink for {}: {}", libname, e);
+                eprintln!("Failed to create symlink for {}: {}", source_libname, e);
             }
         }
         #[cfg(windows)]
@@ -209,14 +222,9 @@ impl Program {
             if let Err(e) = std::os::windows::fs::symlink_file(&lib_real_path, &lib_path) {
                 // TODO: handle windows symlink / hardlink / copy?
                 eprintln!("link_to: no implementation for windows system");
-                eprintln!("Failed to create symlink for {}: {}", libname, e);
+                eprintln!("Failed to create symlink for {}: {}", source_libname, e);
             }
         }
-    }
-
-    pub fn save_to(&self, dir: &str) {
-        // TODO: optimize - shim-mode, direct-mode
-        try_create(&self.name, dir);
     }
 
     ///// private methods
