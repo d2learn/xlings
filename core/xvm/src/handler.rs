@@ -17,6 +17,8 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
     let alias = matches.get_one::<String>("alias");
+    let icon = matches.get_one::<String>("icon");
+
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
         .unwrap_or_default()
@@ -33,6 +35,12 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
 
     if let Some(c) = alias {
         program.set_alias(c);
+    }
+
+    if let Some(i) = icon {
+        program.set_icon_path(i);
+        // create desktop shortcut
+        xvmlib::update_desktop_shortcut(&program);
     }
 
     if !env_vars.is_empty() {
@@ -80,7 +88,12 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
             return Ok(());
         }
         println!("removing...");
-        vdb.remove_all_vdata(target);
+        let versions = vdb.get_all_version(target).unwrap_or_default();
+        for version in versions {
+            vdb.remove_vdata(target, &version);
+            // remove desktop shortcut
+            xvmlib::remove_desktop_shortcut(target, &version);
+        }
     } else {
         let version = version.unwrap();
         if !vdb.has_version(target, &version) {
@@ -92,6 +105,9 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
         }
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
         vdb.remove_vdata(target, version);
+        // remove desktop shortcut
+        xvmlib::remove_desktop_shortcut(target, &version);
+
         // if removed version is current version, set update flag
         if workspace_version == Some(version) {
             global_version_removed = true;
