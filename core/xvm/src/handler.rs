@@ -238,6 +238,48 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     Ok(())
 }
 
+pub fn xvm_info(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
+    let target = matches.get_one::<String>("target").context("Target is required")?;
+    let mut version = matches.get_one::<String>("version");
+
+    let vdb = xvmlib::get_versiondb();
+    let workspace = helper::load_workspace();
+
+    if !vdb.has_target(target) {
+        println!("Target [{}] is missing from the xvm database", target.bold().red());
+        std::process::exit(1);
+    }
+
+    // if version is None, get from workspace
+    if version.is_none() {
+        version = workspace.version(target);
+    }
+
+    if let Some(mut v) = version {
+        v = vdb.match_first_version(target, &v).unwrap_or_else(|| {
+            println!("[{} {}] not found in the xvm database",
+                target.yellow(),
+                v.yellow()
+            );
+            std::process::exit(1);
+        });
+
+        let mut program = shims::Program::new(target, v);
+        if let Some(f) = vdb.get_filename(target) { program.set_filename(f); }
+        if let Some(t) = vdb.get_type(target) { program.set_type(t); }
+
+        program.set_vdata(vdb.get_vdata(target, v).unwrap());
+
+        program.print_info();
+
+        Ok(())
+
+    } else {
+        println!("No version specified for target [{}]", target.bold().red());
+        std::process::exit(1);
+    }
+}
+
 pub fn xvm_current(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
 

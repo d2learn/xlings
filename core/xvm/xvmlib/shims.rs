@@ -292,6 +292,66 @@ impl Program {
             (String::from("XVM_ENV_NULL"), String::new())
         }
     }
+
+    pub fn print_info(&self) {
+        println!("\t[xvm-shim-0.0.5]");
+
+        println!("Program: {}", self.name);
+        println!("Version: {}", self.version);
+
+        let mut target_dir = XVM_WORKSPACE_BINDIR.get().unwrap().clone();
+
+        if let Some(vtype) = &self.vtype {
+            println!("Type: {}", vtype);
+            if vtype == "lib" {
+                target_dir = XVM_WORKSPACE_LIBDIR.get().unwrap().clone();
+            }
+        }
+
+        // SPath: source path
+        let source_filename = self.alias.clone().unwrap_or_else(|| {
+            if cfg!(target_os = "windows") {
+                format!("{}.exe", self.name)
+            } else {
+                self.name.clone()
+            }
+        });
+        if self.path.is_empty() {
+            if self.alias.is_some() {
+                println!("Alias: {}", self.alias.as_ref().unwrap());
+            }
+        } else {
+            let source_path = format!("{}/{}", self.path, source_filename);
+            println!("SPath: {}", source_path);
+        };
+
+        // TPath: target path
+        let target_filename = self.filename.clone().unwrap_or_else(|| {
+            if cfg!(target_os = "windows") {
+                format!("{}.exe", self.name)
+            } else {
+                self.name.clone()
+            }
+        });
+        let target_path = format!("{}/{}", target_dir, target_filename);
+        println!("TPath: {}", target_path);
+
+        if !self.envs.is_empty() {
+            println!("Envs:");
+            if !self.path_env.is_empty() {
+                println!("  PATH={}", self.path_env);
+            }
+            if let Some(ld_path) = &self.ld_library_path_env {
+                println!("  LD_LIBRARY_PATH={}", ld_path);
+            }
+            for (key, value) in &self.envs {
+                println!("  {}={}", key, value);
+            }
+        }
+        if !self.args.is_empty() {
+            println!("Args: {:?}", self.args);
+        }
+    }
 }
 
 pub fn init(workspace_dir: &str) {

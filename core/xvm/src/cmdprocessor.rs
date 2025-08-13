@@ -22,6 +22,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
         Some(("add", sub_matches)) => handler::xvm_add(sub_matches, &cmd_state)?,
         Some(("remove", sub_matches)) => handler::xvm_remove(sub_matches, &cmd_state)?,
         Some(("use", sub_matches)) => handler::xvm_use(sub_matches, &cmd_state)?,
+        Some(("info", sub_matches)) => handler::xvm_info(sub_matches, &cmd_state)?,
         Some(("current", sub_matches)) => handler::xvm_current(sub_matches, &cmd_state)?,
         Some(("run", sub_matches)) => handler::xvm_run(sub_matches, &cmd_state)?,
         Some(("list", sub_matches)) => handler::xvm_list(sub_matches, &cmd_state)?,
@@ -146,6 +147,20 @@ fn build_command() -> Command {
                 Arg::new("target")
                     .required(true)
                     .help("The name of the target"),
+            ),
+    )
+    .subcommand(
+        Command::new("info")
+            .about("Info of specific target and version")
+            .arg(
+                Arg::new("target")
+                    .required(true)
+                    .help("The name of the target"),
+            )
+            .arg(
+                Arg::new("version")
+                    //.required(true)
+                    .help("The version of the target"),
             ),
     )
     .subcommand(
