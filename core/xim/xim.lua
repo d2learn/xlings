@@ -68,6 +68,7 @@ function _input_process(args)
         sysadd_xpkg = kv_cmds["--add-xpkg"],
         sysadd_indexrepo = kv_cmds["--add-indexrepo"],
         sysxpkg_args = kv_cmds["--xpkg-args"],
+        sysxim_args = args, -- is table, xim's original args
 
         info_json = boolean_cmds["--info-json"],
     }

@@ -114,6 +114,7 @@ function IndexStore:build_xpkg_index(xpkg_file)
         function()
             local package_name = path.basename(xpkg_file)
 
+            -- Note: xpkg_file cannot be included main function
             local pkg = utils.load_module(
                 xpkg_file,
                 path.directory(xpkg_file)
@@ -146,10 +147,20 @@ function IndexStore:build_xpkg_index(xpkg_file)
                             local key = string.format("%s@%s", package_name, version)
 
                             if pkg.xpm[os_key][version].ref then
-                                self._index_data[key] = {
-                                    ref = package_name .. "@" .. pkg.xpm[os_key][version].ref
-                                }
-                            else 
+                                local ref_version, _ = utils.deref(pkg.xpm[os_key], version)
+                                if ref_version and pkg.xpm[os_key][ref_version] then
+                                    self._index_data[key] = {
+                                        ref = package_name .. "@" .. ref_version
+                                    }
+                                else
+                                    ref_version = ref_version or pkg.xpm[os_key][version].ref
+                                    -- TODO: optimize for a -> b -> c
+                                    cprint(
+                                        "[xlings:xim]: ${yellow}[%s] = { ref -> %s } version ref failed, %s not found - skip",
+                                        version, ref_version, ref_version
+                                    );
+                                end
+                            else
                                 self._index_data[key] = {
                                     mutex_group = pkg.mutex_group,
                                     version = version,
@@ -157,14 +168,16 @@ function IndexStore:build_xpkg_index(xpkg_file)
                                     path = xpkg_file
                                 }
                             end
-
-                            if version == "latest" then
-                                self._index_data[package_name] = {
-                                    ref = key
-                                }
-                            end
                         end
                     end -- for end
+
+                    -- add default version
+                    if pkg.xpm[os_key].latest then
+                        self._index_data[package_name] = {
+                            ref = package_name .. "@latest"
+                        }
+                    end
+
                     for _, mgroup_name in ipairs(pkg.mutex_group or {}) do
                         if not self._index_data.__mutex_group[mgroup_name] then
                             self._index_data.__mutex_group[mgroup_name] = { }

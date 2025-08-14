@@ -12,6 +12,7 @@ import("xself")
 
 local xinstall = import("xim.xim")
 local d2x = import("d2x.d2x")
+local xscript = import("xscript.xscript")
 
 function deps_check_and_install(xdeps)
 
@@ -251,6 +252,7 @@ function main()
             ["d2x"] = d2x,
             --["im"] = xinstall,
             ["self"] = xself,
+            ["script"] = xscript, -- xlings script
         }
 
         if submodule_map[command] then

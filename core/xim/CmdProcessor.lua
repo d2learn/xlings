@@ -113,7 +113,14 @@ function CmdProcessor:run_target_cmds()
                                 tool = find_tool(input_target .. ".cmd")
                             end
                         end
-                        return tool
+
+                        -- TODO: find_tool design issue? avoid musl-cross-make -> make
+                        -- https://github.com/xmake-io/xmake/blame/7ab1594d2578a0b31d0d09ed2ac813a8be0ee680/xmake/modules/lib/detect/find_toolname.lua#L100
+                        if tool and tool.name then
+                            return tool.name:find(input_target, 1, true)
+                        end
+
+                        return tool -- to false/true?
                     end
 
                     local exist_system_version = system_tool_detect(input_target)
