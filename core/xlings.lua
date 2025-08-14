@@ -12,6 +12,7 @@ import("xself")
 
 local xinstall = import("xim.xim")
 local d2x = import("d2x.d2x")
+local xscript = import("xscript.xscript")
 
 function deps_check_and_install(xdeps)
 
@@ -251,14 +252,18 @@ function main()
             ["d2x"] = d2x,
             --["im"] = xinstall,
             ["self"] = xself,
+            ["script"] = xscript, -- xlings script
         }
 
         if submodule_map[command] then
             _submodule_call(submodule_map[command], cmd_target, cmd_args)
         else
-            log.i18n_print(i18n.data()["command-not-found"], command)
-            print("\n---\n")
             log.i18n_print(i18n.data()["help"])
+            if command and command ~= "help" then
+                print("\n---\n")
+                log.i18n_print(i18n.data()["command-not-found"], command)
+                print("")
+            end
         end
         
     end

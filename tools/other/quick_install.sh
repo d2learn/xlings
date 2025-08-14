@@ -9,6 +9,8 @@ ZIP_FILE="software.zip"
 XLINGS_DIR="xlings-main"
 INSTALL_SCRIPT="tools/install.unix.sh"
 
+trap "echo 'Ctrl+C or killed...'; exit 1" INT TERM
+
 # ------------------------------
 
 cat << 'EOF'

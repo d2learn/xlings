@@ -1,4 +1,6 @@
 import("common")
+-- TODO: optimize base.utils and xim.base.utils issues
+import("base.utils")
 import("config.xconfig")
 
 local installer_base_dir = path.directory(os.scriptdir())
@@ -166,12 +168,7 @@ function prompt(message, value, cmp_func)
 end
 
 function load_module(fullpath, rootdir)
-    -- rootdir/a/b/c.lua -> a.b.c
-    local pattern = "^" .. rootdir:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1") .. "/?"
-    local relative_path = fullpath:gsub(pattern, "")
-    local path_parts = string.split(relative_path, "/")
-    local module_path = table.concat(path_parts, "."):gsub("%.lua$", "")
-    return inherit(module_path, {rootdir = rootdir})
+    return utils.load_module(fullpath, rootdir)
 end
 
 function add_env_path(value)

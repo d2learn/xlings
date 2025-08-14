@@ -1,3 +1,6 @@
+import("base.log")
+import("config.i18n")
+
 import("xim.CmdProcessor")
 
 function _input_process(args)
@@ -68,6 +71,7 @@ function _input_process(args)
         sysadd_xpkg = kv_cmds["--add-xpkg"],
         sysadd_indexrepo = kv_cmds["--add-indexrepo"],
         sysxpkg_args = kv_cmds["--xpkg-args"],
+        sysxim_args = args, -- is table, xim's original args
 
         info_json = boolean_cmds["--info-json"],
     }
@@ -99,6 +103,7 @@ function main(...)
         catch {
             function (errors)
                 print("[xlings:xim] main: error - ", errors)
+                log.i18n_print(i18n.data()["common-qa-tips"])
             end
         }
     }

@@ -7,6 +7,7 @@ import("config.xconfig")
 import("xim.base.github")
 import("xim.base.utils")
 import("xim.base.runtime")
+import("xim.base.xvm")
 
 local XPkgManager = {}
 XPkgManager.__index = XPkgManager
@@ -131,6 +132,26 @@ function XPkgManager:build(xpkg)
 end
 
 function XPkgManager:install(xpkg)
+    if not xpkg.hooks["install"] and xpkg.type == "script" then
+        -- TODO: create a xpkg's xscript template? plugin?
+        -- xpkg.hooks["install"] = xscript_template.install
+        xpkg.hooks["install"] = function()
+            local install_dir = runtime.get_pkginfo().install_dir
+            local script_file = path.join(install_dir, xpkg.name .. ".lua")
+            --local script_content = io.readfile(xpkg.__path)
+            -- replace xpkg_main to main
+            --script_content = script_content:replace("xpkg_main", "main")
+            --io.writefile(script_file, script_content)
+            os.tryrm(script_file)
+            os.cp(xpkg.__path, script_file)
+            xvm.add(xpkg.name, {
+                alias = "xlings script " .. script_file,
+                -- TODO: fix xvm's SPATH issue "bindir/alias" - for only alias
+                bindir = "TODO-FIX-SPATH-ISSUES",
+            })
+            return true
+        end
+    end
     return _try_execute_hook(xpkg.name, xpkg, "install")
 end
 
@@ -139,6 +160,12 @@ function XPkgManager:config(xpkg)
 end
 
 function XPkgManager:uninstall(xpkg)
+    if not xpkg.hooks["uninstall"] and xpkg.type == "script" then
+        xpkg.hooks["uninstall"] = function()
+            xvm.remove(xpkg.name, xpkg.version)
+            return true
+        end
+    end
     local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
     os.tryrm(runtime.get_pkginfo().install_dir)
     return ret
@@ -162,11 +189,15 @@ function XPkgManager:info(xpkg)
         { key = "repo",         label = "repo" },
         { key = "docs",         label = "docs" },
         { key = "forum",        label = "forum" },
+        { key = "programs",     label = "programs" },
     }
 
     cprint("")
     for _, field in ipairs(fields) do
         local value = info[field.key]
+        if type(value) == "table" then
+            value = table.concat(value, ", ")
+        end
         if value then
             cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
         end

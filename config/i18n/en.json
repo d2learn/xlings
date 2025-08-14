@@ -19,11 +19,12 @@
         "\t ${green}d2x${clear},     \t xlings d2x project tool",
         "\t ${green}xself${clear},   \t xlings self management",
         "",
-        "More: ${underline}https://d2learn.org/xlings${clear}",
+        "More: ${underline}https://xlings.d2learn.org${clear}",
         ""
     ],
 
     "command-not-found": "${bright yellow}Command not found:${clear} ${red}%s${clear}, please check your input...",
+    "common-qa-tips": "${bright yellow}Common-QA:${clear} ${red}https://xlings.d2learn.org/documents/qa.html${clear}",
 
     "xim": {
         "help":[

@@ -9,11 +9,14 @@ local os_info = utils.os_info()
 function new(pkg)
     local instance = {}
     debug.setmetatable(instance, XPackage)
+
+    -- init system info
+    instance.__path = pkg.path
+
+    -- init package data
     instance:_init(pkg.version, pkg.data.package)
-    instance.name = instance.pdata.name
-    if instance.pdata.namespace then
-        instance.namespace = instance.pdata.namespace
-    end
+    
+    -- init hooks
     instance.hooks = {
         installed = pkg.data.installed,
         build = pkg.data.build,
@@ -70,8 +73,15 @@ function XPackage:_init(version, package)
     package.xpm[os_info.name] = entry
     version, _ = utils.deref(package.xpm[os_info.name], version)
 
-    self._real_os_key = real_os_key
+    -- x-package data
+    self.name = package.name
     self.version = version
+    if package.namespace then
+        self.namespace = package.namespace
+    end
+    self._real_os_key = real_os_key
+    self.type = package.type or "package"
+
     self.pdata = package
 
     --return version, package

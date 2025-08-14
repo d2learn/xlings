@@ -19,11 +19,12 @@
     "\t ${green}d2x${clear},     \t xlings d2x 项目工具",
     "\t ${green}xself${clear},   \t xlings 自身管理工具",
     "",
-    "更多信息: ${underline}https://d2learn.org/xlings${clear}",
+    "更多信息: ${underline}https://xlings.d2learn.org${clear}",
     ""
   ],
 
   "command-not-found": "${bright yellow}未找到命令:${clear} ${red}%s${clear}, 请检查你的输入...",
+  "common-qa-tips": "${bright yellow}常见问题:${clear} ${red}https://xlings.d2learn.org/documents/qa.html${clear}",
 
   "xim": {
     "help": [
