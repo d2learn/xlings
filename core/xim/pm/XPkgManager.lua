@@ -189,7 +189,6 @@ function XPkgManager:info(xpkg)
         { key = "repo",         label = "repo" },
         { key = "docs",         label = "docs" },
         { key = "forum",        label = "forum" },
-        { key = "programs",     label = "programs" },
     }
 
     cprint("")
@@ -201,6 +200,11 @@ function XPkgManager:info(xpkg)
         if value then
             cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
         end
+    end
+
+    if info["programs"] then
+        local programs = table.concat(info["programs"], ", ")
+        cprint(string.format("${bright}programs:${clear} ${dim cyan}%s${clear}", programs))
     end
 
     cprint("")
