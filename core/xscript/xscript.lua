@@ -80,6 +80,7 @@ function main(script_file, ...)
                 --print("[xlings:xscript] main: error - ", errors)
                 print("[private:xscript] main: error - ", errors)
                 log.i18n_print(i18n.data()["common-qa-tips"])
+                raise(errors)
             end
         }
     }
