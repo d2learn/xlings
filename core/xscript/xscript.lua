@@ -1,6 +1,8 @@
 import("core.base.json")
 
 import("platform")
+import("base.log")
+import("config.i18n")
 import("base.utils")
 
 -- TODD: add input_args helper module, auto parse input args and help info
@@ -77,6 +79,7 @@ function main(script_file, ...)
             function (errors)
                 --print("[xlings:xscript] main: error - ", errors)
                 print("[private:xscript] main: error - ", errors)
+                log.i18n_print(i18n.data()["common-qa-tips"])
             end
         }
     }

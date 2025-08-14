@@ -24,6 +24,7 @@
     ],
 
     "command-not-found": "${bright yellow}Command not found:${clear} ${red}%s${clear}, please check your input...",
+    "common-qa-tips": "${bright yellow}Common-QA:${clear} ${red}https://xlings.d2learn.org/documents/qa.html${clear}",
 
     "xim": {
         "help":[

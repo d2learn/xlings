@@ -1,3 +1,6 @@
+import("base.log")
+import("config.i18n")
+
 import("xim.CmdProcessor")
 
 function _input_process(args)
@@ -100,6 +103,7 @@ function main(...)
         catch {
             function (errors)
                 print("[xlings:xim] main: error - ", errors)
+                log.i18n_print(i18n.data()["common-qa-tips"])
             end
         }
     }

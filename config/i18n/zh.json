@@ -24,6 +24,7 @@
   ],
 
   "command-not-found": "${bright yellow}未找到命令:${clear} ${red}%s${clear}, 请检查你的输入...",
+  "common-qa-tips": "${bright yellow}常见问题:${clear} ${red}https://xlings.d2learn.org/documents/qa.html${clear}",
 
   "xim": {
     "help": [
