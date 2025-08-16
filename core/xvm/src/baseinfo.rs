@@ -24,22 +24,17 @@ pub fn workspace_file() -> String {
 
 #[allow(dead_code)]
 pub fn bindir() -> String {
-    // if is windows
-    if cfg!(target_os = "windows") {
-        return format!(r#"{}\bin"#, platform::xvm_homedir());
-    } else {
-        format!("{}/bin", platform::xvm_homedir())
-    }
+    platform::xvm_homedir().join("bin").to_string_lossy().to_string()
 }
 
 #[allow(dead_code)]
 pub fn libdir() -> String {
-    format!("{}/lib", platform::xvm_homedir())
+    platform::xvm_homedir().join("lib").to_string_lossy().to_string()
 }
 
 #[allow(dead_code)]
 pub fn workspacedir() -> String {
-    platform::xvm_homedir()
+    platform::xvm_homedir().to_string_lossy().to_string()
 }
 
 #[allow(dead_code)]
@@ -49,7 +44,7 @@ pub fn shimdir() -> String {
 
 #[allow(dead_code)]
 pub fn print_baseinfo() {
-    println!("XVM Home: {}", platform::xvm_homedir());
+    println!("XVM Home: {}", platform::xvm_homedir().display());
     println!("XVM Data: {}", platform::xvm_datadir());
     println!("XVM Bindir: {}", bindir());
     println!("XVM VersionDB: {}", versiondb_file());
@@ -78,13 +73,13 @@ pub mod platform {
     }
 */
     // TODO: to support workspace dir, .xlings/xvm-workspace
-    pub fn xvm_homedir() -> String {
+    pub fn xvm_homedir() -> PathBuf {
         if cfg!(target_os = "windows") {
-            r#"C:\Users\Public\xlings\.xlings_data"#.to_string()
+            PathBuf::from(r"C:\Users\Public\xlings\.xlings_data")
         } else if cfg!(target_os = "macos") {
-            "/Users/xlings/.xlings_data".to_string()
+            PathBuf::from("/Users/xlings/.xlings_data")
         } else {
-            "/home/xlings/.xlings_data".to_string()
+            PathBuf::from("/home/xlings/.xlings_data")
         }
     }
 
