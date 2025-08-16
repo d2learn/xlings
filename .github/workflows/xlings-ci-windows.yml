@@ -42,6 +42,7 @@ jobs:
           xvm --version
           xvm -h
           xvm add clear 0.0.1 --alias=cls
+          xvm info clear
           xvm list c
           xvm remove clear --yes
         shell: cmd
