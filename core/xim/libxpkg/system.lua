@@ -31,7 +31,8 @@ function exec(cmd, opt)
                 catch {
                     function(e)
                         print(e)
-                        log.warn("retry %d", opt.retry)
+                        log.warn("retry %d ${blink}...", opt.retry)
+                        os.sleep(1000)
                         opt.retry = opt.retry - 1
                         return false
                     end

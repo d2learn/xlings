@@ -105,11 +105,17 @@ function IndexManager:match_package_version(target)
         end
     end
 
+    local installed_target_versions = {}
+    local nonamespace_target_versions = {}
     local target_versions = {}
     for name, pkg in pairs(self.index) do
         local match_index = name:find(target_match_str, 1, true)
-        if match_index == 1 or (match_index and string.sub(name, match_index - 1, match_index - 1) == ":") then
-            if pkg.installed then return name end
+        if match_index == 1 then -- xxxx@ matched
+            if pkg.installed then table.insert(installed_target_versions, name)  end
+            table.insert(nonamespace_target_versions, name)
+        elseif match_index and string.sub(name, match_index - 1, match_index - 1) == ":" then
+            -- ???:xxxx@ matched
+            if pkg.installed then table.insert(installed_target_versions, name)  end
             table.insert(target_versions, name)
         end
     end
@@ -117,6 +123,13 @@ function IndexManager:match_package_version(target)
     if self.index[target] then
         -- not found in installed packages
         return target -- exact match to default(latest) version
+    elseif #installed_target_versions > 0 then
+        -- sort by version number, installed packages first
+        table.sort(installed_target_versions)
+        return installed_target_versions[1]
+    elseif #nonamespace_target_versions > 0 then
+        table.sort(nonamespace_target_versions)
+        return nonamespace_target_versions[1]
     elseif #target_versions > 0 then
         -- TODO: sort by version number
         table.sort(target_versions)

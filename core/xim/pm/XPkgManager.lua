@@ -26,13 +26,9 @@ function XPkgManager:installed(xpkg)
     if xpkg.hooks["installed"] then
         ret = _try_execute_hook(xpkg.name, xpkg, "installed")
     else
-        local xvm_bin = path.join(runtime.get_bindir(), "xvm")
-        if is_host("windows") then
-            xvm_bin = path.join(runtime.get_bindir(), "xvm.exe")
-        end
-        if os.isfile(xvm_bin) then
-            ret = os.iorun([[%s list %s]], xvm_bin, xpkg.name):trim()
-        end
+        local old_value = xvm.log_tag(false)
+        ret = xvm.has(xpkg.name, xpkg.version)
+        xvm.log_tag(old_value)
     end
 
     if type(ret) == "boolean" then
@@ -189,7 +185,6 @@ function XPkgManager:info(xpkg)
         { key = "repo",         label = "repo" },
         { key = "docs",         label = "docs" },
         { key = "forum",        label = "forum" },
-        { key = "programs",     label = "programs" },
     }
 
     cprint("")
@@ -201,6 +196,11 @@ function XPkgManager:info(xpkg)
         if value then
             cprint(string.format("${bright}%s:${clear} ${dim}%s${clear}", field.label, value))
         end
+    end
+
+    if info["programs"] then
+        local programs = table.concat(info["programs"], ", ")
+        cprint(string.format("${bright}programs:${clear} ${dim cyan}%s${clear}", programs))
     end
 
     cprint("")

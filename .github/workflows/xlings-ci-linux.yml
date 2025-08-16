@@ -41,6 +41,7 @@ jobs:
           xvm --version
           xvm -h
           xvm add cls 0.0.1 --alias=clear
+          xvm info cls
           xvm list c
           xvm remove cls --yes
 

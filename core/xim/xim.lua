@@ -104,6 +104,7 @@ function main(...)
             function (errors)
                 print("[xlings:xim] main: error - ", errors)
                 log.i18n_print(i18n.data()["common-qa-tips"])
+                raise(errors)
             end
         }
     }

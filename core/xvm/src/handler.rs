@@ -17,6 +17,9 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let version = matches.get_one::<String>("version").context("Version is required")?;
     let path = matches.get_one::<String>("path");
     let alias = matches.get_one::<String>("alias");
+    let vtype = matches.get_one::<String>("type");
+    let filename = matches.get_one::<String>("filename");
+
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
         .unwrap_or_default()
@@ -26,6 +29,34 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     println!("adding target: {}, version: {}", target.green().bold(), version.cyan());
 
     let mut program = shims::Program::new(target, version);
+    let mut vdb = xvmlib::get_versiondb().clone();
+
+    if vdb.is_empty(target) {
+        println!("set [{} {}] as default", target.green().bold(), version.cyan());
+        let mut workspace = xvmlib::get_global_workspace().clone();
+        workspace.set_version(target, version);
+        workspace.save_to_local().context("Failed to save Workspace")?;
+    } else {
+        // set type and filename by vdb
+        let vtype_tmp = vdb.get_type(target).cloned();
+        if vtype_tmp.is_some() {
+            program.set_type(&vtype_tmp.clone().unwrap());
+        }
+        let filename_tmp = vdb.get_filename(target).cloned();
+        if filename_tmp.is_some() {
+            program.set_filename(&filename_tmp.clone().unwrap());
+        }
+    }
+
+    if let Some(t) = vtype {
+        program.set_type(t);
+        vdb.set_type(target, t);
+    }
+
+    if let Some(f) = filename {
+        program.set_filename(f);
+        vdb.set_filename(target, f);
+    }
 
     if let Some(p) = path {
         program.set_path(p);
@@ -48,19 +79,18 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         );
     }
 
-    let mut vdb = xvmlib::get_versiondb().clone();
-
-    if vdb.is_empty(target) {
-        println!("set [{} {}] as default", target.green().bold(), version.cyan());
-        let mut workspace = xvmlib::get_global_workspace().clone();
-        workspace.set_version(target, version);
-        workspace.save_to_local().context("Failed to save Workspace")?;
-    }
-
     vdb.set_vdata(target, version, program.vdata());
     vdb.save_to_local().context("Failed to save VersionDB")?;
 
-    xvmlib::shims::try_create(target, &baseinfo::bindir());
+    // if type is lib, create a link in libdir
+    if vtype.is_some_and(|t| t == "lib") {
+        let libdir = baseinfo::libdir();
+        println!("link [{} {}] to [{}] ...", target, version, libdir.bright_purple());
+        program.link_to(&libdir, false);
+    } else {
+        // create a bin shim
+        xvmlib::shims::try_create(target, &baseinfo::bindir());
+    }
 
     Ok(())
 }
@@ -74,6 +104,14 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
     let mut workspace = xvmlib::get_global_workspace().clone();
     let workspace_version = workspace.version(target);
     let mut global_version_removed = false;
+
+    let mut vtype: Option<String> = Option::None;
+    let mut libname: Option<String> = Option::None;
+
+    if vdb.has_target(target) {
+        libname = vdb.get_filename(target).cloned();
+        vtype = vdb.get_type(target).cloned();
+    }
 
     if version.is_none() { // 检查 version 是否为 None
         if !_cmd_state.yes && !helper::prompt(&format!("remove all versions for [{}]? (y/n): ", target.green().bold()), "y") {
@@ -90,6 +128,7 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
             );
             return Ok(());
         }
+
         println!("removing target: {}, version: {}", target.green().bold(), version.cyan());
         vdb.remove_vdata(target, version);
         // if removed version is current version, set update flag
@@ -105,13 +144,44 @@ pub fn xvm_remove(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState)
     if vdb.is_empty(target) { // if is empty delete from workspace
         workspace.remove(target);
         println!("remove [{}] from [{}] workspace", target.green().bold(), "global".bold().bright_purple());
-        xvmlib::shims::delete(target, &baseinfo::platform::bindir());
-        println!("delete shim [{}] ...", target.green().bold());
+        // if type is lib, remove link from libdir
+        if vtype.is_some_and(|t| t == "lib") {
+            let libdir = baseinfo::libdir();
+            // TODO: to support windows
+            let lib_path = format!("{}/{}", libdir, libname.unwrap_or_else(|| format!("{}.so", target)));
+            if fs::symlink_metadata(&lib_path).is_ok() {
+                fs::remove_file(&lib_path).unwrap();
+            }
+            println!("remove link [{}] - {} ...", target.green().bold(), lib_path);
+        } else {
+            // remove bin shim
+            xvmlib::shims::delete(target, &baseinfo::bindir());
+            println!("remove shim [{}] ...", target.green().bold());
+        }
         workspace.save_to_local().context("Failed to save Workspace")?;
     } else if global_version_removed {
         let first_version = vdb.get_first_version(target).unwrap();
         workspace.set_version(target, first_version);
         println!("set [{} {}] as default", target.green().bold(), first_version.cyan());
+        // if is lib, relink
+        if vtype.is_some_and(|t| t == "lib") {
+            let mut program = shims::Program::new(target, first_version);
+            let vdata = vdb
+                .get_vdata(target, first_version)
+                .unwrap_or_else(|| {
+                    println!("[{} {}] not found in the xvm database",
+                        target.red(),
+                        first_version.red()
+                    );
+                    std::process::exit(1);
+                });
+
+            program.set_filename(vdb.get_filename(target).unwrap());
+            program.set_vdata(vdata);
+            let libdir = baseinfo::libdir();
+            println!("relink [{} {}] to [{}] ...", target.green().bold(), first_version.cyan(), libdir.bright_purple());
+            program.link_to(&libdir, true);
+        }
         workspace.save_to_local().context("Failed to save Workspace")?;
     } else {
         // vdb not empty and global version not removed
@@ -148,11 +218,63 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let mut workspace = helper::load_workspace();
 
     if workspace.version(target) != Some(version) {
+        // if type is lib, relink
+        if let Some(vdata) = vdb.get_vdata(target, version) {
+            if vdb.get_type(target) == Some(&"lib".to_string()) {
+                let libdir = baseinfo::libdir();
+                println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
+                let mut program = shims::Program::new(target, version);
+                program.set_filename(vdb.get_filename(target).unwrap());
+                program.set_vdata(vdata);
+                program.link_to(&libdir, true);
+            }
+        }
         workspace.set_version(target, version);
         workspace.save_to_local().context("Failed to save Workspace")?;
     }
 
     println!("using -> target: {}, version: {}", target.green().bold(), version.cyan());
+
+    Ok(())
+}
+
+pub fn xvm_info(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
+    let target = matches.get_one::<String>("target").context("Target is required")?;
+    let mut version = matches.get_one::<String>("version");
+
+    let vdb = xvmlib::get_versiondb();
+    let workspace = helper::load_workspace();
+
+    if !vdb.has_target(target) {
+        println!("Target [{}] is missing from the xvm database", target.bold().yellow());
+        std::process::exit(0);
+    }
+
+    // if version is None, get from workspace
+    if version.is_none() {
+        version = workspace.version(target);
+    }
+
+    if let Some(mut v) = version {
+        v = vdb.match_first_version(target, &v).unwrap_or_else(|| {
+            println!("[{} {}] not found in the xvm database",
+                target.green(),
+                v.yellow()
+            );
+            std::process::exit(0);
+        });
+
+        let mut program = shims::Program::new(target, v);
+        if let Some(f) = vdb.get_filename(target) { program.set_filename(f); }
+        if let Some(t) = vdb.get_type(target) { program.set_type(t); }
+
+        program.set_vdata(vdb.get_vdata(target, v).unwrap());
+
+        program.print_info();
+
+    } else {
+        println!("No version specified for target [{}]", target.green());
+    }
 
     Ok(())
 }

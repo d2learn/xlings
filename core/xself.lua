@@ -193,7 +193,7 @@ function init()
 
     __xlings_usergroup_checker()
 
-    common.xlings_exec([[xlings install xvm@0.0.4 -y]])
+    common.xlings_exec([[xlings install xvm@0.0.5 -y]])
     os.exec([[xvm add xim 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xinstall 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xrun 0.0.4 --alias "xlings run"]])

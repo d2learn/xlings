@@ -22,6 +22,7 @@ pub fn run(matches: &ArgMatches) -> Result<()> {
         Some(("add", sub_matches)) => handler::xvm_add(sub_matches, &cmd_state)?,
         Some(("remove", sub_matches)) => handler::xvm_remove(sub_matches, &cmd_state)?,
         Some(("use", sub_matches)) => handler::xvm_use(sub_matches, &cmd_state)?,
+        Some(("info", sub_matches)) => handler::xvm_info(sub_matches, &cmd_state)?,
         Some(("current", sub_matches)) => handler::xvm_current(sub_matches, &cmd_state)?,
         Some(("run", sub_matches)) => handler::xvm_run(sub_matches, &cmd_state)?,
         Some(("list", sub_matches)) => handler::xvm_list(sub_matches, &cmd_state)?,
@@ -46,7 +47,7 @@ pub fn parse_from_string(args: &[&str]) -> ArgMatches {
 
 fn build_command() -> Command {
     Command::new("xvm")
-    .version("0.0.4") // prev-0.0.4
+    .version("0.0.5") // prev-0.0.5
     .author("d2learn <dev@d2learn.com>")
     .about("a simple and generic version management tool")
     .arg(
@@ -81,6 +82,18 @@ fn build_command() -> Command {
                     .long("alias")
                     .action(ArgAction::Set)
                     .help("Specify a alias for the target"),
+            )
+            .arg(
+                Arg::new("type")
+                    .long("type")
+                    .action(ArgAction::Set)
+                    .help("Specify a type for the target"),
+            )
+            .arg(
+                Arg::new("filename")
+                    .long("filename")
+                    .action(ArgAction::Set)
+                    .help("Specify a filename for the target"),
             )
             .arg(
                 Arg::new("env")
@@ -134,6 +147,20 @@ fn build_command() -> Command {
                 Arg::new("target")
                     .required(true)
                     .help("The name of the target"),
+            ),
+    )
+    .subcommand(
+        Command::new("info")
+            .about("Info of specific target and version")
+            .arg(
+                Arg::new("target")
+                    .required(true)
+                    .help("The name of the target"),
+            )
+            .arg(
+                Arg::new("version")
+                    //.required(true)
+                    .help("The version of the target"),
             ),
     )
     .subcommand(

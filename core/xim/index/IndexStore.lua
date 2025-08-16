@@ -343,7 +343,7 @@ function _serialize(obj, layer)
         s = s .. "\n" .. string.rep("    ", layer - 1) .. "}"
     elseif type(obj) == "string" then
         s = string.format("%q", obj)
-    elseif type(obj) == boolean then
+    elseif type(obj) == "boolean" then
         s = tostring(obj)
     else
         s = tostring(obj)

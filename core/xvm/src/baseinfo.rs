@@ -15,26 +15,37 @@ pub fn rundir() {
 }
 
 pub fn versiondb_file() -> String {
-    format!("{}/versions.xvm.yaml", platform::xvm_homedir())
+    format!("{}/versions.xvm.yaml", platform::xvm_datadir())
 }
 
 pub fn workspace_file() -> String {
-    format!("{}/{}", platform::xvm_homedir(), WORKSPACE_FILE)
+    format!("{}/{}", platform::xvm_datadir(), WORKSPACE_FILE)
 }
 
 #[allow(dead_code)]
 pub fn bindir() -> String {
-    platform::bindir()
+    platform::xvm_homedir().join("bin").to_string_lossy().to_string()
+}
+
+#[allow(dead_code)]
+pub fn libdir() -> String {
+    platform::xvm_homedir().join("lib").to_string_lossy().to_string()
+}
+
+#[allow(dead_code)]
+pub fn workspacedir() -> String {
+    platform::xvm_homedir().to_string_lossy().to_string()
 }
 
 #[allow(dead_code)]
 pub fn shimdir() -> String {
-    format!("{}/shims", platform::xvm_homedir())
+    format!("{}/shims", platform::xvm_datadir())
 }
 
 #[allow(dead_code)]
 pub fn print_baseinfo() {
-    println!("XVM Home: {}", platform::xvm_homedir());
+    println!("XVM Home: {}", platform::xvm_homedir().display());
+    println!("XVM Data: {}", platform::xvm_datadir());
     println!("XVM Bindir: {}", bindir());
     println!("XVM VersionDB: {}", versiondb_file());
     println!("XVM Workspace: {}", workspace_file());
@@ -42,6 +53,7 @@ pub fn print_baseinfo() {
 
 pub mod platform {
     //use std::env;
+    use std::path::PathBuf;
 /*
     use super::*;
 
@@ -61,17 +73,19 @@ pub mod platform {
         }).clone()
     }
 */
-    pub fn bindir() -> String {
+    // TODO: to support workspace dir, .xlings/xvm-workspace
+    pub fn xvm_homedir() -> PathBuf {
         if cfg!(target_os = "windows") {
-            r#"C:\Users\Public\xlings\.xlings_data\bin"#.to_string()
+            PathBuf::from(r"C:\Users\Public\xlings\.xlings_data")
         } else if cfg!(target_os = "macos") {
-            "/Users/xlings/.xlings_data/bin".to_string()
+            PathBuf::from("/Users/xlings/.xlings_data")
         } else {
-            "/home/xlings/.xlings_data/bin".to_string()
+            PathBuf::from("/home/xlings/.xlings_data")
         }
     }
 
-    pub fn xvm_homedir() -> String {
+    // fixed path for xvm data directory
+    pub fn xvm_datadir() -> String {
         if cfg!(target_os = "windows") {
             "C:/Users/Public/xlings/.xlings_data/xvm".to_string()
         } else if cfg!(target_os = "macos") {

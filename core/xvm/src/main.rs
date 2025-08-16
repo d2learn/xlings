@@ -10,7 +10,8 @@ fn main() {
     if helper::runtime_check_and_tips() {
         xvmlib::init_versiondb(baseinfo::versiondb_file().as_str());
         xvmlib::init_global_workspace(baseinfo::workspace_file().as_str());
-        xvmlib::init_shims(baseinfo::bindir().as_str());
+        //xvmlib::init_shims(baseinfo::bindir().as_str());
+        xvmlib::init_shims(baseinfo::workspacedir().as_str());
         let matches = cmdprocessor::parse_from_command_line();
         let _ = cmdprocessor::run(&matches);
     }

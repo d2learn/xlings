@@ -43,6 +43,7 @@ function XPackage:info()
         docs = self.pdata.docs,
         forum = self.pdata.forum,
         description = self.pdata.description,
+        programs = self.pdata.programs,
     }
 end
 
