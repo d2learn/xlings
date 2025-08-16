@@ -24,7 +24,12 @@ pub fn workspace_file() -> String {
 
 #[allow(dead_code)]
 pub fn bindir() -> String {
-    format!("{}/bin", platform::xvm_homedir())
+    // if is windows
+    if cfg!(target_os = "windows") {
+        return format!(r#"{}\bin"#, platform::xvm_homedir());
+    } else {
+        format!("{}/bin", platform::xvm_homedir())
+    }
 }
 
 #[allow(dead_code)]
