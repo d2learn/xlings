@@ -246,8 +246,8 @@ pub fn xvm_info(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -
     let workspace = helper::load_workspace();
 
     if !vdb.has_target(target) {
-        println!("Target [{}] is missing from the xvm database", target.bold().red());
-        std::process::exit(1);
+        println!("Target [{}] is missing from the xvm database", target.bold().yellow());
+        std::process::exit(0);
     }
 
     // if version is None, get from workspace
@@ -258,10 +258,10 @@ pub fn xvm_info(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -
     if let Some(mut v) = version {
         v = vdb.match_first_version(target, &v).unwrap_or_else(|| {
             println!("[{} {}] not found in the xvm database",
-                target.yellow(),
+                target.green(),
                 v.yellow()
             );
-            std::process::exit(1);
+            std::process::exit(0);
         });
 
         let mut program = shims::Program::new(target, v);
@@ -272,12 +272,11 @@ pub fn xvm_info(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -
 
         program.print_info();
 
-        Ok(())
-
     } else {
-        println!("No version specified for target [{}]", target.bold().red());
-        std::process::exit(1);
+        println!("No version specified for target [{}]", target.green());
     }
+
+    Ok(())
 }
 
 pub fn xvm_current(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {

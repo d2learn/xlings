@@ -1,36 +1,16 @@
 import("core.base.json")
 
+import("common")
 import("platform")
 import("base.log")
 import("config.i18n")
 import("base.utils")
 
--- TODD: add input_args helper module, auto parse input args and help info
-function _input_process(args)
-
-    local main_target = ""
-
-    action = tostring(action)
-    args = args or {}
-
-    local kv_cmds = {
-        -- TODo: add kv cmds
-        ["--xscript-info"] = false,  -- -search (string)
-        ["--xscript-info-json"] = false,  -- -list (string)
-    }
-
-    if #args > 0 and args[1]:sub(1, 1) ~= '-' then
-        main_target = args[1]
-    end
-
-    for i = 1, #args do
-        if kv_cmds[args[i]] == false then
-            kv_cmds[args[i]] = args[i + 1] or ""
-        end
-    end
-
-    return main_target, kv_cmds
-end
+local kv_cmds = {
+    -- TODo: add kv cmds
+    ["--xscript-info"] = false,  -- -search (string)
+    ["--xscript-info-json"] = false,  -- -list (string)
+}
 
 -- TODO:
 --   1.public use
@@ -42,7 +22,7 @@ function main(script_file, ...)
     --print("script_file: " .. script_file)
 
     local script_file_path = script_file
-    local _, cmds = _input_process({ ... } or {})
+    local _, cmds = common.xlings_input_process("", { ... }, kv_cmds)
 
     if os.isfile(script_file_path) then
         script_file_path = path.absolute(script_file_path)

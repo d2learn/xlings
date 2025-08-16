@@ -13,6 +13,18 @@ config = {
     },
 }
 ]]
+
+__xvm_log_tag = true
+
+function log_tag(enable)
+    local old_value = __xvm_log_tag
+    if type(enable) == "boolean" then
+        __xvm_log_tag = enable
+    end
+    return old_value
+end
+
+
 function add(name, config)
     config = config or { }
 
@@ -23,6 +35,16 @@ function add(name, config)
     local envs = config.envs or {}
 
     name = name or pkginfo.name
+
+    local type_arg = ""
+    if config.type then
+        type_arg = string.format([[ --type "%s"]], config.type)
+    end
+
+    local filename_arg = ""
+    if config.filename then
+        filename_arg = string.format([[ --filename "%s"]], config.filename)
+    end
 
     local alias_arg = ""
     if config.alias then
@@ -35,9 +57,9 @@ function add(name, config)
     end
 
     __xvm_run(string.format(
-        [[add %s %s --path %s %s %s]],
+        [[add %s %s --path %s %s %s %s %s]],
         name, version, bindir,
-        alias_arg, envs_args
+        type_arg, filename_arg, alias_arg, envs_args
     ))
 
     input_args = runtime.get_runtime_data().input_args
@@ -136,7 +158,7 @@ function __xvm_run(cmd, opt)
         os.exec("xlings install xvm -y")
     end
     xvm_cmd = string.format([[%s %s]], xvm_path, cmd)
-    cprint("[xlings:xim]: xvm run - ${dim}%s", xvm_cmd)
+    if __xvm_log_tag then cprint("[xlings:xim]: xvm run - ${dim}%s", xvm_cmd) end
     return try {
         function ()
             if opt.return_value then
@@ -151,6 +173,11 @@ function __xvm_run(cmd, opt)
             end
         }
     }
+end
+
+function has(name, version)
+    local program_info = info(name, version)
+    return program_info and program_info.Program ~= nil
 end
 
 function test_main()
