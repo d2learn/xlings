@@ -120,13 +120,13 @@ function IndexManager:match_package_version(target)
         end
     end
 
-    if self.index[target] then
-        -- not found in installed packages
-        return target -- exact match to default(latest) version
-    elseif #installed_target_versions > 0 then
+    if #installed_target_versions > 0 then
         -- sort by version number, installed packages first
         table.sort(installed_target_versions)
         return installed_target_versions[1]
+    elseif self.index[target] then
+        -- not found in installed packages
+        return target -- exact match to default(latest) version
     elseif #nonamespace_target_versions > 0 then
         table.sort(nonamespace_target_versions)
         return nonamespace_target_versions[1]

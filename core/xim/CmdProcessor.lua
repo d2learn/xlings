@@ -144,37 +144,46 @@ function CmdProcessor:run_target_cmds()
             end
         else
             local target_list = ""
+            local matched_target_nums = 0
             local matched_target = index_manager:search(self.target)
+
             for name, _ in pairs(matched_target) do
+                matched_target_nums = matched_target_nums + 1
                 target_list = target_list .. name .. "\n"
             end
-            -- fzf installed, use fzf to select target
-            if target_list ~= "" and find_tool("fzf") then
-                local tmpfile = path.join(runtime.get_xim_data_dir(), ".xim_fzf_out")
-                if is_host("windows") then
-                    io.writefile(tmpfile, target_list)
-                    os.addenv("FZF_DEFAULT_COMMAND", string.format([[type %s]], tmpfile))
-                else
-                    io.writefile(tmpfile, "")
-                    os.addenv("FZF_DEFAULT_COMMAND", string.format([[echo -e "%s"]], target_list))
-                end
-                try {
-                    function()
-                        if is_host("windows") then
-                            common.xlings_exec([[fzf --preview "xim -i {}" > ]] .. tmpfile)
-                        else
-                            os.execv("fzf", {"--print-query", "--preview", "xim -i {}"}, {stdout = tmpfile})
-                        end
-                        self.target = io.readfile(tmpfile):trim()
-                        self:run_target_cmds()
-                    end, catch {
-                        function() end
-                    }
-                }
+
+            if matched_target_nums == 1 then
+                self.target = target_list:trim()
+                self:run_target_cmds()
             else
-                cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
-                self:target_tips()
-            end
+                -- fzf installed, use fzf to select target
+                if target_list ~= "" and find_tool("fzf") then
+                    local tmpfile = path.join(runtime.get_xim_data_dir(), ".xim_fzf_out")
+                    if is_host("windows") then
+                        io.writefile(tmpfile, target_list)
+                        os.addenv("FZF_DEFAULT_COMMAND", string.format([[type %s]], tmpfile))
+                    else
+                        io.writefile(tmpfile, "")
+                        os.addenv("FZF_DEFAULT_COMMAND", string.format([[echo -e "%s"]], target_list))
+                    end
+                    try {
+                        function()
+                            if is_host("windows") then
+                                common.xlings_exec([[fzf --preview "xim -i {}" > ]] .. tmpfile)
+                            else
+                                os.execv("fzf", {"--print-query", "--preview", "xim -i {}"}, {stdout = tmpfile})
+                            end
+                            self.target = io.readfile(tmpfile):trim()
+                            self:run_target_cmds()
+                        end, catch {
+                            function() end
+                        }
+                    }
+                else
+                    cprint("[xlings:xim]: ${red}package not found - %s${clear}", self.target)
+                    self:target_tips()
+                end
+            end -- if matched_target and #matched_target == 1 then
         end
     end
 end
