@@ -7,6 +7,10 @@
       "macosx": "/Users/xlings",
       "windows": "C:/Users/Public/xlings"
     },
+    "repo": {
+        "GLOBAL": "https://github.com/d2learn/xlings.git",
+        "CN": "https://gitee.com/sunrisepeak/xlings.git"
+    },
     "xim": {
       "index-repo": "https://github.com/d2learn/xim-pkgindex.git",
       "res-server": "https://github.com/xlings-res",

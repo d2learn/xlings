@@ -1,3 +1,5 @@
+--print("platform.lua loaded successfully.")
+
 import("config.xconfig")
 
 local baseconfig = xconfig.load()

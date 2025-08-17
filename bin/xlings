@@ -11,6 +11,7 @@ fi
 export XLINGS_DIR=$XLINGS_HOME_DIR/.xlings # default use home's xlings
 export XLINGS_RUN_DIR=`pwd`
 export XMAKE_CONFIGDIR=$XLINGS_HOME_DIR # avoid permission issue
+export XLINGS_LATEST_VERSION=$XLINGS_HOME_DIR/.xlings_latest
 
 # check XLINGS_DIR, if not exist, use /usr/share/xlings
 if ! [ -d $XLINGS_DIR ]; then
@@ -26,12 +27,26 @@ if [ "$UID" -eq 0 ]; then
     export XMAKE_ROOT=y
 fi
 
-cd "$XLINGS_DIR/core" || {
-  echo "xlings: error: file corrupt, please reinstall xlings..."
-  echo ""
-  echo -e "\tcurl -fsSL https://d2learn.org/xlings-install.sh | bash"
-  echo ""
-  exit 1
+enter_xlings_core_or_exit() {
+  cd "$XLINGS_DIR/core" || {
+    echo "xlings: error: file corrupt, please reinstall xlings..."
+    echo ""
+    echo -e "\tcurl -fsSL https://d2learn.org/xlings-install.sh | bash"
+    echo ""
+    exit 1
+  }
 }
 
+enter_xlings_core_or_exit
+
 xmake xlings $XLINGS_RUN_DIR "$@"
+
+# if exist XLINGS_LATEST_VERSION, then update XLINGS_DIR
+if [ -d $XLINGS_LATEST_VERSION ]; then
+    cd $XLINGS_HOME_DIR
+    rm -rf $XLINGS_DIR
+    mv $XLINGS_LATEST_VERSION $XLINGS_DIR
+
+    enter_xlings_core_or_exit
+    xmake xlings $XLINGS_RUN_DIR self init
+fi

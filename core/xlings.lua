@@ -1,15 +1,16 @@
 import("core.base.text")
 import("core.base.option")
 
-import("platform")
+import("platform") -- xconfig loaded
 import("common")
-import("config")
+--import("config") -- double load? for xconfig file? because of submoduel?
 
 import("base.log")
 import("config.i18n")
 
 import("xself")
 
+local config_llm = import("config.llm")
 local xinstall = import("xim.xim")
 local d2x = import("d2x.d2x")
 local xscript = import("xscript.xscript")
@@ -199,7 +200,7 @@ function main()
     platform.set_runmode(xlings_runmode)
 
     -- llm config info - llm.config.xlings
-    config.llm.load_global_config()
+    config_llm.load_global_config()
     local xlings_llm_config = option.get("xlings_llm_config")
     if xlings_llm_config then
         xlings_llm_config = common.xlings_config_file_parse(run_dir .. "/" .. xlings_llm_config)
@@ -246,7 +247,7 @@ function main()
     elseif command == "remove" then
         _command_dispatch(xinstall, "-r", cmd_target, cmd_args)
     elseif command == "config" then
-        config.llm()
+        config_llm()
     else -- submodule
         local submodule_map = {
             ["d2x"] = d2x,

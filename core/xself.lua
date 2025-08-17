@@ -1,3 +1,4 @@
+import("devel.git")
 import("privilege.sudo")
 
 import("platform")
@@ -35,7 +36,7 @@ function install()
 
     local install_dir = pconfig.install_dir
 
-    -- cp xliings to install_dir(local xlings dir) and force overwrite
+    -- cp xlings to install_dir(local xlings dir) and force overwrite
     os.cp(platform.get_config_info().sourcedir, install_dir, {force = true})
 
     -- create rcachedir
@@ -210,15 +211,27 @@ function init()
 end
 
 function update()
-    cprint("")
-    cprint("\t\t${bright}[xlings update command]")
-    cprint("")
-    if is_host("windows") then
-        cprint("${cyan}irm https://d2learn.org/xlings-install.ps1.txt | iex")
-    else
-        cprint("${cyan}curl -fsSL https://d2learn.org/xlings-install.sh | bash")
+    local xlings_repo_default = "https://github.com/d2learn/xlings.git"
+    local xlings_config = xconfig.load()
+    local xlings_repo = xlings_config["repo"] or xlings_repo_default
+    local xlings_latest_dir = path.join(platform.get_config_info().homedir, ".xlings_latest")
+
+    if os.isdir(xlings_latest_dir) then
+        cprint("[xlings]: remove old xlings latest dir %s", xlings_latest_dir)
+        os.tryrm(xlings_latest_dir)
     end
-    cprint("")
+
+    cprint("[xlings]: update xlings from ${green}%s${blink}...", xlings_repo)
+    git.clone(xlings_repo, {
+        depth = 1,
+        outputdir = xlings_latest_dir,
+    })
+
+    cprint("[xlings]: replace old xlings files with latest...")
+    -- action in xlings/xlings.bat
+    -- step1: rm .xlings
+    -- step2: mv .xlings_latest .xlings
+    -- step3: xlings self init
 end
 
 function config(cmds)

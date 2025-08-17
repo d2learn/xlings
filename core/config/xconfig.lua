@@ -13,10 +13,22 @@ local xlings_config = {
 
 local projectdir = path.directory(path.directory(os.scriptdir()))
 local xlings_config_file = path.join(path.join(projectdir, "config"), "xlings.json")
+-- Note: __xlings_homedir maybe not exist or just a tmp directory (in first install)
+local __xlings_homedir = path.directory(projectdir)
+local xlings_homedir_config_file = path.join(
+    __xlings_homedir,
+    ".xlings_data", "xlings.json"
+)
+
+if os.isfile(xlings_homedir_config_file) then
+    --cprint("[xlings]: load config from ${yellow}" .. xlings_homedir_config_file)
+    xlings_config_file = xlings_homedir_config_file
+end
 
 function load()
     if xlings_config.need_load_flag and os.isfile(xlings_config_file) then
         xlings_config = json.loadfile(xlings_config_file)
+        -- when first install or need_update
         if xlings_config["need_update"] then
             local urls = {
                 "https://github.com",
@@ -34,6 +46,9 @@ function load()
             xlings_config["xim"]["index-repo"] = xlings_config["xim"]["mirrors"]["index-repo"][target_mirror]
             xlings_config["xim"]["res-server"] = xlings_config["xim"]["mirrors"]["res-server"][target_mirror]
 
+            if type(xlings_config["repo"]) == "table" then
+                xlings_config["repo"] = xlings_config["repo"][target_mirror]
+            end
             xlings_config["need_update"] = false
             xlings_config["mirror"] = target_mirror
 
