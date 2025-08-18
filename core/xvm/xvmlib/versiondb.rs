@@ -10,6 +10,8 @@ pub struct VData {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub envs: Option<IndexMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binds: Option<IndexMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +143,21 @@ impl VersionDB {
                 }
             }
             entry.get_mut().vtype = Some(vtype.to_string());
+        }
+    }
+
+    pub fn add_bind(&mut self, name: &str, version: &str, bind: (String, String)) {
+        let vdata = self.root
+            .entry(name.to_string())
+            .or_insert_with(|| VInfo { vtype: None, filename: None, vdata_list: IndexMap::new() })
+            .vdata_list
+            .entry(version.to_string());
+        if let Entry::Occupied(mut entry) = vdata {
+            entry.get_mut().binds
+                .get_or_insert_with(IndexMap::new)
+                .insert(bind.0, bind.1);
+        } else {
+            eprintln!("xvm-error: version '{}' of target '{}' does not exist", version, name);
         }
     }
 

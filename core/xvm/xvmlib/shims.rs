@@ -2,6 +2,8 @@ use std::fs;
 use std::process::Command;
 use std::sync::OnceLock;
 
+use indexmap::IndexMap;
+
 use crate::versiondb::VData;
 
 pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
@@ -34,6 +36,7 @@ pub struct Program {
     path_env: String,
     ld_library_path_env: Option<String>,
     envs: Vec<(String, String)>,
+    binds: IndexMap<String, String>,
     args: Vec<String>,
 }
 
@@ -49,6 +52,7 @@ impl Program {
             path_env: String::new(),
             ld_library_path_env: None,
             envs: Vec::new(),
+            binds: IndexMap::new(),
             args: Vec::new(),
         }
     }
@@ -98,6 +102,17 @@ impl Program {
         }
     }
 
+    pub fn add_bind(&mut self, target: &str, version: &str) {
+        if self.binds.contains_key(target) {
+            eprintln!("Warning: bind for [ {} ] already exists, overwriting", target);
+        }
+        self.binds.insert(target.to_string(), version.to_string());
+    }
+
+    pub fn get_binds(&self) -> &IndexMap<String, String> {
+        &self.binds
+    }
+
     pub fn set_path(&mut self, path: &str) {
         self.path = path.to_string();
         self.add_env("PATH", path);
@@ -132,6 +147,11 @@ impl Program {
                 None
             } else {
                 Some(envs_tmp.iter().cloned().collect())
+            },
+            binds: if self.binds.is_empty() {
+                None
+            } else {
+                Some(self.binds.clone())
             },
         }
     }

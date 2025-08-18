@@ -19,6 +19,7 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let alias = matches.get_one::<String>("alias");
     let vtype = matches.get_one::<String>("type");
     let filename = matches.get_one::<String>("filename");
+    let bind = matches.get_one::<String>("bind");
 
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
@@ -30,6 +31,29 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
 
     let mut program = shims::Program::new(target, version);
     let mut vdb = xvmlib::get_versiondb().clone();
+
+    if let Some(b) = bind {
+        // bind-format: "target@version"
+        let parts: Vec<&str> = b.split('@').collect();
+        println!("bind: {:?}", parts);
+        if parts.len() == 2 {
+            if !vdb.has_version(parts[0], &parts[1]) {
+                println!("[{} {}] not found in the xvm database",
+                    parts[0].yellow(),
+                    parts[1].yellow()
+                );
+                std::process::exit(1);
+            }
+            program.add_bind(parts[0], parts[1]);
+            vdb.add_bind(
+                parts[0], parts[1],
+                (target.to_string(), version.to_string())
+            );
+        } else {
+            println!("Invalid bind format: expected 'target@version', got '{}'", b);
+            std::process::exit(1);
+        }
+    }
 
     if vdb.is_empty(target) {
         println!("set [{} {}] as default", target.green().bold(), version.cyan());
