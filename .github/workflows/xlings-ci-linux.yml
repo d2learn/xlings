@@ -39,7 +39,7 @@ jobs:
         run: |
           export PATH=/home/xlings/.xlings_data/bin:$PATH
           xlings install rust -y
-          cd core/xvm
+          cd ../core/xvm
           cargo build
 
           ./target/debug/xvm -h
