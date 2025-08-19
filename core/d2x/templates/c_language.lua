@@ -4,7 +4,7 @@ _exercises_file_template = [[
 #define CLINGS_H
 
 static int add(int a, int b) {
-    return a + b
+    return a + b;
 }
 
 #endif
@@ -16,8 +16,8 @@ _tests_file_template = [[
 
 #include "exercises/clings.h"
 
-int mian() {
-    print("hello clings - 1 + 2 = %d\n", add(1, 2))
+int main() {
+    printf("hello clings - 1 + 2 = %d\n", add(1, 2));
     return 0;
 }
 ]]

@@ -6,8 +6,11 @@ _exercises_file_template = [[
 namespace d2cpp {
 
 class Hello {
-
-}
+public:
+    void greet() {
+        std::cout << "Hello, World!" << std::endl;
+    }
+};
 
 }
 
@@ -20,8 +23,9 @@ _tests_file_template = [[
 
 #include "exercises/cpplings.hpp"
 
-int mian() {
-    d2cpp::Hello hello
+int main() {
+    d2cpp::Hello hello;
+    hello.greet();
     return 0;
 }
 ]]

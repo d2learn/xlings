@@ -1,6 +1,6 @@
 _exercises_file = "exercises/pylings.py"
 _exercises_file_template = [[
-def add(a, b)
+def add(a, b):
     return a + b
 ]]
 
@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import exercises.pylings as pylings
 
-print("hello pylings: 1 + 2 = ", pylings.add(1, 2)
+print("hello pylings: 1 + 2 = ", pylings.add(1, 2))
 ]]
 
 _build_file = "xmake.lua"
