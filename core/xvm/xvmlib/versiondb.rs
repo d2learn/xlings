@@ -179,6 +179,10 @@ impl VersionDB {
         }
     }
 
+    pub fn get_bindings(&self, name: &str, version: &str) -> Option<&IndexMap<String, String>> {
+        self.root.get(name)?.vdata_list.get(version)?.bindings.as_ref()
+    }
+
     pub fn get_vdata(&self, name: &str, version: &str) -> Option<&VData> {
         self.root.get(name)?.vdata_list.get(version)
     }

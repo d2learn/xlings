@@ -1,7 +1,7 @@
 use std::fs;
 use std::process::exit;
 use std::collections::HashMap;
-use std::collections::HashSet;
+//use std::collections::HashSet;
 use std::sync::Mutex;
 
 use clap::ArgMatches;
@@ -21,7 +21,7 @@ type TargetVersion = (String, String); // (target, version)
 type InvalidBindingsMap = HashMap<TargetVersion, TargetVersion>;
 static INVALID_BINDINGS: OnceCell<Mutex<InvalidBindingsMap>> = OnceCell::new();
 // record valid bindings, avoid repeatedly accessing the same binding into an infinite loop
-static VALID_BINDINGS: OnceCell<Mutex<HashSet<String>>> = OnceCell::new();
+static VALID_BINDINGS: OnceCell<Mutex<HashMap<String, String>>> = OnceCell::new();
 
 pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
@@ -229,7 +229,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let mut version = matches.get_one::<String>("version").context("Version is required")?;
 
-    let mut vdb = xvmlib::get_versiondb().clone();
+    let vdb = xvmlib::get_versiondb().clone();
 
     if !vdb.has_target(target) {
         println!("Target [{}] is missing from the xvm database", target.bold().red());
@@ -250,23 +250,6 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         });
     }
 
-    let vdata = vdb.get_vdata(target, version).unwrap();
-    let mut workspace = helper::load_workspace();
-
-    if workspace.version(target) != Some(version) {
-        // if type is lib, relink
-        if vdb.get_type(target) == Some(&"lib".to_string()) {
-            let libdir = baseinfo::libdir();
-            println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
-            let mut program = shims::Program::new(target, version);
-            program.set_filename(vdb.get_filename(target).unwrap());
-            program.set_vdata(vdata);
-            program.link_to(&libdir, true);
-        }
-        workspace.set_version(target, version);
-        workspace.save_to_local().context("Failed to save Workspace")?;
-    }
-
     println!("using -> target: {}, version: {}", target.green().bold(), version.cyan());
 
     // init invalid bindings map
@@ -277,13 +260,13 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
 
     VALID_BINDINGS.get_or_init(|| {
         //println!("init valid bindings set...");
-        let mut set = HashSet::new();
-        set.insert(target.to_string());
-        Mutex::new(set)
+        let mut map = HashMap::new();
+        map.insert(target.to_string(), version.to_string());
+        Mutex::new(map)
     });
 
     // update binding tree
-    if let Some(binding) = &vdata.bindings {
+    if let Some(binding) = vdb.get_bindings(target, version) {
         for (binding_target, binding_version) in binding {
             // if alread add to INVALID_BINDINGS println skipping
             let in_valid_bindings = INVALID_BINDINGS
@@ -291,7 +274,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
                 .unwrap().contains_key(&(binding_target.to_string(), binding_version.to_string()));
             let in_invalid_bindings = VALID_BINDINGS
                 .get().unwrap().lock()
-                .unwrap().contains(&binding_target.to_string());
+                .unwrap().contains_key(&binding_target.to_string());
             if in_invalid_bindings || in_valid_bindings {
                 /*
                 println!("[{} {}] already is accessed, skipping...",
@@ -301,7 +284,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
                 */
             } else if vdb.has_version(&binding_target, &binding_version) {
                 VALID_BINDINGS.get().unwrap().lock()
-                    .unwrap().insert(binding_target.to_string());
+                    .unwrap().insert(binding_target.to_string(), binding_version.to_string());
                 //println!("---> update binding tree for Tree[{} {}]:", binding_target.green().bold(), binding_version.cyan());
                 let matches = cmdprocessor::parse_from_string(&["xvm", "use", &binding_target, &binding_version]);
                 cmdprocessor::run(&matches).unwrap();
@@ -327,16 +310,52 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         }
     }
 
+// TODO: optimize code for repeat to save_to_local 
+
     // if exist invalid bindings, remove them
     let invalid_bindings = INVALID_BINDINGS.get().unwrap().lock().unwrap();
     if !invalid_bindings.is_empty() {
+        let mut mut_vdb = vdb.clone();
         for (target_version, invalid_version) in invalid_bindings.iter() {
-            vdb.remove_binding(
+            mut_vdb.remove_binding(
                 &target_version.0, &target_version.1,
                 &invalid_version.0//, &invalid_version.1
             );
         }
-        vdb.save_to_local().context("Failed to save VersionDB")?;
+        mut_vdb.save_to_local().context("Failed to save VersionDB")?;
+    }
+
+    // update to workspace
+    let valid_bindings = VALID_BINDINGS.get().unwrap().lock().unwrap();
+    if !valid_bindings.is_empty() {
+        //println!("valid bindings: {:?}", valid_bindings);
+        let mut workspace = helper::load_workspace();
+        for (binding_target, binding_version) in valid_bindings.iter() {
+            if workspace.version(binding_target) != Some(binding_version) {
+                if let Some(vdata) = vdb.get_vdata(target, version) {
+                    // if type is lib, relink
+                    if vdb.get_type(target) == Some(&"lib".to_string()) {
+                        let libdir = baseinfo::libdir();
+                        println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
+                        let mut program = shims::Program::new(target, version);
+                        program.set_filename(vdb.get_filename(target).unwrap());
+                        program.set_vdata(vdata);
+                        program.link_to(&libdir, true);
+                    }
+                } else {
+                    println!("[{} {}] not found in the xvm database - error",
+                        target.yellow(),
+                        version.yellow()
+                    );
+                    std::process::exit(1);
+                }
+                workspace.set_version(binding_target, binding_version);
+            }
+
+            //println!("using -> target: {}, version: {}", binding_target.green().bold(), binding_version.cyan());
+
+        }
+        workspace.save_to_local().context("Failed to save Workspace")?;
     }
 
     Ok(())
