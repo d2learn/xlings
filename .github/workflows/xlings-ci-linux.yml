@@ -38,12 +38,33 @@ jobs:
       - name: XVM Test on Ubuntu
         run: |
           export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xvm --version
-          xvm -h
-          xvm add cls 0.0.1 --alias=clear
-          xvm info cls
-          xvm list c
-          xvm remove cls --yes
+          xlings install rust -y
+          cd core/xvm
+          cargo build
+
+          ./target/debug/xvm -h
+          ./target/debug/xvm --version
+          
+          ./target/debug/xvm add node1 0.0.1 --alias "echo node1@0.0.1"
+          ./target/debug/xvm add node1 0.0.2 --alias "echo node1@0.0.2"
+          
+          ./target/debug/xvm add node2 0.0.1 --alias "echo node2@0.0.1" --bind node1@0.0.1
+          ./target/debug/xvm add node2 0.0.2 --alias "echo node2@0.0.2" --bind node1@0.0.2
+          
+          ./target/debug/xvm add node3 0.0.1 --alias "echo node3@0.0.1" --bind node1@0.0.1
+          ./target/debug/xvm add node3 0.0.2 --alias "echo node3@0.0.2" --bind node1@0.0.2
+
+          node1 && node2 && node3
+          ./target/debug/xvm info node1
+          ./target/debug/xvm info node2
+          ./target/debug/xvm info node3
+
+          ./target/debug/xvm use node2 0.0.2
+
+          node1 && node2 && node3
+          ./target/debug/xvm info node1
+          ./target/debug/xvm info node2
+          ./target/debug/xvm info node3
 
       - name: D2X Test on Ubuntu
         run: |
