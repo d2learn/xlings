@@ -1,6 +1,7 @@
 use std::fs;
 use std::process::exit;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 use clap::ArgMatches;
@@ -19,6 +20,8 @@ use crate::helper;
 type TargetVersion = (String, String); // (target, version)
 type InvalidBindingsMap = HashMap<TargetVersion, TargetVersion>;
 static INVALID_BINDINGS: OnceCell<Mutex<InvalidBindingsMap>> = OnceCell::new();
+// record valid bindings, avoid repeatedly accessing the same binding into an infinite loop
+static VALID_BINDINGS: OnceCell<Mutex<HashSet<String>>> = OnceCell::new();
 
 pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
@@ -268,13 +271,38 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
 
     // init invalid bindings map
     INVALID_BINDINGS.get_or_init(|| {
+        //println!("init invalid bindings map...");
         Mutex::new(HashMap::new())
+    });
+
+    VALID_BINDINGS.get_or_init(|| {
+        //println!("init valid bindings set...");
+        let mut set = HashSet::new();
+        set.insert(target.to_string());
+        Mutex::new(set)
     });
 
     // update binding tree
     if let Some(binding) = &vdata.bindings {
         for (binding_target, binding_version) in binding {
-            if vdb.has_version(&binding_target, &binding_version) {
+            // if alread add to INVALID_BINDINGS println skipping
+            let in_valid_bindings = INVALID_BINDINGS
+                .get().unwrap().lock()
+                .unwrap().contains_key(&(binding_target.to_string(), binding_version.to_string()));
+            let in_invalid_bindings = VALID_BINDINGS
+                .get().unwrap().lock()
+                .unwrap().contains(&binding_target.to_string());
+            if in_invalid_bindings || in_valid_bindings {
+                /*
+                println!("[{} {}] already is accessed, skipping...",
+                    binding_target.yellow(),
+                    binding_version.yellow()
+                );
+                */
+            } else if vdb.has_version(&binding_target, &binding_version) {
+                VALID_BINDINGS.get().unwrap().lock()
+                    .unwrap().insert(binding_target.to_string());
+                //println!("---> update binding tree for Tree[{} {}]:", binding_target.green().bold(), binding_version.cyan());
                 let matches = cmdprocessor::parse_from_string(&["xvm", "use", &binding_target, &binding_version]);
                 cmdprocessor::run(&matches).unwrap();
             } else { // remove frome binding tree
