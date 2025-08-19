@@ -48,11 +48,11 @@ jobs:
           ./target/debug/xvm add node1 0.0.1 --alias "echo node1@0.0.1"
           ./target/debug/xvm add node1 0.0.2 --alias "echo node1@0.0.2"
           
-          ./target/debug/xvm add node2 0.0.1 --alias "echo node2@0.0.1" --bind node1@0.0.1
-          ./target/debug/xvm add node2 0.0.2 --alias "echo node2@0.0.2" --bind node1@0.0.2
+          ./target/debug/xvm add node2 0.0.1 --alias "echo node2@0.0.1" --binding node1@0.0.1
+          ./target/debug/xvm add node2 0.0.2 --alias "echo node2@0.0.2" --binding node1@0.0.2
           
-          ./target/debug/xvm add node3 0.0.1 --alias "echo node3@0.0.1" --bind node1@0.0.1
-          ./target/debug/xvm add node3 0.0.2 --alias "echo node3@0.0.2" --bind node1@0.0.2
+          ./target/debug/xvm add node3 0.0.1 --alias "echo node3@0.0.1" --binding node1@0.0.1
+          ./target/debug/xvm add node3 0.0.2 --alias "echo node3@0.0.2" --binding node1@0.0.2
 
           node1 && node2 && node3
           ./target/debug/xvm info node1
