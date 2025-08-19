@@ -96,10 +96,10 @@ fn build_command() -> Command {
                     .help("Specify a filename for the target"),
             )
             .arg(
-                Arg::new("bind")
-                    .long("bind")
+                Arg::new("binding")
+                    .long("binding")
                     .action(ArgAction::Set)
-                    .help("Specify a bind for the target"),
+                    .help("Specify a binding for the target"),
             )
             .arg(
                 Arg::new("env")

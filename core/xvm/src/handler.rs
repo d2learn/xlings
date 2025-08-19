@@ -1,9 +1,12 @@
 use std::fs;
 use std::process::exit;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 use clap::ArgMatches;
 use anyhow::{Result, Context};
 use colored::*;
+use once_cell::sync::OnceCell;
 
 use xvmlib::shims;
 use xvmlib::Workspace;
@@ -12,6 +15,11 @@ use crate::cmdprocessor;
 use crate::baseinfo;
 use crate::helper;
 
+
+type TargetVersion = (String, String); // (target, version)
+type InvalidBindingsMap = HashMap<TargetVersion, TargetVersion>;
+static INVALID_BINDINGS: OnceCell<Mutex<InvalidBindingsMap>> = OnceCell::new();
+
 pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) -> Result<()> {
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let version = matches.get_one::<String>("version").context("Version is required")?;
@@ -19,7 +27,7 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let alias = matches.get_one::<String>("alias");
     let vtype = matches.get_one::<String>("type");
     let filename = matches.get_one::<String>("filename");
-    let bind = matches.get_one::<String>("bind");
+    let binding = matches.get_one::<String>("binding");
 
     let env_vars: Vec<String> = matches
         .get_many::<String>("env")
@@ -32,10 +40,10 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let mut program = shims::Program::new(target, version);
     let mut vdb = xvmlib::get_versiondb().clone();
 
-    if let Some(b) = bind {
-        // bind-format: "target@version"
+    if let Some(b) = binding {
+        // binding-format: "target@version"
         let parts: Vec<&str> = b.split('@').collect();
-        println!("bind: {:?}", parts);
+        println!("[{} {}] --binding to--> {:?}", target.green().bold(), version.cyan(), parts);
         if parts.len() == 2 {
             if !vdb.has_version(parts[0], &parts[1]) {
                 println!("[{} {}] not found in the xvm database",
@@ -44,13 +52,13 @@ pub fn xvm_add(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
                 );
                 std::process::exit(1);
             }
-            program.add_bind(parts[0], parts[1]);
-            vdb.add_bind(
+            program.add_binding(parts[0], parts[1]);
+            vdb.add_binding(
                 parts[0], parts[1],
                 (target.to_string(), version.to_string())
             );
         } else {
-            println!("Invalid bind format: expected 'target@version', got '{}'", b);
+            println!("Invalid binding format: expected 'target@version', got '{}'", b);
             std::process::exit(1);
         }
     }
@@ -218,7 +226,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     let target = matches.get_one::<String>("target").context("Target is required")?;
     let mut version = matches.get_one::<String>("version").context("Version is required")?;
 
-    let vdb = xvmlib::get_versiondb();
+    let mut vdb = xvmlib::get_versiondb().clone();
 
     if !vdb.has_target(target) {
         println!("Target [{}] is missing from the xvm database", target.bold().red());
@@ -239,25 +247,69 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         });
     }
 
+    let vdata = vdb.get_vdata(target, version).unwrap();
     let mut workspace = helper::load_workspace();
 
     if workspace.version(target) != Some(version) {
         // if type is lib, relink
-        if let Some(vdata) = vdb.get_vdata(target, version) {
-            if vdb.get_type(target) == Some(&"lib".to_string()) {
-                let libdir = baseinfo::libdir();
-                println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
-                let mut program = shims::Program::new(target, version);
-                program.set_filename(vdb.get_filename(target).unwrap());
-                program.set_vdata(vdata);
-                program.link_to(&libdir, true);
-            }
+        if vdb.get_type(target) == Some(&"lib".to_string()) {
+            let libdir = baseinfo::libdir();
+            println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
+            let mut program = shims::Program::new(target, version);
+            program.set_filename(vdb.get_filename(target).unwrap());
+            program.set_vdata(vdata);
+            program.link_to(&libdir, true);
         }
         workspace.set_version(target, version);
         workspace.save_to_local().context("Failed to save Workspace")?;
     }
 
     println!("using -> target: {}, version: {}", target.green().bold(), version.cyan());
+
+    // init invalid bindings map
+    INVALID_BINDINGS.get_or_init(|| {
+        Mutex::new(HashMap::new())
+    });
+
+    // update binding tree
+    if let Some(binding) = &vdata.bindings {
+        for (binding_target, binding_version) in binding {
+            if vdb.has_version(&binding_target, &binding_version) {
+                let matches = cmdprocessor::parse_from_string(&["xvm", "use", &binding_target, &binding_version]);
+                cmdprocessor::run(&matches).unwrap();
+            } else { // remove frome binding tree
+                println!("[{} {}] not found in the xvm database, removing binding...",
+                    binding_target.yellow(),
+                    binding_version.yellow()
+                );
+                println!("\n\t[{} {}] --X--> [{} {}]\n",
+                    target.green().bold(),
+                    version.cyan(),
+                    binding_target.yellow(),
+                    binding_version.yellow()
+                );
+                // because binding-tree need recursive update,
+                // so need to use global INVALID_BINDINGS to save invalid bindings
+                // Note: INVALID_BINDINGS init in first xvm_use call
+                INVALID_BINDINGS.get().unwrap().lock().unwrap().insert(
+                    (target.to_string(), version.to_string()),
+                    (binding_target.to_string(), binding_version.to_string())
+                );
+            }
+        }
+    }
+
+    // if exist invalid bindings, remove them
+    let invalid_bindings = INVALID_BINDINGS.get().unwrap().lock().unwrap();
+    if !invalid_bindings.is_empty() {
+        for (target_version, invalid_version) in invalid_bindings.iter() {
+            vdb.remove_binding(
+                &target_version.0, &target_version.1,
+                &invalid_version.0//, &invalid_version.1
+            );
+        }
+        vdb.save_to_local().context("Failed to save VersionDB")?;
+    }
 
     Ok(())
 }

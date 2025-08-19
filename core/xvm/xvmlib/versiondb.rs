@@ -11,7 +11,7 @@ pub struct VData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub envs: Option<IndexMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub binds: Option<IndexMap<String, String>>,
+    pub bindings: Option<IndexMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,18 +146,36 @@ impl VersionDB {
         }
     }
 
-    pub fn add_bind(&mut self, name: &str, version: &str, bind: (String, String)) {
+    pub fn add_binding(&mut self, name: &str, version: &str, binding: (String, String)) {
         let vdata = self.root
             .entry(name.to_string())
             .or_insert_with(|| VInfo { vtype: None, filename: None, vdata_list: IndexMap::new() })
             .vdata_list
             .entry(version.to_string());
         if let Entry::Occupied(mut entry) = vdata {
-            entry.get_mut().binds
+            entry.get_mut().bindings
                 .get_or_insert_with(IndexMap::new)
-                .insert(bind.0, bind.1);
+                .insert(binding.0, binding.1);
         } else {
             eprintln!("xvm-error: version '{}' of target '{}' does not exist", version, name);
+        }
+    }
+
+    pub fn remove_binding(&mut self, name: &str, version: &str, binding_target: &str) {
+        if let Some(info) = self.root.get_mut(name) {
+            if let Some(vdata) = info.vdata_list.get_mut(version) {
+                if let Some(bindings) = vdata.bindings.as_mut() {
+                    bindings.remove(binding_target);
+                    // Remove the bindings map if it becomes empty
+                    if bindings.is_empty() {
+                        vdata.bindings = None;
+                    }
+                }
+            } else {
+                eprintln!("xvm-warn: version '{}' of target '{}' does not exist", version, name);
+            }
+        } else {
+            eprintln!("xvm-warn: target '{}' does not exist", name);
         }
     }
 

@@ -36,7 +36,7 @@ pub struct Program {
     path_env: String,
     ld_library_path_env: Option<String>,
     envs: Vec<(String, String)>,
-    binds: IndexMap<String, String>,
+    bindings: IndexMap<String, String>,
     args: Vec<String>,
 }
 
@@ -52,7 +52,7 @@ impl Program {
             path_env: String::new(),
             ld_library_path_env: None,
             envs: Vec::new(),
-            binds: IndexMap::new(),
+            bindings: IndexMap::new(),
             args: Vec::new(),
         }
     }
@@ -102,15 +102,15 @@ impl Program {
         }
     }
 
-    pub fn add_bind(&mut self, target: &str, version: &str) {
-        if self.binds.contains_key(target) {
+    pub fn add_binding(&mut self, target: &str, version: &str) {
+        if self.bindings.contains_key(target) {
             eprintln!("Warning: bind for [ {} ] already exists, overwriting", target);
         }
-        self.binds.insert(target.to_string(), version.to_string());
+        self.bindings.insert(target.to_string(), version.to_string());
     }
 
-    pub fn get_binds(&self) -> &IndexMap<String, String> {
-        &self.binds
+    pub fn get_bindings(&self) -> &IndexMap<String, String> {
+        &self.bindings
     }
 
     pub fn set_path(&mut self, path: &str) {
@@ -148,10 +148,10 @@ impl Program {
             } else {
                 Some(envs_tmp.iter().cloned().collect())
             },
-            binds: if self.binds.is_empty() {
+            bindings: if self.bindings.is_empty() {
                 None
             } else {
-                Some(self.binds.clone())
+                Some(self.bindings.clone())
             },
         }
     }
