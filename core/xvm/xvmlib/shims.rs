@@ -161,6 +161,9 @@ impl Program {
         if let Some(envs) = &vdata.envs {
             self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
         }
+        if let Some(bindings) = &vdata.bindings {
+            self.bindings = bindings.clone();
+        }
         self.alias = vdata.alias.clone();
     }
 
@@ -370,6 +373,15 @@ impl Program {
         }
         if !self.args.is_empty() {
             println!("Args: {:?}", self.args);
+        }
+
+        // print bindings
+        if !self.bindings.is_empty() {
+            let mut bindings_string = String::from("Bindings: ");
+            for (target, version) in &self.bindings {
+                bindings_string.push_str(&format!("{}@{} ", target, version));
+            }
+            println!("{}", bindings_string.trim_end());
         }
     }
 }
