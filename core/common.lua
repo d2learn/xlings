@@ -141,8 +141,7 @@ end
 function xlings_download(url, dest)
     cprint("[xlings]: downloading: ${dim}%s to %s", url, dest)
 
-    try
-    {
+    return try {
         function()
             local tool = find_tool("curl")
             if tool then -- support progress-bar
@@ -158,12 +157,13 @@ function xlings_download(url, dest)
                 -- { insecure = true }
                 runjobs("download",function () http.download(url, dest) end, { progress = true })
             end
+            return true
         end,
-        catch
-        {
+        catch {
             function (e)
                 print(e)
                 cprint("\n\t${yellow}Please check your network environment${clear}\n")
+                return false
             end
         }
     }

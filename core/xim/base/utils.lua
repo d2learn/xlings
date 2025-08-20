@@ -91,7 +91,10 @@ end
 function try_download_and_check(url, dir, sha256)
     local filename = path.join(dir, path.filename(url))
     if not os.isfile(filename) then
-        common.xlings_download(url, filename)
+        if not common.xlings_download(url, filename) then
+            os.tryrm(filename)
+            return false, filename
+        end
     end
     if sha256 then
         if hash.sha256(filename) ~= sha256 then
@@ -249,13 +252,27 @@ function xpm_target_os_helper(xpm)
     return nil
 end
 
-function try_mirror_match_for_url(url)
+function try_mirror_match_for_url(url, opt)
+
+    opt = opt or { }
 
     if type(url) == "string" then
         return url
     elseif type(url) == "table" then
-        local mirror = xconfig.load()["mirror"]
-        return url[mirror] or url["GLOBAL"] or url["DEFAULT"]
+        local target_url = nil
+        if opt.detect then
+            local urls = {}
+            for _, v in pairs(url) do
+                if type(v) == "string" then
+                    table.insert(urls, v)
+                end
+            end
+            target_url = utils.low_latency_urls(urls)
+        else
+            local mirror = xconfig.load()["mirror"]
+            target_url = url[mirror] or url["GLOBAL"] or url["DEFAULT"]
+        end
+        return target_url
     else
         -- TODO: add log level to control log output
         --cprint("[xlings:xim]: ${yellow dim}url is not a string or table")

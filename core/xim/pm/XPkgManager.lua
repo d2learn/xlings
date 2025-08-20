@@ -42,31 +42,9 @@ end
 
 function XPkgManager:download(xpkg)
     local res = xpkg:get_xpm_resources()
-    local url
-    local sha256
 
-    if res == "XLINGS_RES" then
-        --"https://github.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
-        --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
-        local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s-%s.%s]]
-        local res_server = xconfig.load().xim["res-server"]
-        local pkgname = xpkg.name
-        local pkgver = xpkg.version
-        local osname = xpkg._real_os_key -- TODO: optimize this
-        local file_ext = (osname == "windows") and "zip" or "tar.gz"
-        local os_arch = os.arch()
-        if os_arch == "x64" then os_arch = "x86_64" end
-        url = string.format(
-            res_url_template,
-            res_server,
-            pkgname,
-            pkgver,
-            pkgname, pkgver, osname, os_arch, file_ext
-        )
-    else
-        url = utils.try_mirror_match_for_url(res.url)
-        sha256 = res.sha256
-    end
+    local url = utils.try_mirror_match_for_url(res.url)
+    local sha256 = res.sha256
 
     if not url then
         cprint("[xlings:xim]: ${dim}skip download (url is nil)${clear}")
@@ -96,6 +74,8 @@ function XPkgManager:download(xpkg)
         runtime.set_pkginfo({ install_file = filename })
 
         if not ok then -- retry download
+            cprint("[xlings:xim]: ${yellow}download failed, start to detect all mirror and retry...${clear}")
+            url = utils.try_mirror_match_for_url(res.url, { detect = true, retry = true })
             ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         end
 
