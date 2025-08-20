@@ -312,8 +312,9 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
     }
 
     // if recursive_flag is equal to target, (recursive ending)
-    let recursive_flag_value = VALID_BINDINGS.get().unwrap().lock().unwrap()
-        .get("recursive_flag").cloned().unwrap_or_else(|| "XVM_FLAG_NULL".to_string());
+    let mut valid_bindings = VALID_BINDINGS.get().unwrap().lock().unwrap();
+    let recursive_flag_value = valid_bindings.get("recursive_flag")
+        .cloned().unwrap_or_else(|| "XVM_FLAG_NULL".to_string());
 
     if recursive_flag_value == *target {
         // if exist invalid bindings, remove them
@@ -330,8 +331,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         }
 
         // update to workspace (after remove recursive_flag)
-        VALID_BINDINGS.get().unwrap().lock().unwrap().remove("recursive_flag");
-        let valid_bindings = VALID_BINDINGS.get().unwrap().lock().unwrap();
+        valid_bindings.remove("recursive_flag");
         if !valid_bindings.is_empty() {
             //println!("valid bindings: {:?}", valid_bindings);
             let mut workspace = helper::load_workspace();
