@@ -262,6 +262,7 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         //println!("init valid bindings set...");
         let mut map = HashMap::new();
         map.insert(target.to_string(), version.to_string());
+        map.insert("recursive_flag".to_string(), target.to_string());
         Mutex::new(map)
     });
 
@@ -310,52 +311,61 @@ pub fn xvm_use(matches: &ArgMatches, _cmd_state: &cmdprocessor::CommandState) ->
         }
     }
 
-// TODO: optimize code for repeat to save_to_local 
+    // if recursive_flag is equal to target, (recursive ending)
+    let mut valid_bindings = VALID_BINDINGS.get().unwrap().lock().unwrap();
+    let recursive_flag_value = valid_bindings.get("recursive_flag")
+        .cloned().unwrap_or_else(|| "XVM_FLAG_NULL".to_string());
 
-    // if exist invalid bindings, remove them
-    let invalid_bindings = INVALID_BINDINGS.get().unwrap().lock().unwrap();
-    if !invalid_bindings.is_empty() {
-        let mut mut_vdb = vdb.clone();
-        for (target_version, invalid_version) in invalid_bindings.iter() {
-            mut_vdb.remove_binding(
-                &target_version.0, &target_version.1,
-                &invalid_version.0//, &invalid_version.1
-            );
-        }
-        mut_vdb.save_to_local().context("Failed to save VersionDB")?;
-    }
-
-    // update to workspace
-    let valid_bindings = VALID_BINDINGS.get().unwrap().lock().unwrap();
-    if !valid_bindings.is_empty() {
-        //println!("valid bindings: {:?}", valid_bindings);
-        let mut workspace = helper::load_workspace();
-        for (binding_target, binding_version) in valid_bindings.iter() {
-            if workspace.version(binding_target) != Some(binding_version) {
-                if let Some(vdata) = vdb.get_vdata(target, version) {
-                    // if type is lib, relink
-                    if vdb.get_type(target) == Some(&"lib".to_string()) {
-                        let libdir = baseinfo::libdir();
-                        println!("relink [{} {}] to [{}] ...", target.green().bold(), version.cyan(), libdir.bright_purple());
-                        let mut program = shims::Program::new(target, version);
-                        program.set_filename(vdb.get_filename(target).unwrap());
-                        program.set_vdata(vdata);
-                        program.link_to(&libdir, true);
-                    }
-                } else {
-                    println!("[{} {}] not found in the xvm database - error",
-                        target.yellow(),
-                        version.yellow()
-                    );
-                    std::process::exit(1);
-                }
-                workspace.set_version(binding_target, binding_version);
+    if recursive_flag_value == *target {
+        // if exist invalid bindings, remove them
+        let invalid_bindings = INVALID_BINDINGS.get().unwrap().lock().unwrap();
+        if !invalid_bindings.is_empty() {
+            let mut mut_vdb = vdb.clone();
+            for (target_version, invalid_version) in invalid_bindings.iter() {
+                mut_vdb.remove_binding(
+                    &target_version.0, &target_version.1,
+                    &invalid_version.0//, &invalid_version.1
+                );
             }
-
-            //println!("using -> target: {}, version: {}", binding_target.green().bold(), binding_version.cyan());
-
+            mut_vdb.save_to_local().context("Failed to save VersionDB")?;
         }
-        workspace.save_to_local().context("Failed to save Workspace")?;
+
+        // update to workspace (after remove recursive_flag)
+        valid_bindings.remove("recursive_flag");
+        if !valid_bindings.is_empty() {
+            //println!("valid bindings: {:?}", valid_bindings);
+            let mut workspace = helper::load_workspace();
+            for (binding_target, binding_version) in valid_bindings.iter() {
+                if workspace.version(binding_target) != Some(binding_version) {
+                    if let Some(vdata) = vdb.get_vdata(binding_target, binding_version) {
+                        // if type is lib, relink
+                        if vdb.get_type(binding_target) == Some(&"lib".to_string()) {
+                            let libdir = baseinfo::libdir();
+                            println!(
+                                "relink [{} {}] to [{}] ...",
+                                binding_target.green().bold(), binding_version.cyan(),
+                                libdir.bright_purple()
+                            );
+                            let mut program = shims::Program::new(binding_target, binding_version);
+                            program.set_filename(vdb.get_filename(binding_target).unwrap());
+                            program.set_vdata(vdata);
+                            program.link_to(&libdir, true);
+                        }
+                    } else {
+                        println!("[{} {}] not found in the xvm database - error",
+                            binding_target.yellow(),
+                            binding_version.yellow()
+                        );
+                        std::process::exit(1);
+                    }
+                    workspace.set_version(binding_target, binding_version);
+                }
+
+                //println!("using -> target: {}, version: {}", binding_target.green().bold(), binding_version.cyan());
+
+            }
+            workspace.save_to_local().context("Failed to save Workspace")?;
+        }
     }
 
     Ok(())
