@@ -73,7 +73,7 @@ function XPkgManager:download(xpkg)
 
         if not ok then -- retry download
             cprint("[xlings:xim]: ${yellow}download failed, start to detect all mirror and retry...${clear}")
-            url = utils.try_mirror_match_for_url(res.url, { detect = true, retry = true })
+            url = utils.try_mirror_match_for_url(res.url, { detect = true })
             ok, filename = utils.try_download_and_check(url, download_dir, sha256)
         end
 
