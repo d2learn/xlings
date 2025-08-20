@@ -2,18 +2,6 @@ import("privilege.sudo")
 
 import("xim.base.runtime")
 
---[[
-config = {
-    version = "1.0.0",
-    bindir = "/path/to/package",
-    alias = "cmd",
-    envs = {
-        varname = "value",
-        ...
-    },
-}
-]]
-
 __xvm_log_tag = true
 
 function log_tag(enable)
@@ -24,6 +12,20 @@ function log_tag(enable)
     return old_value
 end
 
+--[[
+config = {
+    version = "1.0.0",
+    bindir = "/path/to/package",
+    alias = "cmd",
+    filename = "xxx",
+    type = "xx", -- bin, lib, etc.
+    envs = {
+        varname = "value",
+        ...
+    },
+    binding = "target@version", -- for example, "python@3.8"
+}
+]]
 
 function add(name, config)
     config = config or { }
@@ -46,6 +48,11 @@ function add(name, config)
         filename_arg = string.format([[ --filename "%s"]], config.filename)
     end
 
+    local binding_arg = ""
+    if config.binding then
+        binding_arg = string.format([[ --binding "%s"]], config.binding)
+    end
+
     local alias_arg = ""
     if config.alias then
         alias_arg = string.format([[ --alias "%s"]], config.alias)
@@ -57,9 +64,9 @@ function add(name, config)
     end
 
     __xvm_run(string.format(
-        [[add %s %s --path %s %s %s %s %s]],
+        [[add %s %s --path %s %s %s %s %s %s]],
         name, version, bindir,
-        type_arg, filename_arg, alias_arg, envs_args
+        type_arg, filename_arg, binding_arg, alias_arg, envs_args
     ))
 
     input_args = runtime.get_runtime_data().input_args

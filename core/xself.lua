@@ -186,7 +186,11 @@ function __xlings_usergroup_checker()
 end
 
 function init()
+
     cprint("[xlings]: init xlings...")
+
+    clean() -- clean old xlings files(tmp)
+
     os.addenv("PATH", platform.get_config_info().bindir)
 
     local rcachedir = platform.get_config_info().rcachedir
@@ -194,6 +198,7 @@ function init()
 
     __xlings_usergroup_checker()
 
+    --common.xlings_exec([[xlings remove xvm -y]]) -- remove old xvm
     common.xlings_exec([[xlings install xvm@0.0.5 -y]])
     os.exec([[xvm add xim 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xinstall 0.0.4 --alias "xlings install"]])
@@ -267,11 +272,21 @@ end
 
 function clean()
     os.tryrm(path.join(platform.get_config_info().install_dir, "core", ".xmake"))
+
+    -- clean global cache config(tmp files)
     if is_host("linux") or is_host("macosx") then
         -- TODO: fix homedir issue for windows/linux
         os.tryrm(path.join(platform.get_config_info().homedir, ".xmake"))
     end
     os.iorun("xmake g -c")
+
+    -- clean runtimedir
+    local runtimedir = import("xim.base.runtime").get_runtime_dir()
+    if os.tryrm(runtimedir) then
+        cprint("[xlings]: clean xlings runtimedir(tmp-cache) %s - ${green}ok", runtimedir)
+        os.mkdir(runtimedir)
+    end
+
     cprint("[xlings]: clean xlings tmp files - ${green}ok${clear}")
 end
 
