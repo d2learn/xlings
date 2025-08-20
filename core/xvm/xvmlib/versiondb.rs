@@ -10,6 +10,8 @@ pub struct VData {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub envs: Option<IndexMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bindings: Option<IndexMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,6 +144,43 @@ impl VersionDB {
             }
             entry.get_mut().vtype = Some(vtype.to_string());
         }
+    }
+
+    pub fn add_binding(&mut self, name: &str, version: &str, binding: (String, String)) {
+        let vdata = self.root
+            .entry(name.to_string())
+            .or_insert_with(|| VInfo { vtype: None, filename: None, vdata_list: IndexMap::new() })
+            .vdata_list
+            .entry(version.to_string());
+        if let Entry::Occupied(mut entry) = vdata {
+            entry.get_mut().bindings
+                .get_or_insert_with(IndexMap::new)
+                .insert(binding.0, binding.1);
+        } else {
+            eprintln!("xvm-error: version '{}' of target '{}' does not exist", version, name);
+        }
+    }
+
+    pub fn remove_binding(&mut self, name: &str, version: &str, binding_target: &str) {
+        if let Some(info) = self.root.get_mut(name) {
+            if let Some(vdata) = info.vdata_list.get_mut(version) {
+                if let Some(bindings) = vdata.bindings.as_mut() {
+                    bindings.remove(binding_target);
+                    // Remove the bindings map if it becomes empty
+                    if bindings.is_empty() {
+                        vdata.bindings = None;
+                    }
+                }
+            } else {
+                eprintln!("xvm-warn: version '{}' of target '{}' does not exist", version, name);
+            }
+        } else {
+            eprintln!("xvm-warn: target '{}' does not exist", name);
+        }
+    }
+
+    pub fn get_bindings(&self, name: &str, version: &str) -> Option<&IndexMap<String, String>> {
+        self.root.get(name)?.vdata_list.get(version)?.bindings.as_ref()
     }
 
     pub fn get_vdata(&self, name: &str, version: &str) -> Option<&VData> {

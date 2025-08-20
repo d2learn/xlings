@@ -96,6 +96,12 @@ fn build_command() -> Command {
                     .help("Specify a filename for the target"),
             )
             .arg(
+                Arg::new("binding")
+                    .long("binding")
+                    .action(ArgAction::Set)
+                    .help("Specify a binding for the target"),
+            )
+            .arg(
                 Arg::new("env")
                     .long("env")
                     .value_name("ENV")

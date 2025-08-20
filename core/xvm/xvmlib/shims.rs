@@ -2,6 +2,8 @@ use std::fs;
 use std::process::Command;
 use std::sync::OnceLock;
 
+use indexmap::IndexMap;
+
 use crate::versiondb::VData;
 
 pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
@@ -34,6 +36,7 @@ pub struct Program {
     path_env: String,
     ld_library_path_env: Option<String>,
     envs: Vec<(String, String)>,
+    bindings: IndexMap<String, String>,
     args: Vec<String>,
 }
 
@@ -49,6 +52,7 @@ impl Program {
             path_env: String::new(),
             ld_library_path_env: None,
             envs: Vec::new(),
+            bindings: IndexMap::new(),
             args: Vec::new(),
         }
     }
@@ -98,6 +102,17 @@ impl Program {
         }
     }
 
+    pub fn add_binding(&mut self, target: &str, version: &str) {
+        if self.bindings.contains_key(target) {
+            eprintln!("Warning: bind for [ {} ] already exists, overwriting", target);
+        }
+        self.bindings.insert(target.to_string(), version.to_string());
+    }
+
+    pub fn get_bindings(&self) -> &IndexMap<String, String> {
+        &self.bindings
+    }
+
     pub fn set_path(&mut self, path: &str) {
         self.path = path.to_string();
         self.add_env("PATH", path);
@@ -133,6 +148,11 @@ impl Program {
             } else {
                 Some(envs_tmp.iter().cloned().collect())
             },
+            bindings: if self.bindings.is_empty() {
+                None
+            } else {
+                Some(self.bindings.clone())
+            },
         }
     }
 
@@ -140,6 +160,9 @@ impl Program {
         self.set_path(&vdata.path);
         if let Some(envs) = &vdata.envs {
             self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
+        }
+        if let Some(bindings) = &vdata.bindings {
+            self.bindings = bindings.clone();
         }
         self.alias = vdata.alias.clone();
     }
@@ -350,6 +373,15 @@ impl Program {
         }
         if !self.args.is_empty() {
             println!("Args: {:?}", self.args);
+        }
+
+        // print bindings
+        if !self.bindings.is_empty() {
+            let mut bindings_string = String::from("Bindings: ");
+            for (target, version) in &self.bindings {
+                bindings_string.push_str(&format!("{}@{} ", target, version));
+            }
+            println!("{}", bindings_string.trim_end());
         }
     }
 }

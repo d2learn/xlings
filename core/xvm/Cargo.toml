@@ -22,3 +22,4 @@ indexmap = { version = "1.9", features = ["serde"] }
 clap = { version = "4.3", features = ["derive"] }
 anyhow = "1.0"
 colored = "2.0"
+once_cell = "1.19"
