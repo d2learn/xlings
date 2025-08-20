@@ -2,8 +2,6 @@ import("devel.git")
 import("utils.archive")
 import("lib.detect.find_tool")
 
-import("config.xconfig")
-
 import("xim.base.github")
 import("xim.base.utils")
 import("xim.base.runtime")

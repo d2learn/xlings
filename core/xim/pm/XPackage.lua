@@ -1,4 +1,6 @@
 import("common")
+import("config.xconfig")
+
 import("xim.base.utils")
 
 local XPackage = {}
