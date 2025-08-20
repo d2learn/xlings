@@ -1,4 +1,6 @@
 import("common")
+import("config.xconfig")
+
 import("xim.base.utils")
 
 local XPackage = {}
@@ -56,7 +58,33 @@ function XPackage:has_xpm()
 end
 
 function XPackage:get_xpm_resources()
-    return self.pdata.xpm[os_info.name][self.version]
+    local res = self.pdata.xpm[os_info.name][self.version]
+    if res == "XLINGS_RES" then -- rebuild resources
+        --"https://github.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
+        --"https://gitcode.com/xlings-res/xvm/releases/download/0.0.4/xvm-0.0.4-linux.tar.gz"
+        local res_url_template = [[%s/%s/releases/download/%s/%s-%s-%s-%s.%s]]
+        local res_servers = xconfig.load().xim["mirrors"]["res-server"]
+        local pkgname = self.name
+        local pkgver = self.version
+        local osname = self._real_os_key -- TODO: optimize this
+        local file_ext = (osname == "windows") and "zip" or "tar.gz"
+        local os_arch = os.arch()
+        if os_arch == "x64" then os_arch = "x86_64" end
+
+        res = { url = {}, sha256 = nil } -- reset res
+        for mirror, res_server in pairs(res_servers) do
+            local url = string.format(
+                res_url_template,
+                res_server,
+                pkgname,
+                pkgver,
+                pkgname, pkgver, osname, os_arch, file_ext
+            )
+            -- insert to res
+            res.url[mirror] = url
+        end
+    end
+    return res
 end
 
 function XPackage:get_deps()
