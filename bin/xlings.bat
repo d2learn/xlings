@@ -18,7 +18,7 @@ if exist "%XLINGS_LATEST_VERSION%" (
         rmdir /s /q "%XLINGS_DIR%"
     )
 
-    :: 移动目录（复制+删除）
+    :: move dir (copy + del)
     robocopy "%XLINGS_LATEST_VERSION%" "%XLINGS_DIR%" /E /MOVE >nul
 
     if exist "%XLINGS_DIR%\core\" (
