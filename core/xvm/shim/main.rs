@@ -1,6 +1,15 @@
 use std::env;
-use std::path::Path;
+use std::path::{ Path, PathBuf };
 use std::process::{Command, exit};
+
+fn default_xlings_bindir() -> PathBuf {
+    match std::env::consts::OS {
+        "windows" => PathBuf::from(r"C:\Users\Public\xlings\.xlings_data\bin"),
+        "linux" => PathBuf::from("/home/xlings/.xlings_data/bin"),
+        "macos" => PathBuf::from("/Users/xlings/.xlings_data/bin"),
+        _ => panic!("Unsupported OS"),
+    }
+}
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
@@ -20,6 +29,13 @@ fn main() {
 
     command.arg("--args");
     command.args(&args);
+
+    // append XLINGS_BINDIR to PATH
+    let path_var = env::var_os("PATH").unwrap_or_default();
+    let mut paths = env::split_paths(&path_var).collect::<Vec<_>>();
+    paths.push(default_xlings_bindir());
+    let new_path = env::join_paths(paths).expect("Failed to join paths");
+    command.env("PATH", new_path);
 
     command.stdin(std::process::Stdio::inherit());
     command.stdout(std::process::Stdio::inherit());
