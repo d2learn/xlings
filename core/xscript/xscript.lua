@@ -51,6 +51,8 @@ function main(script_file, ...)
                 -- { indent = true, indentdepth = 4 }
                 print(json.encode(script.package))
             else
+                -- set runtime dir
+                os.cd(platform.get_config_info().rundir)
                 -- run script xpkg_main function
                 script.xpkg_main(unpack(args))
             end

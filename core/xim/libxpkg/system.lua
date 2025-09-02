@@ -13,6 +13,10 @@ function rundir()
     return runtime.get_rundir()
 end
 
+function xpkgdir()
+    return runtime.get_xim_install_basedir()
+end
+
 function bindir()
     return runtime.get_bindir()
 end

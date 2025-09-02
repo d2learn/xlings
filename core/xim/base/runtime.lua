@@ -15,7 +15,7 @@ xim_runtime_data = {
         install_dir = "namespace@name/version",
     },
     input_args = {},
-    --rundir = "",
+    rundir = "",
 }
 
 __xim_install_basedir = nil
@@ -53,6 +53,9 @@ end
 function set_runtime_data(data)
     if data.pkginfo then
         set_pkginfo(data.pkginfo)
+    end
+    if data.rundir then
+        xim_runtime_data.rundir = data.rundir
     end
     if data.input_args then
         xim_runtime_data.input_args = data.input_args

@@ -5,6 +5,8 @@ CURRENT_DATE=$(date +"%Y%m%d%H%M%S")
 LINUX_RELEASE_DIR=$(pwd)/target/x86_64-unknown-linux-musl/release
 WINDOWS_RELEASE_DIR=$(pwd)/target/x86_64-pc-windows-gnu/release
 
+rustup default stable-x86_64-unknown-linux-gnu
+
 cargo build --target x86_64-unknown-linux-musl --release
 cargo build --target x86_64-pc-windows-gnu --release
 

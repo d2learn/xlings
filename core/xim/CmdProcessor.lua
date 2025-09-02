@@ -37,6 +37,7 @@ end
 
 function CmdProcessor:run()
     -- push runtime stack
+    runtime.set_runtime_data({rundir = os.curdir()})
     table.insert(runtime_stack, utils.deep_copy(runtime.get_runtime_data()))
 
         runtime.init()
@@ -55,6 +56,7 @@ function CmdProcessor:run()
 
         runtime.set_runtime_data(runtime_data)
         self.cmds = runtime_data.input_args
+        os.cd(runtime_data.rundir)
 end
 
 function CmdProcessor:run_target_cmds()
@@ -96,10 +98,12 @@ function CmdProcessor:run_target_cmds()
             else -- install
                 -- if dont care for version, try to find installed version
                 local installed_version = nil
-                if not input_target:find("@", 1, true) then
-                    if self._pm_executor:installed() then
-                        installed_version = target_pkgname
-                    end
+
+                if self._pm_executor:installed() then
+                    installed_version = target_pkgname
+                end
+
+                if not installed_version and (not input_target:find("@", 1, true)) then
 
                     -- TODO: better way to detect apps for install by other methods
                     -- for complex detect, it should implemented in xpkg.lua's installed
