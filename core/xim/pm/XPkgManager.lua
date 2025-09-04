@@ -1,6 +1,7 @@
 import("devel.git")
 import("utils.archive")
 import("lib.detect.find_tool")
+import("privilege.sudo")
 
 import("xim.base.github")
 import("xim.base.utils")
@@ -141,7 +142,12 @@ function XPkgManager:uninstall(xpkg)
         end
     end
     local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
-    os.tryrm(runtime.get_pkginfo().install_dir)
+    local installdir = runtime.get_pkginfo().install_dir
+    if not os.tryrm(installdir) and os.isdir(installdir) then
+        cprint("[xlings:xim]: ${yellow}warning: remove install dir failed - %s${clear}", installdir)
+        cprint("[xlings:xim]: ${yellow}try again by sudo...${clear}")
+        sudo.exec("rm -rf " .. installdir)
+    end
     return ret
 end
 
