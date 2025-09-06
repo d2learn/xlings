@@ -222,7 +222,7 @@ function _set_runtime_info(xpkg)
     local runtimedir = runtime.get_runtime_dir()
     local pkgname = xpkg.name
     if xpkg.namespace then
-        pkgname = xpkg.namespace .. "@" .. pkgname
+        pkgname = xpkg.namespace .. "-x-" .. pkgname
     end
     local install_dir = path.join(runtime.get_xim_install_basedir(), pkgname, xpkg.version)
 
