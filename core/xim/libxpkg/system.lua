@@ -21,6 +21,14 @@ function bindir()
     return runtime.get_bindir()
 end
 
+function subos_sysrootdir()
+    local osname = os.host()
+    if is_host("linux") then 
+        osname = "linux"
+    end
+    return path.join(platform.get_config_info().subosdir, osname)
+end
+
 function exec(cmd, opt)
     local ok = false
 

@@ -19,6 +19,8 @@ local xlings_root_cache_dir = {
 }
 
 local xlings_bin_dir = path.join(xlings_root_cache_dir[os.host()], "bin")
+local xlings_lib_dir = path.join(xlings_root_cache_dir[os.host()], "lib")
+local xlings_subos_dir = path.join(xlings_root_cache_dir[os.host()], "subos")
 
 local command_clear = {
     linux = "clear",
@@ -134,6 +136,8 @@ function get_config_info()
         cmd_wrapper = command_wrapper[os.host()],
         projectdir = xlings_projectdir,
         bindir = xlings_bin_dir,
+        libdir = xlings_lib_dir,
+        subosdir = xlings_subos_dir,
         rundir = xlings_rundir,
         rcachedir = xlings_root_cache_dir[os.host()],
         cachedir = xlings_cachedir,

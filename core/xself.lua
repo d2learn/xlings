@@ -185,6 +185,25 @@ function __xlings_usergroup_checker()
     end
 end
 
+function subos_init()
+    local subosdir = platform.get_config_info().subosdir
+    if is_host("linux") then
+        subosdir = path.join(subosdir, "linux")
+        if os.isdir(subosdir) then
+            cprint("[xlings]: subos linux dir %s already exists", subosdir)
+        else
+            cprint("[xlings]: create and init subos linux dir %s", subosdir)
+
+            local bindir = platform.get_config_info().bindir
+            local libdir = platform.get_config_info().libdir
+
+            os.mkdir(subosdir)
+            os.ln(bindir, path.join(subosdir, "bin"))
+            os.ln(libdir, path.join(subosdir, "lib"))
+        end
+    end
+end
+
 function init()
 
     cprint("[xlings]: init xlings...")
@@ -197,6 +216,8 @@ function init()
     __config_environment(rcachedir)
 
     __xlings_usergroup_checker()
+
+    subos_init()
 
     --common.xlings_exec([[xlings remove xvm -y]]) -- remove old xvm
     common.xlings_exec([[xlings install xvm@0.0.5 -y]])
