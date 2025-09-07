@@ -32,6 +32,7 @@ end
 function XPackage:info()
     return {
         type = self.pdata.type,
+        namespace = self.pdata.namespace,
         name = self.pdata.name,
         homepage = self.pdata.homepage,
         version = self.version,

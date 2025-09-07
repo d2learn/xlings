@@ -143,6 +143,7 @@ function XPkgManager:uninstall(xpkg)
     end
     local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
     local installdir = runtime.get_pkginfo().install_dir
+    cprint("[xlings:xim]: try remove - ${dim}%s", installdir)
     if not os.tryrm(installdir) and os.isdir(installdir) then
         cprint("[xlings:xim]: ${yellow}warning: remove install dir failed - %s${clear}", installdir)
         cprint("[xlings:xim]: ${yellow}try again by sudo...${clear}")
@@ -162,6 +163,7 @@ function XPkgManager:info(xpkg)
         { key = "name",         label = "name" },
         { key = "homepage",     label = "homepage" },
         { key = "version",      label = "version" },
+        { key = "namespace",    label = "namespace" },
         { key = "authors",      label = "authors" },
         { key = "maintainers",  label = "maintainers" },
         { key = "contributors", label = "contributors" },

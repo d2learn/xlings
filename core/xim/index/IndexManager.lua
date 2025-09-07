@@ -142,7 +142,7 @@ end
 function IndexManager:load_package(name)
     if self.index[name] then
 
-        local _, pkg = utils.deref(self.index, name)
+        local name, pkg = utils.deref(self.index, name)
 
         -- TODO: fix index-database ref nil value issue
         --       IndexStore.lua:build_xpkg_index
@@ -164,6 +164,16 @@ function IndexManager:load_package(name)
                 path.basename(pkg.path),
                 {rootdir = path.directory(pkg.path)}
             )
+
+            -- add index-repo namespace if not exists
+            if not data.package.namespace then
+                -- namespace is the part before ':', e.g. namespace:packagename
+                local name_parts = name:split(":", {plain = true})
+                if #name_parts == 2 then
+                    data.package.namespace = name_parts[1]
+                end
+            end
+
             -- pkg is a reference to the package
             -- auto update self.index[ref].data
             --self.index[self.index[name].ref].data = data
