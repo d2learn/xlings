@@ -200,6 +200,8 @@ function subos_init()
             os.mkdir(subosdir)
             os.ln(bindir, path.join(subosdir, "bin"))
             os.ln(libdir, path.join(subosdir, "lib"))
+            os.cd(subosdir)
+            os.ln("lib", "lib64")
         end
     end
 end
