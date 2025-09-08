@@ -1,9 +1,21 @@
 @echo off
 
+REM SCRIPT_DIR end with \
+set "SCRIPT_DIR=%~dp0"
+set "RUN_DIR=%cd%"
+set XLINGS_PROJECT_DIR=%SCRIPT_DIR%..
+set XLINGS_TMP_BIN_DIR=%XLINGS_PROJECT_DIR%\bin
 set XMAKE_BIN_DIR=%USERPROFILE%\xmake
 set XLINGS_BIN_DIR=C:\Users\Public\xlings\.xlings_data\bin
 
 set arg1=%1
+
+echo [RunDir]: %RUN_DIR%
+echo [ProjectDir]: %XLINGS_PROJECT_DIR%
+
+cd %XLINGS_PROJECT_DIR%
+
+set "PATH=%XLINGS_TMP_BIN_DIR%;%PATH%"
 
 echo [xlings]: start detect environment and try to auto config...
 
