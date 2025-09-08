@@ -11,8 +11,9 @@ xim_runtime_data = {
     pkginfo = {
         name = "xpkg-name",
         version = "0.0.0",
+        namespace = "xim",
         install_file = "xim-0.0.0.exe",
-        install_dir = "namespace@name/version",
+        install_dir = "namespace-x-name/version",
     },
     input_args = {},
     rundir = "",
@@ -72,6 +73,9 @@ function set_pkginfo(info)
     end
     if info.version then
         xim_runtime_data.pkginfo.version = info.version
+    end
+    if info.namespace then
+        xim_runtime_data.pkginfo.namespace = info.namespace
     end
     if info.install_file then
         xim_runtime_data.pkginfo.install_file = info.install_file

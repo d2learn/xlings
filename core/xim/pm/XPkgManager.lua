@@ -216,7 +216,13 @@ function _try_execute_hook(name, xpkg, action)
 end
 
 function _set_runtime_info(xpkg)
-    if runtime.get_pkginfo().name == xpkg.name then return end
+
+    local pkginfo = runtime.get_pkginfo()
+    local namespace_equal = (xpkg.namespace == pkginfo.namespace)
+    local name_equal = (xpkg.name == pkginfo.name)
+    local version_equal = (xpkg.version == pkginfo.version)
+
+    if namespace_equal and name_equal and version_equal then return end
 
     local url = xpkg:get_xpm_resources().url
     url = utils.try_mirror_match_for_url(url)
@@ -235,6 +241,7 @@ function _set_runtime_info(xpkg)
 
     runtime.set_pkginfo({
         name = xpkg.name,
+        namespace = xpkg.namespace,
         install_dir = install_dir
     })
 
