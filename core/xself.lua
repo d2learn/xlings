@@ -225,6 +225,12 @@ function init()
 
     --common.xlings_exec([[xlings remove xvm -y]]) -- remove old xvm
     common.xlings_exec([[xlings install xvm@0.0.5 -y]])
+
+    if is_host("linux") and not os.isfile("/usr/bin/xvm") then
+        cprint("link [ ${green}xvm${clear} ] to global - /usr/bin/xvm")
+        sudo.exec("ln -sf " .. path.join(platform.get_config_info().bindir, "xvm") .. " /usr/bin/xvm")
+    end
+
     os.exec([[xvm add xim 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xinstall 0.0.4 --alias "xlings install"]])
     os.exec([[xvm add xrun 0.0.4 --alias "xlings run"]])

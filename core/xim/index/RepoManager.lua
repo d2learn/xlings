@@ -136,7 +136,7 @@ function RepoManager:add_subrepo(namespace, repo)
 end
 
 function _sync_repo(repo, rootdir)
-    print("[xlings: xim]: sync package index repo:", repo)
+    cprint("[xlings: xim]: sync package index repo: ${dim green}%s", repo)
 
     rootdir = rootdir or data_dir
 
@@ -148,6 +148,9 @@ function _sync_repo(repo, rootdir)
     local repodir = _to_repodir(repo, rootdir)
 
     if os.isdir(repodir) then
+        os.cd(repodir)
+        os.run("git reset --hard HEAD")
+        os.run("git clean -xfd")
         git.pull({repodir = repodir})
     else
         os.cd(rootdir)
