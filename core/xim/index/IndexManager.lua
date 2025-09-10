@@ -108,6 +108,7 @@ function IndexManager:match_package_version(target)
     local installed_target_versions = {}
     local nonamespace_target_versions = {}
     local target_versions = {}
+    local scode_namespace_versions = {}
     for name, pkg in pairs(self.index) do
         local match_index = name:find(target_match_str, 1, true)
         if match_index == 1 then -- xxxx@ matched
@@ -116,7 +117,12 @@ function IndexManager:match_package_version(target)
         elseif match_index and string.sub(name, match_index - 1, match_index - 1) == ":" then
             -- ???:xxxx@ matched
             if pkg.installed then table.insert(installed_target_versions, name)  end
-            table.insert(target_versions, name)
+            if string.find(name, "scode:", 1, true) == 1 then
+                -- special case for scode:xxxx@, put it to scode namespace list
+                table.insert(scode_namespace_versions, name)
+            else
+                table.insert(target_versions, name)
+            end
         end
     end
 
@@ -134,6 +140,9 @@ function IndexManager:match_package_version(target)
         -- TODO: sort by version number
         table.sort(target_versions)
         return target_versions[1]
+    elseif #scode_namespace_versions > 0 then
+        table.sort(scode_namespace_versions)
+        return scode_namespace_versions[1]
     end
 
     return nil
