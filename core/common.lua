@@ -151,7 +151,7 @@ function xlings_download(url, dest)
                 end
                 -- -#, --progress-bar
                 -- -L, --location):
-                xlings_exec(tool.program .. " -L -# -o " .. dest .. " " .. url)
+                xlings_exec("\"" .. tool.program .. "\"" .. " -L -# -o " .. dest .. " " .. url)
                 --os.vrunv(tool.program, {"-#", "-o", dest, url})
             else
                 -- { insecure = true }
