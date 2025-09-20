@@ -27,7 +27,7 @@ IF %ERRORLEVEL% EQU 0 (
 ) else (
     REM xmake is not installed, downloading and running install script using PowerShell
     echo [xlings]: start install xmake...
-    powershell -Command "Invoke-Expression ((Invoke-WebRequest 'https://xmake.io/psget.text' -UseBasicParsing).Content)"
+    powershell -Command "irm https://xmake.io/psget.text | iex"
 )
 
 REM install git
