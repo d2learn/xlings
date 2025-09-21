@@ -18,6 +18,7 @@ function _input_process(action, args)
         [action .. "-s"] = false,  -- -search (string)
         [action .. "--editor"] = false,  -- -list (string)
         [action .. "--template"] = false, -- -template (string)
+        [action .. "--subpath"] = false, -- -template (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -110,7 +111,10 @@ function main(action, ...)
 
     if action == "new" then
         if cmds["new--template"] then
-            actions.templates(main_target, cmds["new--template"])
+            actions.templates(
+                main_target,
+                cmds["new--template"], cmds["new--subpath"]
+            )
         else
             actions.init(main_target)
         end

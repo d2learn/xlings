@@ -27,10 +27,14 @@ function deps_check_and_install(xdeps)
         else
             local pkg = {
                 name = name,
-                version = nil, -- TODO: support version
+                version = value or "",
             }
+            local pkgname = pkg.name
+            if pkg.version and pkg.version ~= "" then
+                pkgname = pkg.name .. "@" .. pkg.version
+            end
             cprint("${dim}---${clear}")
-            xinstall("-i", name, "-y", "--disable-info", unpack(cmd_args))
+            xinstall("-i", pkgname, "-y", "--disable-info", unpack(cmd_args))
         end
     end
 

@@ -8,6 +8,8 @@ import("xim.base.utils")
 import("xim.base.runtime")
 import("xim.base.xvm")
 
+import("xim.pm.types")
+
 local XPkgManager = {}
 XPkgManager.__index = XPkgManager
 
@@ -24,6 +26,8 @@ function XPkgManager:installed(xpkg)
 
     if xpkg.hooks["installed"] then
         ret = _try_execute_hook(xpkg.name, xpkg, "installed")
+    elseif xpkg.type == "template" then
+        return types.template.installed(xpkg)
     else
         local old_value = xvm.log_tag(false)
         ret = xvm.has(xpkg.name, xpkg.version)
@@ -107,24 +111,15 @@ function XPkgManager:build(xpkg)
 end
 
 function XPkgManager:install(xpkg)
-    if not xpkg.hooks["install"] and xpkg.type == "script" then
-        -- TODO: create a xpkg's xscript template? plugin?
-        -- xpkg.hooks["install"] = xscript_template.install
-        xpkg.hooks["install"] = function()
-            local install_dir = runtime.get_pkginfo().install_dir
-            local script_file = path.join(install_dir, xpkg.name .. ".lua")
-            --local script_content = io.readfile(xpkg.__path)
-            -- replace xpkg_main to main
-            --script_content = script_content:replace("xpkg_main", "main")
-            --io.writefile(script_file, script_content)
-            os.tryrm(script_file)
-            os.cp(xpkg.__path, script_file)
-            xvm.add(xpkg.name, {
-                alias = "xlings script " .. script_file,
-                -- TODO: fix xvm's SPATH issue "bindir/alias" - for only alias
-                bindir = "TODO-FIX-SPATH-ISSUES",
-            })
-            return true
+    if not xpkg.hooks["install"] then
+        if xpkg.type == "script" then
+            xpkg.hooks["install"] = function()
+                return types.script.install(xpkg)
+            end
+        elseif xpkg.type == "template" then
+            xpkg.hooks["install"] = function()
+                return types.template.install(xpkg)
+            end
         end
     end
     return _try_execute_hook(xpkg.name, xpkg, "install")
@@ -135,13 +130,21 @@ function XPkgManager:config(xpkg)
 end
 
 function XPkgManager:uninstall(xpkg)
-    if not xpkg.hooks["uninstall"] and xpkg.type == "script" then
-        xpkg.hooks["uninstall"] = function()
-            xvm.remove(xpkg.name, xpkg.version)
-            return true
+
+    if not xpkg.hooks["uninstall"] then
+        if xpkg.type == "script" then
+            xpkg.hooks["uninstall"] = function()
+                return types.script.uninstall(xpkg)
+            end
+        elseif xpkg.type == "template" then
+            xpkg.hooks["uninstall"] = function()
+                return types.template.uninstall(xpkg)
+            end
         end
     end
+
     local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
+
     local installdir = runtime.get_pkginfo().install_dir
     cprint("[xlings:xim]: try remove - ${dim}%s", installdir)
     if not os.tryrm(installdir) and os.isdir(installdir) then
@@ -236,6 +239,8 @@ function _set_runtime_info(xpkg)
 
     if url then
         local filename = path.join(runtimedir, path.filename(url))
+        -- TODO: filename:replace("git", ""):replace(".tar.gz", "") ...?
+        --      or add new field to xpkg? project_dir?
         runtime.set_pkginfo({ install_file = filename })
     end
 

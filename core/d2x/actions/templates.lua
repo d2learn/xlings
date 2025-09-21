@@ -8,23 +8,25 @@ function get_template_dir(template)
 
     -- namespace:pkgname@version
     local namespace
-    local pkgname
+    local xvm_pkgname
     local version
 
     local parts = template:split("@")
     if #parts == 2 then
         version = parts[2]
     end
+
     parts = parts[1]:split(":")
     if #parts == 2 then
         namespace = parts[1]
         -- TODO: template xvm name? namespace-pkgname?
-        pkgname = namespace .. "-" .. parts[2]
+        xvm_pkgname = namespace .. "-x-" .. parts[2]
     else
-        pkgname = parts[1]
+        xvm_pkgname = "template-x-" .. parts[1]
     end
 
-    if not xvm.has(pkgname) then
+    cprint("[xlings]: checking cache for template [ ${yellow}%s${clear} ]...", template)
+    if not xvm.has(xvm_pkgname, version or "") then
         cprint("[xlings]: template [ ${yellow}%s${clear} ] not found, try to install it...", template)
         ret = os.iorun(string.format("xim %s --disable-info -y", template))
         if ret and string.find(ret, "installed") then
@@ -35,7 +37,7 @@ function get_template_dir(template)
         end
     end
 
-    local info = xvm.info(pkgname, version or "")
+    local info = xvm.info(xvm_pkgname, version or "")
     if info["SPath"] then
         return path.directory(info["SPath"])
     end
@@ -43,7 +45,7 @@ function get_template_dir(template)
     return nil
 end
 
-function main(target, template)
+function main(target, template, subpath)
 
     if target == nil or target == "" then
         target = template
@@ -54,41 +56,19 @@ function main(target, template)
         return
     end
 
-    cprintf("[xligns]: checking templates cache... ")
-    io.stdout:flush()
-
-    local ret = os.iorun("xim xlings-project-templates --disable-info -y")
-
-    if ret and string.find(ret, "installed") then
-        cprint("- ${green}ok")
-    else
-        cprint("- ${red}failed")
-        cprint([[
-
-    ${yellow bright}Try Reinstall Templates Module${clear}
-
-$ ${cyan}xlings remove xlings-project-templates${clear}
-$ ${cyan}xlings install xlings-project-templates
-
-        ]])
-        return
-    end
-
     local config = platform.get_config_info()
-    local templates_rootdir = path.join(
-        config.rcachedir,
-        "xim", "xpkgs", "xlings-project-templates", "latest"
-    )
-    local templates = template:split("-")
-    local templatedir = path.join(templates_rootdir, table.concat(templates, "/"))
     local projectdir = path.join(config.rundir, target)
+    local templatedir = get_template_dir(template)
 
-    if not os.isdir(templatedir) then
-        templatedir = get_template_dir(template)
-    end
-
-    if not os.isdir(templatedir) then
+    if (not templatedir) or (not os.isdir(templatedir)) then
+        cprint("[xlings]: ${red bright}templatedir not found - %s", tostring(templatedir))
         cprint("[xlings]: ${red bright}template [%s] not found...", template)
+    elseif subpath and subpath ~= "" then
+        templatedir = path.join(templatedir, subpath)
+        if not os.isdir(templatedir) then
+            cprint("[xlings]: ${red bright}template subpath [%s] not found in template [%s]", subpath, template)
+            return
+        end
     end
 
     if os.isfile(projectdir) or os.isdir(projectdir) then
