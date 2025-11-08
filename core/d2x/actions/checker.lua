@@ -12,7 +12,7 @@ import("platform")
 import("llm.llm_interface")
 
 -- TODO: optimze
-target_to_code_file = { }
+target_to_code_file = {}
 
 -- don't use this, deprecated
 XLINGS_WAIT = "XLINGS_WAIT"
@@ -35,7 +35,6 @@ function delete_path_prefix(path)
 end
 
 function print_info(target_name, built_targets, total_targets, target_files, output, status)
-
     -- TODO: optimize / workaround cls failed on windows
     common.xlings_clear_screen()
     io.stdout:flush()
@@ -79,7 +78,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
         print("\n The code exist some error!\n")
         -- TODO: remove the path prefix for output info
         --if type(output) == "string" then
-            --output = common.xlings_path_format(output)
+        --output = common.xlings_path_format(output)
         --end
     end
 
@@ -91,7 +90,7 @@ function print_info(target_name, built_targets, total_targets, target_files, out
         -- print ai tips
         local llm_config = config.llm_config
         if llm_config.enable then
-            cprint("\n${blink bright cyan}AI-Tips(" .. llm_config.request_counter  .. "):${clear}")
+            cprint("\n${blink bright cyan}AI-Tips(" .. llm_config.request_counter .. "):${clear}")
             cprint(llm_config.response)
         else
             cprint("\n${dim cyan}AI-Tips-Config:${clear} ${dim underline}https://d2learn.org/docs/xlings${clear}")
@@ -117,13 +116,13 @@ function build_with_error_handling(target)
     try
     {
         function()
-            os.iorunv("xmake", {"build", target})
+            os.iorunv("xmake", { "build", target })
             --os.iorunv("xmake", {"build", "-v", name})
         end,
         catch
         {
             -- After an exception occurs, it is executed
-            function (e)
+            function(e)
                 output = e
                 build_success = false
             end
@@ -139,17 +138,17 @@ function run_with_error_handling(target)
     local run_success = true
 
     try {
-        function ()
-            output, err = os.iorunv("xmake", {"r", target}, {timeout = 2000})
+        function()
+            output, err = os.iorunv("xmake", { "r", target }, { timeout = 2000 })
         end,
         catch
         {
-            function (e)
+            function(e)
                 output = e.stdout .. e.stderr -- .. e.errors
                 run_success = false
             end
         },
-[[--
+        [[--
         finally {
             function (ok, outdata, errdata)
                 output =  outdata .. errdata
@@ -163,7 +162,6 @@ end
 
 -- main start
 function main(start_target, opt)
-
     opt = opt or {}
 
     local checker_pass = false
@@ -193,7 +191,7 @@ function main(start_target, opt)
 
     common.xlings_clear_screen()
 
-    fwatcher.add(detect_dir, {recursion = detect_recursion})
+    fwatcher.add(detect_dir, { recursion = detect_recursion })
     --cprint("Watching directory: ${magenta}" .. detect_dir .. "${clear}")
 
     -- 获取 project 中所有 target
@@ -214,7 +212,6 @@ function main(start_target, opt)
     local runmode = platform.get_config_info().runmode
 
     for _, name in pairs(sorted_targets) do
-
         if skip and (name == start_target or string.find(name, start_target, 1, true)) then
             skip = false;
         end
@@ -233,7 +230,6 @@ function main(start_target, opt)
             local status = false
 
             while not build_success do
-
                 local llm_config = platform.get_config_info().llm_config
                 local ok = 0
                 local event = nil
@@ -247,7 +243,6 @@ function main(start_target, opt)
 
                 local checker_task = function()
                     if ok > 0 or compile_bypass_counter > 20 then
-
                         if targets[name]:get("kind") ~= "phony" then
                             output, build_success = build_with_error_handling(name)
                         else
@@ -264,7 +259,7 @@ function main(start_target, opt)
                             if string.find(output, "❌", 1, true) then
                                 status = false
                                 build_success = false
-                            -- TODO: optimize, remove XLINGS_*
+                                -- TODO: optimize, remove XLINGS_*
                             elseif string.find(output, XLINGS_WAIT) or string.find(output, XLINGS_RETURN) or string.find(output, D2X_WAIT) then
                                 build_success = false
                             end
@@ -281,9 +276,11 @@ function main(start_target, opt)
                             -- TODO2: skip to file-line? code -g file:line
                             if opt.editor == "vscode" then
                                 if open_target_file == false then
-                                    for  _, file in ipairs((files)) do
+                                    for _, file in ipairs((files)) do
                                         file = path.absolute(file)
-                                        os.exec(platform.get_config_info().cmd_wrapper .. "code -g " .. file .. ":1")
+                                        os.exec(platform.get_config_info().cmd_wrapper ..
+                                            string.format([[code -g "%s:1"]], file)
+                                        )
                                     end
                                     open_target_file = true
                                 end
@@ -291,7 +288,7 @@ function main(start_target, opt)
                                 -- TODO3: support more editor?
                             end
                         end
-                        
+
                         print_info(name, built_targets, total_targets, files, output, status)
                         compile_bypass_counter = 0
                     else
@@ -312,7 +309,7 @@ function main(start_target, opt)
                         if old_output_llm_req ~= output then
                             if compile_bypass_counter >= 1 and output then
                                 local sourcecode = "[sourcecode]: \n"
-                                for  _, file in ipairs((files)) do
+                                for _, file in ipairs((files)) do
                                     sourcecode = sourcecode .. "--" .. file .. "\n"
                                     file = path.absolute(file)
                                     local file_content = io.readfile(file)
@@ -333,8 +330,8 @@ function main(start_target, opt)
                 end
 
                 local jobs = jobpool.new()
-                jobs:addjob("xlings/checker", checker_task, {progress = true})
-                jobs:addjob("xlings/llm", llm_task, {isolate = true})
+                jobs:addjob("xlings/checker", checker_task, { progress = true })
+                jobs:addjob("xlings/llm", llm_task, { isolate = true })
                 runjobs("xlings-task", jobs, { parallel = true })
 
                 file_detect_interval = 1500
@@ -350,6 +347,5 @@ You have completed all exercises\n \
 tools-repo: https://github.com/d2learn/xlings\
 "
     config = platform.get_config_info()
-    print_info(config.name, total_targets, total_targets, {"config.xlings"}, bingo, true)
-
+    print_info(config.name, total_targets, total_targets, { "config.xlings" }, bingo, true)
 end

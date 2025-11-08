@@ -39,7 +39,7 @@ enter_xlings_core_or_exit() {
 
 enter_xlings_core_or_exit
 
-xmake xlings $XLINGS_RUN_DIR "$@"
+xmake xlings "$XLINGS_RUN_DIR" "$@"
 
 # if exist XLINGS_LATEST_VERSION, then update XLINGS_DIR
 if [ -d $XLINGS_LATEST_VERSION ]; then
@@ -48,5 +48,5 @@ if [ -d $XLINGS_LATEST_VERSION ]; then
     mv $XLINGS_LATEST_VERSION $XLINGS_DIR
 
     enter_xlings_core_or_exit
-    xmake xlings $XLINGS_RUN_DIR self init
+    xmake xlings "$XLINGS_RUN_DIR" self init
 fi

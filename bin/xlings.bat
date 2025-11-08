@@ -5,6 +5,11 @@ set XLINGS_DIR=C:\Users\Public\xlings\.xlings
 set XLINGS_LATEST_VERSION=C:\Users\Public\xlings\.xlings_latest
 set XLINGS_RUN_DIR=%cd%
 
+:: if is root dir, then set XLINGS_RUN_DIR to root drive
+if "%XLINGS_RUN_DIR%"=="%XLINGS_RUN_DIR:~0,3%" (
+    set "XLINGS_RUN_DIR=%XLINGS_RUN_DIR:~0,2%"
+)
+
 cd /d "%XLINGS_DIR%\core"
 
 :: xlings command
