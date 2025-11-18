@@ -23,7 +23,7 @@ end
 
 function subos_sysrootdir()
     local osname = os.host()
-    if is_host("linux") then 
+    if is_host("linux") then
         osname = "linux"
     end
     return path.join(platform.get_config_info().subosdir, osname)
@@ -56,6 +56,10 @@ function exec(cmd, opt)
     if not ok then
         os.exec(cmd)
     end
+end
+
+function run_in_script(content, admin)
+    common.run_in_script(content, admin)
 end
 
 function unix_api()

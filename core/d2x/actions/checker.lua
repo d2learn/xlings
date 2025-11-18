@@ -77,7 +77,7 @@ function default_editor_opencmd_template(editor)
         end
 
         __default_editor_opencmd_template = string.format([[nvim --server %s ]], __nvim_server_address)
-            .. [[ --remote-send ':edit %s<CR>']]
+            .. [[ --remote-send ":edit %s<CR>"]]
     elseif editor == "zed" then
         __default_editor_opencmd_template = [[ zed "%s:1"]]
     else
@@ -331,7 +331,7 @@ function main(start_target, opt)
                             if open_file_cmd_template then
                                 for _, file in ipairs((files)) do
                                     file = path.absolute(file)
-                                    os.exec(platform.get_config_info().cmd_wrapper .. string.format(open_file_cmd_template, file))
+                                    common.xlings_run_in_script(string.format(open_file_cmd_template, file))
                                 end
                             end
 
