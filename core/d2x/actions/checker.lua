@@ -62,17 +62,15 @@ function default_editor_opencmd_template(editor)
                 end
             elseif is_host("windows") then
                 -- cmd or window terminal gui window
-                if find_tool("wt") then
-                    terminal_app = "wt -w newcmd cmd /k "
-                elseif find_tool("cmd") then
-                    terminal_app = "cmd /c start "
-                end
+                -- terminal_app = "wt -w newcmd cmd /k " -- `help windows / tips` issues
+                terminal_app = "cmd /c start "
             else
                 -- TODO: macosx
             end
 
             if terminal_app then
                 os.exec(terminal_app .. string.format([[ nvim --listen %s ]], __nvim_server_address))
+                os.sleep(500) -- wait nvim opened
             end
 
             __nvim_server_started = true
