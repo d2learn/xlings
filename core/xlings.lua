@@ -1,5 +1,6 @@
 import("core.base.text")
 import("core.base.option")
+import("core.cache.localcache")
 
 import("platform") -- xconfig loaded
 import("common")
@@ -65,15 +66,18 @@ function deps_check_and_install(xdeps)
                 end
 
                 if host_os == cmd[1] then
+                    cprint("${green}[run]${clear}:${cyan} " .. cmd)
                     common.xlings_exec(cmd[2])
                 else
                     -- TODO: support other platform
-                    print("skip postprocess cmd: " .. cmd[2] .. " - " .. cmd[1])
+                    cprint("${yellow}[skip]${clear}:${cyan} " .. cmd[2] .. " - " .. cmd[1])
                 end
             else
+                cprint("${green}[run]${clear}:${cyan} " .. cmd)
                 common.xlings_exec(cmd)
             end
         end
+        cprint("[xlings]: postprocess cmds - ok")
     end
 
 end
@@ -270,6 +274,10 @@ function main()
                 print("")
             end
         end
-        
     end
+
+    -- clear /home/xlings/.xmake/xx/xx/cache/project avoid xlings crash (projectdir issues)
+    -- case: mcpp-standard: table.insert(xim.xppcmds, "xmake project -k compile_commands --project=dslings")
+    localcache.clear("project")
+    localcache.save()
 end
