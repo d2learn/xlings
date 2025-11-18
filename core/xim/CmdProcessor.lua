@@ -344,13 +344,15 @@ function CmdProcessor:sys_detect()
     local names_table = index_manager:search()
     for name, alias in pairs(names_table) do
         local pkg = index_manager:load_package(name)
-        local pme = pm_service:create_pm_executor(pkg)
-        if pme:installed() then
-            alias_str = table.concat(alias, ", ")
-            cprint("${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)", name, alias_str)
-            index_manager.status_changed_pkg[name] = {installed = true}
-        else
-            index_manager.status_changed_pkg[name] = {installed = false}
+        if not pkg.pmwrapper then -- TODO: add cmd-arg to control?
+            local pme = pm_service:create_pm_executor(pkg)
+            if pme:installed() then
+                alias_str = table.concat(alias, ", ")
+                cprint("${dim bright}->${clear} ${green}%s${clear} ${dim}(%s)", name, alias_str)
+                index_manager.status_changed_pkg[name] = {installed = true}
+            else
+                index_manager.status_changed_pkg[name] = {installed = false}
+            end
         end
     end
 end
