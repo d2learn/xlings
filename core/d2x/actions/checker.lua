@@ -3,6 +3,7 @@ import("core.project.target")
 import("core.base.global")
 import("core.base.option")
 import("core.base.fwatcher")
+import("lib.detect.find_tool")
 
 import("private.async.jobpool")
 import("async.runjobs")
@@ -32,6 +33,60 @@ function delete_path_prefix(path)
     -- remove leading and trailing whitespaces
     path = string.gsub(path, "^%s*(.-)%s*$", "%1")
     return path
+end
+
+-- TODO: support user to define editor_opencmd_template function
+local __nvim_server_started = false
+local __nvim_server_address = "127.0.0.1:43210"
+local __default_editor_opencmd_template = nil
+function default_editor_opencmd_template(editor)
+
+    if __default_editor_opencmd_template then
+        return __default_editor_opencmd_template
+    end
+
+    if editor == "vscode" then
+        __default_editor_opencmd_template = [[ code -g "%s:1"]]
+    elseif editor == "nvim" or editor == "vim" then
+        if not __nvim_server_started then
+            local terminal_app = nil
+            if is_host("linux") then
+                if find_tool("gnome-terminal") then
+                    terminal_app = "gnome-terminal -- "
+                elseif find_tool("kitty") then
+                    terminal_app = "kitty "
+                elseif find_tool("alacritty") then
+                    terminal_app = "alacritty -e "
+                elseif find_tool("konsole") then
+                    terminal_app = "konsole -e "
+                end
+            elseif is_host("windows") then
+                -- cmd or window terminal gui window
+                if find_tool("wt") then
+                    terminal_app = "wt -w newcmd cmd /k "
+                elseif find_tool("cmd") then
+                    terminal_app = "cmd /c start "
+                end
+            else
+                -- TODO: macosx
+            end
+
+            if terminal_app then
+                os.exec(terminal_app .. string.format([[ nvim --listen %s ]], __nvim_server_address))
+            end
+
+            __nvim_server_started = true
+        end
+
+        __default_editor_opencmd_template = string.format([[nvim --server %s ]], __nvim_server_address)
+            .. [[ --remote-send ':edit %s<CR>']]
+    elseif editor == "zed" then
+        __default_editor_opencmd_template = [[ zed "%s:1"]]
+    else
+        -- TODO3: support more editor?
+    end
+
+    return __default_editor_opencmd_template
 end
 
 function print_info(target_name, built_targets, total_targets, target_files, output, status)
@@ -271,22 +326,19 @@ function main(start_target, opt)
 
                         if build_success then
                             built_targets = built_targets + 1
-                        else
-                            -- TODO1: -> TODO-X
-                            -- TODO2: skip to file-line? code -g file:line
-                            if opt.editor == "vscode" then
-                                if open_target_file == false then
-                                    for _, file in ipairs((files)) do
-                                        file = path.absolute(file)
-                                        os.exec(platform.get_config_info().cmd_wrapper ..
-                                            string.format([[code -g "%s:1"]], file)
-                                        )
-                                    end
-                                    open_target_file = true
+                        elseif opt.editor and open_target_file == false then
+
+                            local open_file_cmd_template = default_editor_opencmd_template(opt.editor)
+
+                            if open_file_cmd_template then
+                                for _, file in ipairs((files)) do
+                                    file = path.absolute(file)
+                                    os.exec(platform.get_config_info().cmd_wrapper .. string.format(open_file_cmd_template, file))
                                 end
-                            else
-                                -- TODO3: support more editor?
                             end
+
+                            open_target_file = true
+
                         end
 
                         print_info(name, built_targets, total_targets, files, output, status)
