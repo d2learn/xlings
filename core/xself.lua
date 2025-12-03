@@ -22,7 +22,11 @@ function install()
         cprint("[xlings]: create xlings home dir %s", xlings_homedir)
         local current_user = os.getenv("USER")
         sudo.exec("mkdir -p " .. xlings_homedir)
-        sudo.exec(string.format("chown %s %s", current_user, xlings_homedir))
+        -- avoid crash when user is nil value (root)
+        -- https://github.com/Sunrisepeak/mcpp-standard/issues/25
+        if current_user then
+            sudo.exec(string.format("chown %s %s", current_user, xlings_homedir))
+        end
     elseif is_host("windows") then
         if os.isdir(pconfig.homedir) then
             cprint("[xlings]: xlings home dir %s already exists - [win]", pconfig.homedir)
@@ -141,9 +145,9 @@ function __xlings_usergroup_checker()
 
         if not exist_xlings_group then
             -- only run once
-            cprint("[xlings]: ${yellow dim}create group xlings and add current user [%s] to it(only-first)", current_user)
+            cprint("[xlings]: ${yellow dim}create group xlings and add current user [%s] to it(only-first)", tostring(current_user))
             sudo.exec("groupadd xlings")
-            sudo.exec("usermod -aG xlings " .. current_user)
+            if current_user then sudo.exec("usermod -aG xlings " .. current_user) end
             cprint("[xlings]: ${yellow dim}add current %s owner to xlings group(only-first)", xlings_homedir)
             sudo.exec("chown -R :xlings " .. xlings_homedir)
             sudo.exec("chmod -R 775 " .. xlings_homedir)
@@ -152,7 +156,8 @@ function __xlings_usergroup_checker()
             sudo.exec("chmod -R g+s " .. xlings_homedir)
             -- set default acl, new file will inherit acl(group default rw)
             -- sudo.exec("setfacl -d -m g::rwx " .. xlings_homedir)
-        elseif not string.find(os.iorun("groups " .. current_user), "xlings", 1, true) then
+        elseif current_user and (not string.find(os.iorun("groups " .. current_user), "xlings", 1, true)) then
+            ---@diagnostic disable-next-line: undefined-global
             cprint("")
             cprint("${yellow bright}Warning: current user [%s] is not in group xlings", current_user)
             cprint("")
@@ -339,7 +344,7 @@ function uninstall()
                         utils.remove_user_group_linux("xlings")
                         cprint("[xlings]: remove xlings user group - ${green}ok")
                         local current_user = os.getenv("USER")
-                        sudo.exec("chown -R " .. current_user .. ":" .. current_user .. " " .. rcachedir)
+                        if current_user then sudo.exec("chown -R " .. current_user .. ":" .. current_user .. " " .. rcachedir) end
                     elseif is_host("windows") then
                         cprint("[xlings]: try remove [D:/.xlings_data] ...")
                         os.tryrm("D:/.xlings_data")
