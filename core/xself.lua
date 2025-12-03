@@ -157,7 +157,6 @@ function __xlings_usergroup_checker()
             -- set default acl, new file will inherit acl(group default rw)
             -- sudo.exec("setfacl -d -m g::rwx " .. xlings_homedir)
         elseif current_user and (not string.find(os.iorun("groups " .. current_user), "xlings", 1, true)) then
-            ---@diagnostic disable-next-line: undefined-global
             cprint("")
             cprint("${yellow bright}Warning: current user [%s] is not in group xlings", current_user)
             cprint("")
