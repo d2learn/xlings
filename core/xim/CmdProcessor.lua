@@ -81,6 +81,7 @@ function CmdProcessor:run_target_cmds()
             local pkg = index_manager:load_package(target_pkgname)
             self._pm_executor = pm_service:create_pm_executor(pkg)
             self.target = target_pkgname
+            self._input_target = input_target -- backup
 
             if self.cmds.info_json then
                 local pkginfo = self._pm_executor._pkg:info()
@@ -196,6 +197,8 @@ function CmdProcessor:run_nontarget_cmds()
 -- target is nil
     if self.cmds.list then
         self:list()
+    elseif self.cmds.update then
+        self:update()
     elseif self.cmds.sysdetect then
         self:sys_detect()
     elseif self.cmds.sysupdate then
@@ -336,7 +339,20 @@ function CmdProcessor:remove()
 end
 
 function CmdProcessor:update()
-    cprint("[xlings:xim]: update not implement")
+    cprint("[xlings:xim]: ${dim bright}sync repo and rebuild index...${clear}")
+
+    index_manager:sync_repo()
+    index_manager:rebuild()
+    self:sys_detect()
+
+    -- TODO: support install latest version for target
+    if self._input_target and self._input_target ~= "" then
+        cprint("[xlings:xim]: ${bright}try to update [ %s ] to latest version...${clear}", self._input_target)
+        new(self._input_target .. "@latest", {
+            yes = true,
+            disable_info = true
+        }):run()
+    end
 end
 
 function CmdProcessor:sys_detect()
@@ -360,7 +376,7 @@ end
 function CmdProcessor:sys_update()
     local datadir = runtime.get_xim_data_dir()
     if self.cmds.sysupdate == "index" then
-        index_manager:sync_repo()
+        index_manager:sync_repo(true)
         index_manager:rebuild()
         self:sys_detect()
     elseif self.cmds.sysupdate == "self" then

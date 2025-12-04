@@ -32,8 +32,8 @@ function IndexManager:update()
     IndexManager.status_changed_pkg = {}
 end
 
-function IndexManager:sync_repo()
-    repo_manager:sync()
+function IndexManager:sync_repo(force)
+    repo_manager:sync(force)
 end
 
 function IndexManager:rebuild()

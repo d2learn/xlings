@@ -254,6 +254,8 @@ function main()
         _command_dispatch(d2x, "checker", cmd_target, cmd_args)
     elseif command == "remove" then
         _command_dispatch(xinstall, "-r", cmd_target, cmd_args)
+    elseif command == "update" then
+        _command_dispatch(xinstall, "-u", cmd_target, cmd_args)
     elseif command == "config" then
         config_llm()
     else -- submodule
