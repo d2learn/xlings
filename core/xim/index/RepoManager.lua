@@ -20,11 +20,16 @@ RepoManager.__index = RepoManager
 function new()
     local config = xconfig.load()
     RepoManager.repo = config.xim["index-repo"]
-    RepoManager.updateSchedule = 30   -- days
+    RepoManager.updateSchedule = 7   -- days
     return RepoManager
 end
 
-function RepoManager:sync()
+function RepoManager:sync(force)
+
+    if not self:need_to_update(force) then
+        cprint("[xlings: xim]: ${dim}skip sync indexrepos, not reach update schedule(use `xim --update index` to force)...")
+        return
+    end
 
     cprint("[xlings: xim]: sync indexrepos...")
 
@@ -133,6 +138,23 @@ function RepoManager:add_subrepo(namespace, repo)
     json.savefile(subrepos_file, subrepos)
 
     return _to_repodir(repo, index_reposdir)
+end
+
+function RepoManager:need_to_update(force)
+    local last_update_file = path.join(data_dir, "xim_last_update_time")
+    if force or (not os.isfile(last_update_file)) then
+        io.writefile(last_update_file, tostring(os.time()))
+        return true
+    else
+        local last_update_time = tonumber(io.readfile(last_update_file))
+        local current_time = os.time()
+        local delta_days = (current_time - last_update_time) / (24 * 3600)
+        if delta_days >= RepoManager.updateSchedule then
+            io.writefile(last_update_file, tostring(current_time))
+            return true
+        end
+    end
+    return false
 end
 
 function _sync_repo(repo, rootdir)
