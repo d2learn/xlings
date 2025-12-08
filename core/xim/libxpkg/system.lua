@@ -59,7 +59,7 @@ function exec(cmd, opt)
 end
 
 function run_in_script(content, admin)
-    common.run_in_script(content, admin)
+    common.xlings_run_in_script(content, admin)
 end
 
 function unix_api()
