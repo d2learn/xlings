@@ -16,7 +16,9 @@ function new(pkg)
     instance.__path = pkg.path
 
     -- init package data
-    instance:_init(pkg.version, pkg.data.package)
+    -- use deep copy to avoid modifying original data
+    local pdata = utils.deep_copy(pkg.data.package)
+    instance:_init(pkg.version, pdata)
     
     -- init hooks
     instance.hooks = {
