@@ -269,6 +269,9 @@ function CmdProcessor:install()
             if self._pm_executor:install(xpkg) then
                 self:_restart_tips()
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
+                if self.cmds.sys_use then
+                    self._pm_executor:use()
+                end
                 index_manager.status_changed_pkg[self.target] = {installed = true}
             else
                 self:_feedback()
@@ -350,7 +353,8 @@ function CmdProcessor:update()
         cprint("[xlings:xim]: ${bright}try to update [ %s ] to latest version...${clear}", self._input_target)
         new(self._input_target .. "@latest", {
             yes = true,
-            disable_info = true
+            disable_info = true,
+            sys_use = true
         }):run()
     end
 end

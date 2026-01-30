@@ -32,6 +32,7 @@ function _input_process(args)
         ["--add-xpkg"] = false,  -- --add-xpkg (string)
         ["--add-indexrepo"] = false,  -- --add-indexrepo (string)
         ["--xpkg-args"] = false, -- --xpkg-args (string)
+        ["--use"] = false, -- --use (string)
     }
 
     if #args > 0 and args[1]:sub(1, 1) ~= '-' then
@@ -74,6 +75,7 @@ function _input_process(args)
         sysxim_args = args, -- is table, xim's original args
 
         info_json = boolean_cmds["--info-json"],
+        sys_use = kv_cmds["--use"],
     }
 
     return main_target, cmds
