@@ -240,7 +240,13 @@ function init()
     os.exec([[xvm add xrun 0.0.4 --alias "xlings run"]])
     os.exec([[xvm add xchecker 0.0.4 --alias "xlings checker"]])
     os.exec([[xvm add xself 0.0.4 --alias "xlings self"]])
-    os.exec([[xvm add d2x 0.0.4 --alias "xlings d2x"]])
+    
+    if is_host("linux") or is_host("windows") then
+        common.xlings_exec([[xlings install d2x@0.1.1 --use -y]])
+    else
+        os.exec([[xvm add d2x 0.0.4 --alias "xlings d2x"]])
+    end
+
     --os.exec([[xim --detect]])
 
     cprint("")
