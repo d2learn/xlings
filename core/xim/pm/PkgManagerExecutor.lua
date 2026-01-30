@@ -1,6 +1,7 @@
 -- runtime dir is cachedir
 
 import("xim.base.runtime")
+import("xim.base.xvm")
 import("xim.pm.XPkgManager")
 
 local PkgManagerExecutor = {}
@@ -69,6 +70,10 @@ function PkgManagerExecutor:install()
     end
 
     return true
+end
+
+function PkgManagerExecutor:use()
+    xvm.use(self._pkg.name, self._pkg.version)
 end
 
 function PkgManagerExecutor:_config()
