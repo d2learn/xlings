@@ -1,75 +1,117 @@
 #!/bin/bash
 
-RUN_DIR=`pwd`
-#SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)" # avoid source script.sh issue
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-#XMAKE_BIN_URL=https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-bundle-v2.9.9.linux.x86_64
-XMAKE_BIN_URL=https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xmake-3.0.0-linux-x86_64
-XMAKE_BIN="xmake"
+set -euo pipefail
 
-XLINGS_HOME="/home/xlings"
-XLINGS_SYMLINK="/usr/bin/xlings"
-
-trap "echo 'Ctrl+C or killed...'; exit 1" INT TERM
-
-if [ "$(uname)" == "Darwin" ]; then
-    XLINGS_HOME="/Users/xlings"
-    XLINGS_SYMLINK="/usr/local/bin/xlings"
-    XMAKE_BIN_URL=https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xmake-3.0.0-macosx-arm64
-fi
-
-# ANSI color codes
+# 颜色定义
 RED='\033[31m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
-BLUE='\033[34m'
 PURPLE='\033[35m'
-CYAN='\033[36m'
 RESET='\033[0m'
 
-echo -e "${PURPLE}[xlings]: start detect environment and try to auto config...${RESET}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUN_DIR="${PWD}"
 
-# 1. check xmake status
-if ! command -v xmake &> /dev/null
-then
-    echo -e "${PURPLE}[xlings]: start install xmake...${RESET}"
-    XMAKE_BIN="$ROOT_DIR/bin/xmake"
-    curl -sSL $XMAKE_BIN_URL -o $XMAKE_BIN
-    chmod +x $XMAKE_BIN
-    if [ "$(uname)" == "Darwin" ]; then
-        xattr -d com.apple.quarantine $XMAKE_BIN
-    fi
+# 配置
+XMAKE_BIN_URL_LINUX="https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xmake-3.0.0-linux-x86_64"
+XMAKE_BIN_URL_MACOS="https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xmake-3.0.0-macosx-arm64"
+XMAKE_LOCAL="$ROOT_DIR/bin/xmake"
+
+XLINGS_HOME_LINUX="/home/xlings"
+XLINGS_HOME_MACOS="/Users/xlings"
+XLINGS_SYMLINK_LINUX="/usr/bin/xlings"
+XLINGS_SYMLINK_MACOS="/usr/local/bin/xlings"
+
+# 检测系统
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)  echo "linux" ;;
+        Darwin*) echo "macos" ;;
+        *)       echo "unknown" ;;
+    esac
+}
+
+OS_TYPE=$(detect_os)
+
+# 根据系统设置变量
+case "$OS_TYPE" in
+    linux)
+        XLINGS_HOME="$XLINGS_HOME_LINUX"
+        XLINGS_SYMLINK="$XLINGS_SYMLINK_LINUX"
+        XMAKE_BIN_URL="$XMAKE_BIN_URL_LINUX"
+        ;;
+    macos)
+        XLINGS_HOME="$XLINGS_HOME_MACOS"
+        XLINGS_SYMLINK="$XLINGS_SYMLINK_MACOS"
+        XMAKE_BIN_URL="$XMAKE_BIN_URL_MACOS"
+        ;;
+    *)
+        echo -e "${RED}[xlings]: Unsupported OS${RESET}"
+        exit 1
+        ;;
+esac
+
+log_info() { echo -e "${PURPLE}[xlings]: $1${RESET}"; }
+log_success() { echo -e "${GREEN}[xlings]: $1${RESET}"; }
+log_warn() { echo -e "${YELLOW}[xlings]: $1${RESET}"; }
+log_error() { echo -e "${RED}[xlings]: $1${RESET}"; }
+
+trap 'log_error "Interrupted"; exit 1' INT TERM
+
+# 1. 检查并安装 xmake
+if command -v xmake &> /dev/null; then
+    log_success "xmake already installed"
+    XMAKE_BIN="xmake"
 else
-    echo -e "${GREEN}[xlings]: xmake installed${RESET}"
+    log_info "installing xmake..."
+    mkdir -p "$ROOT_DIR/bin"
+
+    if ! curl -sSL --fail "$XMAKE_BIN_URL" -o "$XMAKE_LOCAL"; then
+        log_error "Failed to download xmake"
+        rm -f "$XMAKE_LOCAL"
+        exit 1
+    fi
+
+    chmod +x "$XMAKE_LOCAL"
+
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        xattr -d com.apple.quarantine "$XMAKE_LOCAL" 2>/dev/null || true
+    fi
+
+    XMAKE_BIN="$XMAKE_LOCAL"
 fi
 
-if [ -f $RUN_DIR/install.unix.sh ]; then
-    cd ..
-    RUN_DIR=`pwd`
-fi
-
-if [ "$UID" -eq 0 ];
-then
+# 2. 处理权限
+if [[ "$UID" -eq 0 ]]; then
     export XMAKE_ROOT=y
 fi
 
-# 2. install xlings
-cd $ROOT_DIR/core
-$XMAKE_BIN xlings unused self enforce-install
-sudo ln -sf $XLINGS_HOME/.xlings_data/bin/xlings $XLINGS_SYMLINK
+# 3. 安装 xlings
+cd "$ROOT_DIR/core"
+"$XMAKE_BIN" xlings --project=. unused self enforce-install
+
+# 4. 创建软链接
+if [[ "$UID" -eq 0 ]]; then
+    ln -sf "$XLINGS_HOME/.xlings_data/bin/xlings" "$XLINGS_SYMLINK"
+fi
 
 export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
 
-# 3. init: install xvm and create xim, xinstall...
+# 5. 检查 xlings 命令是否可用
+if ! command -v xlings &> /dev/null; then
+    log_error "xlings command not found, installation failed"
+    exit 1
+fi
+
+# 6. 初始化
 xlings self init
 
-# 5. install info
-echo -e "${GREEN}[xlings]: xlings installed${RESET}"
+# 7. 完成信息
+log_success "xlings installed"
+echo ""
+echo -e "    run [${YELLOW}xlings help${RESET}] get more information"
+echo -e "    after restart ${YELLOW}cmd/shell${RESET} to refresh environment"
+echo ""
 
-echo -e ""
-echo -e "\t    run [$YELLOW xlings help $RESET] get more information"
-echo -e "\t after restart $YELLOW cmd/shell $RESET to refresh environment"
-echo -e ""
-
-cd $RUN_DIR
+cd "$RUN_DIR"
