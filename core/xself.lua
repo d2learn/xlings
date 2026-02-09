@@ -242,7 +242,7 @@ function init()
     os.exec([[xvm add xself 0.0.4 --alias "xlings self"]])
     
     if is_host("linux") or is_host("windows") then
-        common.xlings_exec([[xlings install d2x@0.1.1 --use -y]])
+        common.xlings_exec([[xlings install d2x@latest --use -y]])
     else
         os.exec([[xvm add d2x 0.0.4 --alias "xlings d2x"]])
     end
