@@ -344,7 +344,7 @@ end
 function CmdProcessor:update()
     cprint("[xlings:xim]: ${dim bright}sync repo and rebuild index...${clear}")
 
-    index_manager:sync_repo()
+    index_manager:sync_repo(true)
     index_manager:rebuild()
     self:sys_detect()
 
