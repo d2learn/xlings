@@ -186,29 +186,36 @@ impl Program {
             alias_args = alias.split_whitespace().collect();
         }
 
-        // If path is set and we run the program by name (no alias), check that the executable exists
+        // If path is set and we run the program by name (no alias), resolve executable (path/name or path/bin/name)
         let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
             let base = Path::new(&self.path);
-            let exe_path = if cfg!(target_os = "windows") {
-                let exe = base.join(format!("{}.exe", self.name));
-                let bat = base.join(format!("{}.bat", self.name));
-                if exe.exists() {
-                    Some(exe)
-                } else if bat.exists() {
-                    Some(bat)
-                } else {
-                    None
+            let candidates: Vec<std::path::PathBuf> = if cfg!(target_os = "windows") {
+                let names = [
+                    format!("{}.exe", self.name),
+                    format!("{}.bat", self.name),
+                ];
+                let mut out = Vec::new();
+                for n in &names {
+                    out.push(base.join(n));
                 }
+                for n in &names {
+                    out.push(base.join("bin").join(n));
+                }
+                out
             } else {
-                let p = base.join(&self.name);
-                if p.exists() { Some(p) } else { None }
+                vec![
+                    base.join(&self.name),
+                    base.join("bin").join(&self.name),
+                ]
             };
+            let exe_path = candidates.into_iter().find(|p| p.exists());
             match exe_path {
                 Some(p) => Some(p),
                 None => {
                     eprintln!("xvm: executable not found at {}", base.join(&self.name).display());
+                    eprintln!("  (also tried {})", base.join("bin").join(&self.name).display());
                     #[cfg(target_os = "windows")]
-                    eprintln!("  (looked for {}.exe and {}.bat)", self.name, self.name);
+                    eprintln!("  (looked for {}.exe and {}.bat in path and path/bin)", self.name);
                     eprintln!("  path: {}", self.path);
                     eprintln!("  hint: install with e.g. xlings install {}@<version>", self.name);
                     return 1;
@@ -216,6 +223,23 @@ impl Program {
             }
         } else {
             None
+        };
+
+        let path_env = self.get_path_env();
+        let path_env_value = if let Some(ref p) = program_path {
+            if let Some(parent) = p.parent() {
+                let parent_str = parent.to_string_lossy();
+                if parent_str != self.path.as_str() {
+                    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+                    format!("{}{}{}", parent_str, sep, path_env.1)
+                } else {
+                    path_env.1
+                }
+            } else {
+                path_env.1
+            }
+        } else {
+            path_env.1
         };
 
         let mut cmd = if let Some(ref path) = program_path {
@@ -226,7 +250,7 @@ impl Program {
         let status = cmd
             .args(alias_args)
             .args(&self.args)
-            .envs([self.get_path_env()])
+            .env("PATH", &path_env_value)
             .envs([self.get_ld_library_path_env()])
             .envs(build_extended_envs(self.envs.clone()))
             .status();
