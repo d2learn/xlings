@@ -30,6 +30,7 @@ jobs:
           mkdir -p xmake/bin
           mv xmake.bin xmake/bin/xmake
           echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
+          export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
           xmake --version
 
       - name: Install old xlings (to get GCC 15.1)
