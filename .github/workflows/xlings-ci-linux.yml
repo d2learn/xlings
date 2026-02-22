@@ -27,12 +27,8 @@ jobs:
           XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
           curl -fsSL -o xmake.bin "$XMAKE_URL" -H "Accept: application/octet-stream"
           chmod +x xmake.bin
-          ./xmake.bin -d "$PWD/xmake" -y
-          rm -f xmake.bin
-          sub=$(ls -d xmake/xmake-* 2>/dev/null | head -1)
-          if [[ -n "$sub" && -x "$sub/bin/xmake" ]]; then
-            mv "$sub" xmake.tmp && rm -rf xmake && mv xmake.tmp xmake
-          fi
+          mkdir -p xmake/bin
+          mv xmake.bin xmake/bin/xmake
           echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
           xmake --version
 
