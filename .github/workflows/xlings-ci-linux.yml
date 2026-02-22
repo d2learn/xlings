@@ -21,9 +21,23 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y curl git build-essential
-          # LLVM/Clang for C++23 std module (import std)
-          sudo apt-get install -y llvm-18 clang-18 libc++-18-dev 2>/dev/null || \
-            sudo apt-get install -y llvm-17 clang-17 libc++-17-dev 2>/dev/null || true
+
+      - name: Setup GCC 15 SDK (C++23 std module)
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          curl -fsSL -o gcc-sdk.tar.gz "https://github.com/xlings-res/gcc/releases/download/15.1.0/gcc-15.1.0-linux-x86_64.tar.gz"
+          mkdir -p build/sdk
+          tar -xzf gcc-sdk.tar.gz -C build/sdk
+          rm gcc-sdk.tar.gz
+          # SDK root: tarball may extract to build/sdk/ or build/sdk/gcc-*-linux-x86_64/
+          subdir=$(ls build/sdk 2>/dev/null | head -1)
+          if [[ -n "$subdir" && -d "build/sdk/$subdir/bin" ]]; then
+            sdk_root="build/sdk/$subdir"
+          else
+            sdk_root="build/sdk"
+          fi
+          echo "GCC_SDK=$GITHUB_WORKSPACE/$sdk_root" >> "$GITHUB_ENV"
+          echo "PATH=$GITHUB_WORKSPACE/$sdk_root/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install xmake
         run: |
@@ -41,16 +55,14 @@ jobs:
         with:
           workspaces: core/xvm
 
-      - name: Configure xmake (C++23 std module)
+      - name: Configure xmake (GCC 15 SDK for C++23 std module)
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           cd "$GITHUB_WORKSPACE"
-          for sdk in /usr/lib/llvm-18 /usr/lib/llvm-17; do
-            if [[ -d "$sdk" ]]; then
-              xmake f -p linux --toolchain=llvm --sdk="$sdk" && echo "Using LLVM SDK: $sdk" && exit 0
-            fi
-          done
-          echo "No LLVM SDK found, xmake will use default compiler"
+          [[ -z "$GCC_SDK" ]] && { echo "GCC_SDK not set"; exit 1; }
+          [[ -x "$GCC_SDK/bin/gcc" ]] || { echo "GCC not found in $GCC_SDK/bin"; exit 1; }
+          xmake f -p linux -m release --sdk="$GCC_SDK"
+          echo "Using GCC SDK: $GCC_SDK"
 
       - name: Build and test (linux_release)
         run: |
