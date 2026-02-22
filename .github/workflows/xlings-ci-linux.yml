@@ -93,8 +93,9 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           export XLINGS_DATA="$XLINGS_HOME/data"
-          export PATH="$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
-          echo "PATH=$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
+          # xlings install needs xmake (from earlier step: $HOME/.local/bin)
+          export PATH="$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
+          echo "PATH=$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
           xlings -h
           xvm --version || true
           xlings install gcc@15.1 -y
