@@ -1,7 +1,7 @@
 import("common")
 
-import("xim.libxpkg.system")
-import("xim.base.utils")
+import("libxpkg.system")
+import("base.utils")
 
 function filepath_to_absolute(filepath)
     if not path.is_absolute(filepath) then

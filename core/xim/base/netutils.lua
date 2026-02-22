@@ -4,20 +4,16 @@ function url_to_domain(url)
         return nil
     end
 
-    -- 正则表达式匹配域名
-    -- 匹配 http(s):// 或 git:// 后面的部分
     local pattern = "^[a-zA-Z]+://([^/]+)"
     local domain = url:match(pattern)
 
-    -- 如果是 git@ 格式的 URL，例如 git@github.com:user/repo.git
     if not domain then
-        pattern = "^git@([^:]+)" -- 匹配 git@ 后面的部分
+        pattern = "^git@([^:]+)"
         domain = url:match(pattern)
     end
 
-    -- 如果匹配到了域名，进一步去除端口（如 :8080）
     if domain then
-        domain = domain:match("([^:]+)") -- 去掉端口号（如 example.com:8080 -> example.com）
+        domain = domain:match("([^:]+)")
     end
 
     return domain
@@ -31,13 +27,9 @@ function url_latency(url)
 
     url = url_to_domain(url)
 
-    -- 设置空输出目标：Windows 使用 NUL，Linux 和 macOS 使用 /dev/null
     local null_output = os.host() == "windows" and "NUL" or "/dev/null"
-
-    -- 定义 curl 命令，%{time_total} 用于提取总耗时
     local cmd = string.format("curl -o %s -s -w %%{time_total} %s", null_output, url)
 
-    -- 执行 curl 命令并捕获结果
     local result, err = try {
         function ()
             return os.iorun(cmd)
@@ -77,43 +69,10 @@ function low_latency_urls(urls)
     return min_url
 end
 
-function remove_user_group_linux(group)
-    local members = {}
-    local result = os.iorun("getent group " .. group)
-    -- format：xlings:x:1001:user1,user2,user3
-    local users = result:match("^[^:]+:[^:]+:[^:]+:(.*)"):trim()
-
-    if users then
-        for user in users:gmatch("[^,]+") do
-            table.insert(members, user:match("^%s*(.-)%s*$"))
-        end
-    end
-
-    for _, user in ipairs(members) do
-        os.iorun("sudo gpasswd -d " .. user .. " " .. group)
-    end
-
-    os.exec("sudo groupdel " .. group)
-
-    cprint("[xlings]: ${bright}removed group " .. group .. ":${clear} " .. table.concat(members, ", "))
-end
-
 function load_module(fullpath, rootdir)
-    -- rootdir/a/b/c.lua -> a.b.c
     local pattern = "^" .. rootdir:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1") .. "/?"
     local relative_path = fullpath:gsub(pattern, "")
     local path_parts = string.split(relative_path, "/")
     local module_path = table.concat(path_parts, "."):gsub("%.lua$", "")
     return inherit(module_path, {rootdir = rootdir})
-end
-
-function main()
-    -- test cases
-    local urls = {
-        "https://github.com",
-        "https://gitee.com",
-        "https://gitlab.com",
-    }
-    local fasturl = low_latency_urls(urls)
-    cprint("${yellow}Fastest URL: " .. fasturl)
 end

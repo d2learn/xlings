@@ -1,6 +1,6 @@
 --- xim api
 
-import("xim.xim")
+import("xim")
 
 function install(target)
     xim("-i", target, "-y", "--disable-info")

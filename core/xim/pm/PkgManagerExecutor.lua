@@ -1,8 +1,8 @@
 -- runtime dir is cachedir
 
-import("xim.base.runtime")
-import("xim.base.xvm")
-import("xim.pm.XPkgManager")
+import("base.runtime")
+import("base.xvm")
+import("pm.XPkgManager")
 
 local PkgManagerExecutor = {}
 PkgManagerExecutor.__index = PkgManagerExecutor

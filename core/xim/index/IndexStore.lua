@@ -1,5 +1,5 @@
-import("xim.base.utils")
-import("xim.base.runtime")
+import("base.utils")
+import("base.runtime")
 
 local IndexStore = {}
 IndexStore.__index = IndexStore

@@ -7,11 +7,47 @@ import("common")
 import("base.log")
 import("config.i18n")
 
-import("xim.base.utils")
-import("xim.base.runtime")
-import("xim.pm.XPackage")
-import("xim.pm.PkgManagerService")
-import("xim.index.IndexManager")
+import("base.utils")
+import("base.runtime")
+import("platform")
+import("pm.XPackage")
+import("pm.PkgManagerService")
+import("index.IndexManager")
+
+-- Aggregate dep libs (*.so) from xpkgs into target_libdir (e.g. data/linux/lib) so apps like d2x find glibc/openssl
+local function aggregate_dep_libs_to(deps_list, target_libdir)
+    if not deps_list or not is_host("linux") or not target_libdir then return end
+    local xpkgs = runtime.get_xim_install_basedir()
+    for _, dep_spec in ipairs(deps_list) do
+        local name = dep_spec:gsub("@.*", "")
+        local ver_opt = dep_spec:find("@", 1, true) and dep_spec:match("@(.+)") or nil
+        for _, try_name in ipairs({name, "scode-x-" .. name, "fromsource-x-" .. name}) do
+            local dep_root = path.join(xpkgs, try_name)
+            if not os.isdir(dep_root) then goto continue end
+            local ver_dir = ver_opt
+            if not ver_dir then
+                local vers = os.dirs(dep_root .. "/*")
+                if not vers or #vers == 0 then goto continue end
+                table.sort(vers)
+                ver_dir = path.basename(vers[#vers])
+            end
+            local install_dir = path.join(dep_root, ver_dir)
+            if not os.isdir(install_dir) then goto continue end
+            for _, libsub in ipairs({"lib64", "lib"}) do
+                local srcdir = path.join(install_dir, libsub)
+                if os.isdir(srcdir) then
+                    if not os.isdir(target_libdir) then os.mkdir(target_libdir) end
+                    for _, f in ipairs(os.files(path.join(srcdir, "*.so*"))) do
+                        os.cp(f, path.join(target_libdir, path.filename(f)), {force = true})
+                    end
+                    break
+                end
+            end
+            break
+            ::continue::
+        end
+    end
+end
 
 local index_manager = IndexManager.new()
 local pm_service = PkgManagerService.new()
@@ -61,6 +97,7 @@ end
 
 function CmdProcessor:run_target_cmds()
 -- target isnt nil - [is a package name]
+-- (self is handled by C++ via xmake xself task, not xim)
 
     if self.cmds.search then
         cprint("[xlings:xim]: search for *${green}%s${clear}* ...\n", self.target)
@@ -256,18 +293,29 @@ function CmdProcessor:install()
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
-                    cprint("${dim}---${clear}" .. dep_name)
-                    new(dep_name, {
-                        install = true,
-                        yes = true,
-                        disable_info = true
-                    }):run()
-                    cprint("${dim}---${clear}")
+                    local dep_pkgname = index_manager:match_package_version(dep_name)
+                    if not dep_pkgname then
+                        cprint("${dim}[xlings:xim]: skip dependency (not in index): %s${clear}", dep_name)
+                    else
+                        cprint("${dim}---${clear}" .. dep_name)
+                        new(dep_name, {
+                            install = true,
+                            yes = true,
+                            disable_info = true
+                        }):run()
+                        cprint("${dim}---${clear}")
+                    end
                 end
             end
 
             if self._pm_executor:install(xpkg) then
                 self:_restart_tips()
+                -- aggregate deps' *.so into data/linux/lib so LD_LIBRARY_PATH (e.g. d2x) finds glibc/openssl
+                local cfg = platform.get_config_info()
+                if cfg.subosdir and deps_list and not table.empty(deps_list) then
+                    local target_lib = path.join(cfg.subosdir, "linux", "lib")
+                    aggregate_dep_libs_to(deps_list, target_lib)
+                end
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)
                 if self.cmds.sys_use then
                     self._pm_executor:use()
@@ -384,7 +432,7 @@ function CmdProcessor:sys_update()
         index_manager:rebuild()
         self:sys_detect()
     elseif self.cmds.sysupdate == "self" then
-        cprint("[xlings:xim]: update self - todo")
+        import("xself").main("update")
     end
 end
 

@@ -1,5 +1,5 @@
-import("xim.base.runtime")
-import("xim.base.xvm")
+import("base.runtime")
+import("base.xvm")
 
 function name()
     return runtime.get_pkginfo().name

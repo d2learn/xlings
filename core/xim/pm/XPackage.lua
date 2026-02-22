@@ -1,7 +1,7 @@
 import("common")
 import("config.xconfig")
 
-import("xim.base.utils")
+import("base.utils")
 
 local XPackage = {}
 XPackage.__index = XPackage
@@ -166,7 +166,7 @@ package = {
 
 -- xim: hooks for package manager
 
-import("xim.base.runtime")
+import("base.runtime")
 
 -- pkginfo = runtime.get_pkginfo()
 -- pkginfo = {install_file = "", install_dir = "", version = "x.x.x"}

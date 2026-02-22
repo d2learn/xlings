@@ -9,7 +9,6 @@ pub static WORKSPACE_FILE : &str = ".workspace.xvm.yaml";
 #[allow(dead_code)]
 pub fn rundir() {
     RUNDIR.get_or_init(|| {
-        // get current runtime directory
         env::current_dir().expect("Failed to get current directory")
     });
 }
@@ -52,46 +51,48 @@ pub fn print_baseinfo() {
 }
 
 pub mod platform {
-    //use std::env;
+    use std::env;
     use std::path::PathBuf;
-/*
-    use super::*;
 
-    static HOMEDIR: OnceLock<String> = OnceLock::new();
-
-    pub fn homedir() -> String {
-        HOMEDIR.get_or_init(|| {
-            #[cfg(target_os = "windows")]
-            {
-                env::var("USERPROFILE").expect("Failed to get USERPROFILE environment variable")
+    fn user_home_dir() -> PathBuf {
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(profile) = env::var("USERPROFILE") {
+                return PathBuf::from(profile);
             }
+            PathBuf::from(r"C:\Users\Public")
+        }
 
-            #[cfg(not(target_os = "windows"))]
-            {
-                env::var("HOME").expect("Failed to get HOME environment variable")
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(home) = env::var("HOME") {
+                return PathBuf::from(home);
             }
-        }).clone()
+            PathBuf::from("/tmp")
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(home) = env::var("HOME") {
+                return PathBuf::from(home);
+            }
+            PathBuf::from("/tmp")
+        }
     }
-*/
-    // TODO: to support workspace dir, .xlings/xvm-workspace
+
+    /// XLINGS_DATA dir: env XLINGS_DATA > $HOME/.xlings/data
     pub fn xvm_homedir() -> PathBuf {
-        if cfg!(target_os = "windows") {
-            PathBuf::from(r"C:\Users\Public\xlings\.xlings_data")
-        } else if cfg!(target_os = "macos") {
-            PathBuf::from("/Users/xlings/.xlings_data")
-        } else {
-            PathBuf::from("/home/xlings/.xlings_data")
+        if let Ok(data) = env::var("XLINGS_DATA") {
+            return PathBuf::from(data);
         }
+        let xlings_home = env::var("XLINGS_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| user_home_dir().join(".xlings"));
+        xlings_home.join("data")
     }
 
-    // fixed path for xvm data directory
+    /// XVM data dir: $XLINGS_DATA/xvm
     pub fn xvm_datadir() -> String {
-        if cfg!(target_os = "windows") {
-            "C:/Users/Public/xlings/.xlings_data/xvm".to_string()
-        } else if cfg!(target_os = "macos") {
-            "/Users/xlings/.xlings_data/xvm".to_string()
-        } else {
-            "/home/xlings/.xlings_data/xvm".to_string()
-        }
+        xvm_homedir().join("xvm").to_string_lossy().to_string()
     }
 }

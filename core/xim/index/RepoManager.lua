@@ -8,8 +8,8 @@ import("core.base.json")
 
 import("config.xconfig")
 
-import("xim.base.runtime")
-import("xim.base.utils")
+import("base.runtime")
+import("base.utils")
 
 local data_dir = runtime.get_xim_data_dir()
 local index_reposdir = runtime.get_xim_index_reposdir()

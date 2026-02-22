@@ -1,7 +1,7 @@
 import("base.log")
 import("config.i18n")
 
-import("xim.CmdProcessor")
+import("CmdProcessor")
 
 function _input_process(args)
 
@@ -35,8 +35,34 @@ function _input_process(args)
         ["--use"] = false, -- --use (string)
     }
 
-    if #args > 0 and args[1]:sub(1, 1) ~= '-' then
-        main_target = args[1]
+    -- When xlings passes "update --update index" / "search d2x" / "install -l" (after --), parse first word as command
+    if #args > 0 then
+        local first = args[1]
+        if first == "install" then
+            main_cmds["-i"] = true
+            if args[2] == "-l" then
+                kv_cmds["-l"] = ""
+                main_target = ""
+            else
+                main_target = args[2] or ""
+            end
+        elseif first == "remove" then
+            main_cmds["-r"] = true
+            main_target = args[2] or ""
+        elseif first == "update" then
+            main_cmds["-u"] = true
+            if args[2] == "--update" then
+                kv_cmds["--update"] = args[3] or ""
+                main_target = ""
+            else
+                main_target = args[2] or ""
+            end
+        elseif first == "search" then
+            main_cmds["-s"] = true
+            main_target = args[2] or ""
+        elseif first:sub(1, 1) ~= '-' then
+            main_target = first
+        end
     end
 
     for i = 1, #args do

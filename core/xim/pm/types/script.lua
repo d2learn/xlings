@@ -1,5 +1,5 @@
-import("xim.base.xvm")
-import("xim.base.runtime")
+import("base.xvm")
+import("base.runtime")
 
 function install(xpkg)
     local install_dir = runtime.get_pkginfo().install_dir
