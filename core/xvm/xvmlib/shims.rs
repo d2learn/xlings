@@ -1,8 +1,7 @@
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use std::sync::OnceLock;
-use std::thread;
-use std::time::Duration;
 
 use indexmap::IndexMap;
 
@@ -187,37 +186,60 @@ impl Program {
             alias_args = alias.split_whitespace().collect();
         }
 
-        const MAX_SPAWN_RETRIES: u32 = 5;
-        const RETRY_DELAY_MS: u64 = 500;
-
-        let mut last_err = None;
-        for attempt in 0..MAX_SPAWN_RETRIES {
-            let result = Command::new(&target)
-                .args(&alias_args)
-                .args(&self.args)
-                .envs([self.get_path_env()])
-                .envs([self.get_ld_library_path_env()])
-                .envs(build_extended_envs(self.envs.clone()))
-                .status();
-
-            match result {
-                Ok(status) => return status.code().unwrap_or(1),
-                Err(e) => {
-                    let retryable = e.raw_os_error() == Some(11); // EAGAIN: Resource temporarily unavailable
-                    last_err = Some(e);
-                    if retryable && attempt + 1 < MAX_SPAWN_RETRIES {
-                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                        continue;
-                    }
-                    break;
+        // If path is set and we run the program by name (no alias), check that the executable exists
+        let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
+            let base = Path::new(&self.path);
+            let exe_path = if cfg!(target_os = "windows") {
+                let exe = base.join(format!("{}.exe", self.name));
+                let bat = base.join(format!("{}.bat", self.name));
+                if exe.exists() {
+                    Some(exe)
+                } else if bat.exists() {
+                    Some(bat)
+                } else {
+                    None
+                }
+            } else {
+                let p = base.join(&self.name);
+                if p.exists() { Some(p) } else { None }
+            };
+            match exe_path {
+                Some(p) => Some(p),
+                None => {
+                    eprintln!("xvm: executable not found at {}", base.join(&self.name).display());
+                    #[cfg(target_os = "windows")]
+                    eprintln!("  (looked for {}.exe and {}.bat)", self.name, self.name);
+                    eprintln!("  path: {}", self.path);
+                    eprintln!("  hint: install with e.g. xlings install {}@<version>", self.name);
+                    return 1;
                 }
             }
-        }
+        } else {
+            None
+        };
 
-        if let Some(e) = last_err {
-            eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+        let mut cmd = if let Some(ref path) = program_path {
+            Command::new(path)
+        } else {
+            Command::new(&target)
+        };
+        let status = cmd
+            .args(alias_args)
+            .args(&self.args)
+            .envs([self.get_path_env()])
+            .envs([self.get_ld_library_path_env()])
+            .envs(build_extended_envs(self.envs.clone()))
+            .status();
+
+        match status {
+            Ok(status) => {
+                status.code().unwrap_or(1)
+            },
+            Err(e) => {
+                eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+                1
+            }
         }
-        1
 
         //println!("Program [{}] finished", self.name);
     }
@@ -267,41 +289,35 @@ impl Program {
 
     ///// private methods
 
-    /// Max path entries to inherit from current PATH to avoid execve E2BIG (Argument list too long).
-    const PATH_INHERIT_MAX_ENTRIES: usize = 96;
-
     fn get_path_env(&self) -> (String, String) {
 
         let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-        let workspace_bindir = XVM_WORKSPACE_BINDIR.get().unwrap();
         let mut new_path = self.path_env.clone();
 
-        // append workspace/bin: self.path_env > workspace/bin > current PATH
-        if !new_path.is_empty() {
-            new_path.push_str(separator);
-        }
-        new_path.push_str(workspace_bindir);
+        // append workspace/bin to path
+        // self.path_env priority is higher than workspace/bin
+        // workspace/bin priority is higher than current(system) PATH
+        new_path.push_str(separator);
+        new_path.push_str(XVM_WORKSPACE_BINDIR.get().unwrap());
 
         if cfg!(target_os = "windows") { // libpath -> path
+            // on windows, we need to append the workspace/lib to path
             new_path.push_str(separator);
             new_path.push_str(XVM_WORKSPACE_LIBDIR.get().unwrap());
         }
 
         let current_path = std::env::var("PATH").unwrap_or_default();
 
-        let inherited = if current_path.is_empty() {
-            String::new()
+        new_path = if current_path.is_empty() {
+            self.path_env.to_string()
         } else {
-            // Cap inherited entries to avoid execve(2) E2BIG (Argument list too long) in CI/crowded envs
-            let entries: Vec<&str> = current_path.split(separator).collect();
-            let take = std::cmp::min(entries.len(), Self::PATH_INHERIT_MAX_ENTRIES);
-            entries.into_iter().take(take).collect::<Vec<_>>().join(separator)
+            // if self.path_env is empty, then use current_path
+            if self.path_env.is_empty() {
+                current_path
+            } else {
+                format!("{}{}{}", self.path_env, separator, current_path)
+            }
         };
-
-        if !inherited.is_empty() {
-            new_path.push_str(separator);
-            new_path.push_str(&inherited);
-        }
 
         ("PATH".to_string(), new_path)
     }
@@ -323,18 +339,11 @@ impl Program {
 
             let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
 
-            let inherited_ld: String = if current_ld_path.is_empty() {
-                String::new()
-            } else {
-                let entries: Vec<&str> = current_ld_path.split(':').collect();
-                let take = std::cmp::min(entries.len(), Self::PATH_INHERIT_MAX_ENTRIES);
-                entries.into_iter().take(take).collect::<Vec<_>>().join(":")
-            };
-
-            let new_ld_path = if inherited_ld.is_empty() {
+            let new_ld_path = if current_ld_path.is_empty() {
                 ld_path.to_string()
             } else {
-                format!("{}:{}", ld_path, inherited_ld)
+                //let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+                format!("{}:{}", ld_path, current_ld_path)
             };
 
             (ld_library_path_env_name.to_string(), new_ld_path)
