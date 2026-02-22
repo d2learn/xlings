@@ -237,6 +237,12 @@ impl Program {
             },
             Err(e) => {
                 eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    if let Some(ref path) = program_path {
+                        eprintln!("  path: {}", path.display());
+                        eprintln!("  hint: the binary or a required library/interpreter may be missing (e.g. in minimal/CI environments).");
+                    }
+                }
                 1
             }
         }

@@ -54,7 +54,10 @@ fn main() {
             exit(status.code().unwrap_or(1));
         }
         Err(e) => {
-            eprintln!("Failed to execute `xvm run {}`: {}", executable_name, e); // 这里还能使用 `executable_name`
+            eprintln!("Failed to execute `xvm run {}`: {}", executable_name, e);
+            if e.kind() == std::io::ErrorKind::NotFound {
+                eprintln!("  hint: xvm not found in PATH. Set XLINGS_HOME or XLINGS_DATA and ensure xvm is in the corresponding bin directory.");
+            }
             exit(1);
         }
     }
