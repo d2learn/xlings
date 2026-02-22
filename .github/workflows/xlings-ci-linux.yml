@@ -96,6 +96,7 @@ jobs:
           # xlings install needs xmake (from earlier step: $HOME/.local/bin)
           export PATH="$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
           echo "PATH=$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
+          xmake --version
           xlings -h
           xvm --version || true
           xlings install gcc@15.1 -y
