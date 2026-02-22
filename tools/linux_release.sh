@@ -32,8 +32,8 @@ if ! xmake build -q 2>/dev/null; then
   xmake build 2>/dev/null || true
 fi
 
-echo "[linux_release] Building xvm (Rust)..."
-(cd core/xvm && cargo clean && cargo build --release -q 2>/dev/null || cargo build --release)
+echo "[linux_release] Building xvm (Rust) via release-build.sh..."
+(cd core/xvm && cargo clean && chmod +x release-build.sh && ./release-build.sh linux)
 
 echo "[linux_release] Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
@@ -64,13 +64,14 @@ exec "$(dirname "$SELF")/.xlings.real" "$@"
 WRAPPER
 chmod +x "$OUT_DIR/bin/xlings"
 
-# xvm and xvm-shim into data
-if [[ -f "core/xvm/target/release/xvm" ]]; then
-  cp core/xvm/target/release/xvm "$OUT_DIR/data/bin/"
+# xvm and xvm-shim into data (from release-build.sh musl output)
+XVM_RELEASE_DIR="core/xvm/target/x86_64-unknown-linux-musl/release"
+if [[ -f "$XVM_RELEASE_DIR/xvm" ]]; then
+  cp "$XVM_RELEASE_DIR/xvm" "$OUT_DIR/data/bin/"
   chmod +x "$OUT_DIR/data/bin/xvm"
 fi
-if [[ -f "core/xvm/target/release/xvm-shim" ]]; then
-  cp core/xvm/target/release/xvm-shim "$OUT_DIR/data/bin/xvm-shim"
+if [[ -f "$XVM_RELEASE_DIR/xvm-shim" ]]; then
+  cp "$XVM_RELEASE_DIR/xvm-shim" "$OUT_DIR/data/bin/xvm-shim"
   chmod +x "$OUT_DIR/data/bin/xvm-shim"
 fi
 

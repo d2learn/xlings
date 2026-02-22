@@ -55,6 +55,9 @@ jobs:
         with:
           workspaces: core/xvm
 
+      - name: Add Rust musl target (for xvm release-build.sh)
+        run: rustup target add x86_64-unknown-linux-musl
+
       - name: Configure xmake (GCC 15 SDK for C++23 std module)
         run: |
           export PATH="$HOME/.local/bin:$PATH"
