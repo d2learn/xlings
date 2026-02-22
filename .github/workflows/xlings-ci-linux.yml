@@ -67,7 +67,7 @@ jobs:
       - name: Build and test (linux_release)
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          export XLINGS_NOLINKSTATIC=1
+          # Build with static libstdc++/libgcc so the release binary runs after old xlings is removed
           cd "$GITHUB_WORKSPACE"
           chmod +x ./tools/linux_release.sh
           ./tools/linux_release.sh
