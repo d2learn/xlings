@@ -252,35 +252,41 @@ impl Program {
 
     ///// private methods
 
+    /// Max path entries to inherit from current PATH to avoid execve E2BIG (Argument list too long).
+    const PATH_INHERIT_MAX_ENTRIES: usize = 96;
+
     fn get_path_env(&self) -> (String, String) {
 
         let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let workspace_bindir = XVM_WORKSPACE_BINDIR.get().unwrap();
         let mut new_path = self.path_env.clone();
 
-        // append workspace/bin to path
-        // self.path_env priority is higher than workspace/bin
-        // workspace/bin priority is higher than current(system) PATH
-        new_path.push_str(separator);
-        new_path.push_str(XVM_WORKSPACE_BINDIR.get().unwrap());
+        // append workspace/bin: self.path_env > workspace/bin > current PATH
+        if !new_path.is_empty() {
+            new_path.push_str(separator);
+        }
+        new_path.push_str(workspace_bindir);
 
         if cfg!(target_os = "windows") { // libpath -> path
-            // on windows, we need to append the workspace/lib to path
             new_path.push_str(separator);
             new_path.push_str(XVM_WORKSPACE_LIBDIR.get().unwrap());
         }
 
         let current_path = std::env::var("PATH").unwrap_or_default();
 
-        new_path = if current_path.is_empty() {
-            self.path_env.to_string()
+        let inherited = if current_path.is_empty() {
+            String::new()
         } else {
-            // if self.path_env is empty, then use current_path
-            if self.path_env.is_empty() {
-                current_path
-            } else {
-                format!("{}{}{}", self.path_env, separator, current_path)
-            }
+            // Cap inherited entries to avoid execve(2) E2BIG (Argument list too long) in CI/crowded envs
+            let entries: Vec<&str> = current_path.split(separator).collect();
+            let take = std::cmp::min(entries.len(), Self::PATH_INHERIT_MAX_ENTRIES);
+            entries.into_iter().take(take).collect::<Vec<_>>().join(separator)
         };
+
+        if !inherited.is_empty() {
+            new_path.push_str(separator);
+            new_path.push_str(&inherited);
+        }
 
         ("PATH".to_string(), new_path)
     }
@@ -302,11 +308,18 @@ impl Program {
 
             let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
 
-            let new_ld_path = if current_ld_path.is_empty() {
+            let inherited_ld: String = if current_ld_path.is_empty() {
+                String::new()
+            } else {
+                let entries: Vec<&str> = current_ld_path.split(':').collect();
+                let take = std::cmp::min(entries.len(), Self::PATH_INHERIT_MAX_ENTRIES);
+                entries.into_iter().take(take).collect::<Vec<_>>().join(":")
+            };
+
+            let new_ld_path = if inherited_ld.is_empty() {
                 ld_path.to_string()
             } else {
-                //let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-                format!("{}:{}", ld_path, current_ld_path)
+                format!("{}:{}", ld_path, inherited_ld)
             };
 
             (ld_library_path_env_name.to_string(), new_ld_path)
