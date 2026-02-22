@@ -21,14 +21,18 @@ local function detect_xlings_home()
     return path.join(user_home or ".", ".xlings")
 end
 
--- Path resolution: XLINGS_DATA env > .xlings.json "data" field > default ($XLINGS_HOME/data)
+-- Path resolution: XLINGS_DATA env > .xlings.json "data" field (relative to xlings_home) > default ($XLINGS_HOME/data)
 local function detect_xlings_data(xlings_home)
     local env_data = os.getenv("XLINGS_DATA")
     if env_data and env_data ~= "" then
         return env_data
     end
-    if baseconfig["data"] then
-        return baseconfig["data"]
+    if baseconfig["data"] and baseconfig["data"] ~= "" then
+        local d = baseconfig["data"]
+        if path.is_absolute(d) then
+            return d
+        end
+        return path.join(xlings_home, d)
     end
     return path.join(xlings_home, "data")
 end

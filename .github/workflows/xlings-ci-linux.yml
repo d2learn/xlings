@@ -1,73 +1,74 @@
 name: xlings-ci-linux
 
-on: [push]
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  GIT_TERMINAL_PROMPT: 0
 
 jobs:
-
-  linux-test:
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: tools
+  build-and-test:
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install curl and git
-        run: sudo apt-get install -y curl git
-
-      - name: Installation Xlings on Ubuntu
-        run: ./install.unix.sh
-
-      - name: XIM Test on Ubuntu
+      - name: Install system deps
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xlings -h
-          xim -h
-          xim -l
-          xim --detect
-          xim -s v
-          xim -i d2x::d2ds -y
-          source ~/.bashrc
-          xim -l
-          xim -r d2x::d2ds -y
-          xim -l
+          sudo apt-get update -qq
+          sudo apt-get install -y curl git build-essential
+          # LLVM/Clang for C++23 std module (import std)
+          sudo apt-get install -y llvm-18 clang-18 libc++-18-dev 2>/dev/null || \
+            sudo apt-get install -y llvm-17 clang-17 libc++-17-dev 2>/dev/null || true
 
-      - name: XVM Test on Ubuntu
+      - name: Install xmake
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xlings install rust -y
-          cd ../core/xvm
-          cargo build
+          curl -fsSL https://xmake.io/shget.text | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "PATH=$HOME/.local/bin:$PATH" >> "$GITHUB_ENV"
 
-          ./target/debug/xvm -h
-          ./target/debug/xvm --version
-          
-          ./target/debug/xvm add node1 0.0.1 --alias "echo node1@0.0.1"
-          ./target/debug/xvm add node1 0.0.2 --alias "echo node1@0.0.2"
-          
-          ./target/debug/xvm add node2 0.0.1 --alias "echo node2@0.0.1" --binding node1@0.0.1
-          ./target/debug/xvm add node2 0.0.2 --alias "echo node2@0.0.2" --binding node1@0.0.2
-          
-          ./target/debug/xvm add node3 0.0.1 --alias "echo node3@0.0.1" --binding node1@0.0.1
-          ./target/debug/xvm add node3 0.0.2 --alias "echo node3@0.0.2" --binding node1@0.0.2
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-          node1 && node2 && node3
-          ./target/debug/xvm info node1
-          ./target/debug/xvm info node2
-          ./target/debug/xvm info node3
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
 
-          ./target/debug/xvm use node2 0.0.2
-
-          node1 && node2 && node3
-          ./target/debug/xvm info node1
-          ./target/debug/xvm info node2
-          ./target/debug/xvm info node3
-
-      - name: D2X Test on Ubuntu
+      - name: Configure xmake (C++23 std module)
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
-          d2x -h
-          d2x new helloworld
+          export PATH="$HOME/.local/bin:$PATH"
+          cd "$GITHUB_WORKSPACE"
+          for sdk in /usr/lib/llvm-18 /usr/lib/llvm-17; do
+            if [[ -d "$sdk" ]]; then
+              xmake f -p linux --toolchain=llvm --sdk="$sdk" && echo "Using LLVM SDK: $sdk" && exit 0
+            fi
+          done
+          echo "No LLVM SDK found, xmake will use default compiler"
+
+      - name: Build and test (linux_release)
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          export XLINGS_NOLINKSTATIC=1
+          cd "$GITHUB_WORKSPACE"
+          chmod +x ./tools/linux_release.sh
+          ./tools/linux_release.sh
+
+      - name: Prepare release artifact
+        run: |
+          tarball=$(ls build/xlings-*-linux-x86_64.tar.gz 2>/dev/null | head -1)
+          [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
+          cp "$tarball" build/release.tar.gz
+
+      - name: Attach artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: xlings-linux-x86_64
+          path: build/release.tar.gz

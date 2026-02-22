@@ -76,6 +76,26 @@ xlings install d2x:mcpp-standard
 - Communication Group (Q): 167535744 / 1006282943
 - [Community Forum](https://forum.d2learn.org/category/9/xlings): Discussions on related technologies, features, and issues
 
+## Testing
+
+Unit tests use [Google Test](https://github.com/google/googletest). From the project root:
+
+```bash
+# Smoke test only (no C++ modules, no SDK required)
+xmake build xlings_smoke_test && xmake run xlings_smoke_test
+
+# Full tests (requires same SDK as main binary, e.g. for import std)
+xmake f --sdk=/path/to/gcc-15   # or your toolchain
+xmake build xlings_test && xmake run xlings_test
+```
+
+Or run both via script (full tests only when `XLINGS_SDK` is set):
+
+```bash
+./tools/run_tests.sh
+XLINGS_SDK=/path/to/gcc-15 ./tools/run_tests.sh   # include full tests
+```
+
 ## Contributing
 
 - [Issue Handling and Bug Fixing
