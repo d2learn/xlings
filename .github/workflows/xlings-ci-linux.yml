@@ -25,9 +25,9 @@ jobs:
       - name: Install xmake (bundled v3.0.7)
         run: |
           XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-          curl -fsSL -o xmake.bin "$XMAKE_URL"
+          curl -fsSL -o xmake.bin "$XMAKE_URL" -H "Accept: application/octet-stream"
           mkdir -p xmake
-          (cd xmake && tar -xf ../xmake.bin) || (cd .. && sh ./xmake.bin -d "$PWD/xmake" -y)
+          (cd xmake && tar -xf ../xmake.bin) || (sh ./xmake.bin -d "$PWD/xmake" -y)
           rm -f xmake.bin
           sub=$(ls -d xmake/xmake-* 2>/dev/null | head -1)
           if [[ -n "$sub" && -x "$sub/bin/xmake" ]]; then
