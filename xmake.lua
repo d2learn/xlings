@@ -13,7 +13,9 @@ target("xlings")
     if is_plat("macosx") then
         add_ldflags("-lc++experimental", {force = true})
     elseif is_plat("linux") then
-        -- Static link for release (set XLINGS_NOLINKSTATIC=1 to skip, e.g. when SDK linker fails)
+        -- Use system dynamic linker (glibc) so binary is not tied to SDK path (e.g. /home/xlings/.xlings_data/...)
+        add_ldflags("-Wl,-dynamic-linker,/lib64/ld-linux-x86-64.so.2", {force = true})
+        -- Static link stdc++/gcc for release so binary does not depend on SDK libs
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static-libstdc++", "-static-libgcc", {force = true})
         end
