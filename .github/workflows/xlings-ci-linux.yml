@@ -20,7 +20,21 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y curl git build-essential xmake
+          sudo apt-get install -y curl git build-essential
+
+      - name: Install xmake (bundled v3.0.7)
+        run: |
+          XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
+          curl -fsSL -o xmake.bin "$XMAKE_URL"
+          mkdir -p xmake
+          (cd xmake && tar -xf ../xmake.bin) || (cd .. && sh ./xmake.bin -d "$PWD/xmake" -y)
+          rm -f xmake.bin
+          sub=$(ls -d xmake/xmake-* 2>/dev/null | head -1)
+          if [[ -n "$sub" && -x "$sub/bin/xmake" ]]; then
+            mv "$sub" xmake.tmp && rm -rf xmake && mv xmake.tmp xmake
+          fi
+          echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
+          xmake --version
 
       - name: Install old xlings (to get GCC 15.1)
         run: |
@@ -84,10 +98,10 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           export XLINGS_DATA="$XLINGS_HOME/data"
-          # xlings install needs xmake (apt-installed in /usr/bin)
           export PATH="$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
           echo "PATH=$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
-          xmake --version
+          # Package uses bundled xmake (tools/xmake) when system has none
+          xmake --version || true
           xlings -h
           xvm --version || true
           xlings install gcc@15.1 -y

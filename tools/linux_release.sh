@@ -50,7 +50,7 @@ fi
 cp "$BIN_SRC" "$OUT_DIR/bin/.xlings.real"
 chmod +x "$OUT_DIR/bin/.xlings.real"
 
-# bin/xlings wrapper: set XLINGS_HOME to package root so unpack-and-run works
+# bin/xlings wrapper: set XLINGS_HOME to package root; use bundled xmake if system has none
 cat > "$OUT_DIR/bin/xlings" << 'WRAPPER'
 #!/usr/bin/env bash
 set -e
@@ -60,6 +60,13 @@ XLINGS_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
 export XLINGS_HOME="$XLINGS_ROOT"
 export XLINGS_DATA="${XLINGS_DATA:-$XLINGS_ROOT/data}"
 export PATH="$XLINGS_DATA/bin:${PATH}"
+# If system has no xmake, prefer bundled one (xim and C++ invoke xmake)
+if ! command -v xmake &>/dev/null; then
+  BUNDLED_XMAKE="$XLINGS_ROOT/tools/xmake/bin/xmake"
+  if [[ -x "$BUNDLED_XMAKE" ]]; then
+    export PATH="$XLINGS_ROOT/tools/xmake/bin:${PATH}"
+  fi
+fi
 exec "$(dirname "$SELF")/.xlings.real" "$@"
 WRAPPER
 chmod +x "$OUT_DIR/bin/xlings"
@@ -77,6 +84,46 @@ fi
 
 # xim tree (Lua)
 cp -R core/xim "$OUT_DIR/"
+
+# Bundled xmake (so package works without system xmake)
+XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
+XMAKE_BUNDLE_DIR="$OUT_DIR/tools/xmake"
+XMAKE_DL="$OUT_DIR/tools/xmake.bin"
+mkdir -p "$OUT_DIR/tools"
+echo "[linux_release] Downloading bundled xmake..."
+if curl -fsSL -o "$XMAKE_DL" "$XMAKE_URL"; then
+  _xmake_extracted=
+  # Try tar (auto-detect gzip/xz) - extracts into current dir
+  if (cd "$OUT_DIR/tools" && tar -xf xmake.bin 2>/dev/null); then
+    _xmake_extracted=1
+  # Try makeself-style: script -d dest
+  elif (cd "$OUT_DIR/tools" && sh ./xmake.bin -d "$XMAKE_BUNDLE_DIR" -y 2>/dev/null); then
+    _xmake_extracted=1
+  fi
+  rm -f "$XMAKE_DL"
+  if [[ -n "$_xmake_extracted" ]]; then
+    # Tar extracts into OUT_DIR/tools; find the single top-level dir (e.g. xmake-v3.0.7) and move to tools/xmake
+    if [[ -x "$XMAKE_BUNDLE_DIR/bin/xmake" ]]; then
+      :
+    elif compgen -G "$XMAKE_BUNDLE_DIR/xmake-*/bin/xmake" >/dev/null 2>&1; then
+      _sub=$(ls -d "$XMAKE_BUNDLE_DIR"/xmake-* 2>/dev/null | head -1)
+      _tmp="$OUT_DIR/tools/xmake.tmp"
+      rm -rf "$_tmp"
+      mv "$_sub" "$_tmp"
+      rm -rf "$XMAKE_BUNDLE_DIR"
+      mv "$_tmp" "$XMAKE_BUNDLE_DIR"
+    elif compgen -G "$OUT_DIR/tools/xmake-*/bin/xmake" >/dev/null 2>&1; then
+      _sub=$(ls -d "$OUT_DIR/tools"/xmake-* 2>/dev/null | head -1)
+      rm -rf "$XMAKE_BUNDLE_DIR"
+      mv "$_sub" "$XMAKE_BUNDLE_DIR"
+    fi
+  fi
+fi
+if [[ -x "$XMAKE_BUNDLE_DIR/bin/xmake" ]]; then
+  echo "[linux_release] Bundled xmake: $XMAKE_BUNDLE_DIR/bin/xmake"
+else
+  echo "[linux_release] Warning: bundled xmake not available; package will require system xmake"
+fi
 
 # data/xim: xim will clone index repo on first run (xim --update index)
 mkdir -p "$OUT_DIR/data/xim"
