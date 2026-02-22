@@ -1,6 +1,8 @@
 use std::fs;
 use std::process::Command;
 use std::sync::OnceLock;
+use std::thread;
+use std::time::Duration;
 
 use indexmap::IndexMap;
 
@@ -185,24 +187,37 @@ impl Program {
             alias_args = alias.split_whitespace().collect();
         }
 
-        let status = Command::new(&target)
-            .args(alias_args)
-            .args(&self.args)
-            .envs([self.get_path_env()]) // .env("PATH", self.get_path_env())
-            // .env("XXLD_LIBRARY_PATH", self.get_ld_library_path_env())
-            .envs([self.get_ld_library_path_env()])
-            .envs(build_extended_envs(self.envs.clone()))
-            .status();
+        const MAX_SPAWN_RETRIES: u32 = 5;
+        const RETRY_DELAY_MS: u64 = 500;
 
-        match status {
-            Ok(status) => {
-                status.code().unwrap_or(1)
-            },
-            Err(e) => {
-                eprintln!("Failed to execute `xvm run {}`: {}", target, e);
-                1
+        let mut last_err = None;
+        for attempt in 0..MAX_SPAWN_RETRIES {
+            let result = Command::new(&target)
+                .args(&alias_args)
+                .args(&self.args)
+                .envs([self.get_path_env()])
+                .envs([self.get_ld_library_path_env()])
+                .envs(build_extended_envs(self.envs.clone()))
+                .status();
+
+            match result {
+                Ok(status) => return status.code().unwrap_or(1),
+                Err(e) => {
+                    let retryable = e.raw_os_error() == Some(11); // EAGAIN: Resource temporarily unavailable
+                    last_err = Some(e);
+                    if retryable && attempt + 1 < MAX_SPAWN_RETRIES {
+                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                        continue;
+                    }
+                    break;
+                }
             }
         }
+
+        if let Some(e) = last_err {
+            eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+        }
+        1
 
         //println!("Program [{}] finished", self.name);
     }
