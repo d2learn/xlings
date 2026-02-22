@@ -13,7 +13,7 @@ function Show-Progress {
     }
 }
 
-$xlingsBinDir = "C:\Users\Public\xlings\.xlings_data\bin"
+$xlingsBinDir = "C:\Users\Public\xlings\data\bin"
 $softwareName = "xlings"
 $tempDir = [System.IO.Path]::GetTempPath()
 $installDir = Join-Path $tempDir $softwareName

@@ -6,7 +6,7 @@ set "RUN_DIR=%cd%"
 set XLINGS_PROJECT_DIR=%SCRIPT_DIR%..
 set XLINGS_TMP_BIN_DIR=%XLINGS_PROJECT_DIR%\bin
 set XMAKE_BIN_DIR=%USERPROFILE%\xmake
-set XLINGS_BIN_DIR=C:\Users\Public\xlings\.xlings_data\bin
+set XLINGS_BIN_DIR=C:\Users\Public\xlings\data\bin
 
 set arg1=%1
 
@@ -42,7 +42,7 @@ IF %ERRORLEVEL% EQU 0 (
 
 REM 2. set xlings to PATH
 for /f "tokens=2*" %%a in ('reg query "HKEY_CURRENT_USER\Environment" /v PATH') do set UserPath=%%b
-echo %UserPath% | findstr /i "xlings_data" >nul
+echo %UserPath% | findstr /i "xlings" >nul
 if %errorlevel% neq 0 (
     echo [xlings]: set xlings to PATH
     setx PATH "%XLINGS_BIN_DIR%;%UserPath%"

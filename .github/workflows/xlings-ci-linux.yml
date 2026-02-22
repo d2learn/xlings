@@ -22,22 +22,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y curl git build-essential
 
-      - name: Setup GCC 15 SDK (C++23 std module)
+      - name: Install old xlings (to get GCC 15.1)
         run: |
-          cd "$GITHUB_WORKSPACE"
-          curl -fsSL -o gcc-sdk.tar.gz "https://github.com/xlings-res/gcc/releases/download/15.1.0/gcc-15.1.0-linux-x86_64.tar.gz"
-          mkdir -p build/sdk
-          tar -xzf gcc-sdk.tar.gz -C build/sdk
-          rm gcc-sdk.tar.gz
-          # SDK root: tarball may extract to build/sdk/ or build/sdk/gcc-*-linux-x86_64/
-          subdir=$(ls build/sdk 2>/dev/null | head -1)
-          if [[ -n "$subdir" && -d "build/sdk/$subdir/bin" ]]; then
-            sdk_root="build/sdk/$subdir"
-          else
-            sdk_root="build/sdk"
-          fi
-          echo "GCC_SDK=$GITHUB_WORKSPACE/$sdk_root" >> "$GITHUB_ENV"
-          echo "PATH=$GITHUB_WORKSPACE/$sdk_root/bin:$PATH" >> "$GITHUB_ENV"
+          curl -fsSL https://d2learn.org/xlings-install.sh | bash
+          # Old install may use .xlings_data (legacy) or data/; support both and /home/xlings (reference)
+          echo "OLD_XLINGS_PREFIX=$HOME/.xlings_data" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/.xlings_data/bin:$HOME/.xlings/data/bin:/home/xlings/.xlings_data/bin:/home/xlings/data/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Install GCC 15.1 with old xlings
+        run: |
+          export PATH="$HOME/.xlings_data/bin:$HOME/.xlings/data/bin:/home/xlings/.xlings_data/bin:/home/xlings/data/bin:$PATH"
+          xlings install gcc@15.1 -y
+          # Use GCC from xlings for building new xlings
+          GCC_BIN=$(which gcc)
+          GCC_SDK=$(dirname "$(dirname "$GCC_BIN")")
+          echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
+          echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install xmake
         run: |
@@ -77,6 +77,25 @@ jobs:
           tarball=$(ls build/xlings-*-linux-x86_64.tar.gz 2>/dev/null | head -1)
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
+
+      - name: Uninstall old xlings
+        run: |
+          rm -rf "$HOME/.xlings_data" "$HOME/.xlings" /home/xlings 2>/dev/null || true
+
+      - name: Install newly built xlings
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          tar -xzf build/release.tar.gz -C build
+          pkg_dir=$(ls -d build/xlings-*-linux-x86_64 2>/dev/null | head -1)
+          [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
+          export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
+          export XLINGS_DATA="$XLINGS_HOME/data"
+          export PATH="$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
+          echo "PATH=$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
+          xlings -h
+          xvm --version || true
+          xlings install gcc@15.1 -y
+          gcc --version || true
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

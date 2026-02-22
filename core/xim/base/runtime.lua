@@ -99,15 +99,11 @@ end
 
 function get_xim_data_dir()
     if __xim_data_dir == nil then
-        -- default xim data dir
-        __xim_data_dir = path.join(platform.get_config_info().rcachedir, "xim")
-        -- TODO: optimize to support custom data dir by config file
-        if is_host("windows") and os.isdir("D:/") then
-            if not os.isdir("D:/.xlings_data") then os.mkdir("D:/.xlings_data") end
-            __xim_data_dir = path.join("D:/.xlings_data", "xim")
-            if not os.isdir(__xim_data_dir) then
-                os.mkdir(__xim_data_dir)
-            end
+        -- xim data dir under XLINGS_DATA (default ~/.xlings/data), same on all platforms
+        local data_root = platform.get_config_info().rcachedir
+        __xim_data_dir = path.join(data_root, "xim")
+        if not os.isdir(__xim_data_dir) then
+            os.mkdir(__xim_data_dir)
         end
     end
     return __xim_data_dir

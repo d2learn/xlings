@@ -23,13 +23,13 @@ jobs:
 
       - name: XIM Test on macOS
         run: |
-          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          export PATH=/Users/xlings/data/bin:$PATH
           xlings -h
           xim -h
 
       - name: XVM Test on macOS
         run: |
-          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          export PATH=/Users/xlings/data/bin:$PATH
           xvm --version
           xvm -h
           xvm add cls 0.0.1 --alias=clear
@@ -38,6 +38,6 @@ jobs:
 
       - name: D2X Test on macOS
         run: |
-          export PATH=/Users/xlings/.xlings_data/bin:$PATH
+          export PATH=/Users/xlings/data/bin:$PATH
           d2x -h
           d2x new helloworld
