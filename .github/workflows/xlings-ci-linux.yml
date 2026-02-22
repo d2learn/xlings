@@ -20,7 +20,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y curl git build-essential
+          sudo apt-get install -y curl git build-essential xmake
 
       - name: Install old xlings (to get GCC 15.1)
         run: |
@@ -39,12 +39,6 @@ jobs:
           echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
           echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
 
-      - name: Install xmake
-        run: |
-          curl -fsSL https://xmake.io/shget.text | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          echo "PATH=$HOME/.local/bin:$PATH" >> "$GITHUB_ENV"
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -60,7 +54,6 @@ jobs:
 
       - name: Configure xmake (GCC 15 SDK for C++23 std module)
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
           cd "$GITHUB_WORKSPACE"
           [[ -z "$GCC_SDK" ]] && { echo "GCC_SDK not set"; exit 1; }
           [[ -x "$GCC_SDK/bin/gcc" ]] || { echo "GCC not found in $GCC_SDK/bin"; exit 1; }
@@ -69,8 +62,6 @@ jobs:
 
       - name: Build and test (linux_release)
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          # Build with static libstdc++/libgcc so the release binary runs after old xlings is removed
           cd "$GITHUB_WORKSPACE"
           chmod +x ./tools/linux_release.sh
           ./tools/linux_release.sh
@@ -93,9 +84,9 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           export XLINGS_DATA="$XLINGS_HOME/data"
-          # xlings install needs xmake (from earlier step: $HOME/.local/bin)
-          export PATH="$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
-          echo "PATH=$HOME/.local/bin:$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
+          # xlings install needs xmake (apt-installed in /usr/bin)
+          export PATH="$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
+          echo "PATH=$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
           xmake --version
           xlings -h
           xvm --version || true
