@@ -248,7 +248,7 @@ impl Program {
             Command::new(&target)
         };
         let status = cmd
-            .args(alias_args)
+            .args(&alias_args)
             .args(&self.args)
             .env("PATH", &path_env_value)
             .envs([self.get_ld_library_path_env()])
@@ -260,6 +260,25 @@ impl Program {
                 status.code().unwrap_or(1)
             },
             Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound
+                    && program_path.is_some()
+                    && cfg!(target_os = "linux")
+                {
+                    let bin_path = program_path.as_ref().unwrap();
+                    let ld_env = self.get_ld_library_path_env();
+                    let extended = build_extended_envs(self.envs.clone());
+                    let status_fallback = run_via_system_loader(
+                        bin_path,
+                        &alias_args,
+                        &self.args,
+                        &path_env_value,
+                        &ld_env,
+                        &extended,
+                    );
+                    if let Ok(s) = status_fallback {
+                        return s.code().unwrap_or(1);
+                    }
+                }
                 eprintln!("Failed to execute `xvm run {}`: {}", target, e);
                 if e.kind() == std::io::ErrorKind::NotFound {
                     if let Some(ref path) = program_path {
@@ -556,4 +575,41 @@ fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
             (key, new_val)
         })
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn system_loader_paths() -> Vec<&'static std::path::Path> {
+    use std::path::Path;
+    [
+        Path::new("/lib64/ld-linux-x86-64.so.2"),
+        Path::new("/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"),
+    ]
+    .to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn run_via_system_loader(
+    bin_path: &Path,
+    alias_args: &[&str],
+    args: &[String],
+    path_env_value: &str,
+    ld_env: &(String, String),
+    extended_envs: &[(String, String)],
+) -> std::io::Result<std::process::ExitStatus> {
+    let loader = system_loader_paths()
+        .into_iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no system ELF loader found"))?;
+    let mut cmd = Command::new(loader);
+    cmd.arg(bin_path)
+        .args(alias_args)
+        .args(args)
+        .env("PATH", path_env_value);
+    if ld_env.0 != "XVM_ENV_NULL" {
+        cmd.env(&ld_env.0, &ld_env.1);
+    }
+    for (k, v) in extended_envs {
+        cmd.env(k, v);
+    }
+    cmd.status()
 }

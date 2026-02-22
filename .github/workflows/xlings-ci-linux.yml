@@ -102,6 +102,8 @@ jobs:
           xlings -h
           xvm --version || true
           xlings install gcc@15.1 -y
+          /home/runner/work/xlings/xlings/build/xlings-0.1.0-linux-x86_64/data/xim/xpkgs/gcc/15.1.0/bin/gcc --version
+          echo "try to run gcc --version"
           gcc --version || true
 
       - name: Attach artifact
