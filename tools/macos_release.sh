@@ -39,6 +39,13 @@ xmake build xlings 2>&1 || fail "xmake build failed"
 BIN_SRC="build/macosx/${ARCH}/release/xlings"
 [[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"
 
+info "Verifying no LLVM toolchain dependency..."
+if otool -L "$BIN_SRC" | grep -q "llvm"; then
+    otool -L "$BIN_SRC"
+    fail "Binary still links against LLVM dylib"
+fi
+info "OK: binary has no LLVM runtime dependency"
+
 # ── 2. Build xvm (Rust) ─────────────────────────────────────────
 info "Building xvm (Rust)..."
 (cd core/xvm && cargo build --release)

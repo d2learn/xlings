@@ -11,14 +11,12 @@ target("xlings")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
-        -- brew install llvm@20
-        -- macOS: use dynamic linking to avoid ABI conflicts with dependencies
-        -- Dependencies (ftxui, llmapi) are built with system libc++
-        -- Static linking causes memory allocator conflicts
-        add_linkdirs("/opt/homebrew/Cellar/llvm@20/20.1.8/lib/c++")
-        add_ldflags("-lc++experimental", {force = true})
-        -- Add rpath to find homebrew libc++ at runtime
-        add_ldflags("-Wl,-rpath,/opt/homebrew/opt/llvm@20/lib/c++", {force = true})
+        local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
+        local libcxx_dir = llvm_prefix .. "/lib/c++"
+        -- Static link libc++ so binary has no runtime dependency on LLVM toolchain
+        add_ldflags("-nostdlib++", {force = true})
+        add_ldflags(libcxx_dir .. "/libc++.a", {force = true})
+        add_ldflags(libcxx_dir .. "/libc++experimental.a", {force = true})
     elseif is_plat("linux") then
         -- Use system dynamic linker (glibc) so binary is not tied to SDK path (e.g. /home/xlings/.xlings_data/...)
         add_ldflags("-Wl,-dynamic-linker,/lib64/ld-linux-x86-64.so.2", {force = true})
