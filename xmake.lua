@@ -17,7 +17,7 @@ target("xlings")
         add_ldflags("-nostdlib++", {force = true})
         add_ldflags(libcxx_dir .. "/libc++.a", {force = true})
         add_ldflags(libcxx_dir .. "/libc++experimental.a", {force = true})
-        add_ldflags("-lc++abi", {force = true})
+        add_ldflags(libcxx_dir .. "/libc++abi.a", {force = true})
     elseif is_plat("linux") then
         -- Use system dynamic linker (glibc) so binary is not tied to SDK path (e.g. /home/xlings/.xlings_data/...)
         add_ldflags("-Wl,-dynamic-linker,/lib64/ld-linux-x86-64.so.2", {force = true})
