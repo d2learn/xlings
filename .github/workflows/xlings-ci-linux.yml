@@ -42,11 +42,23 @@ jobs:
           mkdir -p gcc-sdk
           tar -xzf gcc.tar.gz -C gcc-sdk --strip-components=1
           GCC_SDK="$GITHUB_WORKSPACE/gcc-sdk"
+
+          # Pre-built GCC binaries have a non-standard ELF interpreter path.
+          # Patch all ELF executables to use the system dynamic linker.
+          sudo apt-get install -q -y patchelf
+          SYS_INTERP=$(patchelf --print-interpreter /usr/bin/ls)
+          echo "System interpreter: $SYS_INTERP"
+          find "$GCC_SDK" -type f -executable | while read -r f; do
+            if file "$f" | grep -qE 'ELF.*(executable|pie executable)'; then
+              patchelf --set-interpreter "$SYS_INTERP" "$f" 2>/dev/null || true
+            fi
+          done
+
           echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
           echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
-          echo "=== GCC SDK contents ==="
-          ls "$GCC_SDK/bin/" | head -20
-          "$GCC_SDK/bin/gcc" --version || echo "WARN: gcc not found at $GCC_SDK/bin/gcc"
+          echo "LD_LIBRARY_PATH=$GCC_SDK/lib64:$GCC_SDK/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+          echo "=== GCC SDK verification ==="
+          "$GCC_SDK/bin/gcc" --version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

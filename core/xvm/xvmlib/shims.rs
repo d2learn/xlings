@@ -240,7 +240,7 @@ impl Program {
                     eprintln!("xvm: executable not found at {}", base.join(&self.name).display());
                     eprintln!("  (also tried {})", base.join("bin").join(&self.name).display());
                     #[cfg(target_os = "windows")]
-                    eprintln!("  (looked for {}.exe and {}.bat in path and path/bin)", self.name);
+                    eprintln!("  (looked for {}.exe and {}.bat in path and path/bin)", self.name, self.name);
                     eprintln!("  path: {}", self.path);
                     eprintln!("  hint: install with e.g. xlings install {}@<version>", self.name);
                     return 1;
