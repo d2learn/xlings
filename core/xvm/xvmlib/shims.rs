@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
@@ -188,7 +188,16 @@ impl Program {
 
         // If path is set and we run the program by name (no alias), resolve executable (path/name or path/bin/name)
         let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
-            let base = Path::new(&self.path);
+            // Resolve relative path against XLINGS_DATA (workspace dir) for package bootstrap entries
+            let mut base: std::path::PathBuf = if Path::new(&self.path).is_relative() {
+                XVM_WORKSPACE_DIR.get().map(|w| Path::new(w).join(&self.path)).unwrap_or_else(|| PathBuf::from(&self.path))
+            } else {
+                PathBuf::from(&self.path)
+            };
+            // Normalize base (resolve ".." and ".") so exists() and Command::new() find the binary reliably
+            if let Ok(canon) = fs::canonicalize(&base) {
+                base = canon;
+            }
             let candidates: Vec<std::path::PathBuf> = if cfg!(target_os = "windows") {
                 let names = [
                     format!("{}.exe", self.name),

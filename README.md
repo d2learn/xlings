@@ -71,6 +71,13 @@ xlings install d2x:mcpp-standard
 
 👉 [more details...](https://xlings.d2learn.org/en/documents/quick-start/install-and-version.html)
 
+## Environment
+
+When using the **Linux release package** (e.g. `xlings-*-linux-x86_64.tar.gz`):
+
+- **`bin/`** — Real binaries (`xlings`, `xvm`, `xvm-shim`). Use these with your existing `XLINGS_HOME`/`XLINGS_DATA` (or defaults). Add `bin/` to PATH for the default/system xlings behavior.
+- **`data/bin/`** — xvm shims (including `xlings`, `xvm`, `xvm-shim` and any installed tools). Running anything from `data/bin/` uses the **package’s isolated environment** (package `XLINGS_HOME`/`XLINGS_DATA`). Add `data/bin/` to PATH to use the package in a self-contained way.
+
 ## Community
 
 - Communication Group (Q): 167535744 / 1006282943
