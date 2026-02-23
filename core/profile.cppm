@@ -1,0 +1,237 @@
+module;
+
+#include <ctime>
+
+export module xlings.profile;
+
+import std;
+
+import xlings.config;
+import xlings.json;
+import xlings.log;
+import xlings.utils;
+
+namespace xlings::profile {
+
+namespace fs = std::filesystem;
+
+export struct Generation {
+    int                                    number;
+    std::string                            created;
+    std::string                            reason;
+    std::map<std::string, std::string>     packages;
+};
+
+std::string utc_now_iso_() {
+    auto now   = std::chrono::system_clock::now();
+    auto nowTT = std::chrono::system_clock::to_time_t(now);
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&nowTT));
+    return buf;
+}
+
+int next_gen_number_(const fs::path& gensDir) {
+    int maxNum = 0;
+    if (!fs::exists(gensDir)) return 1;
+    for (auto& entry : fs::directory_iterator(gensDir)) {
+        auto stem = entry.path().stem().string();
+        try { maxNum = std::max(maxNum, std::stoi(stem)); }
+        catch (...) {}
+    }
+    return maxNum + 1;
+}
+
+void sync_workspace_yaml_(const fs::path& envDir,
+                          const std::map<std::string, std::string>& packages) {
+    auto xvmDir = envDir / "xvm";
+    fs::create_directories(xvmDir);
+    auto yamlPath = xvmDir / ".workspace.xvm.yaml";
+
+    std::string yaml = "versions:\n";
+    for (auto& [name, ver] : packages) {
+        yaml += "  " + name + ": " + ver + "\n";
+    }
+    utils::write_string_to_file(yamlPath.string(), yaml);
+}
+
+std::uintmax_t dir_size_(const fs::path& dir) {
+    std::uintmax_t total = 0;
+    std::error_code ec;
+    for (auto& entry : fs::recursive_directory_iterator(dir, ec)) {
+        if (entry.is_regular_file())
+            total += entry.file_size();
+    }
+    return total;
+}
+
+export Generation load_current(const fs::path& envDir) {
+    auto profilePath = envDir / ".profile.json";
+    if (!fs::exists(profilePath)) return {0, "", "init", {}};
+    try {
+        auto content = utils::read_file_to_string(profilePath.string());
+        auto json = nlohmann::json::parse(content);
+        Generation gen;
+        gen.number  = json.value("current_generation", 0);
+        gen.created = json.value("created", "");
+        gen.reason  = json.value("reason", "");
+        if (json.contains("packages") && json["packages"].is_object()) {
+            for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
+                gen.packages[it.key()] = it.value().get<std::string>();
+        }
+        return gen;
+    } catch (...) { return {0, "", "init", {}}; }
+}
+
+export int commit(const fs::path& envDir,
+                  std::map<std::string, std::string> packages,
+                  const std::string& reason) {
+    auto gensDir = envDir / "generations";
+    fs::create_directories(gensDir);
+
+    int nextGen = next_gen_number_(gensDir);
+    auto now = utc_now_iso_();
+
+    nlohmann::json genJson = {
+        {"generation", nextGen},
+        {"created",    now},
+        {"reason",     reason},
+        {"packages",   packages}
+    };
+    auto genFile = gensDir / (std::format("{:03d}", nextGen) + ".json");
+    utils::write_string_to_file(genFile.string(), genJson.dump(2));
+
+    nlohmann::json profileJson = {
+        {"current_generation", nextGen},
+        {"packages",           packages}
+    };
+    utils::write_string_to_file((envDir / ".profile.json").string(),
+                                profileJson.dump(2));
+
+    sync_workspace_yaml_(envDir, packages);
+
+    return 0;
+}
+
+export std::vector<Generation> list_generations(const fs::path& envDir) {
+    std::vector<Generation> result;
+    auto gensDir = envDir / "generations";
+    if (!fs::exists(gensDir)) return result;
+
+    for (auto& entry : fs::directory_iterator(gensDir)) {
+        if (!entry.is_regular_file()) continue;
+        try {
+            auto content = utils::read_file_to_string(entry.path().string());
+            auto json = nlohmann::json::parse(content);
+            Generation gen;
+            gen.number  = json.value("generation", 0);
+            gen.created = json.value("created", "");
+            gen.reason  = json.value("reason", "");
+            if (json.contains("packages") && json["packages"].is_object())
+                for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
+                    gen.packages[it.key()] = it.value().get<std::string>();
+            result.push_back(gen);
+        } catch (...) {}
+    }
+
+    std::ranges::sort(result, {}, &Generation::number);
+    return result;
+}
+
+export int rollback(const fs::path& envDir, int targetGen) {
+    std::map<std::string, std::string> packages;
+
+    if (targetGen > 0) {
+        auto gensDir = envDir / "generations";
+        auto genFile = gensDir / (std::format("{:03d}", targetGen) + ".json");
+        if (!fs::exists(genFile)) {
+            log::error("[xlings:profile] generation {} not found", targetGen);
+            return 1;
+        }
+        try {
+            auto content = utils::read_file_to_string(genFile.string());
+            auto json = nlohmann::json::parse(content);
+            for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
+                packages[it.key()] = it.value().get<std::string>();
+        } catch (...) {
+            log::error("[xlings:profile] failed to read generation {}", targetGen);
+            return 1;
+        }
+    }
+
+    sync_workspace_yaml_(envDir, packages);
+
+    nlohmann::json profileJson = {
+        {"current_generation", targetGen},
+        {"packages",           packages}
+    };
+    utils::write_string_to_file((envDir / ".profile.json").string(),
+                                profileJson.dump(2));
+
+    std::println("[xlings:profile] rolled back to generation {}", targetGen);
+    return 0;
+}
+
+export int gc(const fs::path& xlingsHome, bool dryRun = false) {
+    std::set<std::string> referenced;
+
+    auto subosDir = xlingsHome / "subos";
+    if (fs::exists(subosDir)) {
+        for (auto& envEntry : fs::directory_iterator(subosDir)) {
+            if (!envEntry.is_directory()) continue;
+            auto gensDir = envEntry.path() / "generations";
+            if (!fs::exists(gensDir)) continue;
+            for (auto& genEntry : fs::directory_iterator(gensDir)) {
+                try {
+                    auto content = utils::read_file_to_string(genEntry.path().string());
+                    auto json = nlohmann::json::parse(content);
+                    for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
+                        referenced.insert(it.key() + "@" + it.value().get<std::string>());
+                } catch (...) {}
+            }
+        }
+    }
+
+    auto pkgDir = xlingsHome / "data" / "xpkgs";
+    if (!fs::exists(pkgDir)) {
+        std::println("[xlings:store] xpkgs not found, nothing to gc");
+        return 0;
+    }
+
+    std::uintmax_t freedBytes = 0;
+    int removedCount = 0;
+
+    for (auto& pkgEntry : fs::directory_iterator(pkgDir)) {
+        if (!pkgEntry.is_directory()) continue;
+        auto pkgName = pkgEntry.path().filename().string();
+        for (auto& verEntry : fs::directory_iterator(pkgEntry)) {
+            if (!verEntry.is_directory()) continue;
+            auto ver = verEntry.path().filename().string();
+            auto key = pkgName + "@" + ver;
+            if (!referenced.count(key)) {
+                auto size = dir_size_(verEntry.path());
+                if (dryRun) {
+                    std::println("  would remove xpkgs/{}/{} ({:.1f} MB)",
+                        pkgName, ver, static_cast<double>(size) / 1e6);
+                } else {
+                    std::error_code ec;
+                    fs::remove_all(verEntry.path(), ec);
+                    if (!ec)
+                        std::println("[xlings:store] removed xpkgs/{}/{}", pkgName, ver);
+                }
+                freedBytes += size;
+                ++removedCount;
+            }
+        }
+    }
+
+    if (dryRun) {
+        std::println("[xlings:store] gc dry-run: {} packages, {:.1f} MB would be freed",
+            removedCount, static_cast<double>(freedBytes) / 1e6);
+    } else {
+        std::println("[xlings:store] gc: {} packages removed, {:.1f} MB freed",
+            removedCount, static_cast<double>(freedBytes) / 1e6);
+    }
+    return 0;
+}
+
+} // namespace xlings::profile

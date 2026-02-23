@@ -82,6 +82,14 @@ std::string ask_input(const std::string& prompt, const std::string& defaultValue
     return input.empty() ? defaultValue : input;
 }
 
+void write_string_to_file(const std::string& filepath, const std::string& content) {
+    std::ofstream ofs(filepath, std::ios::trunc);
+    if (!ofs.is_open()) {
+        throw std::runtime_error("Failed to write file: " + filepath);
+    }
+    ofs << content;
+}
+
 void print_separator(const std::string& title) {
     std::println("\n=== {} ===", title);
 }

@@ -2,6 +2,9 @@ module;
 
 #include <cstdio>
 #include <cstdlib>
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 
 export module xlings.platform:linux;
 
@@ -13,6 +16,14 @@ namespace xlings {
 namespace platform_impl {
 
     export constexpr char PATH_SEPARATOR = ':';
+
+    export std::filesystem::path get_executable_path() {
+        char buf[4096];
+        ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n == -1) return {};
+        buf[n] = '\0';
+        return std::filesystem::path(buf);
+    }
 
     export std::pair<int, std::string> run_command_capture(const std::string& cmd) {
         std::string full = cmd + " 2>&1";

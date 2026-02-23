@@ -95,16 +95,70 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           export XLINGS_DATA="$XLINGS_HOME/data"
-          export PATH="$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH"
-          echo "PATH=$XLINGS_HOME/bin:$XLINGS_DATA/bin:$PATH" >> "$GITHUB_ENV"
-          # Package uses bundled xmake (tools/xmake) when system has none
+          export XLINGS_SUBOS="$XLINGS_HOME/subos/default"
+          export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH"
+          echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
+          echo "XLINGS_DATA=$XLINGS_DATA" >> "$GITHUB_ENV"
+          echo "XLINGS_SUBOS=$XLINGS_SUBOS" >> "$GITHUB_ENV"
+          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH" >> "$GITHUB_ENV"
           xmake --version || true
           xlings -h
           xvm --version || true
-          xlings install gcc@15.1 -y
-          /home/runner/work/xlings/xlings/build/xlings-0.1.0-linux-x86_64/data/xim/xpkgs/gcc/15.1.0/bin/gcc --version
-          echo "try to run gcc --version"
-          gcc --version || true
+          echo "=== subos/current symlink ==="
+          ls -la "$XLINGS_HOME/subos/current"
+          readlink "$XLINGS_HOME/subos/current"
+
+      - name: "Test: install d2x@0.1.0 in default subos"
+        run: |
+          echo "=== Install d2x@0.1.0 in default subos ==="
+          xlings install d2x@0.1.0 -y
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "default subos d2x version: $D2X_VER"
+          echo "$D2X_VER" | grep -q "0.1.0" || { echo "FAIL: expected 0.1.0, got $D2X_VER"; exit 1; }
+          echo "OK: default subos has d2x 0.1.0"
+
+      - name: "Test: create dev subos and install d2x@0.1.2"
+        run: |
+          echo "=== Create dev subos ==="
+          xlings subos new dev
+          xlings subos use dev
+          echo "=== Verify subos/current points to dev ==="
+          readlink "$XLINGS_HOME/subos/current" | grep -q "dev" || \
+            { echo "FAIL: subos/current not pointing to dev"; ls -la "$XLINGS_HOME/subos/current"; exit 1; }
+          echo "=== Install d2x@0.1.2 in dev subos ==="
+          xlings install d2x@0.1.2 -y
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "dev subos d2x version: $D2X_VER"
+          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
+          echo "OK: dev subos has d2x 0.1.2"
+
+      - name: "Test: switch back to default and verify isolation"
+        run: |
+          echo "=== Switch back to default ==="
+          xlings subos use default
+          readlink "$XLINGS_HOME/subos/current" | grep -q "default" || \
+            { echo "FAIL: subos/current not pointing to default"; exit 1; }
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "default subos d2x version after switch: $D2X_VER"
+          echo "$D2X_VER" | grep -q "0.1.0" || { echo "FAIL: expected 0.1.0, got $D2X_VER"; exit 1; }
+          echo "OK: isolation verified - default still has d2x 0.1.0"
+
+          echo "=== Switch to dev again ==="
+          xlings subos use dev
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "dev subos d2x version after switch: $D2X_VER"
+          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
+          echo "OK: isolation verified - dev still has d2x 0.1.2"
+
+          echo "=== subos list ==="
+          xlings subos list
+
+      - name: "Test: remove dev subos"
+        run: |
+          xlings subos use default
+          xlings subos remove dev
+          xlings subos list
+          echo "OK: dev subos removed"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

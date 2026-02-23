@@ -99,9 +99,12 @@ end
 
 function get_xim_data_dir()
     if __xim_data_dir == nil then
-        -- xim data dir under XLINGS_DATA (default ~/.xlings/data), same on all platforms
-        local data_root = platform.get_config_info().rcachedir
-        __xim_data_dir = path.join(data_root, "xim")
+        local env_data = os.getenv("XLINGS_DATA")
+        if env_data and env_data ~= "" then
+            __xim_data_dir = env_data
+        else
+            __xim_data_dir = path.join(platform.get_config_info().homedir, "data")
+        end
         if not os.isdir(__xim_data_dir) then
             os.mkdir(__xim_data_dir)
         end
@@ -111,7 +114,6 @@ end
 
 function get_xim_install_basedir()
     if __xim_install_basedir == nil then
-        -- default xim install basedir
         __xim_install_basedir = path.join(get_xim_data_dir(), "xpkgs")
     end
     return __xim_install_basedir

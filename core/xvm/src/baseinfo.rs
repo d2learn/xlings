@@ -80,18 +80,18 @@ pub mod platform {
         }
     }
 
-    /// XLINGS_DATA dir: env XLINGS_DATA > $HOME/.xlings/data
+    /// Per-subos home: env XLINGS_SUBOS > $XLINGS_HOME/subos/default
     pub fn xvm_homedir() -> PathBuf {
-        if let Ok(data) = env::var("XLINGS_DATA") {
-            return PathBuf::from(data);
+        if let Ok(subos) = env::var("XLINGS_SUBOS") {
+            return PathBuf::from(subos);
         }
         let xlings_home = env::var("XLINGS_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|_| user_home_dir().join(".xlings"));
-        xlings_home.join("data")
+        xlings_home.join("subos").join("default")
     }
 
-    /// XVM data dir: $XLINGS_DATA/xvm
+    /// XVM data dir: $XLINGS_SUBOS/xvm
     pub fn xvm_datadir() -> String {
         xvm_homedir().join("xvm").to_string_lossy().to_string()
     }

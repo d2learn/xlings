@@ -167,6 +167,8 @@ function XPkgManager:info(xpkg)
         { key = "homepage",     label = "homepage" },
         { key = "version",      label = "version" },
         { key = "namespace",    label = "namespace" },
+        { key = "source",       label = "source" },
+        { key = "maintainer",   label = "maintainer" },
         { key = "authors",      label = "authors" },
         { key = "maintainers",  label = "maintainers" },
         { key = "contributors", label = "contributors" },

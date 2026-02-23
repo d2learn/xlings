@@ -38,6 +38,8 @@ function XPackage:info()
         name = self.pdata.name,
         homepage = self.pdata.homepage,
         version = self.version,
+        source = self.pdata.source,
+        maintainer = self.pdata.maintainer,
         authors = self.pdata.authors,
         maintainers = self.pdata.maintainers,
         categories = self.pdata.categories,

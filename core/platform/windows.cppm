@@ -1,6 +1,9 @@
 module;
 
 #include <cstdlib>
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 export module xlings.platform:windows;
 
@@ -12,6 +15,13 @@ namespace xlings {
 namespace platform_impl {
 
     export constexpr char PATH_SEPARATOR = ';';
+
+    export std::filesystem::path get_executable_path() {
+        wchar_t buf[MAX_PATH];
+        DWORD n = ::GetModuleFileNameW(nullptr, buf, MAX_PATH);
+        if (n == 0) return {};
+        return std::filesystem::path(buf);
+    }
 
     export std::pair<int, std::string> run_command_capture(const std::string& cmd) {
         std::string full = cmd + " 2>&1";

@@ -26,8 +26,9 @@ end
 
 local function config()
     local cfg = pconfig()
-    cprint("XLINGS_HOME: %s", cfg.homedir or "")
-    cprint("XLINGS_DATA: %s", cfg.rcachedir or "")
+    cprint("XLINGS_HOME:  %s", cfg.homedir or "")
+    cprint("XLINGS_DATA:  %s", cfg.rcachedir or "")
+    cprint("XLINGS_SUBOS: %s", cfg.subosdir or "")
     cprint("  bin: %s", cfg.bindir or "")
     cprint("  lib: %s", cfg.libdir or "")
 end

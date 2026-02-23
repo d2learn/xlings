@@ -2,6 +2,10 @@ module;
 
 #include <cstdio>
 #include <cstdlib>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <stdlib.h>
+#endif
 
 export module xlings.platform:macos;
 
@@ -13,6 +17,15 @@ namespace xlings {
 namespace platform_impl {
 
     export constexpr char PATH_SEPARATOR = ':';
+
+    export std::filesystem::path get_executable_path() {
+        char buf[4096];
+        uint32_t size = sizeof(buf);
+        if (::_NSGetExecutablePath(buf, &size) != 0) return {};
+        char real[4096];
+        if (::realpath(buf, real) == nullptr) return std::filesystem::path(buf);
+        return std::filesystem::path(real);
+    }
 
     export std::pair<int, std::string> run_command_capture(const std::string& cmd) {
         std::string full = cmd + " 2>&1";

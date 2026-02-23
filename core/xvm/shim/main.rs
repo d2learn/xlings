@@ -3,8 +3,8 @@ use std::path::{ Path, PathBuf };
 use std::process::{Command, exit};
 
 fn default_xlings_bindir() -> PathBuf {
-    if let Ok(data) = env::var("XLINGS_DATA") {
-        return PathBuf::from(data).join("bin");
+    if let Ok(subos) = env::var("XLINGS_SUBOS") {
+        return PathBuf::from(subos).join("bin");
     }
     let xlings_home = env::var("XLINGS_HOME")
         .map(PathBuf::from)
@@ -16,25 +16,35 @@ fn default_xlings_bindir() -> PathBuf {
             };
             PathBuf::from(home).join(".xlings")
         });
-    xlings_home.join("data").join("bin")
+    xlings_home.join("subos").join("default").join("bin")
 }
 
-/// If the current executable is under .../data/bin/, return (data_dir, pkg_root). Caller sets XLINGS_* on command
-/// and should run pkg_root/bin/xvm to avoid recursing into data/bin/xvm shim.
-fn detect_package_data_bin() -> Option<(PathBuf, PathBuf)> {
+/// Detect if running from a package layout and return (subos_dir, pkg_root).
+/// Supports two layouts:
+///   Legacy:  .../data/bin/<shim>        → subos_dir=.../data,           pkg_root=...
+///   SubOS:   .../subos/<name>/bin/<shim> → subos_dir=.../subos/<name>, pkg_root=...
+fn detect_package_layout() -> Option<(PathBuf, PathBuf)> {
     let exe_path = std::env::current_exe()
         .ok()
         .or_else(|| env::args().next().map(PathBuf::from));
     let path_buf = exe_path?;
     let path_str = path_buf.to_string_lossy();
-    let in_data_bin = path_str.contains("/data/bin/") || path_str.contains("\\data\\bin\\");
-    if !in_data_bin {
-        return None;
+
+    let bin_dir = path_buf.parent()?;
+    let subos_dir = bin_dir.parent()?;
+
+    if path_str.contains("/data/bin/") || path_str.contains("\\data\\bin\\") {
+        let pkg_root = subos_dir.parent()?;
+        return Some((subos_dir.to_path_buf(), pkg_root.to_path_buf()));
     }
-    let data_bin = path_buf.parent()?;
-    let data_dir = data_bin.parent()?;
-    let pkg_root = data_dir.parent()?;
-    Some((data_dir.to_path_buf(), pkg_root.to_path_buf()))
+
+    if path_str.contains("/subos/") || path_str.contains("\\subos\\") {
+        let subos_parent = subos_dir.parent()?;
+        let pkg_root = subos_parent.parent()?;
+        return Some((subos_dir.to_path_buf(), pkg_root.to_path_buf()));
+    }
+
+    None
 }
 
 fn main() {
@@ -49,7 +59,7 @@ fn main() {
 
     args.remove(0);
 
-    let pkg = detect_package_data_bin();
+    let pkg = detect_package_layout();
     let xvm_bin: String = pkg
         .as_ref()
         .and_then(|(_, pkg_root)| {
@@ -68,12 +78,12 @@ fn main() {
     command.arg("--args");
     command.args(&args);
 
-    if let Some((ref data_dir, ref pkg_root)) = pkg {
-        command.env("XLINGS_DATA", data_dir);
+    if let Some((ref subos_dir, ref pkg_root)) = pkg {
         command.env("XLINGS_HOME", pkg_root);
+        command.env("XLINGS_DATA", pkg_root.join("data"));
+        command.env("XLINGS_SUBOS", subos_dir);
     }
 
-    // append XLINGS_BINDIR to PATH (use package data/bin when in package mode)
     let path_var = env::var_os("PATH").unwrap_or_default();
     let mut paths = env::split_paths(&path_var).collect::<Vec<_>>();
     let bindir = pkg.as_ref().map(|(d, _)| d.join("bin")).unwrap_or_else(default_xlings_bindir);
@@ -92,7 +102,7 @@ fn main() {
         Err(e) => {
             eprintln!("Failed to execute `xvm run {}`: {}", executable_name, e);
             if e.kind() == std::io::ErrorKind::NotFound {
-                eprintln!("  hint: xvm not found in PATH. Set XLINGS_HOME or XLINGS_DATA and ensure xvm is in the corresponding bin directory.");
+                eprintln!("  hint: xvm not found in PATH. Set XLINGS_HOME or XLINGS_SUBOS.");
             }
             exit(1);
         }

@@ -14,7 +14,7 @@ import("pm.XPackage")
 import("pm.PkgManagerService")
 import("index.IndexManager")
 
--- Aggregate dep libs (*.so) from xpkgs into target_libdir (e.g. data/linux/lib) so apps like d2x find glibc/openssl
+-- Aggregate dep libs (*.so) from xpkgs into target_libdir (e.g. subos/<name>/lib) so apps like d2x find glibc/openssl
 local function aggregate_dep_libs_to(deps_list, target_libdir)
     if not deps_list or not is_host("linux") or not target_libdir then return end
     local xpkgs = runtime.get_xim_install_basedir()
@@ -38,7 +38,7 @@ local function aggregate_dep_libs_to(deps_list, target_libdir)
                 if os.isdir(srcdir) then
                     if not os.isdir(target_libdir) then os.mkdir(target_libdir) end
                     for _, f in ipairs(os.files(path.join(srcdir, "*.so*"))) do
-                        os.cp(f, path.join(target_libdir, path.filename(f)), {force = true})
+                        os.ln(f, path.join(target_libdir, path.filename(f)), {force = true})
                     end
                     break
                 end
@@ -310,10 +310,9 @@ function CmdProcessor:install()
 
             if self._pm_executor:install(xpkg) then
                 self:_restart_tips()
-                -- aggregate deps' *.so into data/linux/lib so LD_LIBRARY_PATH (e.g. d2x) finds glibc/openssl
                 local cfg = platform.get_config_info()
                 if cfg.subosdir and deps_list and not table.empty(deps_list) then
-                    local target_lib = path.join(cfg.subosdir, "linux", "lib")
+                    local target_lib = path.join(cfg.subosdir, "lib")
                     aggregate_dep_libs_to(deps_list, target_lib)
                 end
                 cprint("[xlings:xim]: ${green bright}%s${clear} - installed", self.target)

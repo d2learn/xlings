@@ -4,6 +4,7 @@ import std;
 
 import xlings.log;
 import xlings.config;
+import xlings.subos;
 import xlings.platform;
 import xlings.xself;
 
@@ -92,17 +93,17 @@ export CommandProcessor create_processor() {
             "xlings install <package[@version]>")
         .add("remove", "remove package/tool",
             [](int argc, char* argv[]) {
-                return xim_exec("", argc, argv);
+                return xim_exec("", argc, argv, 1);
             },
             "xlings remove <package>")
         .add("update", "update package/tool",
             [](int argc, char* argv[]) {
-                return xim_exec("", argc, argv);
+                return xim_exec("", argc, argv, 1);
             },
             "xlings update <package>")
         .add("search", "search for packages",
             [](int argc, char* argv[]) {
-                return xim_exec("", argc, argv);
+                return xim_exec("", argc, argv, 1);
             },
             "xlings search <keyword>")
         .add("use", "switch version of a tool",
@@ -122,11 +123,16 @@ export CommandProcessor create_processor() {
                 Config::print_paths();
                 return 0;
             })
-        .add("self", "self management (init/update/config/clean)",
+        .add("subos", "manage sub-os environments",
+            [](int argc, char* argv[]) {
+                return subos::run(argc, argv);
+            },
+            "xlings subos <new|use|list|remove|info> [name]")
+        .add("self", "self management (init/update/config/clean/migrate)",
             [](int argc, char* argv[]) {
                 return xself::run(argc, argv);
             },
-            "xlings self [init|update|config|clean|help]");
+            "xlings self [init|update|config|clean [--dry-run]|migrate|help]");
 }
 
 } // namespace xlings::cmdprocessor

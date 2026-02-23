@@ -1,43 +1,164 @@
 name: xlings-ci-macos
 
-on: [push]
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  GIT_TERMINAL_PROMPT: 0
 
 jobs:
-
-  macos-test:
-    runs-on: macos-latest
-
-    defaults:
-      run:
-        working-directory: tools
+  build-and-test:
+    runs-on: macos-14
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install curl and git
-        run: brew install curl git
-
-      - name: Installation Xlings on macOS
-        run: ./install.unix.sh
-
-      - name: XIM Test on macOS
+      - name: Install system deps
         run: |
-          export PATH=/Users/xlings/data/bin:$PATH
+          brew install xmake
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
+
+      - name: Configure xmake
+        run: |
+          xmake f -p macosx -m release
+
+      - name: Build C++ (xlings binary)
+        run: |
+          xmake build xlings
+
+      - name: Build xvm (Rust)
+        run: |
+          cd core/xvm
+          cargo build --release
+
+      - name: Smoke test
+        run: |
+          ./build/macosx/arm64/release/xlings -h
+          ./core/xvm/target/release/xvm --version
+
+      - name: Package release
+        run: |
+          VERSION=$(./build/macosx/arm64/release/xlings --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.2.0")
+          echo "PKG_VERSION=$VERSION" >> "$GITHUB_ENV"
+          OUTDIR="build/xlings-${VERSION}-macos-arm64"
+          mkdir -p "$OUTDIR/bin"
+          mkdir -p "$OUTDIR/xim"
+          mkdir -p "$OUTDIR/data/xpkgs"
+          mkdir -p "$OUTDIR/data/runtimedir"
+          mkdir -p "$OUTDIR/data/xim-index-repos"
+          mkdir -p "$OUTDIR/data/local-indexrepo"
+          mkdir -p "$OUTDIR/subos/default/bin"
+          mkdir -p "$OUTDIR/subos/default/lib"
+          mkdir -p "$OUTDIR/subos/default/usr"
+          mkdir -p "$OUTDIR/subos/default/xvm"
+          mkdir -p "$OUTDIR/subos/default/generations"
+          mkdir -p "$OUTDIR/tools"
+          mkdir -p "$OUTDIR/config/i18n"
+          ln -sfn default "$OUTDIR/subos/current"
+          cp build/macosx/arm64/release/xlings "$OUTDIR/bin/"
+          cp core/xvm/target/release/xvm "$OUTDIR/bin/"
+          cp core/xvm/target/release/xvm-shim "$OUTDIR/bin/" 2>/dev/null || true
+          chmod +x "$OUTDIR/bin/"*
+          for shim in xlings xvm xvm-shim; do
+            cp "$OUTDIR/bin/xvm-shim" "$OUTDIR/subos/default/bin/$shim" 2>/dev/null || \
+            cp "$OUTDIR/bin/xvm" "$OUTDIR/subos/default/bin/$shim"
+            chmod +x "$OUTDIR/subos/default/bin/$shim"
+          done
+          printf '%s\n' '---' 'xvm-wmetadata:' '  name: global' '  active: true' '  inherit: true' 'versions:' '  xlings: bootstrap' '  xvm: bootstrap' '  xvm-shim: bootstrap' > "$OUTDIR/subos/default/xvm/.workspace.xvm.yaml"
+          printf '%s\n' '---' 'xlings:' '  bootstrap:' '    path: "../../bin"' 'xvm:' '  bootstrap:' '    path: "../../bin"' 'xvm-shim:' '  bootstrap:' '    path: "../../bin"' > "$OUTDIR/subos/default/xvm/versions.xvm.yaml"
+          cp -r core/xim/ "$OUTDIR/xim/" 2>/dev/null || true
+          cp -R config/i18n/*.json "$OUTDIR/config/i18n/" 2>/dev/null || true
+          echo '{}' > "$OUTDIR/data/xim-index-repos/xim-indexrepos.json"
+          cat > "$OUTDIR/.xlings.json" << DOTJSON
+          {"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false}
+          DOTJSON
+          cat > "$OUTDIR/xmake.lua" << 'LUA'
+          add_moduledirs("xim")
+          add_moduledirs(".")
+          task("xim")
+              on_run(function ()
+                  import("core.base.option")
+                  local xim_dir = path.join(os.projectdir(), "xim")
+                  local xim_entry = import("xim", {rootdir = xim_dir, anonymous = true})
+                  local args = option.get("arguments") or { "-h" }
+                  xim_entry.main(table.unpack(args))
+              end)
+              set_menu{
+                  usage = "xmake xim [arguments]",
+                  description = "xim package manager",
+                  options = {
+                      {nil, "arguments", "vs", nil, "xim arguments"},
+                  }
+              }
+          LUA
+          tar -czf "build/xlings-${VERSION}-macos-arm64.tar.gz" -C build "xlings-${VERSION}-macos-arm64"
+          cp "build/xlings-${VERSION}-macos-arm64.tar.gz" build/release.tar.gz
+
+      - name: Setup xlings environment
+        run: |
+          VERSION="${PKG_VERSION:-0.2.0}"
+          OUTDIR="$GITHUB_WORKSPACE/build/xlings-${VERSION}-macos-arm64"
+          echo "XLINGS_HOME=$OUTDIR" >> "$GITHUB_ENV"
+          echo "XLINGS_DATA=$OUTDIR/data" >> "$GITHUB_ENV"
+          echo "XLINGS_SUBOS=$OUTDIR/subos/default" >> "$GITHUB_ENV"
+          echo "PATH=$OUTDIR/subos/current/bin:$OUTDIR/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: "Test: basic commands"
+        run: |
           xlings -h
-          xim -h
+          xlings config
+          xlings subos list
+          ls -la "$XLINGS_HOME/subos/current"
 
-      - name: XVM Test on macOS
+      - name: "Test: install d2x@0.1.2 in default subos"
         run: |
-          export PATH=/Users/xlings/data/bin:$PATH
-          xvm --version
-          xvm -h
-          xvm add cls 0.0.1 --alias=clear
-          xvm list c
-          xvm remove cls --yes
+          xlings install d2x@0.1.2 -y
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "default subos d2x version: $D2X_VER"
+          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
+          echo "OK: default subos has d2x 0.1.2"
 
-      - name: D2X Test on macOS
+      - name: "Test: create dev subos and verify isolation"
         run: |
-          export PATH=/Users/xlings/data/bin:$PATH
-          d2x -h
-          d2x new helloworld
+          xlings subos new dev
+          xlings subos use dev
+          readlink "$XLINGS_HOME/subos/current" | grep -q "dev" || \
+            { echo "FAIL: subos/current not pointing to dev"; exit 1; }
+          if d2x --version 2>&1; then
+            echo "FAIL: d2x should not be available in fresh dev subos"
+            exit 1
+          fi
+          echo "OK: dev subos does not have d2x (isolated)"
+
+          echo "=== Switch back to default ==="
+          xlings subos use default
+          D2X_VER=$(d2x --version 2>&1 | head -1)
+          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
+          echo "OK: default subos still has d2x 0.1.2 after switching back"
+          xlings subos list
+
+      - name: "Test: cleanup dev subos"
+        run: |
+          xlings subos use default
+          xlings subos remove dev
+          xlings subos list
+
+      - name: Attach artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: xlings-macos-arm64
+          path: build/release.tar.gz

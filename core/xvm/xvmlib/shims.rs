@@ -7,6 +7,16 @@ use indexmap::IndexMap;
 
 use crate::versiondb::VData;
 
+fn expand_xlings_vars(value: &str) -> String {
+    let home = std::env::var("XLINGS_HOME").unwrap_or_default();
+    let data = std::env::var("XLINGS_DATA").unwrap_or_default();
+    let subos = std::env::var("XLINGS_SUBOS").unwrap_or_default();
+    value
+        .replace("${XLINGS_HOME}", &home)
+        .replace("${XLINGS_DATA}", &data)
+        .replace("${XLINGS_SUBOS}", &subos)
+}
+
 pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
 /*
 TODO: WORKPACE ? .xlings/xvm-workspace
@@ -158,9 +168,15 @@ impl Program {
     }
 
     pub fn set_vdata(&mut self, vdata: &VData) {
-        self.set_path(&vdata.path);
+        self.set_path(&expand_xlings_vars(&vdata.path));
         if let Some(envs) = &vdata.envs {
-            self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
+            let expanded: Vec<(String, String)> = envs
+                .iter()
+                .map(|(k, v)| (k.clone(), expand_xlings_vars(v)))
+                .collect();
+            self.add_envs(
+                expanded.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice()
+            );
         }
         if let Some(bindings) = &vdata.bindings {
             self.bindings = bindings.clone();
@@ -188,7 +204,7 @@ impl Program {
 
         // If path is set and we run the program by name (no alias), resolve executable (path/name or path/bin/name)
         let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
-            // Resolve relative path against XLINGS_DATA (workspace dir) for package bootstrap entries
+            // Resolve relative path against workspace dir (XLINGS_SUBOS) for package bootstrap entries
             let mut base: std::path::PathBuf = if Path::new(&self.path).is_relative() {
                 XVM_WORKSPACE_DIR.get().map(|w| Path::new(w).join(&self.path)).unwrap_or_else(|| PathBuf::from(&self.path))
             } else {
@@ -507,13 +523,14 @@ pub fn init(workspace_dir: &str) {
 pub fn try_create(target: &str, dir: &str) {
     let target_shim = shim_file(target, dir);
     if !fs::metadata(&target_shim).is_ok() {
-        // check dir
         if !fs::metadata(dir).is_ok() {
             fs::create_dir_all(dir).unwrap();
         }
 
-        // cp bindir/xvm-shim to target_shim
-        fs::copy(XVM_SHIM_BIN.get().unwrap(), &target_shim).unwrap();
+        let src = XVM_SHIM_BIN.get().unwrap();
+        if fs::hard_link(src, &target_shim).is_err() {
+            fs::copy(src, &target_shim).unwrap();
+        }
     }
 }
 

@@ -21,31 +21,35 @@ local function detect_xlings_home()
     return path.join(user_home or ".", ".xlings")
 end
 
--- Path resolution: XLINGS_DATA env > .xlings.json "data" field (relative to xlings_home) > default ($XLINGS_HOME/data)
+-- Global shared data: XLINGS_DATA env > default ($XLINGS_HOME/data)
 local function detect_xlings_data(xlings_home)
     local env_data = os.getenv("XLINGS_DATA")
     if env_data and env_data ~= "" then
         return env_data
     end
-    if baseconfig["data"] and baseconfig["data"] ~= "" then
-        local d = baseconfig["data"]
-        if path.is_absolute(d) then
-            return d
-        end
-        return path.join(xlings_home, d)
-    end
     return path.join(xlings_home, "data")
+end
+
+-- Current subos: XLINGS_SUBOS env > default ($XLINGS_HOME/subos/default)
+local function detect_xlings_subos(xlings_home)
+    local env_subos = os.getenv("XLINGS_SUBOS")
+    if env_subos and env_subos ~= "" then
+        return env_subos
+    end
+    local active = baseconfig["activeSubos"] or "default"
+    return path.join(xlings_home, "subos", active)
 end
 
 local xlings_home = detect_xlings_home()
 local xlings_data = detect_xlings_data(xlings_home)
+local xlings_subos = detect_xlings_subos(xlings_home)
 
 local xlings_install_dir = xlings_home
 local xlings_root_cache_dir = xlings_data
 
-local xlings_bin_dir = path.join(xlings_data, "bin")
-local xlings_lib_dir = path.join(xlings_data, "lib")
-local xlings_subos_dir = path.join(xlings_data, "subos")
+local xlings_bin_dir = path.join(xlings_subos, "bin")
+local xlings_lib_dir = path.join(xlings_subos, "lib")
+local xlings_subos_dir = xlings_subos
 
 local command_clear = {
     linux = "clear",

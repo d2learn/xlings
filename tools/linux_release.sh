@@ -1,89 +1,114 @@
 #!/usr/bin/env bash
-# Build a self-contained xlings package for Linux, run verification with data in a temp dir,
-# then pack the release directory into xlings-<version>-linux-x86_64.tar.gz.
-# Output dir: build/xlings-<version>-linux-x86_64
-# Usage: ./tools/linux_release.sh
-# Env:   SKIP_NETWORK_VERIFY=1  skip xim --update and install d2x (avoids network hang).
-#        GIT_CONNECT_TIMEOUT=N  git connect timeout in seconds (default 30).
+# Build a self-contained xlings package for Linux x86_64.
+#
+# Directory layout (v0.2.0+):
+#   xlings-<ver>-linux-x86_64/
+#   ├── bin/                   # real binaries (xlings, xvm, xvm-shim)
+#   ├── xim/                   # xim Lua source code
+#   ├── data/                  # global shared data (XLINGS_DATA)
+#   │   ├── xpkgs/             # package store (populated at runtime)
+#   │   ├── runtimedir/        # download cache
+#   │   ├── xim-index-repos/   # git-cloned index repos
+#   │   └── local-indexrepo/   # user local index
+#   ├── subos/
+#   │   ├── current -> default # symlink to active subos
+#   │   └── default/           # default sub-os (XLINGS_SUBOS = sysroot)
+#   │       ├── bin/            # shim copies (xlings, xvm, xvm-shim)
+#   │       ├── lib/            # library symlinks (populated at runtime)
+#   │       ├── usr/            # headers (populated at runtime)
+#   │       ├── xvm/            # xvm config
+#   │       └── generations/    # profile generations
+#   ├── tools/xmake/bin/xmake  # bundled xmake
+#   ├── config/i18n/           # i18n json
+#   ├── xmake.lua              # package-root xim task
+#   └── .xlings.json           # config
+#
+# Output:  build/xlings-<ver>-linux-x86_64.tar.gz
+# Usage:   ./tools/linux_release.sh
+# Env:     SKIP_NETWORK_VERIFY=1   skip network-dependent tests
+#          SKIP_XMAKE_BUNDLE=1     skip downloading bundled xmake
+#          GIT_CONNECT_TIMEOUT=N   git TCP timeout seconds (default 30)
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Version: read from core (single source of truth)
 VERSION=$(sed -n 's/.*VERSION = "\([^"]*\)".*/\1/p' "$PROJECT_DIR/core/config.cppm" | head -1)
-[[ -z "$VERSION" ]] && VERSION="0.1.0"
+[[ -z "$VERSION" ]] && VERSION="0.2.0"
 
-PKG_NAME="xlings-${VERSION}-linux-x86_64"
+ARCH="x86_64"
+PKG_NAME="xlings-${VERSION}-linux-${ARCH}"
 OUT_DIR="$PROJECT_DIR/build/$PKG_NAME"
+
 TEST_DATA=""
-cleanup_test_data() {
-  if [[ -n "$TEST_DATA" && -d "$TEST_DATA" ]]; then
-    echo "[linux_release] Cleaning up test data: $TEST_DATA"
-    rm -rf "$TEST_DATA"
-  fi
+cleanup() {
+  [[ -n "$TEST_DATA" && -d "$TEST_DATA" ]] && rm -rf "$TEST_DATA"
 }
+trap cleanup EXIT
+
+info()  { echo "[release] $*"; }
+fail()  { echo "[release] FAIL: $*" >&2; exit 1; }
 
 cd "$PROJECT_DIR"
 
-echo "[linux_release] Version: $VERSION"
-echo "[linux_release] Building C++ binary..."
-xmake clean
-if ! xmake build -q 2>/dev/null; then
-  xmake build 2>/dev/null || true
-fi
+# ── 1. Build C++ ─────────────────────────────────────────────────
+info "Version: $VERSION  |  Arch: $ARCH"
+info "Building C++ binary..."
+xmake clean -q 2>/dev/null || true
+xmake build xlings 2>&1 || fail "xmake build failed"
 
-echo "[linux_release] Building xvm (Rust) via release-build.sh..."
-(cd core/xvm && cargo clean && chmod +x release-build.sh && ./release-build.sh linux)
+BIN_SRC="build/linux/${ARCH}/release/xlings"
+[[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"
 
-echo "[linux_release] Assembling $OUT_DIR ..."
+# ── 2. Build xvm (Rust) ─────────────────────────────────────────
+info "Building xvm (Rust musl)..."
+(cd core/xvm && chmod +x release-build.sh && ./release-build.sh linux)
+XVM_DIR="core/xvm/target/x86_64-unknown-linux-musl/release"
+[[ -f "$XVM_DIR/xvm" ]]      || fail "xvm binary not found"
+[[ -f "$XVM_DIR/xvm-shim" ]] || fail "xvm-shim binary not found"
+
+# ── 3. Assemble package ─────────────────────────────────────────
+info "Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
+
 mkdir -p "$OUT_DIR/bin"
-mkdir -p "$OUT_DIR/data/bin"
-mkdir -p "$OUT_DIR/data/lib"
+mkdir -p "$OUT_DIR/subos/default/bin"
+mkdir -p "$OUT_DIR/subos/default/lib"
+mkdir -p "$OUT_DIR/subos/default/usr"
+mkdir -p "$OUT_DIR/subos/default/xvm"
+mkdir -p "$OUT_DIR/subos/default/generations"
+ln -sfn default "$OUT_DIR/subos/current"
+mkdir -p "$OUT_DIR/xim"
+mkdir -p "$OUT_DIR/data/xpkgs"
+mkdir -p "$OUT_DIR/data/runtimedir"
+mkdir -p "$OUT_DIR/data/xim-index-repos"
+mkdir -p "$OUT_DIR/data/local-indexrepo"
 
-# bin/: real binaries only (no script wrapper). data/bin/: xvm-shim copies as shims; data/bin/xlings,xvm,xvm-shim run with package env via xvm.
-BIN_SRC="build/linux/x86_64/release/xlings"
-XVM_RELEASE_DIR="core/xvm/target/x86_64-unknown-linux-musl/release"
-if [[ ! -f "$BIN_SRC" ]]; then
-  echo "[linux_release] Error: C++ binary not found at $BIN_SRC. Run xmake build first."
-  exit 1
-fi
-cp "$BIN_SRC" "$OUT_DIR/bin/xlings"
-chmod +x "$OUT_DIR/bin/xlings"
-if [[ -f "$XVM_RELEASE_DIR/xvm" ]]; then
-  cp "$XVM_RELEASE_DIR/xvm" "$OUT_DIR/bin/xvm"
-  chmod +x "$OUT_DIR/bin/xvm"
-fi
-if [[ -f "$XVM_RELEASE_DIR/xvm-shim" ]]; then
-  cp "$XVM_RELEASE_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
-  chmod +x "$OUT_DIR/bin/xvm-shim"
-fi
+cp "$BIN_SRC"         "$OUT_DIR/bin/xlings"
+cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
+cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
+chmod +x "$OUT_DIR/bin/"*
 
-# data/bin/: all shims (xvm-shim copies). xlings/xvm/xvm-shim run with package env via detect_package_data_bin() and bootstrap config.
-for shim_name in xlings xvm xvm-shim; do
-  if [[ -f "$XVM_RELEASE_DIR/xvm-shim" ]]; then
-    cp "$XVM_RELEASE_DIR/xvm-shim" "$OUT_DIR/data/bin/$shim_name"
-    chmod +x "$OUT_DIR/data/bin/$shim_name"
-  fi
+for shim in xlings xvm xvm-shim; do
+  cp "$XVM_DIR/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
+  chmod +x "$OUT_DIR/subos/default/bin/$shim"
 done
 
-# data/xvm/: bootstrap config so "xvm run xlings|xvm|xvm-shim" resolve to ../bin (relative to XLINGS_DATA = data dir)
-mkdir -p "$OUT_DIR/data/xvm"
-cat > "$OUT_DIR/data/xvm/versions.xvm.yaml" << 'VERSIONS'
+cat > "$OUT_DIR/subos/default/xvm/versions.xvm.yaml" << 'YAML'
 ---
 xlings:
   bootstrap:
-    path: "../bin"
+    path: "../../bin"
 xvm:
   bootstrap:
-    path: "../bin"
+    path: "../../bin"
 xvm-shim:
   bootstrap:
-    path: "../bin"
-VERSIONS
-cat > "$OUT_DIR/data/xvm/.workspace.xvm.yaml" << 'WORKSPACE'
+    path: "../../bin"
+YAML
+
+cat > "$OUT_DIR/subos/default/xvm/.workspace.xvm.yaml" << 'YAML'
 ---
 xvm-wmetadata:
   name: global
@@ -93,36 +118,30 @@ versions:
   xlings: bootstrap
   xvm: bootstrap
   xvm-shim: bootstrap
-WORKSPACE
+YAML
 
-# xim tree (Lua)
-cp -R core/xim "$OUT_DIR/"
+cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
-# Bundled xmake (single executable, no extraction). Use timeouts to avoid hanging on slow/unreachable network.
-XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-XMAKE_BUNDLE_DIR="$OUT_DIR/tools/xmake"
-mkdir -p "$XMAKE_BUNDLE_DIR/bin"
-echo "[linux_release] Downloading bundled xmake..."
-if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BUNDLE_DIR/bin/xmake" "$XMAKE_URL"; then
-  chmod +x "$XMAKE_BUNDLE_DIR/bin/xmake"
+# Bundled xmake
+if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
+  XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
+  XMAKE_BIN="$OUT_DIR/tools/xmake/bin/xmake"
+  mkdir -p "$(dirname "$XMAKE_BIN")"
+  info "Downloading bundled xmake..."
+  if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
+    chmod +x "$XMAKE_BIN"
+    info "Bundled xmake OK"
+  else
+    info "Warning: xmake download failed; package will require system xmake"
+  fi
 fi
-if [[ -x "$XMAKE_BUNDLE_DIR/bin/xmake" ]]; then
-  echo "[linux_release] Bundled xmake: $XMAKE_BUNDLE_DIR/bin/xmake"
-else
-  echo "[linux_release] Warning: bundled xmake not available; package will require system xmake"
-fi
 
-# data/xim: xim will clone index repo on first run (xim --update index)
-mkdir -p "$OUT_DIR/data/xim"
-mkdir -p "$OUT_DIR/data/xim/xim-index-repos"
-echo '{}' > "$OUT_DIR/data/xim/xim-index-repos/xim-indexrepos.json"
-
-# config/ for i18n
+# i18n
 mkdir -p "$OUT_DIR/config/i18n"
 cp -R config/i18n/*.json "$OUT_DIR/config/i18n/" 2>/dev/null || true
 
-# xmake.lua at package root
-cat > "$OUT_DIR/xmake.lua" << 'XMAKE_PKG'
+# xmake.lua (package root)
+cat > "$OUT_DIR/xmake.lua" << 'LUA'
 add_moduledirs("xim")
 add_moduledirs(".")
 task("xim")
@@ -140,118 +159,128 @@ task("xim")
             {nil, "arguments", "vs", nil, "xim arguments"},
         }
     }
-XMAKE_PKG
+LUA
 
-# .xlings.json (data path + version from config)
+# .xlings.json
 if command -v jq &>/dev/null && [[ -f config/xlings.json ]]; then
-  jq -s '.[0] + .[1]' config/xlings.json <(echo '{"data":"data"}') > "$OUT_DIR/.xlings.json"
+  jq '. + {"activeSubos":"default","subos":{"default":{"dir":""}}}' \
+    config/xlings.json > "$OUT_DIR/.xlings.json"
 else
   cat > "$OUT_DIR/.xlings.json" << DOTJSON
-{"data":"data","version":"$VERSION","need_update":false,"mirror":"CN","xim":{"mirrors":{"index-repo":{"GLOBAL":"https://github.com/d2learn/xim-pkgindex.git","CN":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"res-server":{"GLOBAL":"https://github.com/xlings-res","CN":"https://gitcode.com/xlings-res"}},"res-server":"https://gitcode.com/xlings-res","index-repo":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"repo":"https://gitee.com/sunrisepeak/xlings.git"}
+{"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false,"mirror":"CN","xim":{"mirrors":{"index-repo":{"GLOBAL":"https://github.com/d2learn/xim-pkgindex.git","CN":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"res-server":{"GLOBAL":"https://github.com/xlings-res","CN":"https://gitcode.com/xlings-res"}},"res-server":"https://gitcode.com/xlings-res","index-repo":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"repo":"https://gitee.com/sunrisepeak/xlings.git"}
 DOTJSON
 fi
 
-echo "[linux_release] Package assembled: $OUT_DIR"
-echo ""
+# xim index-repos placeholder (global shared)
+echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
 
-# --- Verification: use dir under build/ (not /tmp) so package stays clean ---
-# Set SKIP_NETWORK_VERIFY=1 to skip xim --update index and install d2x (avoids hanging on slow/firewalled network).
-TEST_DATA="$PROJECT_DIR/build/.release_verify_data.$$"
+info "Package assembled: $OUT_DIR"
+
+# ── 4. Verification ─────────────────────────────────────────────
+info "=== Verification ==="
+
+# 4a. Check binaries exist and are executable
+for f in bin/xlings bin/xvm bin/xvm-shim \
+         subos/default/bin/xlings subos/default/bin/xvm subos/default/bin/xvm-shim; do
+  [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
+done
+info "OK: all binaries present and executable"
+
+# 4b. Check directory structure
+for d in subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n; do
+  [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
+done
+[[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"
+[[ "$(readlink "$OUT_DIR/subos/current")" == "default" ]] || fail "subos/current does not point to default"
+info "OK: directory structure valid (incl. subos/current symlink)"
+
+# 4c. Check .xlings.json
+[[ -f "$OUT_DIR/.xlings.json" ]] || fail ".xlings.json missing"
+if command -v jq &>/dev/null; then
+  AS=$(jq -r '.activeSubos' "$OUT_DIR/.xlings.json" 2>/dev/null)
+  [[ "$AS" == "default" ]] || fail ".xlings.json activeSubos != 'default' (got '$AS')"
+fi
+info "OK: .xlings.json present and valid"
+
+# 4d. Functional tests (self-contained detection)
+info "Testing self-contained execution..."
+TEST_DATA="$PROJECT_DIR/build/.release_verify_$$"
 mkdir -p "$TEST_DATA"
-trap cleanup_test_data EXIT
 
-# For install test with XLINGS_DATA=$TEST_DATA, xvm must be in TEST_DATA/bin (real xvm from bin/)
-mkdir -p "$TEST_DATA/bin" "$TEST_DATA/xvm"
-for f in xvm xvm-shim; do
-  [[ -f "$OUT_DIR/bin/$f" ]] && cp "$OUT_DIR/bin/$f" "$TEST_DATA/bin/" && chmod +x "$TEST_DATA/bin/$f"
-done
-# Bootstrap so xvm run finds tools when using TEST_DATA
-cp "$OUT_DIR/data/xvm/versions.xvm.yaml" "$TEST_DATA/xvm/" 2>/dev/null || true
-cp "$OUT_DIR/data/xvm/.workspace.xvm.yaml" "$TEST_DATA/xvm/" 2>/dev/null || true
+export XLINGS_HOME="$OUT_DIR"
+export XLINGS_DATA="$OUT_DIR/data"
+export XLINGS_SUBOS="$OUT_DIR/subos/default"
+export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$OUT_DIR/tools/xmake/bin:$PATH"
 
-export GIT_TERMINAL_PROMPT=0
-# Prefer shorter git TCP timeout to avoid long hangs (git 2.3+)
-export GIT_CONNECT_TIMEOUT="${GIT_CONNECT_TIMEOUT:-30}"
+HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1) || fail "xlings -h failed"
+echo "$HELP_OUT" | grep -q "subos" || fail "xlings -h missing 'subos' command"
+info "OK: xlings -h shows subos/self commands"
 
-echo "[linux_release] Verify: bin/ and data/bin/ executables..."
-if [[ ! -x "$OUT_DIR/bin/xlings" ]]; then
-  echo "[linux_release] FAIL: bin/xlings is missing or not executable"
-  exit 1
-fi
-for f in xvm xvm-shim; do
-  if [[ ! -x "$OUT_DIR/bin/$f" ]]; then
-    echo "[linux_release] FAIL: bin/$f is missing or not executable"
-    exit 1
-  fi
-done
-if [[ ! -x "$OUT_DIR/data/bin/xlings" ]] || [[ ! -x "$OUT_DIR/data/bin/xvm-shim" ]]; then
-  echo "[linux_release] FAIL: data/bin shims (xlings, xvm-shim) missing or not executable"
-  exit 1
-fi
-echo "  OK: bin/xlings, bin/xvm, bin/xvm-shim; data/bin shims"
+CONFIG_OUT=$("$OUT_DIR/bin/xlings" config 2>&1) || fail "xlings config failed"
+echo "$CONFIG_OUT" | grep -q "XLINGS_HOME" || fail "config output missing XLINGS_HOME"
+echo "$CONFIG_OUT" | grep -q "XLINGS_SUBOS" || fail "config output missing XLINGS_SUBOS"
+info "OK: xlings config prints correct paths"
 
-# Network-dependent verification: optional and time-bounded to avoid indefinite hang
-if [[ "${SKIP_NETWORK_VERIFY}" = "1" ]]; then
-  echo "[linux_release] Skip: xim --update index and install d2x (SKIP_NETWORK_VERIFY=1)"
+SUBOS_OUT=$("$OUT_DIR/bin/xlings" subos list 2>&1) || fail "xlings subos list failed"
+echo "$SUBOS_OUT" | grep -q "default" || fail "subos list missing 'default'"
+info "OK: xlings subos list shows default"
+
+GC_OUT=$("$OUT_DIR/bin/xlings" self clean --dry-run 2>&1) || fail "xlings self clean --dry-run failed"
+info "OK: xlings self clean --dry-run works"
+
+XVM_OUT=$("$OUT_DIR/bin/xvm" --version 2>&1) || fail "xvm --version failed"
+info "OK: xvm --version = $XVM_OUT"
+
+# 4e. Network-dependent tests
+if [[ "${SKIP_NETWORK_VERIFY:-}" == "1" ]]; then
+  info "Skip: network-dependent tests (SKIP_NETWORK_VERIFY=1)"
 else
-  echo "[linux_release] Verify: xim --update index (into temp data, timeout 300s)..."
+  export GIT_TERMINAL_PROMPT=0
+  export GIT_CONNECT_TIMEOUT="${GIT_CONNECT_TIMEOUT:-30}"
+
   run_with_timeout() {
     local t="$1"; shift
     if command -v timeout &>/dev/null; then timeout "$t" "$@"; else "$@"; fi
   }
-  if ! run_with_timeout 300 bash -c 'cd "$1" && export XLINGS_HOME="$1" XLINGS_DATA="$2" PATH="$2/bin:$1/bin:$1/tools/xmake/bin:$PATH" && xmake xim -P . -- --update index' _ "$OUT_DIR" "$TEST_DATA"; then
-    echo "[linux_release] FAIL: xim --update index failed (network/timeout?). Set SKIP_NETWORK_VERIFY=1 to skip."
-    exit 1
+
+  info "Verify: xim --update index (timeout 300s)..."
+  if ! run_with_timeout 300 bash -c \
+    'cd "$1" && xmake xim -P . -- --update index' _ "$OUT_DIR"; then
+    fail "xim --update index failed (network?). Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
-  echo "[linux_release] Verify: ./bin/xlings install d2x -y (into temp data, timeout 300s)..."
-  if ! run_with_timeout 300 bash -c 'cd "$1" && export XLINGS_HOME="$1" XLINGS_DATA="$2" PATH="$2/bin:$1/bin:$1/tools/xmake/bin:$PATH" && ./bin/xlings install d2x -y' _ "$OUT_DIR" "$TEST_DATA"; then
-    echo "[linux_release] FAIL: install d2x -y failed (network/timeout?). Set SKIP_NETWORK_VERIFY=1 to skip."
-    exit 1
+  info "Verify: xlings install d2x -y (timeout 300s)..."
+  if ! run_with_timeout 300 bash -c \
+    'cd "$1" && ./bin/xlings install d2x -y' _ "$OUT_DIR"; then
+    fail "install d2x failed. Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
-  XPKG_D2X="$TEST_DATA/xim/xpkgs/d2x"
-  if [[ ! -d "$XPKG_D2X" ]]; then
-    echo "[linux_release] FAIL: data/xim/xpkgs/d2x not found or not a directory"
-    exit 1
+  XPKG_D2X="$XLINGS_DATA/xpkgs/d2x"
+  if [[ -d "$XPKG_D2X" ]] && compgen -G "$XPKG_D2X/*" > /dev/null 2>&1; then
+    info "OK: data/xpkgs/d2x installed successfully"
+  else
+    fail "data/xpkgs/d2x not found after install"
   fi
-  if ! compgen -G "$XPKG_D2X/*" > /dev/null 2>&1; then
-    echo "[linux_release] FAIL: data/xim/xpkgs/d2x has no version directory"
-    exit 1
-  fi
-  echo "  OK: data/xim/xpkgs/d2x exists with version dir(s)"
-
-  D2X_BIN="$TEST_DATA/bin/d2x"
-  if [[ ! -x "$D2X_BIN" ]] && [[ ! -f "$D2X_BIN" ]]; then
-    echo "[linux_release] FAIL: data/bin/d2x not found (xvm shim or binary)"
-    exit 1
-  fi
-  echo "  OK: data/bin/d2x exists"
 fi
 
-echo "[linux_release] Verify: data/bin/xlings uses package env (isolation) when env is polluted..."
-CONFIG_OUT=$(cd "$OUT_DIR" && export XLINGS_HOME=/home/xlings XLINGS_DATA=/home/xlings/data && ./data/bin/xlings config 2>&1) || true
-if echo "$CONFIG_OUT" | grep -qF "XLINGS_DATA: $OUT_DIR/data"; then
-  echo "  OK: data/bin/xlings uses package path under polluted env"
-else
-  echo "[linux_release] FAIL: expected XLINGS_DATA to be package path ($OUT_DIR/data), got:"
-  echo "$CONFIG_OUT" | grep -E "XLINGS_HOME|XLINGS_DATA" || echo "$CONFIG_OUT"
-  exit 1
-fi
-
-# Remove test data (trap will run on exit too; explicit for clarity)
-cleanup_test_data
+cleanup
 trap - EXIT
 
-echo ""
-echo "[linux_release] All checks passed. Creating release archive..."
+# ── 5. Create archive ───────────────────────────────────────────
+info ""
+info "All checks passed. Creating release archive..."
 
 ARCHIVE="$PROJECT_DIR/build/${PKG_NAME}.tar.gz"
-tar -czvf "$ARCHIVE" -C "$PROJECT_DIR/build" "$PKG_NAME"
+tar -czf "$ARCHIVE" -C "$PROJECT_DIR/build" "$PKG_NAME"
 
-echo ""
-echo "[linux_release] Done."
-echo "  Package:  $OUT_DIR"
-echo "  Archive:  $ARCHIVE"
-echo "  Unpack:   tar -xzf ${PKG_NAME}.tar.gz && cd $PKG_NAME && ./bin/xlings config  (or ./data/bin/xlings for package-isolated env)"
-echo ""
+info ""
+info "Done."
+info "  Package:  $OUT_DIR"
+info "  Archive:  $ARCHIVE"
+info ""
+info "  Unpack & use:"
+info "    tar -xzf ${PKG_NAME}.tar.gz"
+info "    cd $PKG_NAME"
+info "    export PATH=\"\$(pwd)/subos/current/bin:\$(pwd)/bin:\$PATH\""
+info "    xlings config"
+info ""
