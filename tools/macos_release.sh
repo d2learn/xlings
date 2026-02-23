@@ -172,6 +172,7 @@ mkdir -p "$TEST_DATA"
 
 export XLINGS_HOME="$OUT_DIR"
 export XLINGS_DATA="$OUT_DIR/data"
+export XLINGS_SUBOS="$OUT_DIR/subos/current"
 export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$PATH"
 
 HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1) || fail "xlings -h failed"

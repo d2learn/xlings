@@ -1,3 +1,5 @@
+module;
+#include <cstdlib>
 export module xlings.utils;
 
 import std;
@@ -49,16 +51,6 @@ export namespace xlings::utils {
     return result;
 }
 
-[[nodiscard]] std::string read_file_to_string(const std::string& filepath) {
-    std::ifstream fileStream(filepath);
-    if (!fileStream.is_open()) {
-        throw std::runtime_error("Failed to open file: " + filepath);
-    }
-    std::stringstream buffer;
-    buffer << fileStream.rdbuf();
-    return buffer.str();
-}
-
 bool ask_yes_no(const std::string& question, bool defaultYes = false) {
     std::string prompt = defaultYes ? "[Y/n] " : "[y/N] ";
     std::print("{}{}", question, prompt);
@@ -80,14 +72,6 @@ std::string ask_input(const std::string& prompt, const std::string& defaultValue
     if (!std::getline(std::cin, input)) return defaultValue;
 
     return input.empty() ? defaultValue : input;
-}
-
-void write_string_to_file(const std::string& filepath, const std::string& content) {
-    std::ofstream ofs(filepath, std::ios::trunc);
-    if (!ofs.is_open()) {
-        throw std::runtime_error("Failed to write file: " + filepath);
-    }
-    ofs << content;
 }
 
 void print_separator(const std::string& title) {

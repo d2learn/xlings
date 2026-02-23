@@ -130,7 +130,7 @@ static int cmd_migrate() {
     nlohmann::json json;
     if (fs::exists(configPath)) {
         try {
-            auto content = utils::read_file_to_string(configPath.string());
+            auto content = platform::read_file_to_string(configPath.string());
             json = nlohmann::json::parse(content, nullptr, false);
             if (json.is_discarded()) json = nlohmann::json::object();
         } catch (...) { json = nlohmann::json::object(); }
@@ -139,7 +139,7 @@ static int cmd_migrate() {
     json["activeSubos"] = "default";
     if (!json.contains("subos")) json["subos"] = nlohmann::json::object();
     json["subos"]["default"] = {{"dir", ""}};
-    utils::write_string_to_file(configPath.string(), json.dump(2));
+    platform::write_string_to_file(configPath.string(), json.dump(2));
 
     auto currentLink = subosDir / "current";
     std::error_code lec;

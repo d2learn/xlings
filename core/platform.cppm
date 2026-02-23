@@ -1,3 +1,7 @@
+module;
+
+#include <cstdio>
+
 export module xlings.platform;
 
 import std;
@@ -51,6 +55,29 @@ namespace platform {
 
     export int exec(const std::string& cmd) {
         return std::system(cmd.c_str());
+    }
+
+    export [[nodiscard]] std::string read_file_to_string(const std::string& filepath) {
+        std::FILE* fp = std::fopen(filepath.c_str(), "rb");
+        if (!fp) {
+            throw std::runtime_error("Failed to open file: " + filepath);
+        }
+        std::fseek(fp, 0, SEEK_END);
+        long sz = std::ftell(fp);
+        std::fseek(fp, 0, SEEK_SET);
+        std::string content(static_cast<std::size_t>(sz), '\0');
+        std::fread(content.data(), 1, content.size(), fp);
+        std::fclose(fp);
+        return content;
+    }
+
+    export void write_string_to_file(const std::string& filepath, const std::string& content) {
+        std::FILE* fp = std::fopen(filepath.c_str(), "w");
+        if (!fp) {
+            throw std::runtime_error("Failed to write file: " + filepath);
+        }
+        std::fwrite(content.data(), 1, content.size(), fp);
+        std::fclose(fp);
     }
 
 } // namespace platform

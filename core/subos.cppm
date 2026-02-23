@@ -22,14 +22,14 @@ export struct SubosInfo {
 nlohmann::json read_config_json_(const fs::path& path) {
     if (!fs::exists(path)) return nlohmann::json::object();
     try {
-        auto content = utils::read_file_to_string(path.string());
+        auto content = platform::read_file_to_string(path.string());
         auto json = nlohmann::json::parse(content, nullptr, false);
         return json.is_discarded() ? nlohmann::json::object() : json;
     } catch (...) { return nlohmann::json::object(); }
 }
 
 void write_config_json_(const fs::path& path, const nlohmann::json& json) {
-    utils::write_string_to_file(path.string(), json.dump(2));
+    platform::write_string_to_file(path.string(), json.dump(2));
 }
 
 export std::vector<SubosInfo> list_all() {
@@ -115,7 +115,7 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     // Minimal bootstrap xvm config — do NOT copy the source subos's full
     // registry, otherwise every package registration leaks into the new
     // environment and there is zero isolation.
-    utils::write_string_to_file((dir / "xvm" / ".workspace.xvm.yaml").string(),
+    platform::write_string_to_file((dir / "xvm" / ".workspace.xvm.yaml").string(),
         "---\n"
         "xvm-wmetadata:\n"
         "  name: global\n"
@@ -128,7 +128,7 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
 
     // Bootstrap version database — path ../../bin resolves to <root>/bin/
     // from any subos/<name>/ directory.
-    utils::write_string_to_file((dir / "xvm" / "versions.xvm.yaml").string(),
+    platform::write_string_to_file((dir / "xvm" / "versions.xvm.yaml").string(),
         "---\n"
         "xlings:\n"
         "  vdata_list:\n"

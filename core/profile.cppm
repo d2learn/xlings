@@ -9,6 +9,7 @@ import std;
 import xlings.config;
 import xlings.json;
 import xlings.log;
+import xlings.platform;
 import xlings.utils;
 
 namespace xlings::profile {
@@ -51,7 +52,7 @@ void sync_workspace_yaml_(const fs::path& envDir,
     for (auto& [name, ver] : packages) {
         yaml += "  " + name + ": " + ver + "\n";
     }
-    utils::write_string_to_file(yamlPath.string(), yaml);
+    platform::write_string_to_file(yamlPath.string(), yaml);
 }
 
 std::uintmax_t dir_size_(const fs::path& dir) {
@@ -68,7 +69,7 @@ export Generation load_current(const fs::path& envDir) {
     auto profilePath = envDir / ".profile.json";
     if (!fs::exists(profilePath)) return {0, "", "init", {}};
     try {
-        auto content = utils::read_file_to_string(profilePath.string());
+        auto content = platform::read_file_to_string(profilePath.string());
         auto json = nlohmann::json::parse(content);
         Generation gen;
         gen.number  = json.value("current_generation", 0);
@@ -98,13 +99,13 @@ export int commit(const fs::path& envDir,
         {"packages",   packages}
     };
     auto genFile = gensDir / (std::format("{:03d}", nextGen) + ".json");
-    utils::write_string_to_file(genFile.string(), genJson.dump(2));
+    platform::write_string_to_file(genFile.string(), genJson.dump(2));
 
     nlohmann::json profileJson = {
         {"current_generation", nextGen},
         {"packages",           packages}
     };
-    utils::write_string_to_file((envDir / ".profile.json").string(),
+    platform::write_string_to_file((envDir / ".profile.json").string(),
                                 profileJson.dump(2));
 
     sync_workspace_yaml_(envDir, packages);
@@ -120,7 +121,7 @@ export std::vector<Generation> list_generations(const fs::path& envDir) {
     for (auto& entry : fs::directory_iterator(gensDir)) {
         if (!entry.is_regular_file()) continue;
         try {
-            auto content = utils::read_file_to_string(entry.path().string());
+            auto content = platform::read_file_to_string(entry.path().string());
             auto json = nlohmann::json::parse(content);
             Generation gen;
             gen.number  = json.value("generation", 0);
@@ -148,7 +149,7 @@ export int rollback(const fs::path& envDir, int targetGen) {
             return 1;
         }
         try {
-            auto content = utils::read_file_to_string(genFile.string());
+            auto content = platform::read_file_to_string(genFile.string());
             auto json = nlohmann::json::parse(content);
             for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
                 packages[it.key()] = it.value().get<std::string>();
@@ -164,7 +165,7 @@ export int rollback(const fs::path& envDir, int targetGen) {
         {"current_generation", targetGen},
         {"packages",           packages}
     };
-    utils::write_string_to_file((envDir / ".profile.json").string(),
+    platform::write_string_to_file((envDir / ".profile.json").string(),
                                 profileJson.dump(2));
 
     std::println("[xlings:profile] rolled back to generation {}", targetGen);
@@ -182,7 +183,7 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
             if (!fs::exists(gensDir)) continue;
             for (auto& genEntry : fs::directory_iterator(gensDir)) {
                 try {
-                    auto content = utils::read_file_to_string(genEntry.path().string());
+                    auto content = platform::read_file_to_string(genEntry.path().string());
                     auto json = nlohmann::json::parse(content);
                     for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
                         referenced.insert(it.key() + "@" + it.value().get<std::string>());

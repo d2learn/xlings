@@ -52,7 +52,7 @@ private:
         auto configPath = paths_.homeDir / ".xlings.json";
         if (fs::exists(configPath)) {
             try {
-                auto content = utils::read_file_to_string(configPath.string());
+                auto content = platform::read_file_to_string(configPath.string());
                 auto json    = nlohmann::json::parse(content, nullptr, false);
                 if (!json.is_discarded()) {
                     if (json.contains("activeSubos") && json["activeSubos"].is_string()) {
