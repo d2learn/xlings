@@ -46,8 +46,11 @@ export std::vector<SubosInfo> list_all() {
             int toolCount = 0;
             auto binDir   = dir / "bin";
             if (fs::exists(binDir)) {
-                for (auto& e : fs::directory_iterator(binDir))
-                    if (e.path().filename() != "xvm-shim") ++toolCount;
+                for (auto& e : fs::directory_iterator(binDir)) {
+                    auto stem = e.path().stem().string();
+                    if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias")
+                        ++toolCount;
+                }
             }
             result.push_back({name, dir, p.activeSubos == name, toolCount});
         }
@@ -99,9 +102,12 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     fs::create_directories(dir / "generations");
 
     auto shimSrc = p.subosDir / "bin" / "xvm-shim";
+    if (!fs::exists(shimSrc))
+        shimSrc = p.subosDir / "bin" / "xvm-shim.exe";
     if (fs::exists(shimSrc)) {
+        auto ext = shimSrc.extension().string();
         for (auto& n : {"xvm-shim", "xlings", "xvm"}) {
-            fs::copy_file(shimSrc, dir / "bin" / n,
+            fs::copy_file(shimSrc, dir / "bin" / (std::string(n) + ext),
                 fs::copy_options::overwrite_existing);
         }
     }
@@ -213,8 +219,11 @@ export std::optional<SubosInfo> info(const std::string& name) {
     int toolCount = 0;
     auto binDir = dir / "bin";
     if (fs::exists(binDir)) {
-        for (auto& e : fs::directory_iterator(binDir))
-            if (e.path().filename() != "xvm-shim") ++toolCount;
+        for (auto& e : fs::directory_iterator(binDir)) {
+            auto stem = e.path().stem().string();
+            if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias")
+                ++toolCount;
+        }
     }
     return SubosInfo{name, dir, p.activeSubos == name, toolCount};
 }
