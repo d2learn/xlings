@@ -71,7 +71,11 @@ function load()
     if xlings_config.need_load_flag then
         xlings_config_file = resolve_config_file()
         if os.isfile(xlings_config_file) then
+            local defaults_xim = xlings_config.xim
             xlings_config = json.loadfile(xlings_config_file)
+            if not xlings_config.xim then
+                xlings_config.xim = defaults_xim
+            end
             -- when first install or need_update
             if xlings_config["need_update"] then
                 local urls = {

@@ -106,9 +106,17 @@ Copy-Item -Recurse "core\xim\*" "$OUT_DIR\xim\" -ErrorAction SilentlyContinue
 Copy-Item "config\i18n\*.json" "$OUT_DIR\config\i18n\" -ErrorAction SilentlyContinue
 '{}' | Set-Content "$OUT_DIR\data\xim-index-repos\xim-indexrepos.json" -Encoding UTF8
 
-@"
-{"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false}
+$configSrc = "$PROJECT_DIR\config\xlings.json"
+if (Test-Path $configSrc) {
+  $base = Get-Content $configSrc -Raw | ConvertFrom-Json
+  $base | Add-Member -NotePropertyName "activeSubos" -NotePropertyValue "default" -Force
+  $base | Add-Member -NotePropertyName "subos" -NotePropertyValue @{default=@{dir=""}} -Force
+  $base | ConvertTo-Json -Depth 10 -Compress | Set-Content "$OUT_DIR\.xlings.json" -Encoding UTF8
+} else {
+  @"
+{"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false,"mirror":"CN","xim":{"mirrors":{"index-repo":{"GLOBAL":"https://github.com/d2learn/xim-pkgindex.git","CN":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"res-server":{"GLOBAL":"https://github.com/xlings-res","CN":"https://gitcode.com/xlings-res"}},"res-server":"https://gitcode.com/xlings-res","index-repo":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"repo":"https://gitee.com/sunrisepeak/xlings.git"}
 "@ | Set-Content "$OUT_DIR\.xlings.json" -Encoding UTF8
+}
 
 @"
 add_moduledirs("xim")

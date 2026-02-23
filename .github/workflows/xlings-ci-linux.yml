@@ -35,30 +35,18 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
           xmake --version
 
-      - name: Install GCC 15.1
+      - name: Install Xlings
+        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
+
+      - name: Install GCC 15.1 with Xlings
         run: |
-          curl -fsSL -o gcc.tar.gz \
-            "https://github.com/xlings-res/gcc/releases/download/15.1.0/gcc-15.1.0-linux-x86_64.tar.gz"
-          mkdir -p gcc-sdk
-          tar -xzf gcc.tar.gz -C gcc-sdk --strip-components=1
-          GCC_SDK="$GITHUB_WORKSPACE/gcc-sdk"
-
-          # Pre-built GCC binaries have a non-standard ELF interpreter path.
-          # Patch all ELF executables to use the system dynamic linker.
-          sudo apt-get install -q -y patchelf
-          SYS_INTERP=$(patchelf --print-interpreter /usr/bin/ls)
-          echo "System interpreter: $SYS_INTERP"
-          find "$GCC_SDK" -type f -executable | while read -r f; do
-            if file "$f" | grep -qE 'ELF.*(executable|pie executable)'; then
-              patchelf --set-interpreter "$SYS_INTERP" "$f" 2>/dev/null || true
-            fi
-          done
-
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          xlings install gcc@15.1 -y
+          GCC_BIN=$(which gcc)
+          GCC_SDK=$(dirname "$(dirname "$GCC_BIN")")
           echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
           echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$GCC_SDK/lib64:$GCC_SDK/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
-          echo "=== GCC SDK verification ==="
-          "$GCC_SDK/bin/gcc" --version
+          gcc --version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -75,8 +63,6 @@ jobs:
 
       - name: Configure xmake
         run: |
-          echo "Using GCC SDK: $GCC_SDK"
-          which gcc && gcc --version
           xmake f -p linux -m release --sdk="$GCC_SDK"
 
       # ── Phase 2: Build via Release Script ───────────────────────
@@ -85,6 +71,11 @@ jobs:
         run: |
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
+
+      - name: Uninstall old Xlings
+        run: |
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          xlings self uninstall -y || rm -rf /home/xlings/.xlings_data
 
       - name: Prepare release artifact
         run: |
