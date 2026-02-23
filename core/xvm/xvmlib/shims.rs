@@ -285,9 +285,9 @@ impl Program {
                 status.code().unwrap_or(1)
             },
             Err(e) => {
+                #[cfg(target_os = "linux")]
                 if e.kind() == std::io::ErrorKind::NotFound
                     && program_path.is_some()
-                    && cfg!(target_os = "linux")
                 {
                     let bin_path = program_path.as_ref().unwrap();
                     let ld_env = self.get_ld_library_path_env();

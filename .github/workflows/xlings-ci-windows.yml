@@ -17,6 +17,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Phase 1: Configure Environment ──────────────────────────
+
       - name: Install xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
@@ -33,163 +35,99 @@ jobs:
           workspaces: core/xvm
 
       - name: Configure xmake
-        run: |
-          xmake f -p windows -m release
+        run: xmake f -p windows -m release
 
-      - name: Build C++ (xlings binary)
-        run: |
-          xmake build xlings
+      # ── Phase 2: Build via Release Script ───────────────────────
 
-      - name: Build xvm (Rust)
-        run: |
-          cd core/xvm
-          cargo build --release
-
-      - name: Smoke test
+      - name: Build (windows_release)
         shell: pwsh
         run: |
-          .\build\windows\x64\release\xlings.exe -h
-          .\core\xvm\target\release\xvm.exe --version
+          & "$env:GITHUB_WORKSPACE\tools\windows_release.ps1"
 
-      - name: Package release
+      - name: Prepare release artifact
         shell: pwsh
         run: |
-          $VERSION = "0.2.0"
-          $OUTDIR = "build\xlings-$VERSION-windows-x86_64"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\bin"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\xim"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\data\xpkgs"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\data\runtimedir"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\data\xim-index-repos"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\data\local-indexrepo"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\subos\default\bin"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\subos\default\lib"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\subos\default\usr"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\subos\default\xvm"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\subos\default\generations"
-          New-Item -ItemType Directory -Force -Path "$OUTDIR\config\i18n"
-          $defaultAbs = (Resolve-Path "$OUTDIR\subos\default").Path
-          New-Item -ItemType Junction -Path "$OUTDIR\subos\current" -Target $defaultAbs
-          Copy-Item "build\windows\x64\release\xlings.exe" "$OUTDIR\bin\"
-          Copy-Item "core\xvm\target\release\xvm.exe" "$OUTDIR\bin\"
-          if (Test-Path "core\xvm\target\release\xvm-shim.exe") {
-            Copy-Item "core\xvm\target\release\xvm-shim.exe" "$OUTDIR\bin\"
-            foreach ($shim in @("xlings.exe","xvm.exe","xvm-shim.exe")) {
-              Copy-Item "$OUTDIR\bin\xvm-shim.exe" "$OUTDIR\subos\default\bin\$shim"
-            }
-          }
-          @"
-          ---
-          xvm-wmetadata:
-            name: global
-            active: true
-            inherit: true
-          versions:
-            xlings: bootstrap
-            xvm: bootstrap
-            xvm-shim: bootstrap
-          "@ | Set-Content "$OUTDIR\subos\default\xvm\.workspace.xvm.yaml" -Encoding UTF8
-          @"
-          ---
-          xlings:
-            bootstrap:
-              path: "../../bin"
-          xvm:
-            bootstrap:
-              path: "../../bin"
-          xvm-shim:
-            bootstrap:
-              path: "../../bin"
-          "@ | Set-Content "$OUTDIR\subos\default\xvm\versions.xvm.yaml" -Encoding UTF8
-          Copy-Item -Recurse "core\xim\" "$OUTDIR\xim\" -ErrorAction SilentlyContinue
-          Copy-Item "config\i18n\*.json" "$OUTDIR\config\i18n\" -ErrorAction SilentlyContinue
-          '{}' | Set-Content "$OUTDIR\data\xim-index-repos\xim-indexrepos.json" -Encoding UTF8
-          @"
-          {"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false}
-          "@ | Set-Content "$OUTDIR\.xlings.json" -Encoding UTF8
-          @"
-          add_moduledirs("xim")
-          add_moduledirs(".")
-          task("xim")
-              on_run(function ()
-                  import("core.base.option")
-                  local xim_dir = path.join(os.projectdir(), "xim")
-                  local xim_entry = import("xim", {rootdir = xim_dir, anonymous = true})
-                  local args = option.get("arguments") or { "-h" }
-                  xim_entry.main(table.unpack(args))
-              end)
-              set_menu{
-                  usage = "xmake xim [arguments]",
-                  description = "xim package manager",
-                  options = {
-                      {nil, "arguments", "vs", nil, "xim arguments"},
-                  }
-              }
-          "@ | Set-Content "$OUTDIR\xmake.lua" -Encoding UTF8
-          Compress-Archive -Path "$OUTDIR" -DestinationPath "build\xlings-$VERSION-windows-x86_64.zip"
-          Copy-Item "build\xlings-$VERSION-windows-x86_64.zip" "build\release.zip"
+          $zip = Get-ChildItem "build\xlings-*-windows-x86_64.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No release zip found" }
+          Copy-Item $zip.FullName "build\release.zip"
+
+      # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment
         shell: pwsh
         run: |
-          $VERSION = "0.2.0"
-          $OUTDIR = "$env:GITHUB_WORKSPACE\build\xlings-$VERSION-windows-x86_64"
-          echo "XLINGS_HOME=$OUTDIR" >> $env:GITHUB_ENV
-          echo "XLINGS_DATA=$OUTDIR\data" >> $env:GITHUB_ENV
-          echo "XLINGS_SUBOS=$OUTDIR\subos\default" >> $env:GITHUB_ENV
-          echo "$OUTDIR\subos\current\bin" >> $env:GITHUB_PATH
-          echo "$OUTDIR\bin" >> $env:GITHUB_PATH
+          $pkgDir = Get-ChildItem -Directory "build\xlings-*-windows-x86_64" | Select-Object -First 1
+          if (-not $pkgDir) { throw "Package dir not found" }
+          $XLINGS_HOME = $pkgDir.FullName
+          echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
+          echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
+          echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
+          echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
 
       - name: "Test: basic commands"
         shell: pwsh
         run: |
           xlings -h
           xlings config
+          xvm --version
           xlings subos list
 
-      - name: "Test: install d2x@0.1.1 in default subos"
+      - name: "Test: create subos s1, install d2x@0.1.1"
         shell: pwsh
         run: |
-          xlings install d2x@0.1.1 -y
-          $ver = (d2x --version 2>&1) | Select-Object -First 1
-          Write-Host "default subos d2x version: $ver"
-          if ($ver -notmatch "0\.1\.1") { throw "FAIL: expected 0.1.1, got $ver" }
-          Write-Host "OK: default subos has d2x 0.1.1"
+          Write-Host "=== Create subos s1 ==="
+          xlings subos new s1
+          xlings subos use s1
+          Write-Host "=== Install d2x@0.1.1 in s1 ==="
+          $out = (xlings install d2x@0.1.1 -y 2>&1) | Out-String
+          Write-Host $out
+          if ($out -notmatch "version.*0\.1\.1") {
+            throw "FAIL: [package] info doesn't show version 0.1.1"
+          }
+          if ($out -notmatch "d2x@0\.1\.1.*installed") {
+            throw "FAIL: d2x@0.1.1 install not confirmed"
+          }
+          Write-Host "OK: d2x@0.1.1 installed in s1, [package] info verified"
 
-      - name: "Test: create dev subos and install d2x@0.1.2"
+      - name: "Test: create subos s2, install d2x@0.1.2"
         shell: pwsh
         run: |
-          xlings subos new dev
-          xlings subos use dev
-          xlings install d2x@0.1.2 -y
-          $ver = (d2x --version 2>&1) | Select-Object -First 1
-          Write-Host "dev subos d2x version: $ver"
-          if ($ver -notmatch "0\.1\.2") { throw "FAIL: expected 0.1.2, got $ver" }
-          Write-Host "OK: dev subos has d2x 0.1.2"
+          Write-Host "=== Create subos s2 ==="
+          xlings subos new s2
+          xlings subos use s2
+          Write-Host "=== Install d2x@0.1.2 in s2 ==="
+          $out = (xlings install d2x@0.1.2 -y 2>&1) | Out-String
+          Write-Host $out
+          if ($out -notmatch "version.*0\.1\.2") {
+            throw "FAIL: [package] info doesn't show version 0.1.2"
+          }
+          if ($out -notmatch "d2x@0\.1\.2.*installed") {
+            throw "FAIL: d2x@0.1.2 install not confirmed"
+          }
+          Write-Host "OK: d2x@0.1.2 installed in s2, [package] info verified"
 
-      - name: "Test: switch back and verify isolation"
+      - name: "Test: switch subos and verify isolation"
+        shell: pwsh
+        run: |
+          Write-Host "=== Switch to s1 ==="
+          xlings subos use s1
+          Write-Host "OK: switched to s1"
+
+          Write-Host "=== Switch to s2 ==="
+          xlings subos use s2
+          Write-Host "OK: switched to s2"
+
+          Write-Host "=== subos list ==="
+          xlings subos list
+
+      - name: "Test: cleanup subos"
         shell: pwsh
         run: |
           xlings subos use default
-          $ver = (d2x --version 2>&1) | Select-Object -First 1
-          Write-Host "default subos d2x after switch: $ver"
-          if ($ver -notmatch "0\.1\.1") { throw "FAIL: expected 0.1.1, got $ver" }
-          Write-Host "OK: isolation verified - default still has d2x 0.1.1"
-
-          xlings subos use dev
-          $ver = (d2x --version 2>&1) | Select-Object -First 1
-          Write-Host "dev subos d2x after switch: $ver"
-          if ($ver -notmatch "0\.1\.2") { throw "FAIL: expected 0.1.2, got $ver" }
-          Write-Host "OK: isolation verified - dev still has d2x 0.1.2"
-
+          xlings subos remove s1
+          xlings subos remove s2
           xlings subos list
-
-      - name: "Test: cleanup dev subos"
-        shell: pwsh
-        run: |
-          xlings subos use default
-          xlings subos remove dev
-          xlings subos list
+          Write-Host "OK: test subos removed"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

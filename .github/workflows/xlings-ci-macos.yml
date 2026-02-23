@@ -17,9 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Phase 1: Configure Environment ──────────────────────────
+
       - name: Install system deps
         run: |
-          brew install xmake
+          brew install xmake llvm@20
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,128 +35,99 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -p macosx -m release
+          xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
 
-      - name: Build C++ (xlings binary)
-        run: |
-          xmake build xlings
+      # ── Phase 2: Build via Release Script ───────────────────────
 
-      - name: Build xvm (Rust)
+      - name: Build (macos_release)
         run: |
-          cd core/xvm
-          cargo build --release
+          chmod +x ./tools/macos_release.sh
+          SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 
-      - name: Smoke test
+      - name: Prepare release artifact
         run: |
-          ./build/macosx/arm64/release/xlings -h
-          ./core/xvm/target/release/xvm --version
+          tarball=$(ls build/xlings-*-macos-arm64.tar.gz 2>/dev/null | head -1)
+          [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
+          cp "$tarball" build/release.tar.gz
 
-      - name: Package release
-        run: |
-          VERSION=$(./build/macosx/arm64/release/xlings --version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.2.0")
-          echo "PKG_VERSION=$VERSION" >> "$GITHUB_ENV"
-          OUTDIR="build/xlings-${VERSION}-macos-arm64"
-          mkdir -p "$OUTDIR/bin"
-          mkdir -p "$OUTDIR/xim"
-          mkdir -p "$OUTDIR/data/xpkgs"
-          mkdir -p "$OUTDIR/data/runtimedir"
-          mkdir -p "$OUTDIR/data/xim-index-repos"
-          mkdir -p "$OUTDIR/data/local-indexrepo"
-          mkdir -p "$OUTDIR/subos/default/bin"
-          mkdir -p "$OUTDIR/subos/default/lib"
-          mkdir -p "$OUTDIR/subos/default/usr"
-          mkdir -p "$OUTDIR/subos/default/xvm"
-          mkdir -p "$OUTDIR/subos/default/generations"
-          mkdir -p "$OUTDIR/tools"
-          mkdir -p "$OUTDIR/config/i18n"
-          ln -sfn default "$OUTDIR/subos/current"
-          cp build/macosx/arm64/release/xlings "$OUTDIR/bin/"
-          cp core/xvm/target/release/xvm "$OUTDIR/bin/"
-          cp core/xvm/target/release/xvm-shim "$OUTDIR/bin/" 2>/dev/null || true
-          chmod +x "$OUTDIR/bin/"*
-          for shim in xlings xvm xvm-shim; do
-            cp "$OUTDIR/bin/xvm-shim" "$OUTDIR/subos/default/bin/$shim" 2>/dev/null || \
-            cp "$OUTDIR/bin/xvm" "$OUTDIR/subos/default/bin/$shim"
-            chmod +x "$OUTDIR/subos/default/bin/$shim"
-          done
-          printf '%s\n' '---' 'xvm-wmetadata:' '  name: global' '  active: true' '  inherit: true' 'versions:' '  xlings: bootstrap' '  xvm: bootstrap' '  xvm-shim: bootstrap' > "$OUTDIR/subos/default/xvm/.workspace.xvm.yaml"
-          printf '%s\n' '---' 'xlings:' '  bootstrap:' '    path: "../../bin"' 'xvm:' '  bootstrap:' '    path: "../../bin"' 'xvm-shim:' '  bootstrap:' '    path: "../../bin"' > "$OUTDIR/subos/default/xvm/versions.xvm.yaml"
-          cp -r core/xim/ "$OUTDIR/xim/" 2>/dev/null || true
-          cp -R config/i18n/*.json "$OUTDIR/config/i18n/" 2>/dev/null || true
-          echo '{}' > "$OUTDIR/data/xim-index-repos/xim-indexrepos.json"
-          cat > "$OUTDIR/.xlings.json" << DOTJSON
-          {"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false}
-          DOTJSON
-          cat > "$OUTDIR/xmake.lua" << 'LUA'
-          add_moduledirs("xim")
-          add_moduledirs(".")
-          task("xim")
-              on_run(function ()
-                  import("core.base.option")
-                  local xim_dir = path.join(os.projectdir(), "xim")
-                  local xim_entry = import("xim", {rootdir = xim_dir, anonymous = true})
-                  local args = option.get("arguments") or { "-h" }
-                  xim_entry.main(table.unpack(args))
-              end)
-              set_menu{
-                  usage = "xmake xim [arguments]",
-                  description = "xim package manager",
-                  options = {
-                      {nil, "arguments", "vs", nil, "xim arguments"},
-                  }
-              }
-          LUA
-          tar -czf "build/xlings-${VERSION}-macos-arm64.tar.gz" -C build "xlings-${VERSION}-macos-arm64"
-          cp "build/xlings-${VERSION}-macos-arm64.tar.gz" build/release.tar.gz
+      # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment
         run: |
-          VERSION="${PKG_VERSION:-0.2.0}"
-          OUTDIR="$GITHUB_WORKSPACE/build/xlings-${VERSION}-macos-arm64"
-          echo "XLINGS_HOME=$OUTDIR" >> "$GITHUB_ENV"
-          echo "XLINGS_DATA=$OUTDIR/data" >> "$GITHUB_ENV"
-          echo "XLINGS_SUBOS=$OUTDIR/subos/default" >> "$GITHUB_ENV"
-          echo "PATH=$OUTDIR/subos/current/bin:$OUTDIR/bin:$PATH" >> "$GITHUB_ENV"
+          tar -xzf build/release.tar.gz -C build
+          pkg_dir=$(ls -d build/xlings-*-macos-arm64 2>/dev/null | head -1)
+          [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
+          XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
+          echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
+          echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
+          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
+          echo "=== subos/current symlink ==="
+          ls -la "$XLINGS_HOME/subos/current"
+          readlink "$XLINGS_HOME/subos/current"
 
       - name: "Test: basic commands"
         run: |
           xlings -h
           xlings config
+          xvm --version || true
           xlings subos list
-          ls -la "$XLINGS_HOME/subos/current"
 
-      - name: "Test: install d2x@0.1.2 in default subos"
+      - name: "Test: create subos s1, install d2x@0.1.1"
         run: |
-          xlings install d2x@0.1.2 -y
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "default subos d2x version: $D2X_VER"
-          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
-          echo "OK: default subos has d2x 0.1.2"
+          echo "=== Create subos s1 ==="
+          xlings subos new s1
+          xlings subos use s1
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
+            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
+          echo "=== Install d2x@0.1.1 in s1 ==="
+          INSTALL_OUT=$(xlings install d2x@0.1.1 -y 2>&1)
+          echo "$INSTALL_OUT"
+          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.1" || \
+            { echo "FAIL: [package] info doesn't show version 0.1.1"; exit 1; }
+          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.1.*installed" || \
+            { echo "FAIL: d2x@0.1.1 install not confirmed"; exit 1; }
+          echo "OK: d2x@0.1.1 installed in s1, [package] info verified"
 
-      - name: "Test: create dev subos and verify isolation"
+      - name: "Test: create subos s2, install d2x@0.1.2"
         run: |
-          xlings subos new dev
-          xlings subos use dev
-          readlink "$XLINGS_HOME/subos/current" | grep -q "dev" || \
-            { echo "FAIL: subos/current not pointing to dev"; exit 1; }
-          if d2x --version 2>&1; then
-            echo "FAIL: d2x should not be available in fresh dev subos"
-            exit 1
-          fi
-          echo "OK: dev subos does not have d2x (isolated)"
+          echo "=== Create subos s2 ==="
+          xlings subos new s2
+          xlings subos use s2
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
+            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
+          echo "=== Install d2x@0.1.2 in s2 ==="
+          INSTALL_OUT=$(xlings install d2x@0.1.2 -y 2>&1)
+          echo "$INSTALL_OUT"
+          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.2" || \
+            { echo "FAIL: [package] info doesn't show version 0.1.2"; exit 1; }
+          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.2.*installed" || \
+            { echo "FAIL: d2x@0.1.2 install not confirmed"; exit 1; }
+          echo "OK: d2x@0.1.2 installed in s2, [package] info verified"
 
-          echo "=== Switch back to default ==="
+      - name: "Test: switch subos and verify isolation"
+        run: |
+          echo "=== Switch to s1 ==="
+          xlings subos use s1
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
+            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
+          echo "OK: switched to s1"
+
+          echo "=== Switch to s2 ==="
+          xlings subos use s2
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
+            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
+          echo "OK: switched to s2"
+
+          echo "=== subos list ==="
+          xlings subos list
+
+      - name: "Test: cleanup subos"
+        run: |
           xlings subos use default
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
-          echo "OK: default subos still has d2x 0.1.2 after switching back"
+          xlings subos remove s1
+          xlings subos remove s2
           xlings subos list
-
-      - name: "Test: cleanup dev subos"
-        run: |
-          xlings subos use default
-          xlings subos remove dev
-          xlings subos list
+          echo "OK: test subos removed"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

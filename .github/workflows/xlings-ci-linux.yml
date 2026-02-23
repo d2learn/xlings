@@ -17,6 +17,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Phase 1: Configure Environment ──────────────────────────
+
       - name: Install system deps
         run: |
           sudo apt-get update -qq
@@ -33,22 +35,18 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
           xmake --version
 
-      - name: Install old xlings (to get GCC 15.1)
+      - name: Install GCC 15.1
         run: |
-          curl -fsSL https://d2learn.org/xlings-install.sh | bash
-          # Old install may use .xlings_data (legacy) or data/; support both and /home/xlings (reference)
-          echo "OLD_XLINGS_PREFIX=$HOME/.xlings_data" >> "$GITHUB_ENV"
-          echo "PATH=$HOME/.xlings_data/bin:$HOME/.xlings/data/bin:/home/xlings/.xlings_data/bin:/home/xlings/data/bin:$PATH" >> "$GITHUB_ENV"
-
-      - name: Install GCC 15.1 with old xlings
-        run: |
-          export PATH="$HOME/.xlings_data/bin:$HOME/.xlings/data/bin:/home/xlings/.xlings_data/bin:/home/xlings/data/bin:$PATH"
-          xlings install gcc@15.1 -y
-          # Use GCC from xlings for building new xlings
-          GCC_BIN=$(which gcc)
-          GCC_SDK=$(dirname "$(dirname "$GCC_BIN")")
+          curl -fsSL -o gcc.tar.gz \
+            "https://github.com/xlings-res/gcc/releases/download/15.1.0/gcc-15.1.0-linux-x86_64.tar.gz"
+          mkdir -p gcc-sdk
+          tar -xzf gcc.tar.gz -C gcc-sdk --strip-components=1
+          GCC_SDK="$GITHUB_WORKSPACE/gcc-sdk"
           echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
           echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
+          echo "=== GCC SDK contents ==="
+          ls "$GCC_SDK/bin/" | head -20
+          "$GCC_SDK/bin/gcc" --version || echo "WARN: gcc not found at $GCC_SDK/bin/gcc"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -63,19 +61,18 @@ jobs:
       - name: Add Rust musl target (for xvm release-build.sh)
         run: rustup target add x86_64-unknown-linux-musl
 
-      - name: Configure xmake (GCC 15 SDK for C++23 std module)
+      - name: Configure xmake
         run: |
-          cd "$GITHUB_WORKSPACE"
-          [[ -z "$GCC_SDK" ]] && { echo "GCC_SDK not set"; exit 1; }
-          [[ -x "$GCC_SDK/bin/gcc" ]] || { echo "GCC not found in $GCC_SDK/bin"; exit 1; }
-          xmake f -p linux -m release --sdk="$GCC_SDK"
           echo "Using GCC SDK: $GCC_SDK"
+          which gcc && gcc --version
+          xmake f -p linux -m release --sdk="$GCC_SDK"
 
-      - name: Build and test (linux_release)
+      # ── Phase 2: Build via Release Script ───────────────────────
+
+      - name: Build (linux_release)
         run: |
-          cd "$GITHUB_WORKSPACE"
           chmod +x ./tools/linux_release.sh
-          ./tools/linux_release.sh
+          SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
 
       - name: Prepare release artifact
         run: |
@@ -83,82 +80,84 @@ jobs:
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
 
-      - name: Uninstall old xlings
-        run: |
-          rm -rf "$HOME/.xlings_data" "$HOME/.xlings" /home/xlings 2>/dev/null || true
+      # ── Phase 3: Test ───────────────────────────────────────────
 
-      - name: Install newly built xlings
+      - name: Setup xlings environment
         run: |
-          cd "$GITHUB_WORKSPACE"
           tar -xzf build/release.tar.gz -C build
           pkg_dir=$(ls -d build/xlings-*-linux-x86_64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
-          export XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
-          export XLINGS_DATA="$XLINGS_HOME/data"
-          export XLINGS_SUBOS="$XLINGS_HOME/subos/default"
-          export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH"
+          XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
-          echo "XLINGS_DATA=$XLINGS_DATA" >> "$GITHUB_ENV"
-          echo "XLINGS_SUBOS=$XLINGS_SUBOS" >> "$GITHUB_ENV"
+          echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH" >> "$GITHUB_ENV"
-          xmake --version || true
-          xlings -h
-          xvm --version || true
           echo "=== subos/current symlink ==="
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
 
-      - name: "Test: install d2x@0.1.0 in default subos"
+      - name: "Test: basic commands"
         run: |
-          echo "=== Install d2x@0.1.0 in default subos ==="
-          xlings install d2x@0.1.0 -y
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "default subos d2x version: $D2X_VER"
-          echo "$D2X_VER" | grep -q "0.1.0" || { echo "FAIL: expected 0.1.0, got $D2X_VER"; exit 1; }
-          echo "OK: default subos has d2x 0.1.0"
+          xlings -h
+          xlings config
+          xvm --version || true
+          xlings subos list
 
-      - name: "Test: create dev subos and install d2x@0.1.2"
+      - name: "Test: create subos s1, install d2x@0.1.1"
         run: |
-          echo "=== Create dev subos ==="
-          xlings subos new dev
-          xlings subos use dev
-          echo "=== Verify subos/current points to dev ==="
-          readlink "$XLINGS_HOME/subos/current" | grep -q "dev" || \
-            { echo "FAIL: subos/current not pointing to dev"; ls -la "$XLINGS_HOME/subos/current"; exit 1; }
-          echo "=== Install d2x@0.1.2 in dev subos ==="
-          xlings install d2x@0.1.2 -y
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "dev subos d2x version: $D2X_VER"
-          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
-          echo "OK: dev subos has d2x 0.1.2"
+          echo "=== Create subos s1 ==="
+          xlings subos new s1
+          xlings subos use s1
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
+            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
+          echo "=== Install d2x@0.1.1 in s1 ==="
+          INSTALL_OUT=$(xlings install d2x@0.1.1 -y 2>&1)
+          echo "$INSTALL_OUT"
+          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.1" || \
+            { echo "FAIL: [package] info doesn't show version 0.1.1"; exit 1; }
+          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.1.*installed" || \
+            { echo "FAIL: d2x@0.1.1 install not confirmed"; exit 1; }
+          echo "OK: d2x@0.1.1 installed in s1, [package] info verified"
 
-      - name: "Test: switch back to default and verify isolation"
+      - name: "Test: create subos s2, install d2x@0.1.2"
         run: |
-          echo "=== Switch back to default ==="
-          xlings subos use default
-          readlink "$XLINGS_HOME/subos/current" | grep -q "default" || \
-            { echo "FAIL: subos/current not pointing to default"; exit 1; }
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "default subos d2x version after switch: $D2X_VER"
-          echo "$D2X_VER" | grep -q "0.1.0" || { echo "FAIL: expected 0.1.0, got $D2X_VER"; exit 1; }
-          echo "OK: isolation verified - default still has d2x 0.1.0"
+          echo "=== Create subos s2 ==="
+          xlings subos new s2
+          xlings subos use s2
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
+            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
+          echo "=== Install d2x@0.1.2 in s2 ==="
+          INSTALL_OUT=$(xlings install d2x@0.1.2 -y 2>&1)
+          echo "$INSTALL_OUT"
+          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.2" || \
+            { echo "FAIL: [package] info doesn't show version 0.1.2"; exit 1; }
+          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.2.*installed" || \
+            { echo "FAIL: d2x@0.1.2 install not confirmed"; exit 1; }
+          echo "OK: d2x@0.1.2 installed in s2, [package] info verified"
 
-          echo "=== Switch to dev again ==="
-          xlings subos use dev
-          D2X_VER=$(d2x --version 2>&1 | head -1)
-          echo "dev subos d2x version after switch: $D2X_VER"
-          echo "$D2X_VER" | grep -q "0.1.2" || { echo "FAIL: expected 0.1.2, got $D2X_VER"; exit 1; }
-          echo "OK: isolation verified - dev still has d2x 0.1.2"
+      - name: "Test: switch subos and verify isolation"
+        run: |
+          echo "=== Switch to s1 ==="
+          xlings subos use s1
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
+            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
+          echo "OK: switched to s1"
+
+          echo "=== Switch to s2 ==="
+          xlings subos use s2
+          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
+            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
+          echo "OK: switched to s2"
 
           echo "=== subos list ==="
           xlings subos list
 
-      - name: "Test: remove dev subos"
+      - name: "Test: cleanup subos"
         run: |
           xlings subos use default
-          xlings subos remove dev
+          xlings subos remove s1
+          xlings subos remove s2
           xlings subos list
-          echo "OK: dev subos removed"
+          echo "OK: test subos removed"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

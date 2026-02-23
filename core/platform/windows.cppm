@@ -1,5 +1,6 @@
 module;
 
+#include <cstdio>
 #include <cstdlib>
 #if defined(_WIN32)
 #include <windows.h>
