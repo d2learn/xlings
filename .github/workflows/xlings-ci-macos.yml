@@ -60,6 +60,7 @@ jobs:
           XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
           echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
+          echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
           echo "=== subos/current symlink ==="
           ls -la "$XLINGS_HOME/subos/current"
@@ -69,7 +70,7 @@ jobs:
         run: |
           xlings -h
           xlings config
-          xvm --version || true
+          xvm --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.1"

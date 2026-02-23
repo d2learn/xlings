@@ -164,6 +164,7 @@ Info "OK: .xlings.json present"
 
 $env:XLINGS_HOME = $OUT_DIR
 $env:XLINGS_DATA = "$OUT_DIR\data"
+$env:XLINGS_SUBOS = "$OUT_DIR\subos\current"
 $env:PATH = "$OUT_DIR\subos\current\bin;$OUT_DIR\bin;$env:PATH"
 
 $helpOut = & "$OUT_DIR\bin\xlings.exe" -h 2>&1 | Out-String
