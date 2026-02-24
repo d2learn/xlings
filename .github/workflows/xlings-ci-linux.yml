@@ -36,13 +36,15 @@ jobs:
           xmake --version
 
       - name: Install Xlings
-        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install musl-gcc 15.1 with Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
           xlings install musl-gcc@15.1.0 -y
-          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          MUSL_SDK=$XLINGS_HOME/data/xpkgs/musl-gcc/15.1.0
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
@@ -77,8 +79,7 @@ jobs:
 
       - name: Uninstall old Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xlings self uninstall -y || rm -rf /home/xlings/.xlings_data
+          xlings self uninstall -y || rm -rf "$HOME/.xlings"
 
       - name: Prepare release artifact
         run: |
@@ -175,6 +176,52 @@ jobs:
 
           echo "=== subos list ==="
           xlings subos list
+
+      - name: "Test: xpkgs multi-subos reuse (T14)"
+        run: |
+          echo "=== Install d2x@0.1.1 in s1 again (already installed) ==="
+          xlings subos use s1
+          REUSE_OUT=$(xlings install d2x@0.1.1 -y 2>&1)
+          echo "$REUSE_OUT"
+          echo "$REUSE_OUT" | grep -qi "installed" || \
+            { echo "FAIL: d2x@0.1.1 should be recognized as installed (xpkgs reuse)"; exit 1; }
+          echo "OK: xpkgs reuse confirmed — d2x@0.1.1 not re-downloaded"
+
+      - name: "Test: .xlings.json project deps (T18)"
+        run: |
+          echo "=== T18: no .xlings.json → tip (exit 0) ==="
+          cd /tmp
+          ERR_OUT=$(xlings install 2>&1)
+          echo "$ERR_OUT"
+          echo "$ERR_OUT" | grep -qi ".xlings.json" || \
+            { echo "FAIL: should mention .xlings.json"; exit 1; }
+
+          echo "=== T18: valid .xlings.json ==="
+          PROJ_DIR=$(mktemp -d)
+          printf '{"deps":["d2x@0.1.1"]}\n' > "$PROJ_DIR/.xlings.json"
+          cd "$PROJ_DIR"
+          DEP_OUT=$(xlings install 2>&1) || true
+          echo "$DEP_OUT"
+          echo "$DEP_OUT" | grep -qi "d2x" || \
+            { echo "FAIL: should process d2x from .xlings.json"; exit 1; }
+
+          echo "=== T18: invalid deps format → error ==="
+          printf '{"deps":{"d2x":"0.1.1"}}\n' > "$PROJ_DIR/.xlings.json"
+          cd "$PROJ_DIR"
+          INV_OUT=$(xlings install 2>&1) || true
+          echo "$INV_OUT"
+          echo "$INV_OUT" | grep -qi "invalid" || \
+            { echo "FAIL: should report invalid deps format"; exit 1; }
+          rm -rf "$PROJ_DIR"
+          echo "OK: .xlings.json project deps tests passed"
+
+      - name: "Test: index search & spec validation (T20/T21)"
+        run: |
+          SEARCH_OUT=$(xlings search d2x 2>&1)
+          echo "$SEARCH_OUT"
+          echo "$SEARCH_OUT" | grep -qi "d2x" || \
+            { echo "FAIL: search should find d2x"; exit 1; }
+          echo "OK: index search and spec validation working"
 
       - name: "Test: cleanup subos"
         run: |

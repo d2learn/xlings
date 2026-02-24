@@ -3,6 +3,7 @@ export module xlings.cmdprocessor;
 import std;
 
 import xlings.log;
+import xlings.json;
 import xlings.config;
 import xlings.subos;
 import xlings.platform;
@@ -52,8 +53,6 @@ public:
         for (const auto& c : commands_) {
             std::println("\t {:12}\t{}", c.name, c.description);
         }
-        std::println("\nPaths:");
-        Config::print_paths();
         return 0;
     }
 
@@ -84,13 +83,92 @@ int xvm_exec(const std::string& subcommand, int argc, char* argv[], int startIdx
     return platform::exec(cmd);
 }
 
+std::filesystem::path find_project_xlings_json() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+
+    auto cwd = fs::current_path(ec);
+    if (ec) return {};
+    auto homeDir = Config::paths().homeDir;
+
+    fs::path cur = cwd;
+    while (!cur.empty()) {
+        auto cfg = cur / ".xlings.json";
+        if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {
+            auto curNorm = fs::weakly_canonical(cur, ec);
+            if (!ec) {
+                auto homeNorm = fs::weakly_canonical(homeDir, ec);
+                if (!ec && curNorm == homeNorm) {
+                    // Skip global config at $XLINGS_HOME/.xlings.json
+                } else {
+                    return cfg;
+                }
+            } else {
+                return cfg;
+            }
+        }
+
+        auto parent = cur.parent_path();
+        if (parent == cur) break;
+        cur = parent;
+    }
+    return {};
+}
+
+int install_from_project_config() {
+    namespace fs = std::filesystem;
+    auto cfg = find_project_xlings_json();
+    if (cfg.empty()) {
+        std::println("Tip: create <project>/.xlings.json with deps, or run `xlings install <package>`");
+        return 0;
+    }
+
+    nlohmann::json json;
+    try {
+        auto content = platform::read_file_to_string(cfg.string());
+        json = nlohmann::json::parse(content, nullptr, false);
+    } catch (...) {
+        json = nlohmann::json::object();
+    }
+    if (json.is_discarded() || !json.is_object()) {
+        log::error("Invalid JSON in {}", cfg.string());
+        return 1;
+    }
+    if (!json.contains("deps") || !json["deps"].is_array()) {
+        log::error("Missing or invalid `deps` array in {}", cfg.string());
+        return 1;
+    }
+
+    auto& p = Config::paths();
+    int rc = 0;
+    for (const auto& dep : json["deps"]) {
+        if (!dep.is_string()) continue;
+        auto target = dep.get<std::string>();
+        if (target.empty()) continue;
+        std::string cmd = std::format(
+            "xmake xim -P \"{}\" -- {} -y",
+            p.homeDir.string(),
+            target
+        );
+        auto dep_rc = platform::exec(cmd);
+        if (dep_rc != 0) {
+            rc = dep_rc;
+            break;
+        }
+    }
+    return rc;
+}
+
 export CommandProcessor create_processor() {
     return CommandProcessor{}
         .add("install", "install package/tool",
             [](int argc, char* argv[]) {
+                if (argc <= 2) {
+                    return install_from_project_config();
+                }
                 return xim_exec("", argc, argv);
             },
-            "xlings install <package[@version]>")
+            "xlings install [package[@version]]")
         .add("remove", "remove package/tool",
             [](int argc, char* argv[]) {
                 return xim_exec("", argc, argv, 1);

@@ -47,6 +47,15 @@ fn detect_package_layout() -> Option<(PathBuf, PathBuf)> {
     None
 }
 
+fn xlings_subcommand_alias(name: &str) -> Option<&'static str> {
+    match name {
+        "xim" | "xinstall" => Some("install"),
+        "xsubos"           => Some("subos"),
+        "xself"            => Some("self"),
+        _                  => None,
+    }
+}
+
 fn main() {
     let mut args: Vec<String> = env::args().collect();
 
@@ -74,8 +83,15 @@ fn main() {
 
     let mut command = Command::new(&xvm_bin);
     command.arg("run");
-    command.arg(executable_name.clone());
-    command.arg("--args");
+
+    if let Some(subcmd) = xlings_subcommand_alias(&executable_name) {
+        command.arg("xlings");
+        command.arg("--args");
+        command.arg(subcmd);
+    } else {
+        command.arg(executable_name.clone());
+        command.arg("--args");
+    }
     command.args(&args);
 
     if let Some((ref subos_dir, ref pkg_root)) = pkg {
@@ -100,7 +116,10 @@ fn main() {
             exit(status.code().unwrap_or(1));
         }
         Err(e) => {
-            eprintln!("Failed to execute `xvm run {}`: {}", executable_name, e);
+            let run_target = xlings_subcommand_alias(&executable_name)
+                .map(|_| "xlings".to_string())
+                .unwrap_or_else(|| executable_name.clone());
+            eprintln!("Failed to execute `xvm run {}`: {}", run_target, e);
             if e.kind() == std::io::ErrorKind::NotFound {
                 eprintln!("  hint: xvm not found in PATH. Set XLINGS_HOME or XLINGS_SUBOS.");
             }

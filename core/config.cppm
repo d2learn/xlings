@@ -9,7 +9,7 @@ import xlings.utils;
 namespace xlings {
 
 export struct Info {
-    static constexpr std::string_view VERSION = "0.2.0";
+    static constexpr std::string_view VERSION = "0.3.0";
     static constexpr std::string_view REPO = "https://github.com/d2learn/xlings";
 };
 

@@ -56,9 +56,17 @@ cd "$PROJECT_DIR"
 info "Version: $VERSION  |  Arch: $ARCH"
 info "Building C++ binary..."
 # Ensure xmake is configured with a toolchain that supports `import std`.
-MUSL_SDK_DEFAULT="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
+MUSL_SDK_DEFAULT="${XLINGS_HOME:-$HOME/.xlings}/data/xpkgs/musl-gcc/15.1.0"
 MUSL_SDK="${MUSL_SDK:-$MUSL_SDK_DEFAULT}"
 if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
+  # Some musl-gcc toolchains are built with a fixed interpreter path
+  # baked into helper binaries (cc1, as, collect2).  Create the loader
+  # symlink at that path so they can run during the build.
+  LOADER_DIR="/home/xlings/.xlings_data/lib"
+  if ! mkdir -p "$LOADER_DIR" 2>/dev/null; then
+    sudo mkdir -p "$LOADER_DIR" && sudo chown "$(id -u):$(id -g)" "$LOADER_DIR"
+  fi
+  ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
   export PATH="$MUSL_SDK/bin:$PATH"
@@ -103,7 +111,7 @@ cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
 cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
 
-for shim in xlings xvm xvm-shim xmake; do
+for shim in xlings xvm xvm-shim xmake xim xinstall xsubos xself; do
   cp "$XVM_DIR/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
   chmod +x "$OUT_DIR/subos/default/bin/$shim"
 done
@@ -286,10 +294,10 @@ else
     fail "xim --update index failed (network?). Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
-  info "Verify: xlings install d2x -y (timeout 300s)..."
+  info "Verify: xlings install d2x@0.1.3 -y (timeout 300s)..."
   if ! run_with_timeout 300 bash -c \
-    'cd "$1" && ./bin/xlings install d2x -y' _ "$OUT_DIR"; then
-    fail "install d2x failed. Set SKIP_NETWORK_VERIFY=1 to skip."
+    'cd "$1" && PATH="$1/subos/current/bin:$1/bin:/usr/local/bin:/usr/bin:/bin" ./bin/xlings install d2x@0.1.3 -y' _ "$OUT_DIR"; then
+    fail "install d2x@0.1.3 failed. Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
   XPKG_D2X="$XLINGS_DATA/xpkgs/d2x"

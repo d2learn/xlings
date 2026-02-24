@@ -63,12 +63,12 @@
 xlings install musl-gcc@15.1.0 -y
 ```
 
-SDK 路径: `/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0/`
+SDK 路径: `/home/xlings/.xlings_data/xpkgs/musl-gcc/15.1.0/`
 
 xmake 配置:
 
 ```bash
-MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+MUSL_SDK=/home/xlings/.xlings_data/xpkgs/musl-gcc/15.1.0
 xmake f -p linux -m release --sdk=$MUSL_SDK --cross=x86_64-linux-musl-
 ```
 
@@ -91,7 +91,7 @@ musl-gcc SDK ($MUSL_SDK)
 **兜底策略**：如果 musl-gcc SDK 中某个 `.a` 文件缺失，可从 gcc@15.1 SDK 获取：
 
 ```
-gcc SDK (/home/xlings/.xlings_data/xim/xpkgs/gcc/15.1.0/)
+gcc SDK (/home/xlings/.xlings_data/xpkgs/gcc/15.1.0/)
 └── lib64/
     ├── libstdc++.a, libstdc++fs.a
     └── libsupc++.a
@@ -149,7 +149,7 @@ elseif is_plat("linux") then
 
 - name: Configure xmake
   run: |
-    MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+    MUSL_SDK=/home/xlings/.xlings_data/xpkgs/musl-gcc/15.1.0
     xmake f -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl-
 ```
 

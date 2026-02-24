@@ -21,6 +21,15 @@
 | [T11](T11-xmake-musl-static.md) | xmake.lua musl 静态链接配置 | Lua | 1 | ~10 行 |
 | [T12](T12-ci-musl-gcc.md) | CI/Release 切换 musl-gcc@15.1.0 | YAML | 1 | ~30 行 |
 | [T13](T13-verify-static-binary.md) | musl 静态二进制验证 | — | 2 | 无代码改动 |
+| [T14](T14-xpkgs-reuse.md) | 多 subos 安装复用 xpkgs（框架层拦截） | Lua | 1 | ~20 行 |
+| [T15](T15-install-config-split.md) | template.lua config 拆分 + 2 个 xpkg 补 config | Lua | 1 | ~10 行 |
+| [T16](T16-namespace-unify.md) | 命名空间解析统一 | Lua | 2 | ~40 行 |
+| [T17](T17-dep-install-dir.md) | dep_install_dir API | Lua | 2 | ~30 行 |
+| [T18](T18-config-deps.md) | 项目级 .xlings.json 依赖声明 | C++ | 3 | ~60 行 |
+| [T19](T19-remove-refcheck.md) | remove 时引用检查，防止误删共享 xpkgs | Lua | 1 | ~25 行 |
+| [T20](T20-xpkg-spec-v1.md) | xpkg spec 版本字段 + 字段规范化 | Lua | 4 | ~30 行 |
+| [T21](T21-indexdb-enrich.md) | Index DB 丰富化（type/desc/categories） | Lua | 4 | ~15 行 |
+| [T22](T22-repo-simplify.md) | 多仓库简化（xim-pkgindex + awesome） | Lua | 5 | ~40 行 |
 
 ---
 
@@ -43,6 +52,16 @@ flowchart TD
     T12["T12\nCI/Release\nmusl-gcc@15.1.0"]
     T13["T13\n验证\nstatic binary check"]
 
+    T14["T14\nxpkgs 复用\nP0"]
+    T15["T15\ntemplate config 拆分\nP0"]
+    T16["T16\nnamespace 统一\nP1"]
+    T17["T17\ndep_install_dir API\nP1"]
+    T18["T18\n.xlings.json deps\nP2"]
+    T19["T19\nremove 引用检查\nP0"]
+    T20["T20\nxpkg spec v1\nP3"]
+    T21["T21\nIndex DB 丰富化\nP3"]
+    T22["T22\n多仓库简化\nP3"]
+
     T01 --> T02
     T02 --> T03
     T02 --> T04
@@ -56,6 +75,15 @@ flowchart TD
     T10 --> T09
     T11 --> T13
     T12 --> T13
+    T15 --> T14
+    T14 --> T16
+    T14 --> T19
+    T16 --> T17
+    T14 --> T18
+    T14 --> T20
+    T20 --> T21
+    T20 --> T22
+    T16 --> T22
 ```
 
 ---
@@ -106,6 +134,46 @@ Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分�
 | 任务 | 说明 | 依赖 |
 |------|------|------|
 | T09 | CI/CD 多平台补齐 | 所有任务（需代码全部就绪） |
+
+---
+
+## xim 模块改进任务（T14-T18）
+
+> 设计文档: [../xim-issues-design.md](../xim-issues-design.md)
+
+### xim-Wave 1 — P0 优先，3 个任务
+
+| 任务 | 说明 | 文件 | 依赖 |
+|------|------|------|------|
+| T15 | template.lua config 拆分 + 2 个 xpkg 补 config | `template.lua`, `rustup.lua`, `musl-cross-make.lua` | 无 |
+| T14 | 多 subos 安装复用 xpkgs（框架层拦截） | `PkgManagerExecutor.lua`, `XPkgManager.lua` | T15 |
+| T19 | remove 时引用检查，防止误删共享 xpkgs | `XPkgManager.lua` | 可与 T14 并行 |
+
+### xim-Wave 2 — P1 改进，2 个 Agent 并行
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T16 | 命名空间解析统一 | T14 |
+| T17 | dep_install_dir API | T16 |
+
+### xim-Wave 3 — P2 新功能，1 个 Agent
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T18 | 项目级 .xlings.json 依赖声明与批量安装 | T14（建议） |
+
+### xim-Wave 4 — P3 规范化，2 个 Agent 并行
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T20 | xpkg spec 版本字段 + 字段规范化 | T14 |
+| T21 | Index DB 丰富化（type/desc/categories） | T20 |
+
+### xim-Wave 5 — P3 多仓库简化，1 个 Agent
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T22 | 多仓库简化（只保留 xim-pkgindex + awesome） | T20, T16 |
 
 ---
 
@@ -170,6 +238,53 @@ ls ~/.xlings/envs/default/   # 存在 bin/ xvm/ generations/ .profile.json
 
 # T09: CI 三平台均绿
 # Linux x86_64, macOS arm64, Windows x86_64 均有产物
+
+# ── xim 模块验收 ─────────────────────────────────────
+
+# T15: template config 拆分
+# template.lua 中 install() 不含 xvm.add()，config() 中含 xvm.add()
+# rustup.lua 和 musl-cross-make.lua 补齐了 config()
+
+# T14: xpkgs 复用
+xlings subos new test-reuse
+xlings subos use test-reuse
+xlings install cmake -y      # 期望: 跳过下载, 输出 "reuse xpkgs, skip download"
+cmake --version               # 期望: 正常输出版本号
+xlings subos use default
+xlings subos remove test-reuse
+
+# T19: remove 引用检查
+xlings subos new test-ref
+xlings subos use test-ref
+xlings install cmake -y
+xlings remove cmake -y       # 期望: 输出 "other subos still using, keep xpkgs files"
+xlings subos use default
+cmake --version               # 期望: default 中 cmake 仍正常
+xlings subos remove test-ref
+
+# T16: 命名空间统一
+xlings install d2x -y         # 期望: 依赖库聚合不靠硬编码 namespace
+d2x --version                  # 期望: 正常运行
+
+# T17: dep_install_dir API
+# pkginfo.dep_install_dir("glibc") 返回正确路径
+
+# T18: 项目级 .xlings.json 依赖
+cd /tmp && mkdir test-proj && cd test-proj
+echo '{"name":"test","deps":["cmake"]}' > .xlings.json
+xlings install                 # 期望: 自动安装 cmake
+
+# T20: xpkg spec v1
+# spec = "1" 的包正常安装/卸载
+# 无 spec 字段的旧包兼容工作
+
+# T21: Index DB 丰富化
+xim --update index
+# 期望: xim-index-db.lua 中条目包含 type/description 字段
+
+# T22: 多仓库简化
+# 新安装 xlings 首次 sync 不拉取子仓库
+# 已有用户 xim-indexrepos.json 继续工作
 ```
 
 ---
@@ -188,3 +303,14 @@ ls ~/.xlings/envs/default/   # 存在 bin/ xvm/ generations/ .profile.json
 | xmake.lua musl 链接配置 | [T11](T11-xmake-musl-static.md) §4 |
 | CI musl-gcc SDK 配置 | [T12](T12-ci-musl-gcc.md) §4 |
 | 静态二进制验证清单 | [T13](T13-verify-static-binary.md) §3 |
+| xim 模块问题总览 | [../xim-issues-design.md](../xim-issues-design.md) |
+| xpkgs 复用方案 | [T14](T14-xpkgs-reuse.md) §4 |
+| install/config 分离规范 | [T15](T15-install-config-split.md) §4 |
+| 命名空间统一方案 | [T16](T16-namespace-unify.md) §4 |
+| dep_install_dir API | [T17](T17-dep-install-dir.md) §4 |
+| 项目级 .xlings.json 依赖声明 | [T18](T18-config-deps.md) §4 |
+| remove 引用检查方案 | [T19](T19-remove-refcheck.md) §4 |
+| xpkg spec v1 规范 | [T20](T20-xpkg-spec-v1.md) §3 |
+| Index DB 丰富化 | [T21](T21-indexdb-enrich.md) §3 |
+| 多仓库简化方案 | [T22](T22-repo-simplify.md) §3 |
+| xpkg 规范化总览与路线图 | [../xpkg-spec-design.md](../xpkg-spec-design.md) |
