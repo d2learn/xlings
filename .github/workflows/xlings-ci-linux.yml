@@ -42,6 +42,14 @@ jobs:
           tar -xzf /tmp/musl-gcc.tar.gz -C /tmp
           MUSL_SDK="$(ls -d /tmp/musl-gcc-*-linux-x86_64 2>/dev/null | head -1)"
           [[ -d "$MUSL_SDK" ]] || { echo "FAIL: musl-gcc extract dir not found"; exit 1; }
+          # Symlink system binutils into SDK if missing (tarball may not ship them)
+          MUSL_BINDIR="$MUSL_SDK/x86_64-linux-musl/bin"
+          mkdir -p "$MUSL_BINDIR"
+          for tool in as ld ar nm objcopy objdump ranlib readelf strip; do
+            if [[ ! -f "$MUSL_BINDIR/$tool" ]] && command -v "$tool" &>/dev/null; then
+              ln -sf "$(which "$tool")" "$MUSL_BINDIR/$tool"
+            fi
+          done
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
