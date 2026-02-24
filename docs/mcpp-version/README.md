@@ -19,7 +19,8 @@ docs/mcpp-version/
 │   ├── env-store-design.md   ← Store/Profile/世代设计
 │   ├── rpath-and-os-vision.md← RPATH 解决方案 + OS 演进
 │   ├── pkg-taxonomy.md       ← 包分类体系设计
-│   └── release-static-build.md ← Linux musl 静态构建方案
+│   ├── release-static-build.md ← Linux musl 静态构建方案
+│   └── install-scripts-design.md ← 安装脚本方案与设计
 │
 └── tasks/                    ← 任务拆分（13 个可并行任务）
     ├── README.md             ← 任务总览 + 依赖拓扑 + 并行分组
@@ -117,6 +118,19 @@ docs/mcpp-version/
 
 ---
 
+### [install-scripts-design.md](install-scripts-design.md) — 安装脚本方案与设计
+
+安装体系分为两层：`quick_install`（一键在线安装）和 `install-from-release`（包内安装器）。
+
+**关键结论**:
+- 新版安装流程零编译依赖：下载预编译 release 包 → 拷贝到 XLINGS_HOME → 配置 PATH
+- 旧版 `install.unix.sh` / `install.win.bat` 已废弃（依赖已移除的 `xmake task("xlings")` + `self enforce-install`）
+- macOS 平台标识统一为 `macosx`（与 xmake 一致）
+- 支持 `XLINGS_GITHUB_MIRROR` 环境变量指定镜像加速
+- 支持 `XLINGS_HOME` 自定义安装路径
+
+---
+
 ## 快速索引
 
 | 想了解 | 去看 |
@@ -132,6 +146,7 @@ docs/mcpp-version/
 | 包类型和命名规范 | [pkg-taxonomy.md](pkg-taxonomy.md) |
 | OS 演进路线 | [rpath-and-os-vision.md §4](rpath-and-os-vision.md#四xlings-作为操作系统包管理器的演进) |
 | Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
+| 安装脚本方案与设计 | [install-scripts-design.md](install-scripts-design.md) |
 | musl-gcc 构建任务 | [tasks/README.md](tasks/README.md) T11-T13 |
 | 实施任务和并行分组 | [tasks/README.md](tasks/README.md) |
 

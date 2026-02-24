@@ -3,7 +3,7 @@
 #
 # Directory layout matches linux_release.sh (see that file for details).
 #
-# Output:  build/xlings-<ver>-macos-arm64.tar.gz
+# Output:  build/xlings-<ver>-macosx-arm64.tar.gz
 # Usage:   ./tools/macos_release.sh
 # Env:     SKIP_NETWORK_VERIFY=1   skip network-dependent tests
 
@@ -16,7 +16,7 @@ VERSION=$(sed -n 's/.*VERSION = "\([^"]*\)".*/\1/p' "$PROJECT_DIR/core/config.cp
 [[ -z "$VERSION" ]] && VERSION="0.2.0"
 
 ARCH="arm64"
-PKG_NAME="xlings-${VERSION}-macos-${ARCH}"
+PKG_NAME="xlings-${VERSION}-macosx-${ARCH}"
 OUT_DIR="$PROJECT_DIR/build/$PKG_NAME"
 
 TEST_DATA=""
@@ -107,6 +107,10 @@ versions:
 YAML
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
+
+# Install script (bundled in package root)
+cp "$PROJECT_DIR/tools/install-from-release.sh" "$OUT_DIR/install.sh"
+chmod +x "$OUT_DIR/install.sh"
 
 # i18n
 mkdir -p "$OUT_DIR/config/i18n"
@@ -235,4 +239,9 @@ info ""
 info "Done."
 info "  Package:  $OUT_DIR"
 info "  Archive:  $ARCHIVE"
+info ""
+info "  Unpack & install:"
+info "    tar -xzf ${PKG_NAME}.tar.gz"
+info "    cd $PKG_NAME"
+info "    ./install.sh"
 info ""

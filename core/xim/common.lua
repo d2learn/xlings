@@ -155,17 +155,6 @@ function xlings_python(file)
     end
 end
 
-function xlings_clear_screen()
-    --[[
-        if os.host() == "windows" then
-            os.exec("xligns_clear.bat")
-        else
-            os.exec("clear")
-        end
-    ]]
-    os.exec(platform.get_config_info().cmd_clear)
-end
-
 function xlings_download(url, dest)
     cprint("[xlings]: downloading: ${dim}%s to %s", url, dest)
 
