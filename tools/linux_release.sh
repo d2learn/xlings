@@ -64,6 +64,17 @@ if [[ -z "${MUSL_SDK:-}" ]]; then
   fi
 fi
 if [[ -n "${MUSL_SDK:-}" ]] && [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
+  # gcc expects plain binutils (as, ld, ...) in <sysroot>/x86_64-linux-musl/bin/
+  MUSL_BINDIR="$MUSL_SDK/x86_64-linux-musl/bin"
+  mkdir -p "$MUSL_BINDIR"
+  for _tool in as ld ar nm objcopy objdump ranlib readelf strip; do
+    [[ -e "$MUSL_BINDIR/$_tool" ]] && continue
+    if [[ -x "$MUSL_SDK/bin/x86_64-linux-musl-$_tool" ]]; then
+      ln -sf "$MUSL_SDK/bin/x86_64-linux-musl-$_tool" "$MUSL_BINDIR/$_tool"
+    elif command -v "$_tool" &>/dev/null; then
+      ln -sf "$(command -v "$_tool")" "$MUSL_BINDIR/$_tool"
+    fi
+  done
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
   export PATH="$MUSL_SDK/bin:$PATH"
