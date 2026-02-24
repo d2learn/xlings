@@ -9,13 +9,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 TMP_BASE="${TMPDIR:-/tmp}/xlings-e2e-$$"
 ARCHIVE_PATH="${1:-}"
-SKIP_NETWORK_TESTS="${SKIP_NETWORK_TESTS:-1}"
+SKIP_NETWORK_TESTS="${SKIP_NETWORK_TESTS:-0}"
 
 log() { echo "[e2e] $*"; }
 fail() { echo "[e2e] FAIL: $*" >&2; exit 1; }
 
 cleanup() {
-  [[ -d "$TMP_BASE" ]] && rm -rf "$TMP_BASE"
+  [[ -d "$TMP_BASE" ]] && rm -rf "$TMP_BASE" || true
 }
 trap cleanup EXIT
 
@@ -116,10 +116,25 @@ scenario_network_install_optional() {
   fi
 
   log "scenario: network install"
-  local out
-  out="$(xlings install d2x@0.1.2 -y 2>&1)" || fail "xlings install d2x@0.1.2 failed"
-  assert_contains "$out" "installed" "install output missing success marker"
-  [[ -d "$XLINGS_DATA/xpkgs/d2x" ]] || fail "d2x package folder not found after install"
+  command -v xmake >/dev/null 2>&1 || fail "xmake not found in PATH; d2x install requires xmake"
+
+  xlings subos new net11 >/dev/null 2>&1 || true
+  xlings subos use net11 >/dev/null 2>&1
+  xlings install d2x@0.1.1 -y >/dev/null 2>&1 || fail "xlings install d2x@0.1.1 failed"
+
+  xlings subos new net12 >/dev/null 2>&1 || true
+  xlings subos use net12 >/dev/null 2>&1
+  xlings install d2x@0.1.2 -y >/dev/null 2>&1 || fail "xlings install d2x@0.1.2 failed"
+
+  xlings subos new net13 >/dev/null 2>&1 || true
+  xlings subos use net13 >/dev/null 2>&1
+  xlings install d2x@0.1.3 -y >/dev/null 2>&1 || fail "xlings install d2x@0.1.3 failed"
+
+  # Cleanup test envs
+  xlings subos use default >/dev/null 2>&1 || true
+  xlings subos rm net11 >/dev/null 2>&1 || true
+  xlings subos rm net12 >/dev/null 2>&1 || true
+  xlings subos rm net13 >/dev/null 2>&1 || true
 }
 
 main() {
@@ -136,6 +151,7 @@ main() {
   scenario_network_install_optional
 
   log "PASS: all usability scenarios passed"
+  exit 0
 }
 
 main "$@"

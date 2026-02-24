@@ -8,16 +8,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 TMP_BASE="${TMPDIR:-/tmp}/xlings-e2e-macos-$$"
 ARCHIVE_PATH="${1:-}"
-SKIP_NETWORK_TESTS="${SKIP_NETWORK_TESTS:-1}"
+SKIP_NETWORK_TESTS="${SKIP_NETWORK_TESTS:-0}"
 D2X_VERSION="${D2X_VERSION:-0.1.3}"
 
 log() { echo "[e2e-macos] $*"; }
 fail() { echo "[e2e-macos] FAIL: $*" >&2; exit 1; }
 
 cleanup() {
-  [[ -d "$TMP_BASE" ]] && rm -rf "$TMP_BASE"
+  [[ -d "$TMP_BASE" ]] && rm -rf "$TMP_BASE" || true
 }
-trap cleanup EXIT
+# Ensure EXIT trap does not override script exit code (some shells use trap's exit status)
+trap 'cleanup; true' EXIT
 
 assert_contains() {
   local output="$1"
@@ -113,10 +114,18 @@ scenario_network_install_optional() {
     return
   fi
 
-  log "scenario: network install"
+  log "scenario: network install (xlings install d2x)"
+  command -v xmake >/dev/null 2>&1 || fail "xmake not found in PATH; d2x install requires xmake"
+
+  xlings subos new netmac >/dev/null 2>&1 || true
+  xlings subos use netmac >/dev/null 2>&1
   local out
-  out="$(xlings install "d2x@${D2X_VERSION}" -y 2>&1)" || fail "xlings install d2x failed"
-  assert_contains "$out" "installed" "install output missing success marker"
+  out="$(xlings install "d2x@${D2X_VERSION}" -y 2>&1)" || fail "xlings install d2x@${D2X_VERSION} failed"
+  assert_contains "$out" "0.1" "install output should show d2x version"
+  assert_contains "$out" "installed" "install output should confirm installed"
+
+  xlings subos use default >/dev/null 2>&1 || true
+  xlings subos rm netmac >/dev/null 2>&1 || true
 }
 
 main() {
@@ -131,6 +140,7 @@ main() {
   scenario_network_install_optional
 
   log "PASS: all usability scenarios passed"
+  exit 0
 }
 
 main "$@"

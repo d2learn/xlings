@@ -28,11 +28,13 @@ bash tests/e2e/linux_usability_test.sh build/xlings-0.2.0-linux-x86_64.tar.gz
 
 ### Network Scenario
 
-By default network-dependent installation checks are skipped.
+By default network-dependent installation checks are enabled.
 
 ```bash
-SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh
+SKIP_NETWORK_TESTS=1 bash tests/e2e/linux_usability_test.sh
 ```
+
+Same toggle works for macOS and Windows scripts.
 
 ## E2E macOS Usability Test
 

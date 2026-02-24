@@ -133,7 +133,7 @@ jobs:
       - name: "Test: E2E usability script"
         run: |
           chmod +x tests/e2e/macos_usability_test.sh
-          SKIP_NETWORK_TESTS=1 bash tests/e2e/macos_usability_test.sh build/release.tar.gz
+          SKIP_NETWORK_TESTS=0 bash tests/e2e/macos_usability_test.sh build/release.tar.gz
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4
