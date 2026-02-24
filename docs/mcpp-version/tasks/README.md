@@ -18,6 +18,9 @@
 | [T08](T08-self-migrate.md) | xself migrate 命令 | C++ | 4 | ~80 行 |
 | [T09](T09-ci-multiplatform.md) | CI/CD 多平台补齐 | YAML | 5 | ~100 行 |
 | [T10](T10-pkg-taxonomy-impl.md) | XPackage.lua 新增字段 | Lua | 1 | ~10 行 |
+| [T11](T11-xmake-musl-static.md) | xmake.lua musl 静态链接配置 | Lua | 1 | ~10 行 |
+| [T12](T12-ci-musl-gcc.md) | CI/Release 切换 musl-gcc@15.1.0 | YAML | 1 | ~30 行 |
+| [T13](T13-verify-static-binary.md) | musl 静态二进制验证 | — | 2 | 无代码改动 |
 
 ---
 
@@ -36,6 +39,10 @@ flowchart TD
     T09["T09\nCI/CD\nmacOS + Windows"]
     T10["T10\nXPackage.lua\nsource/maintainer"]
 
+    T11["T11\nxmake.lua\nmusl static flags"]
+    T12["T12\nCI/Release\nmusl-gcc@15.1.0"]
+    T13["T13\n验证\nstatic binary check"]
+
     T01 --> T02
     T02 --> T03
     T02 --> T04
@@ -47,6 +54,8 @@ flowchart TD
     T06 --> T09
     T07 --> T09
     T10 --> T09
+    T11 --> T13
+    T12 --> T13
 ```
 
 ---
@@ -55,7 +64,7 @@ flowchart TD
 
 Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分配给多个 Agent。
 
-### Wave 1 — 完全独立，4 个 Agent 并行
+### Wave 1 — 完全独立，6 个 Agent 并行
 
 | 任务 | 说明 | 文件 |
 |------|------|------|
@@ -63,6 +72,14 @@ Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分�
 | T06 | xvm shims.rs 添加 `expand_xlings_vars()` | `core/xvm/xvmlib/shims.rs` |
 | T07 | xim Lua 读取 `XLINGS_PKGDIR` | `core/xim/base/runtime.lua` |
 | T10 | XPackage.lua 添加 `source`/`maintainer` | `core/xim/pm/XPackage.lua` |
+| T11 | xmake.lua musl 静态链接配置 | `xmake.lua` |
+| T12 | CI/Release 切换 musl-gcc@15.1.0 | `.github/workflows/*.yml` |
+
+### Wave 1.5 — 等待 T11+T12，1 个 Agent
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T13 | musl 静态二进制验证与回归测试 | T11 + T12 |
 
 ### Wave 2 — 等待 T01，1 个 Agent
 
@@ -167,3 +184,7 @@ ls ~/.xlings/envs/default/   # 存在 bin/ xvm/ generations/ .profile.json
 | 世代 JSON 格式 | [../env-store-design.md §3.3](../env-store-design.md) |
 | `expand_xlings_vars()` 实现 | [T06](T06-xvm-var-expand.md) §4 |
 | 目录迁移映射关系 | [T08](T08-self-migrate.md) §4 |
+| musl 静态构建设计 | [../release-static-build.md](../release-static-build.md) |
+| xmake.lua musl 链接配置 | [T11](T11-xmake-musl-static.md) §4 |
+| CI musl-gcc SDK 配置 | [T12](T12-ci-musl-gcc.md) §4 |
+| 静态二进制验证清单 | [T13](T13-verify-static-binary.md) §3 |

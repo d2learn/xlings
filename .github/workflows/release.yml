@@ -1,0 +1,185 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.2.0). Leave empty to use version from core/config.cppm'
+        required: false
+        type: string
+
+env:
+  GIT_TERMINAL_PROMPT: 0
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y curl git build-essential
+
+      - name: Install xmake (bundled v3.0.7)
+        run: |
+          XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
+          curl -fsSL -o xmake.bin "$XMAKE_URL" -H "Accept: application/octet-stream"
+          chmod +x xmake.bin
+          mkdir -p xmake/bin
+          mv xmake.bin xmake/bin/xmake
+          echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
+          export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
+          xmake --version
+
+      - name: Install Xlings
+        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
+
+      - name: Install musl-gcc 15.1 with Xlings
+        run: |
+          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          xlings install musl-gcc@15.1.0 -y
+          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
+          echo "PATH=$MUSL_SDK/bin:$PATH" >> "$GITHUB_ENV"
+          x86_64-linux-musl-g++ --version
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
+
+      - name: Add Rust musl target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      - name: Configure xmake
+        run: |
+          xmake f -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl-
+
+      - name: Build (linux_release)
+        run: |
+          chmod +x ./tools/linux_release.sh
+          SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xlings-linux-x86_64
+          path: build/xlings-*-linux-x86_64.tar.gz
+
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: brew install xmake llvm@20
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
+
+      - name: Configure xmake
+        run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+
+      - name: Build (macos_release)
+        run: |
+          chmod +x ./tools/macos_release.sh
+          SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xlings-macos-arm64
+          path: build/xlings-*-macos-arm64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
+
+      - name: Configure xmake
+        run: xmake f -p windows -m release
+
+      - name: Build (windows_release)
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tools\windows_release.ps1"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xlings-windows-x86_64
+          path: build/xlings-*-windows-x86_64.zip
+
+  create-release:
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            VER=$(sed -n 's/.*VERSION = "\([^"]*\)".*/\1/p' core/config.cppm | head -1)
+            [[ -z "$VER" ]] && VER="0.2.0"
+            echo "version=$VER" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: xlings ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/xlings-linux-x86_64/xlings-*-linux-x86_64.tar.gz
+            artifacts/xlings-macos-arm64/xlings-*-macos-arm64.tar.gz
+            artifacts/xlings-windows-x86_64/xlings-*-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

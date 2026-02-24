@@ -19,10 +19,13 @@ target("xlings")
         add_ldflags(libcxx_dir .. "/libc++experimental.a", {force = true})
         add_ldflags("-lc++abi", {force = true})
     elseif is_plat("linux") then
-        -- Use system dynamic linker (glibc) so binary is not tied to SDK path (e.g. /home/xlings/.xlings_data/...)
-        add_ldflags("-Wl,-dynamic-linker,/lib64/ld-linux-x86-64.so.2", {force = true})
-        -- Static link stdc++/gcc for release so binary does not depend on SDK libs
+        -- Prefer fully static Linux release binaries to avoid glibc runtime constraints.
         if not os.getenv("XLINGS_NOLINKSTATIC") then
-            add_ldflags("-static-libstdc++", "-static-libgcc", {force = true})
+            add_ldflags("-static", {force = true})
+        end
+        -- Fallback search path: allow using gcc SDK static libs when needed.
+        local gcc_sdk = os.getenv("GCC_SDK")
+        if gcc_sdk and #gcc_sdk > 0 then
+            add_linkdirs(gcc_sdk .. "/lib64", {force = true})
         end
     end

@@ -38,15 +38,14 @@ jobs:
       - name: Install Xlings
         run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
 
-      - name: Install GCC 15.1 with Xlings
+      - name: Install musl-gcc 15.1 with Xlings
         run: |
           export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xlings install gcc@15.1 -y
-          GCC_BIN=$(which gcc)
-          GCC_SDK=$(dirname "$(dirname "$GCC_BIN")")
-          echo "GCC_SDK=$GCC_SDK" >> "$GITHUB_ENV"
-          echo "PATH=$GCC_SDK/bin:$PATH" >> "$GITHUB_ENV"
-          gcc --version
+          xlings install musl-gcc@15.1.0 -y
+          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
+          echo "PATH=$MUSL_SDK/bin:$PATH" >> "$GITHUB_ENV"
+          x86_64-linux-musl-g++ --version
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -63,7 +62,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -p linux -m release --sdk="$GCC_SDK"
+          xmake f -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl-
 
       # ── Phase 2: Build via Release Script ───────────────────────
 

@@ -18,9 +18,10 @@ docs/mcpp-version/
 │   ├── env-design.md         ← 多环境管理与业界对比
 │   ├── env-store-design.md   ← Store/Profile/世代设计
 │   ├── rpath-and-os-vision.md← RPATH 解决方案 + OS 演进
-│   └── pkg-taxonomy.md       ← 包分类体系设计
+│   ├── pkg-taxonomy.md       ← 包分类体系设计
+│   └── release-static-build.md ← Linux musl 静态构建方案
 │
-└── tasks/                    ← 任务拆分（10 个可并行任务）
+└── tasks/                    ← 任务拆分（13 个可并行任务）
     ├── README.md             ← 任务总览 + 依赖拓扑 + 并行分组
     ├── T01-platform-exe-path.md
     ├── T02-config-multienv.md
@@ -31,7 +32,10 @@ docs/mcpp-version/
     ├── T07-xim-pkgdir.md
     ├── T08-self-migrate.md
     ├── T09-ci-multiplatform.md
-    └── T10-pkg-taxonomy-impl.md
+    ├── T10-pkg-taxonomy-impl.md
+    ├── T11-xmake-musl-static.md
+    ├── T12-ci-musl-gcc.md
+    └── T13-verify-static-binary.md
 ```
 
 ---
@@ -101,6 +105,18 @@ docs/mcpp-version/
 
 ---
 
+### [release-static-build.md](release-static-build.md) — Linux musl 静态构建方案
+
+解决 Linux 发布二进制 glibc >= 2.38 依赖过高的问题。使用 `musl-gcc@15.1.0` 替代 `gcc@15.1` 作为构建工具链，配合 `-static` 全静态链接，生成零外部依赖的二进制。
+
+**关键结论**:
+- 当前 `gcc@15.1` 编译的二进制要求 glibc >= 2.38，排除 Ubuntu 22.04、Debian 12、RHEL 9 等
+- `musl-gcc@15.1.0` + `-static` 生成完全静态二进制，零外部依赖，任意 Linux x86_64 可运行
+- 与 xvm/xvm-shim（Rust musl 静态）策略一致，所有二进制统一为零依赖
+- musl-gcc SDK 自带完整静态库；如缺失可从 gcc SDK 兜底查找
+
+---
+
 ## 快速索引
 
 | 想了解 | 去看 |
@@ -115,6 +131,8 @@ docs/mcpp-version/
 | RPATH 解决方案 | [rpath-and-os-vision.md §3](rpath-and-os-vision.md#三最简洁的解决方案变量替换--origin) |
 | 包类型和命名规范 | [pkg-taxonomy.md](pkg-taxonomy.md) |
 | OS 演进路线 | [rpath-and-os-vision.md §4](rpath-and-os-vision.md#四xlings-作为操作系统包管理器的演进) |
+| Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
+| musl-gcc 构建任务 | [tasks/README.md](tasks/README.md) T11-T13 |
 | 实施任务和并行分组 | [tasks/README.md](tasks/README.md) |
 
 ---
@@ -131,5 +149,7 @@ docs/mcpp-version/
 | `core/xvm/xvmlib/shims.rs` | 部分实现 | 已有 LD_LIBRARY_PATH 注入，缺 `${XLINGS_HOME}` 展开 |
 | `core/xim/pm/XPackage.lua` | 部分实现 | 已有 type 字段，缺 source / maintainer |
 | CI/CD | 部分实现 | 已有 Linux，缺 macOS / Windows |
+| `xmake.lua` Linux 链接 | 待切换 | glibc 动态 → musl 全静态（T11） |
+| CI/Release Linux 工具链 | 待切换 | gcc@15.1 → musl-gcc@15.1.0（T12） |
 
 详细的任务拆分和实施步骤见 [tasks/README.md](tasks/README.md)。
