@@ -46,12 +46,7 @@ jobs:
             export PATH="/home/xlings/.xlings_data/bin:$PATH"
           fi
           xlings install musl-gcc@15.1.0 -y
-          # Probe musl-gcc SDK: new path first, then legacy
-          if [[ -d "$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0" ]]; then
-            MUSL_SDK="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0"
-          else
-            MUSL_SDK="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
-          fi
+          MUSL_SDK="$(dirname "$(dirname "$(which x86_64-linux-musl-gcc)")")"
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"

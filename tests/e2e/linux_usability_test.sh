@@ -40,11 +40,9 @@ prepare_archive() {
   fi
 
   log "no archive found, building via tools/linux_release.sh ..."
-  # Probe musl-gcc SDK: new path first, then legacy
-  if [[ -d "$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0/bin" ]]; then
-    export PATH="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0/bin:$PATH"
-  else
-    export PATH="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0/bin:$PATH"
+  MUSL_GCC_BIN="$(command -v x86_64-linux-musl-gcc 2>/dev/null || true)"
+  if [[ -n "$MUSL_GCC_BIN" ]]; then
+    export PATH="$(dirname "$MUSL_GCC_BIN"):$PATH"
   fi
   SKIP_NETWORK_VERIFY=1 "$ROOT_DIR/tools/linux_release.sh" || fail "release build failed"
   ARCHIVE_PATH="$(ls -t "$BUILD_DIR"/xlings-*-linux-x86_64.tar.gz 2>/dev/null | head -1 || true)"
