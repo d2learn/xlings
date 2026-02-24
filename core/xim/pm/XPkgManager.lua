@@ -7,6 +7,7 @@ import("base.github")
 import("base.utils")
 import("base.runtime")
 import("base.xvm")
+import("platform")
 
 import("pm.types")
 
@@ -126,7 +127,13 @@ function XPkgManager:install(xpkg)
 end
 
 function XPkgManager:config(xpkg)
-    return _try_execute_hook(xpkg.name, xpkg, "config")
+    if xpkg.hooks.config then
+        return _try_execute_hook(xpkg.name, xpkg, "config")
+    end
+    if xpkg.type == "template" then
+        return types.template.config(xpkg)
+    end
+    return true
 end
 
 function XPkgManager:uninstall(xpkg)
@@ -145,14 +152,81 @@ function XPkgManager:uninstall(xpkg)
 
     local ret = _try_execute_hook(xpkg.name, xpkg, "uninstall")
 
-    local installdir = runtime.get_pkginfo().install_dir
-    cprint("[xlings:xim]: try remove - ${dim}%s", installdir)
-    if not os.tryrm(installdir) and os.isdir(installdir) then
-        cprint("[xlings:xim]: ${yellow}warning: remove install dir failed - %s${clear}", installdir)
-        cprint("[xlings:xim]: ${yellow}try again by sudo...${clear}")
-        sudo.exec("rm -rf " .. installdir)
+    local pkginfo = runtime.get_pkginfo()
+    local installdir = pkginfo.install_dir
+    local pkgver = pkginfo.version
+    local xvm_pkgname = _get_xvm_pkgname(xpkg)
+    if _any_other_subos_using(xvm_pkgname, pkgver) then
+        cprint("[xlings:xim]: ${dim}skip remove - %s still used by other subos${clear}", installdir)
+    else
+        cprint("[xlings:xim]: try remove - ${dim}%s", installdir)
+        if not os.tryrm(installdir) and os.isdir(installdir) then
+            cprint("[xlings:xim]: ${yellow}warning: remove install dir failed - %s${clear}", installdir)
+            cprint("[xlings:xim]: ${yellow}try again by sudo...${clear}")
+            sudo.exec("rm -rf " .. installdir)
+        end
     end
     return ret
+end
+
+function _get_xvm_pkgname(xpkg)
+    local pkgname = xpkg.name
+    if xpkg.type == "template" then
+        if xpkg.namespace and xpkg.namespace ~= "" then
+            return xpkg.namespace .. "-x-" .. pkgname
+        else
+            return "template-x-" .. pkgname
+        end
+    else
+        if xpkg.namespace and xpkg.namespace ~= "" then
+            return xpkg.namespace .. "-x-" .. pkgname
+        else
+            return pkgname
+        end
+    end
+end
+
+function _escape_lua_pattern(s)
+    return (s:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"))
+end
+
+function _yaml_has_version(content, pkgname, pkgver)
+    if not content or not pkgname then
+        return false
+    end
+    if not pkgver or pkgver == "" then
+        return content:find(pkgname, 1, true) ~= nil
+    end
+
+    local pkg_pat = _escape_lua_pattern(pkgname)
+    local ver_pat = _escape_lua_pattern(tostring(pkgver))
+    local prefixed = "\n" .. content
+    local line_pattern = "\n%s*" .. pkg_pat .. ":%s*\"?" .. ver_pat .. "\"?%s*[\n\r]"
+    if prefixed:find(line_pattern) then
+        return true
+    end
+    local tail_pattern = "\n%s*" .. pkg_pat .. ":%s*\"?" .. ver_pat .. "\"?%s*$"
+    return prefixed:find(tail_pattern) ~= nil
+end
+
+function _any_other_subos_using(pkgname, pkgver)
+    local cfg = platform.get_config_info()
+    local current_subos = path.filename(cfg.subosdir)
+    local subos_root = path.join(cfg.homedir, "subos")
+    local subos_dirs = os.dirs(path.join(subos_root, "*"))
+    for _, subos_dir in ipairs(subos_dirs or {}) do
+        local name = path.filename(subos_dir)
+        if name ~= current_subos and name ~= "current" then
+            local workspace_file = path.join(subos_dir, "xvm", ".workspace.xvm.yaml")
+            if os.isfile(workspace_file) then
+                local content = io.readfile(workspace_file)
+                if _yaml_has_version(content, pkgname, pkgver) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
 end
 
 function XPkgManager:info(xpkg)

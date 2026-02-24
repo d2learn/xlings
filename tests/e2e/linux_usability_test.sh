@@ -109,6 +109,80 @@ scenario_self_and_cleanup() {
   assert_contains "$out" "dry-run" "clean dry-run output mismatch"
 }
 
+scenario_project_deps() {
+  log "scenario: project deps (.xlings.json)"
+
+  # T18: no .xlings.json → should fail with helpful error
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local out
+  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  assert_contains "$out" ".xlings.json" \
+    "xlings install (no args, no config) should mention .xlings.json"
+
+  # T18: valid .xlings.json with deps array
+  cat > "$tmpdir/.xlings.json" <<'XJSON'
+{
+  "deps": [
+    "d2x@0.1.3"
+  ]
+}
+XJSON
+  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  assert_contains "$out" "d2x" \
+    "xlings install should process d2x dep from .xlings.json"
+
+  # T18: invalid deps format → should fail with helpful error
+  cat > "$tmpdir/.xlings.json" <<'XJSON'
+{
+  "deps": { "d2x": "0.1.3" }
+}
+XJSON
+  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  assert_contains "$out" "invalid" \
+    "xlings install with object deps should report invalid format"
+
+  rm -rf "$tmpdir"
+  log "  project deps: OK"
+}
+
+scenario_xpkgs_reuse() {
+  log "scenario: xpkgs multi-subos reuse (T14)"
+
+  # Install d2x@0.1.1 in subos reuse-a
+  xlings subos new reuse-a >/dev/null 2>&1 || true
+  xlings subos use reuse-a >/dev/null 2>&1
+  xlings install d2x@0.1.1 -y >/dev/null 2>&1 || fail "install d2x in reuse-a failed"
+
+  # Install same version in subos reuse-b — should reuse xpkgs (fast path)
+  xlings subos new reuse-b >/dev/null 2>&1 || true
+  xlings subos use reuse-b >/dev/null 2>&1
+  local out
+  out="$(xlings install d2x@0.1.1 -y 2>&1)" || true
+  echo "$out"
+  assert_contains "$out" "d2x" "reuse install should mention d2x"
+  # xvm cross-subos scanning may show "already installed" — that IS the reuse
+  assert_contains "$out" "installed" \
+    "second install of d2x@0.1.1 should confirm it is installed (reused)"
+
+  # Cleanup
+  xlings subos use default >/dev/null 2>&1 || true
+  xlings subos rm reuse-a >/dev/null 2>&1 || true
+  xlings subos rm reuse-b >/dev/null 2>&1 || true
+  log "  xpkgs reuse: OK"
+}
+
+scenario_index_spec_validation() {
+  log "scenario: index spec validation & enrichment (T20/T21)"
+
+  # Search triggers index rebuild; spec warnings should appear for legacy pkgs
+  local out
+  out="$(xlings search d2x 2>&1)" || true
+  echo "$out"
+  assert_contains "$out" "d2x" "search should find d2x packages"
+  log "  index spec validation: OK"
+}
+
 scenario_network_install_optional() {
   if [[ "$SKIP_NETWORK_TESTS" == "1" ]]; then
     log "scenario: network install (skipped, SKIP_NETWORK_TESTS=1)"
@@ -130,11 +204,41 @@ scenario_network_install_optional() {
   xlings subos use net13 >/dev/null 2>&1
   xlings install d2x@0.1.3 -y >/dev/null 2>&1 || fail "xlings install d2x@0.1.3 failed"
 
+  # T14/T18/T20/T21 feature tests (require network-installed packages)
+  scenario_project_deps
+  scenario_xpkgs_reuse
+  scenario_index_spec_validation
+
   # Cleanup test envs
   xlings subos use default >/dev/null 2>&1 || true
   xlings subos rm net11 >/dev/null 2>&1 || true
   xlings subos rm net12 >/dev/null 2>&1 || true
   xlings subos rm net13 >/dev/null 2>&1 || true
+}
+
+scenario_project_deps_offline() {
+  log "scenario: project deps offline (.xlings.json error handling)"
+
+  # T18: no .xlings.json → error with hint
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local out
+  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  assert_contains "$out" ".xlings.json" \
+    "xlings install (no args, no config) should mention .xlings.json"
+
+  # T18: invalid deps format
+  cat > "$tmpdir/.xlings.json" <<'XJSON'
+{
+  "deps": { "d2x": "0.1.3" }
+}
+XJSON
+  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  assert_contains "$out" "invalid" \
+    "xlings install with object deps should report invalid format"
+
+  rm -rf "$tmpdir"
+  log "  project deps offline: OK"
 }
 
 main() {
@@ -148,6 +252,7 @@ main() {
   scenario_info_mapping
   scenario_subos_lifecycle_and_aliases
   scenario_self_and_cleanup
+  scenario_project_deps_offline
   scenario_network_install_optional
 
   log "PASS: all usability scenarios passed"

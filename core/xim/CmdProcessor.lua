@@ -9,30 +9,65 @@ import("config.i18n")
 
 import("base.utils")
 import("base.runtime")
+import("base.xvm")
 import("platform")
 import("pm.XPackage")
 import("pm.PkgManagerService")
 import("index.IndexManager")
 
+local function _resolve_dep_dir_via_xvm(name, version)
+    local old_value = xvm.log_tag(false)
+    local pinfo = xvm.info(name, version or "")
+    xvm.log_tag(old_value)
+    if not pinfo or not pinfo["SPath"] or not pinfo["Version"] then
+        return nil
+    end
+
+    local spath = pinfo["SPath"]
+    local pver = pinfo["Version"]
+    local strs = string.split(spath, pver)
+    if #strs == 2 then
+        return path.join(strs[1], pver)
+    end
+    return nil
+end
+
+local function _resolve_dep_dir_via_scan(name, version)
+    local xpkgs = runtime.get_xim_install_basedir()
+    local try_names = {name, "scode-x-" .. name, "fromsource-x-" .. name}
+    for _, try_name in ipairs(try_names) do
+        local dep_root = path.join(xpkgs, try_name)
+        if os.isdir(dep_root) then
+            local ver_dir = version
+            if not ver_dir then
+                local vers = os.dirs(dep_root .. "/*")
+                if vers and #vers > 0 then
+                    table.sort(vers)
+                    ver_dir = path.basename(vers[#vers])
+                end
+            end
+            if ver_dir then
+                local install_dir = path.join(dep_root, ver_dir)
+                if os.isdir(install_dir) then
+                    return install_dir
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- Aggregate dep libs (*.so) from xpkgs into target_libdir (e.g. subos/<name>/lib) so apps like d2x find glibc/openssl
 local function aggregate_dep_libs_to(deps_list, target_libdir)
     if not deps_list or not is_host("linux") or not target_libdir then return end
-    local xpkgs = runtime.get_xim_install_basedir()
     for _, dep_spec in ipairs(deps_list) do
         local name = dep_spec:gsub("@.*", "")
         local ver_opt = dep_spec:find("@", 1, true) and dep_spec:match("@(.+)") or nil
-        for _, try_name in ipairs({name, "scode-x-" .. name, "fromsource-x-" .. name}) do
-            local dep_root = path.join(xpkgs, try_name)
-            if not os.isdir(dep_root) then goto continue end
-            local ver_dir = ver_opt
-            if not ver_dir then
-                local vers = os.dirs(dep_root .. "/*")
-                if not vers or #vers == 0 then goto continue end
-                table.sort(vers)
-                ver_dir = path.basename(vers[#vers])
-            end
-            local install_dir = path.join(dep_root, ver_dir)
-            if not os.isdir(install_dir) then goto continue end
+        local install_dir = _resolve_dep_dir_via_xvm(name, ver_opt)
+        if not install_dir then
+            install_dir = _resolve_dep_dir_via_scan(name, ver_opt)
+        end
+        if install_dir and os.isdir(install_dir) then
             for _, libsub in ipairs({"lib64", "lib"}) do
                 local srcdir = path.join(install_dir, libsub)
                 if os.isdir(srcdir) then
@@ -43,8 +78,6 @@ local function aggregate_dep_libs_to(deps_list, target_libdir)
                     break
                 end
             end
-            break
-            ::continue::
         end
     end
 end

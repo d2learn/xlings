@@ -110,11 +110,23 @@ function XPackage:_init(version, package)
     -- x-package data
     self.name = package.name
     self.version = version
+    self.spec = package.spec or "0"
     if package.namespace then
         self.namespace = package.namespace
     end
     self._real_os_key = real_os_key
     self.type = package.type or "package"
+
+    -- normalize compatibility fields (backward compatible)
+    if type(package.license) == "string" and not package.licenses then
+        package.licenses = { package.license }
+    end
+    if type(package.authors) == "string" then
+        package.authors = { package.authors }
+    end
+    if type(package.maintainer) == "string" and not package.maintainers then
+        package.maintainers = { package.maintainer }
+    end
 
     self.pdata = package
 

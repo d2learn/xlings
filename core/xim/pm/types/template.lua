@@ -24,8 +24,11 @@ function install(xpkg)
         return false
     end
 
-    xvm.add(__get_xvm_pkgname(xpkg))
+    return true
+end
 
+function config(xpkg)
+    xvm.add(__get_xvm_pkgname(xpkg))
     return true
 end
 

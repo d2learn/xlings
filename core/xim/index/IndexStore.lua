@@ -9,6 +9,40 @@ local default_repo_dir = {
     path.join(path.directory(os.scriptdir()), "pkgindex")
 }
 
+local function _append_warning(warnings, msg)
+    if msg and msg ~= "" then
+        table.insert(warnings, msg)
+    end
+end
+
+local function _validate_xpkg_spec(pkg)
+    local warnings = {}
+    local spec = tostring(pkg.spec or "0")
+    if spec == "1" then
+        if type(pkg.name) ~= "string" or pkg.name == "" then
+            _append_warning(warnings, "spec v1: missing/invalid `name`")
+        end
+        if type(pkg.description) ~= "string" or pkg.description == "" then
+            _append_warning(warnings, "spec v1: missing/invalid `description`")
+        end
+        if type(pkg.type) ~= "string" or pkg.type == "" then
+            _append_warning(warnings, "spec v1: missing/invalid `type`")
+        end
+        if type(pkg.xpm) ~= "table" then
+            _append_warning(warnings, "spec v1: missing/invalid `xpm`")
+        end
+        if pkg.license and not pkg.licenses then
+            _append_warning(warnings, "spec v1: prefer `licenses` over legacy `license`")
+        end
+        if pkg.maintainer and not pkg.maintainers then
+            _append_warning(warnings, "spec v1: prefer `maintainers` over legacy `maintainer`")
+        end
+    elseif pkg.spec == nil then
+        _append_warning(warnings, "legacy xpkg: missing `spec` (treated as spec=0)")
+    end
+    return warnings
+end
+
 function new(indexdirs)
     local instance = {}
     debug.setmetatable(instance, IndexStore)
@@ -119,6 +153,9 @@ function IndexStore:build_xpkg_index(xpkg_file)
                 xpkg_file,
                 path.directory(xpkg_file)
             ).package
+            for _, warning in ipairs(_validate_xpkg_spec(pkg)) do
+                cprint("[xlings:xim]: ${yellow}[xpkg-spec] %s - %s${clear}", warning, xpkg_file)
+            end
 
             if pkg.namespace then
                 package_name = pkg.namespace .. ":" .. package_name
@@ -165,7 +202,11 @@ function IndexStore:build_xpkg_index(xpkg_file)
                                     mutex_group = pkg.mutex_group,
                                     version = version,
                                     installed = false,
-                                    path = xpkg_file
+                                    path = xpkg_file,
+                                    type = pkg.type or "package",
+                                    description = pkg.description,
+                                    categories = pkg.categories,
+                                    programs = pkg.programs
                                 }
                             end
                         end

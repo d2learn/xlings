@@ -44,27 +44,56 @@ function PkgManagerExecutor:_build()
     return true
 end
 
+function _xpkgs_has_files(install_dir)
+    if not install_dir or not os.isdir(install_dir) then
+        return false
+    end
+    local files = os.files(path.join(install_dir, "*"))
+    return files and #files > 0
+end
+
 function PkgManagerExecutor:install()
     -- reset to data dir
 
     os.cd(runtime.get_runtime_dir())
 
     if self.type == "xpm" then
-        if not self:_download() or not self:_build() then
-            cprint("[xlings:xim]: hooks: ${red}download or build failed${clear}")
-            return false
+        -- ensure runtime pkginfo has install_dir before reuse check
+        local pkg = self._pkg
+        local pkgname = pkg.name
+        if pkg.namespace then
+            pkgname = pkg.namespace .. "-x-" .. pkgname
         end
-    end
+        local install_dir = path.join(runtime.get_xim_install_basedir(), pkgname, pkg.version)
+        runtime.set_pkginfo({
+            name = pkg.name,
+            namespace = pkg.namespace,
+            install_dir = install_dir
+        })
 
-    cprint("[xlings:xim]: start install ${green}%s${clear}, it may take some minutes...", self._pkg.name)
-    if not _try_execute(self, "install") then
-        cprint("[xlings:xim]: hooks.install: ${red}install failed${clear}")
-        return false
-    end
+        if _xpkgs_has_files(install_dir) then
+            cprint("[xlings:xim]: ${dim}install_dir already has files, skip download/build/install, run config only${clear}")
+        else
+            if not self:_download() or not self:_build() then
+                cprint("[xlings:xim]: hooks: ${red}download or build failed${clear}")
+                return false
+            end
 
-    if self.type == "xpm" then
+            cprint("[xlings:xim]: start install ${green}%s${clear}, it may take some minutes...", self._pkg.name)
+            if not _try_execute(self, "install") then
+                cprint("[xlings:xim]: hooks.install: ${red}install failed${clear}")
+                return false
+            end
+        end
+
         if not self:_config() then
             cprint("[xlings:xim]: hooks.config: ${red}config failed${clear}")
+            return false
+        end
+    else
+        cprint("[xlings:xim]: start install ${green}%s${clear}, it may take some minutes...", self._pkg.name)
+        if not _try_execute(self, "install") then
+            cprint("[xlings:xim]: hooks.install: ${red}install failed${clear}")
             return false
         end
     end
@@ -77,12 +106,11 @@ function PkgManagerExecutor:use()
 end
 
 function PkgManagerExecutor:_config()
-    -- only for xpm, and called in install
+    -- only for xpm, and called in install; pm.config handles template fallback
     if self._pkg.hooks.config then
         cprint("[xlings:xim]: start config...", self._pkg.name)
-        return _try_execute(self, "config")
     end
-    return true
+    return _try_execute(self, "config")
 end
 
 function PkgManagerExecutor:uninstall()
