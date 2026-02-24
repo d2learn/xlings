@@ -53,8 +53,6 @@ public:
         for (const auto& c : commands_) {
             std::println("\t {:12}\t{}", c.name, c.description);
         }
-        std::println("\nPaths:");
-        Config::print_paths();
         return 0;
     }
 

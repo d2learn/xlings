@@ -107,7 +107,7 @@ cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
 cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
 
-for shim in xlings xvm xvm-shim xmake; do
+for shim in xlings xvm xvm-shim xmake xim xinstall xsubos xself; do
   cp "$XVM_DIR/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
   chmod +x "$OUT_DIR/subos/default/bin/$shim"
 done

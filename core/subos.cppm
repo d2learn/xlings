@@ -48,7 +48,8 @@ export std::vector<SubosInfo> list_all() {
             if (fs::exists(binDir)) {
                 for (auto& e : fs::directory_iterator(binDir)) {
                     auto stem = e.path().stem().string();
-                    if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias")
+                    if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias"
+                        && stem != "xim" && stem != "xinstall" && stem != "xsubos" && stem != "xself")
                         ++toolCount;
                 }
             }
@@ -106,7 +107,8 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
         shimSrc = p.subosDir / "bin" / "xvm-shim.exe";
     if (fs::exists(shimSrc)) {
         auto ext = shimSrc.extension().string();
-        for (auto& n : {"xvm-shim", "xlings", "xvm"}) {
+        for (auto& n : {"xvm-shim", "xlings", "xvm",
+                         "xim", "xinstall", "xsubos", "xself"}) {
             fs::copy_file(shimSrc, dir / "bin" / (std::string(n) + ext),
                 fs::copy_options::overwrite_existing);
         }
@@ -221,7 +223,8 @@ export std::optional<SubosInfo> info(const std::string& name) {
     if (fs::exists(binDir)) {
         for (auto& e : fs::directory_iterator(binDir)) {
             auto stem = e.path().stem().string();
-            if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias")
+            if (stem != "xvm-shim" && stem != "xlings" && stem != "xvm" && stem != "xvm-alias"
+                && stem != "xim" && stem != "xinstall" && stem != "xsubos" && stem != "xself")
                 ++toolCount;
         }
     }

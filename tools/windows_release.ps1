@@ -73,7 +73,7 @@ Copy-Item "$XVM_DIR\xvm.exe" "$OUT_DIR\bin\"
 
 if (Test-Path "$XVM_DIR\xvm-shim.exe") {
   Copy-Item "$XVM_DIR\xvm-shim.exe" "$OUT_DIR\bin\"
-  foreach ($shim in @("xlings.exe", "xvm.exe", "xvm-shim.exe")) {
+  foreach ($shim in @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xinstall.exe", "xsubos.exe", "xself.exe")) {
     Copy-Item "$OUT_DIR\bin\xvm-shim.exe" "$OUT_DIR\subos\default\bin\$shim"
   }
 }
