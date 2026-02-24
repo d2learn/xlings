@@ -118,6 +118,15 @@ export CommandProcessor create_processor() {
                 return xvm_exec("list", argc, argv);
             },
             "xlings use <target> [version]")
+        .add("info", "show tool info",
+            [](int argc, char* argv[]) {
+                if (argc < 3) {
+                    std::println("Usage: xlings info <target>");
+                    return 1;
+                }
+                return xvm_exec("info", argc, argv);
+            },
+            "xlings info <target>")
         .add("config", "show xlings configuration",
             [](int, char**) {
                 Config::print_paths();
@@ -127,7 +136,7 @@ export CommandProcessor create_processor() {
             [](int argc, char* argv[]) {
                 return subos::run(argc, argv);
             },
-            "xlings subos <new|use|list|remove|info> [name]")
+            "xlings subos <new|use|list|ls|remove|rm|info|i> [name]")
         .add("self", "self management (init/update/config/clean/migrate)",
             [](int argc, char* argv[]) {
                 return xself::run(argc, argv);

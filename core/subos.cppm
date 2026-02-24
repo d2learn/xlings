@@ -258,6 +258,10 @@ export int run(int argc, char* argv[]) {
     if (argc < 3) return run_list_();
 
     std::string sub = argv[2];
+    if (sub == "ls") sub = "list";
+    if (sub == "rm") sub = "remove";
+    if (sub == "i")  sub = "info";
+
     if (sub == "new") {
         if (argc < 4) { log::error("usage: xlings subos new <name>"); return 1; }
         return create(argv[3]);
@@ -268,12 +272,13 @@ export int run(int argc, char* argv[]) {
     }
     if (sub == "list")   return run_list_();
     if (sub == "remove") {
-        if (argc < 4) { log::error("usage: xlings subos remove <name>"); return 1; }
+        if (argc < 4) { log::error("usage: xlings subos remove|rm <name>"); return 1; }
         return remove(argv[3]);
     }
     if (sub == "info")   return run_info_(argc > 3 ? argv[3] : "");
 
     log::error("[xlings:subos] unknown subcommand: {}", sub);
+    log::error("usage: xlings subos <new|use|list|ls|remove|rm|info|i> [name]");
     return 1;
 }
 
