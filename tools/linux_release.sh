@@ -165,6 +165,10 @@ fi
 mkdir -p "$OUT_DIR/config/i18n"
 cp -R config/i18n/*.json "$OUT_DIR/config/i18n/" 2>/dev/null || true
 
+# shell profiles
+mkdir -p "$OUT_DIR/config/shell"
+cp -R config/shell/* "$OUT_DIR/config/shell/" 2>/dev/null || true
+
 # xmake.lua (package root)
 cat > "$OUT_DIR/xmake.lua" << 'LUA'
 add_moduledirs("xim")
@@ -220,7 +224,7 @@ fi
 info "OK: all binaries present and executable"
 
 # 4b. Check directory structure
-for d in subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n; do
+for d in subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell; do
   [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
 done
 [[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"

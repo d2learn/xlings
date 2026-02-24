@@ -60,6 +60,7 @@ $dirs = @(
   "$OUT_DIR\subos\default\xvm",
   "$OUT_DIR\subos\default\generations",
   "$OUT_DIR\config\i18n",
+  "$OUT_DIR\config\shell",
   "$OUT_DIR\tools"
 )
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
@@ -104,6 +105,7 @@ xvm-shim:
 
 Copy-Item -Recurse "core\xim\*" "$OUT_DIR\xim\" -ErrorAction SilentlyContinue
 Copy-Item "config\i18n\*.json" "$OUT_DIR\config\i18n\" -ErrorAction SilentlyContinue
+Copy-Item "config\shell\*" "$OUT_DIR\config\shell\" -ErrorAction SilentlyContinue
 
 # Install script (bundled in package root)
 Copy-Item "$PROJECT_DIR\tools\install-from-release.ps1" "$OUT_DIR\install.ps1"
@@ -154,7 +156,7 @@ Info "OK: all binaries present"
 
 $requiredDirs = @(
   "subos\default\bin", "subos\default\lib", "subos\default\xvm",
-  "subos\default\generations", "xim", "data\xpkgs", "config\i18n"
+  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell"
 )
 foreach ($d in $requiredDirs) {
   if (-not (Test-Path "$OUT_DIR\$d")) { Fail "directory $d missing" }

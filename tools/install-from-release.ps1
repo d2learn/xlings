@@ -45,11 +45,11 @@ if ($OLD_XLINGS_HOME -and $OLD_XLINGS_HOME -ne $DEFAULT_XLINGS_HOME) {
     Write-Host "  [1] Overwrite existing installation at $OLD_XLINGS_HOME" -ForegroundColor Cyan
     Write-Host "  [2] Install to default location $DEFAULT_XLINGS_HOME (keep old)" -ForegroundColor Cyan
     Write-Host ""
-    $choice = Read-Host "Choose [1/2] (default: 1)"
-    if ($choice -eq "2") {
-        $XLINGS_HOME = $DEFAULT_XLINGS_HOME
-    } else {
+    $choice = Read-Host "Choose [1/2] (default: 2)"
+    if ($choice -eq "1") {
         $XLINGS_HOME = $OLD_XLINGS_HOME
+    } else {
+        $XLINGS_HOME = $DEFAULT_XLINGS_HOME
     }
 } else {
     $XLINGS_HOME = $DEFAULT_XLINGS_HOME
@@ -81,8 +81,9 @@ if (Test-Path $currentLink) { Remove-Item -Force -Recurse $currentLink }
 New-Item -ItemType Junction -Path $currentLink -Target $defaultDir | Out-Null
 
 $XLINGS_BIN = "$XLINGS_HOME\subos\current\bin"
+$XLINGS_PROFILE_PS1 = "$XLINGS_HOME\config\shell\xlings-profile.ps1"
 
-# Add to user PATH
+# Add to user PATH (for cmd.exe and other non-PowerShell tools)
 $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$XLINGS_BIN*") {
     $newPath = "$XLINGS_BIN;$userPath"
@@ -92,8 +93,30 @@ if ($userPath -notlike "*$XLINGS_BIN*") {
     Write-Host "[xlings]: PATH already contains $XLINGS_BIN" -ForegroundColor Green
 }
 
-# Update PATH for current session
-$env:Path = "$XLINGS_BIN;$XLINGS_HOME\bin;$env:Path"
+# Add PowerShell profile sourcing
+$psProfileDir = Split-Path -Parent $PROFILE
+if (-not (Test-Path $psProfileDir)) {
+    New-Item -ItemType Directory -Force -Path $psProfileDir | Out-Null
+}
+if (-not (Test-Path $PROFILE)) {
+    New-Item -ItemType File -Force -Path $PROFILE | Out-Null
+}
+
+$psProfileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
+if (-not $psProfileContent -or $psProfileContent -notlike "*xlings-profile*") {
+    $sourceLine = "if (Test-Path `"$XLINGS_PROFILE_PS1`") { . `"$XLINGS_PROFILE_PS1`" }"
+    Add-Content -Path $PROFILE -Value "`n# xlings`n$sourceLine"
+    Write-Host "[xlings]: Added xlings profile to $PROFILE" -ForegroundColor Green
+} else {
+    Write-Host "[xlings]: xlings profile already configured in $PROFILE" -ForegroundColor Green
+}
+
+# Apply profile for current session
+if (Test-Path $XLINGS_PROFILE_PS1) {
+    . $XLINGS_PROFILE_PS1
+} else {
+    $env:Path = "$XLINGS_BIN;$XLINGS_HOME\bin;$env:Path"
+}
 
 # Verify
 try {
