@@ -16,8 +16,7 @@ if (-not (Test-Path "bin") -or -not (Test-Path "subos") -or -not (Test-Path "xim
     exit 1
 }
 
-$DEFAULT_XLINGS_HOME = "C:\Users\Public\xlings"
-$XLINGS_HOME = if ($env:XLINGS_HOME) { $env:XLINGS_HOME } else { $DEFAULT_XLINGS_HOME }
+$XLINGS_HOME = "$env:USERPROFILE\.xlings"
 
 Write-Host "[xlings]: Installing xlings to $XLINGS_HOME" -ForegroundColor Green
 

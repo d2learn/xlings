@@ -40,9 +40,19 @@ jobs:
 
       - name: Install musl-gcc 15.1 with Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
+          # Probe xlings binary: new path first, then legacy
+          if [[ -d "$HOME/.xlings/subos/current/bin" ]]; then
+            export PATH="$HOME/.xlings/subos/current/bin:$PATH"
+          else
+            export PATH="/home/xlings/.xlings_data/bin:$PATH"
+          fi
           xlings install musl-gcc@15.1.0 -y
-          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          # Probe musl-gcc SDK: new path first, then legacy
+          if [[ -d "$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0" ]]; then
+            MUSL_SDK="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0"
+          else
+            MUSL_SDK="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
+          fi
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
@@ -77,8 +87,13 @@ jobs:
 
       - name: Uninstall old Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
-          xlings self uninstall -y || rm -rf /home/xlings/.xlings_data
+          if [[ -d "$HOME/.xlings/subos/current/bin" ]]; then
+            export PATH="$HOME/.xlings/subos/current/bin:$PATH"
+            xlings self uninstall -y || rm -rf "$HOME/.xlings"
+          elif [[ -d "/home/xlings/.xlings_data/bin" ]]; then
+            export PATH="/home/xlings/.xlings_data/bin:$PATH"
+            xlings self uninstall -y || rm -rf /home/xlings/.xlings_data
+          fi
 
       - name: Prepare release artifact
         run: |
@@ -86,7 +101,26 @@ jobs:
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
 
-      # ── Phase 3: Test ───────────────────────────────────────────
+      # ── Phase 3: Install Test ──────────────────────────────────
+
+      - name: "Test: install.sh installs to ~/.xlings"
+        run: |
+          rm -rf "$HOME/.xlings"
+          tar -xzf build/release.tar.gz -C /tmp
+          pkg_dir=$(ls -d /tmp/xlings-*-linux-x86_64 2>/dev/null | head -1)
+          [[ -z "$pkg_dir" ]] && { echo "FAIL: package dir not found"; exit 1; }
+          cd "$pkg_dir" && bash install.sh
+          echo "=== Verify install path ==="
+          [[ -d "$HOME/.xlings/bin" ]] || { echo "FAIL: ~/.xlings/bin not found"; exit 1; }
+          [[ -d "$HOME/.xlings/subos/current/bin" ]] || { echo "FAIL: ~/.xlings/subos/current/bin not found"; exit 1; }
+          [[ -x "$HOME/.xlings/bin/xlings" ]] || { echo "FAIL: xlings binary not executable"; exit 1; }
+          echo "=== Verify xlings works ==="
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
+          xlings -h
+          xlings config
+          echo "OK: install.sh correctly installs to ~/.xlings"
+
+      # ── Phase 4: Functional Test ─────────────────────────────────
 
       - name: Setup xlings environment
         run: |

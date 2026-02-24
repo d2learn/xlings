@@ -37,13 +37,13 @@ detect_os() {
 
 OS_TYPE=$(detect_os)
 
+XLINGS_HOME="$HOME/.xlings"
+
 case "$OS_TYPE" in
     linux)
-        DEFAULT_XLINGS_HOME="/home/xlings"
         PROFILE_FILES=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile")
         ;;
     macos)
-        DEFAULT_XLINGS_HOME="/Users/xlings"
         PROFILE_FILES=("$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.zprofile")
         ;;
     *)
@@ -52,22 +52,10 @@ case "$OS_TYPE" in
         ;;
 esac
 
-XLINGS_HOME="${XLINGS_HOME:-$DEFAULT_XLINGS_HOME}"
-
 log_info "Installing xlings to ${CYAN}${XLINGS_HOME}${RESET}"
 
 # Create XLINGS_HOME if it doesn't exist
-if [[ "$UID" -eq 0 ]]; then
-    mkdir -p "$XLINGS_HOME"
-else
-    if [[ ! -d "$XLINGS_HOME" ]]; then
-        if ! mkdir -p "$XLINGS_HOME" 2>/dev/null; then
-            log_warn "Cannot create $XLINGS_HOME without root. Using sudo..."
-            sudo mkdir -p "$XLINGS_HOME"
-            sudo chown "$(id -u):$(id -g)" "$XLINGS_HOME"
-        fi
-    fi
-fi
+mkdir -p "$XLINGS_HOME"
 
 # Copy package contents to XLINGS_HOME
 if [[ "$SCRIPT_DIR" != "$XLINGS_HOME" ]]; then

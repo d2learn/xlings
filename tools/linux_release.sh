@@ -56,8 +56,16 @@ cd "$PROJECT_DIR"
 info "Version: $VERSION  |  Arch: $ARCH"
 info "Building C++ binary..."
 # Ensure xmake is configured with a toolchain that supports `import std`.
-MUSL_SDK_DEFAULT="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
-MUSL_SDK="${MUSL_SDK:-$MUSL_SDK_DEFAULT}"
+# Probe musl-gcc SDK: new path ($HOME/.xlings) first, then legacy (/home/xlings/.xlings_data)
+MUSL_SDK_NEW="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0"
+MUSL_SDK_OLD="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
+if [[ -z "${MUSL_SDK:-}" ]]; then
+  if [[ -d "$MUSL_SDK_NEW" ]]; then
+    MUSL_SDK="$MUSL_SDK_NEW"
+  else
+    MUSL_SDK="$MUSL_SDK_OLD"
+  fi
+fi
 if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
