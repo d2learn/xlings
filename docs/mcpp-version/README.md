@@ -19,6 +19,8 @@ docs/mcpp-version/
 │   ├── env-store-design.md   ← Store/Profile/世代设计
 │   ├── rpath-and-os-vision.md← RPATH 解决方案 + OS 演进
 │   ├── pkg-taxonomy.md       ← 包分类体系设计
+│   ├── elf-relocation-and-subos-design.md ← ELF 可重定位与多 subos 设计（预构建 loader/RPATH、LD_LIBRARY_PATH）
+│   ├── elfpatch-shrink-rpath-mode.md ← elfpatch 可选 shrink-rpath 模式
 │   ├── release-static-build.md ← Linux musl 静态构建方案
 │   ├── install-scripts-design.md ← 安装脚本方案与设计
 │   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
@@ -107,6 +109,18 @@ docs/mcpp-version/
 
 ---
 
+### [elf-relocation-and-subos-design.md](elf-relocation-and-subos-design.md) — ELF 可重定位与多 subos 设计
+
+预构建包 ELF 解释器写死构建机路径导致子进程无法执行；同一 subos 内多版本依赖（A 依赖 b@0.0.1、C 依赖 b@0.0.2）会因 subos/lib 按文件名聚合而冲突。文档含：问题与方案总结一览、install 时 patchelf 到系统 loader、libxpkg 通用函数、包索引与预构建职责、多 subos 下 loader 与 LD_LIBRARY_PATH 分离、多版本依赖冲突与 Conda/Nix/npm/Spack 对比、**可参考方案详解**（Nix per-package 闭包、npm 式 per-program LD_LIBRARY_PATH）、**包索引分发的包 vs 基于 subos 视图构建的用户应用**（用户应用可能的依赖冲突及应对：注册到 xvm 闭包、RPATH 写死、默认视图约定）、LD_LIBRARY_PATH 副作用与应对、**分阶段建议方案**（短期/中期/长期）。
+
+---
+
+### [elfpatch-shrink-rpath-mode.md](elfpatch-shrink-rpath-mode.md) — elfpatch 可选 shrink-rpath 模式
+
+在 install 后的自动 ELF patch 中引入可选 shrink 流程：先写入依赖闭包 RPATH，再通过 `patchelf --shrink-rpath` 收缩到最小必要路径。文档包含 API 兼容设计（`elfpatch.auto(true)` 与 `elfpatch.auto({ enable=true, shrink=true })`）、默认策略、gcc 示例与风险说明。
+
+---
+
 ### [release-static-build.md](release-static-build.md) — Linux musl 静态构建方案
 
 解决 Linux 发布二进制 glibc >= 2.38 依赖过高的问题。使用 `musl-gcc@15.1.0` 替代 `gcc@15.1` 作为构建工具链，配合 `-static` 全静态链接，生成零外部依赖的二进制。
@@ -157,6 +171,7 @@ docs/mcpp-version/
 | 代码风格规范 | [main.md §7](main.md#七代码风格规范mcpp-style-ref-落地) |
 | RPATH 解决方案 | [rpath-and-os-vision.md §3](rpath-and-os-vision.md#三最简洁的解决方案变量替换--origin) |
 | 包类型和命名规范 | [pkg-taxonomy.md](pkg-taxonomy.md) |
+| elfpatch shrink-rpath 方案 | [elfpatch-shrink-rpath-mode.md](elfpatch-shrink-rpath-mode.md) |
 | OS 演进路线 | [rpath-and-os-vision.md §4](rpath-and-os-vision.md#四xlings-作为操作系统包管理器的演进) |
 | Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
 | 安装脚本方案与设计 | [install-scripts-design.md](install-scripts-design.md) |

@@ -13,6 +13,10 @@ function install_file()
     return runtime.get_pkginfo().install_file
 end
 
+function deps_list()
+    return runtime.get_pkginfo().deps_list or {}
+end
+
 local function _ends_with(s, suffix)
     return suffix == "" or s:sub(-#suffix) == suffix
 end

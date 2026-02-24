@@ -3,6 +3,7 @@
 import("base.runtime")
 import("base.xvm")
 import("pm.XPkgManager")
+import("libxpkg.elfpatch")
 
 local PkgManagerExecutor = {}
 PkgManagerExecutor.__index = PkgManagerExecutor
@@ -62,6 +63,7 @@ function PkgManagerExecutor:install()
     if self.type == "xpm" then
         -- ensure runtime pkginfo has install_dir before reuse check
         local pkg = self._pkg
+        local deps_list = self:deps() or {}
         local pkgname = pkg.name
         if pkg.namespace then
             pkgname = pkg.namespace .. "-x-" .. pkgname
@@ -70,7 +72,10 @@ function PkgManagerExecutor:install()
         runtime.set_pkginfo({
             name = pkg.name,
             namespace = pkg.namespace,
-            install_dir = install_dir
+            install_dir = install_dir,
+            deps_list = deps_list,
+            -- default manual mode; package author can switch to auto in install()
+            elfpatch_auto = false
         })
 
         if _xpkgs_has_files(install_dir) then
@@ -85,6 +90,23 @@ function PkgManagerExecutor:install()
             if not _try_execute(self, "install") then
                 cprint("[xlings:xim]: hooks.install: ${red}install failed${clear}")
                 return false
+            end
+
+            -- Optional auto mode: xim patches current package after install hook.
+            if elfpatch.is_auto() then
+                local patch_result = elfpatch.apply_auto({
+                    target = install_dir,
+                    loader = "subos",
+                    include_shared_libs = true
+                })
+                cprint(
+                    "[xlings:xim]: ${dim}elfpatch auto mode scanned=%d patched=%d failed=%d shrinked=%d shrink_failed=%d${clear}",
+                    patch_result.scanned or 0,
+                    patch_result.patched or 0,
+                    patch_result.failed or 0,
+                    patch_result.shrinked or 0,
+                    patch_result.shrink_failed or 0
+                )
             end
         end
 
