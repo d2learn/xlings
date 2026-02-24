@@ -103,7 +103,7 @@ cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
 cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
 
-for shim in xlings xvm xvm-shim; do
+for shim in xlings xvm xvm-shim xmake; do
   cp "$XVM_DIR/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
   chmod +x "$OUT_DIR/subos/default/bin/$shim"
 done
@@ -119,6 +119,9 @@ xvm:
 xvm-shim:
   bootstrap:
     path: "../../bin"
+xmake:
+  bootstrap:
+    path: "../../bin"
 YAML
 
 cat > "$OUT_DIR/subos/default/xvm/.workspace.xvm.yaml" << 'YAML'
@@ -131,21 +134,30 @@ versions:
   xlings: bootstrap
   xvm: bootstrap
   xvm-shim: bootstrap
+  xmake: bootstrap
 YAML
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
-# Bundled xmake
+# Bundled xmake (baseline tool in bin/)
+XMAKE_READY=0
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
   XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-  XMAKE_BIN="$OUT_DIR/tools/xmake/bin/xmake"
-  mkdir -p "$(dirname "$XMAKE_BIN")"
+  XMAKE_BIN="$OUT_DIR/bin/xmake"
   info "Downloading bundled xmake..."
   if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
     chmod +x "$XMAKE_BIN"
     info "Bundled xmake OK"
+    XMAKE_READY=1
   else
-    info "Warning: xmake download failed; package will require system xmake"
+    info "curl failed, trying wget..."
+    if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
+      chmod +x "$XMAKE_BIN"
+      info "Bundled xmake OK (wget fallback)"
+      XMAKE_READY=1
+    else
+      fail "bundled xmake download failed (curl + wget)"
+    fi
   fi
 fi
 
@@ -194,9 +206,13 @@ info "=== Verification ==="
 
 # 4a. Check binaries exist and are executable
 for f in bin/xlings bin/xvm bin/xvm-shim \
-         subos/default/bin/xlings subos/default/bin/xvm subos/default/bin/xvm-shim; do
+         subos/default/bin/xlings subos/default/bin/xvm subos/default/bin/xvm-shim \
+         subos/default/bin/xmake; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
+if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
+  [[ -x "$OUT_DIR/bin/xmake" ]] || fail "bin/xmake is missing or not executable"
+fi
 info "OK: all binaries present and executable"
 
 # 4b. Check directory structure
@@ -223,7 +239,7 @@ mkdir -p "$TEST_DATA"
 export XLINGS_HOME="$OUT_DIR"
 export XLINGS_DATA="$OUT_DIR/data"
 export XLINGS_SUBOS="$OUT_DIR/subos/current"
-export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$OUT_DIR/tools/xmake/bin:$PATH"
+export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$PATH"
 
 HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1) || fail "xlings -h failed"
 echo "$HELP_OUT" | grep -q "subos" || fail "xlings -h missing 'subos' command"
