@@ -20,7 +20,8 @@ docs/mcpp-version/
 │   ├── rpath-and-os-vision.md← RPATH 解决方案 + OS 演进
 │   ├── pkg-taxonomy.md       ← 包分类体系设计
 │   ├── release-static-build.md ← Linux musl 静态构建方案
-│   └── install-scripts-design.md ← 安装脚本方案与设计
+│   ├── install-scripts-design.md ← 安装脚本方案与设计
+│   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
 │
 └── tasks/                    ← 任务拆分（13 个可并行任务）
     ├── README.md             ← 任务总览 + 依赖拓扑 + 并行分组
@@ -131,6 +132,18 @@ docs/mcpp-version/
 
 ---
 
+### [xim-dir-compat.md](xim-dir-compat.md) — xim 目录兼容方案（临时）
+
+解决 `xlings install xlings` 多版本共存时，每个版本的 xlings 二进制应加载自身版本的 xim Lua 代码而非全局代码的问题。
+
+**关键结论**:
+- C++ 侧 `find_xim_project_dir()` 优先按可执行文件位置解析 xim 项目目录
+- Lua 侧 `xmake.lua` 自动检测 `core/xim/`（源码树）和 `xim/`（release/包）两种布局
+- release 脚本直接复制 `core/xim/xmake.lua`，消除内联重复
+- 临时方案：xim 迁移到 C++ 后可移除
+
+---
+
 ## 快速索引
 
 | 想了解 | 去看 |
@@ -147,6 +160,7 @@ docs/mcpp-version/
 | OS 演进路线 | [rpath-and-os-vision.md §4](rpath-and-os-vision.md#四xlings-作为操作系统包管理器的演进) |
 | Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
 | 安装脚本方案与设计 | [install-scripts-design.md](install-scripts-design.md) |
+| xim 目录多版本兼容 | [xim-dir-compat.md](xim-dir-compat.md) |
 | musl-gcc 构建任务 | [tasks/README.md](tasks/README.md) T11-T13 |
 | 实施任务和并行分组 | [tasks/README.md](tasks/README.md) |
 

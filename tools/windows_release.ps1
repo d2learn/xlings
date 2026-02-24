@@ -123,25 +123,8 @@ if (Test-Path $configSrc) {
 "@ | Set-Content "$OUT_DIR\.xlings.json" -Encoding UTF8
 }
 
-@"
-add_moduledirs("xim")
-add_moduledirs(".")
-task("xim")
-    on_run(function ()
-        import("core.base.option")
-        local xim_dir = path.join(os.projectdir(), "xim")
-        local xim_entry = import("xim", {rootdir = xim_dir, anonymous = true})
-        local args = option.get("arguments") or { "-h" }
-        xim_entry.main(table.unpack(args))
-    end)
-    set_menu{
-        usage = "xmake xim [arguments]",
-        description = "xim package manager",
-        options = {
-            {nil, "arguments", "vs", nil, "xim arguments"},
-        }
-    }
-"@ | Set-Content "$OUT_DIR\xmake.lua" -Encoding UTF8
+# xmake.lua (package root) — reuse core/xim/xmake.lua which auto-detects layout
+Copy-Item "core\xim\xmake.lua" "$OUT_DIR\xmake.lua"
 
 Info "Package assembled: $OUT_DIR"
 

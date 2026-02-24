@@ -130,6 +130,9 @@ function XPkgManager:config(xpkg)
     if xpkg.hooks.config then
         return _try_execute_hook(xpkg.name, xpkg, "config")
     end
+    if xpkg.type == "script" then
+        return types.script.config(xpkg)
+    end
     if xpkg.type == "template" then
         return types.template.config(xpkg)
     end
