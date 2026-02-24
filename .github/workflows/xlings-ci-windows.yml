@@ -51,6 +51,27 @@ jobs:
           if (-not $zip) { throw "No release zip found" }
           Copy-Item $zip.FullName "build\release.zip"
 
+      # ── Phase 2.5: Test install script ─────────────────────────
+
+      - name: "Test: install script (install-from-release.ps1)"
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "install-test"
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
+          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
+          if (-not $pkgDir) { throw "Package dir not found" }
+          Set-Location $pkgDir.FullName
+          & powershell -ExecutionPolicy Bypass -File install.ps1
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          Write-Host "=== Verify install ==="
+          xlings -h
+          xlings config
+          xvm --version
+          Write-Host "=== Cleanup install test ==="
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+
       # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment

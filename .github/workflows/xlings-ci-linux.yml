@@ -86,6 +86,24 @@ jobs:
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
 
+      # ── Phase 2.5: Test install script ─────────────────────────
+
+      - name: "Test: install script (install-from-release.sh)"
+        run: |
+          INSTALL_DIR=$(mktemp -d)
+          tar -xzf build/release.tar.gz -C "$INSTALL_DIR"
+          pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-linux-x86_64 2>/dev/null | head -1)
+          [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
+          cd "$pkg_dir"
+          bash ./install.sh
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
+          echo "=== Verify install ==="
+          xlings -h
+          xlings config
+          xvm --version
+          echo "=== Cleanup install test ==="
+          rm -rf "$HOME/.xlings" "$INSTALL_DIR"
+
       # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment
