@@ -124,3 +124,17 @@ SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh
 <a href="https://github.com/d2learn/xlings/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=d2learn/xlings" />
 </a>
+
+
+## Installation
+
+```bash
+# Installation instructions
+```
+
+
+## Usage
+
+```python
+# Usage examples
+```
