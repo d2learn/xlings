@@ -16,8 +16,40 @@ if (-not (Test-Path "bin") -or -not (Test-Path "subos") -or -not (Test-Path "xim
     exit 1
 }
 
-$DEFAULT_XLINGS_HOME = "C:\Users\Public\xlings"
-$XLINGS_HOME = if ($env:XLINGS_HOME) { $env:XLINGS_HOME } else { $DEFAULT_XLINGS_HOME }
+$DEFAULT_XLINGS_HOME = "$env:USERPROFILE\.xlings"
+
+function Detect-ExistingXlingsHome {
+    $existingCmd = Get-Command xlings -ErrorAction SilentlyContinue
+    if (-not $existingCmd) { return $null }
+    $binDir = Split-Path -Parent $existingCmd.Source
+    $candidate = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $binDir))
+    if ((Test-Path "$candidate\bin") -and (Test-Path "$candidate\subos")) {
+        return $candidate
+    }
+    return $null
+}
+
+if ($env:XLINGS_HOME) {
+    $XLINGS_HOME = $env:XLINGS_HOME
+} else {
+    $OLD_XLINGS_HOME = Detect-ExistingXlingsHome
+    if ($OLD_XLINGS_HOME -and $OLD_XLINGS_HOME -ne $DEFAULT_XLINGS_HOME) {
+        Write-Host "[xlings]: Detected existing xlings at: $OLD_XLINGS_HOME" -ForegroundColor Yellow
+        Write-Host "[xlings]: Default install directory is: $DEFAULT_XLINGS_HOME" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  [1] Overwrite existing installation at $OLD_XLINGS_HOME" -ForegroundColor Cyan
+        Write-Host "  [2] Install to default location $DEFAULT_XLINGS_HOME (keep old)" -ForegroundColor Cyan
+        Write-Host ""
+        $choice = Read-Host "Choose [1/2] (default: 1)"
+        if ($choice -eq "2") {
+            $XLINGS_HOME = $DEFAULT_XLINGS_HOME
+        } else {
+            $XLINGS_HOME = $OLD_XLINGS_HOME
+        }
+    } else {
+        $XLINGS_HOME = $DEFAULT_XLINGS_HOME
+    }
+}
 
 Write-Host "[xlings]: Installing xlings to $XLINGS_HOME" -ForegroundColor Green
 

@@ -39,11 +39,11 @@ OS_TYPE=$(detect_os)
 
 case "$OS_TYPE" in
     linux)
-        DEFAULT_XLINGS_HOME="/home/xlings"
+        DEFAULT_XLINGS_HOME="$HOME/.xlings"
         PROFILE_FILES=("$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile")
         ;;
     macos)
-        DEFAULT_XLINGS_HOME="/Users/xlings"
+        DEFAULT_XLINGS_HOME="$HOME/.xlings"
         PROFILE_FILES=("$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.zprofile")
         ;;
     *)
@@ -52,7 +52,42 @@ case "$OS_TYPE" in
         ;;
 esac
 
-XLINGS_HOME="${XLINGS_HOME:-$DEFAULT_XLINGS_HOME}"
+detect_existing_xlings_home() {
+    local existing_bin
+    existing_bin=$(command -v xlings 2>/dev/null) || return 1
+    local bin_dir
+    bin_dir=$(cd "$(dirname "$existing_bin")" 2>/dev/null && pwd) || return 1
+    local candidate
+    candidate=$(cd "$bin_dir/../../.." 2>/dev/null && pwd) || return 1
+    if [[ -d "$candidate/bin" ]] && [[ -d "$candidate/subos" ]]; then
+        echo "$candidate"
+    fi
+}
+
+if [[ -n "${XLINGS_HOME:-}" ]]; then
+    : # respect explicit XLINGS_HOME from environment
+else
+    OLD_XLINGS_HOME=$(detect_existing_xlings_home || true)
+    if [[ -n "$OLD_XLINGS_HOME" ]] && [[ "$OLD_XLINGS_HOME" != "$DEFAULT_XLINGS_HOME" ]]; then
+        log_warn "Detected existing xlings at: ${CYAN}${OLD_XLINGS_HOME}${RESET}"
+        log_warn "Default install directory is: ${CYAN}${DEFAULT_XLINGS_HOME}${RESET}"
+        echo ""
+        echo -e "  [1] Overwrite existing installation at ${CYAN}${OLD_XLINGS_HOME}${RESET}"
+        echo -e "  [2] Install to default location ${CYAN}${DEFAULT_XLINGS_HOME}${RESET} (keep old)"
+        echo ""
+        read -rp "Choose [1/2] (default: 1): " choice
+        case "$choice" in
+            2)
+                XLINGS_HOME="$DEFAULT_XLINGS_HOME"
+                ;;
+            *)
+                XLINGS_HOME="$OLD_XLINGS_HOME"
+                ;;
+        esac
+    else
+        XLINGS_HOME="$DEFAULT_XLINGS_HOME"
+    fi
+fi
 
 log_info "Installing xlings to ${CYAN}${XLINGS_HOME}${RESET}"
 
