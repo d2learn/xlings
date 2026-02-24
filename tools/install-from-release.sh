@@ -80,13 +80,13 @@ if [[ -n "$OLD_XLINGS_HOME" ]] && [[ "$OLD_XLINGS_HOME" != "$DEFAULT_XLINGS_HOME
     echo -e "  [1] Overwrite existing installation at ${CYAN}${OLD_XLINGS_HOME}${RESET}"
     echo -e "  [2] Install to default location ${CYAN}${DEFAULT_XLINGS_HOME}${RESET} (keep old)"
     echo ""
-    read -rp "Choose [1/2] (default: 1): " choice
+    read -rp "Choose [1/2] (default: 2): " choice
     case "$choice" in
-        2)
-            XLINGS_HOME="$DEFAULT_XLINGS_HOME"
+        1)
+            XLINGS_HOME="$OLD_XLINGS_HOME"
             ;;
         *)
-            XLINGS_HOME="$OLD_XLINGS_HOME"
+            XLINGS_HOME="$DEFAULT_XLINGS_HOME"
             ;;
     esac
 else
@@ -134,32 +134,51 @@ ln -sfn default "$XLINGS_HOME/subos/current"
 
 XLINGS_BIN="$XLINGS_HOME/subos/current/bin"
 
-# Add to shell profile
-PROFILE_LINE="export PATH=\"$XLINGS_BIN:\$PATH\""
+XLINGS_PROFILE_SH="$XLINGS_HOME/config/shell/xlings-profile.sh"
+XLINGS_PROFILE_FISH="$XLINGS_HOME/config/shell/xlings-profile.fish"
 PROFILE_ADDED=false
+
+# bash / zsh
+SOURCE_LINE="test -f \"$XLINGS_PROFILE_SH\" && source \"$XLINGS_PROFILE_SH\""
 
 for profile in "${PROFILE_FILES[@]}"; do
     if [[ -f "$profile" ]]; then
-        if ! grep -qF "$XLINGS_BIN" "$profile" 2>/dev/null; then
+        if ! grep -qF "xlings-profile" "$profile" 2>/dev/null; then
             echo "" >> "$profile"
             echo "# xlings" >> "$profile"
-            echo "$PROFILE_LINE" >> "$profile"
-            log_info "Added PATH to ${CYAN}${profile}${RESET}"
+            echo "$SOURCE_LINE" >> "$profile"
+            log_info "Added xlings profile to ${CYAN}${profile}${RESET}"
         else
-            log_info "PATH already configured in ${profile}"
+            log_info "xlings profile already configured in ${profile}"
         fi
         PROFILE_ADDED=true
         break
     fi
 done
 
-if [[ "$PROFILE_ADDED" == "false" ]]; then
-    log_warn "No shell profile found. Manually add to your profile:"
-    log_warn "  $PROFILE_LINE"
+# fish
+FISH_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+if [[ -f "$FISH_CONFIG" ]] || command -v fish &>/dev/null; then
+    mkdir -p "$(dirname "$FISH_CONFIG")"
+    FISH_SOURCE_LINE="test -f \"$XLINGS_PROFILE_FISH\"; and source \"$XLINGS_PROFILE_FISH\""
+    if [[ -f "$FISH_CONFIG" ]] && grep -qF "xlings-profile" "$FISH_CONFIG" 2>/dev/null; then
+        log_info "xlings profile already configured in ${FISH_CONFIG}"
+    else
+        echo "" >> "$FISH_CONFIG"
+        echo "# xlings" >> "$FISH_CONFIG"
+        echo "$FISH_SOURCE_LINE" >> "$FISH_CONFIG"
+        log_info "Added xlings profile to ${CYAN}${FISH_CONFIG}${RESET}"
+    fi
+    PROFILE_ADDED=true
 fi
 
-# Update PATH for current session
-export PATH="$XLINGS_BIN:$XLINGS_HOME/bin:$PATH"
+if [[ "$PROFILE_ADDED" == "false" ]]; then
+    log_warn "No shell profile found. Manually add to your shell config:"
+    log_warn "  $SOURCE_LINE"
+fi
+
+# Apply profile for current session
+source "$XLINGS_PROFILE_SH"
 
 # Verify
 if "$XLINGS_HOME/bin/xlings" -h &>/dev/null; then

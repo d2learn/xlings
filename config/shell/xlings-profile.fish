@@ -1,19 +1,10 @@
-# Xlings
+# Xlings Shell Profile (fish)
 
-if test (uname) = "Darwin"
-    set -x XLINGS_HOME "/Users/xlings"
-else
-    set -x XLINGS_HOME "/home/xlings"
-end
+set -l _script_dir (dirname (status filename))
+set -gx XLINGS_HOME (dirname (dirname "$_script_dir"))
 
-set -x XLINGS_DATA "$XLINGS_HOME/data"
-set -x XLINGS_BIN "$XLINGS_HOME/data/bin"
-set -x PATH "$XLINGS_BIN" $PATH
+set -gx XLINGS_BIN "$XLINGS_HOME/subos/current/bin"
 
-# XVM
-set -x XVM_WORKSPACE_NAME "global"
-
-# Function to update the workspace name
-function xvm-workspace
-    set -x XVM_WORKSPACE_NAME $argv[1]
+if not contains "$XLINGS_BIN" $PATH
+    set -gx PATH "$XLINGS_BIN" "$XLINGS_HOME/bin" $PATH
 end

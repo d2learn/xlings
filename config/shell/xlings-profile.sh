@@ -1,18 +1,14 @@
-# Xlings
-export XLINGS_HOME="/home/xlings"
+# Xlings Shell Profile (bash/zsh)
 
-if [ "$(uname)" = "Darwin" ]; then
-    export XLINGS_HOME="/Users/xlings"
+_xlings_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
+if [ -n "$_xlings_dir" ]; then
+    export XLINGS_HOME="$_xlings_dir"
 fi
+unset _xlings_dir
 
-export XLINGS_DATA="$XLINGS_HOME/data"
-export XLINGS_BIN="$XLINGS_HOME/data/bin"
-export PATH="$XLINGS_BIN:$PATH"
+export XLINGS_BIN="$XLINGS_HOME/subos/current/bin"
 
-# XVM
-export XVM_WORKSPACE_NAME="global"
-
-# Function to update the workspace name
-xvm-workspace() {
-    export XVM_WORKSPACE_NAME="$1"
-}
+case ":$PATH:" in
+    *":$XLINGS_BIN:"*) ;;
+    *) export PATH="$XLINGS_BIN:$XLINGS_HOME/bin:$PATH" ;;
+esac
