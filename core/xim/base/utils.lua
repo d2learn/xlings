@@ -1,6 +1,5 @@
 import("common")
--- TODO: optimize base.utils and xim.base.utils issues
-import("base.utils")
+import("base.netutils")
 import("config.xconfig")
 
 local installer_base_dir = path.directory(os.scriptdir())
@@ -12,7 +11,7 @@ function load_installers(dir)
 
     for _, file in ipairs(os.files(path.join(installers_dir, "*.lua"))) do
         local name = path.basename(file)
-        local installer = import("xim." .. dir .. "." .. name)
+        local installer = import("" .. dir .. "." .. name)
         installers[name] = installer
     end
 
@@ -171,7 +170,7 @@ function prompt(message, value, cmp_func)
 end
 
 function load_module(fullpath, rootdir)
-    return utils.load_module(fullpath, rootdir)
+    return netutils.load_module(fullpath, rootdir)
 end
 
 function add_env_path(value)
@@ -267,7 +266,7 @@ function try_mirror_match_for_url(url, opt)
                     table.insert(urls, v)
                 end
             end
-            target_url = utils.low_latency_urls(urls)
+            target_url = netutils.low_latency_urls(urls)
         else
             local mirror = xconfig.load()["mirror"]
             target_url = url[mirror] or url["GLOBAL"] or url["DEFAULT"]

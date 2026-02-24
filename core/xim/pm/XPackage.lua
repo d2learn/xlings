@@ -1,7 +1,7 @@
 import("common")
 import("config.xconfig")
 
-import("xim.base.utils")
+import("base.utils")
 
 local XPackage = {}
 XPackage.__index = XPackage
@@ -38,6 +38,8 @@ function XPackage:info()
         name = self.pdata.name,
         homepage = self.pdata.homepage,
         version = self.version,
+        source = self.pdata.source,
+        maintainer = self.pdata.maintainer,
         authors = self.pdata.authors,
         maintainers = self.pdata.maintainers,
         categories = self.pdata.categories,
@@ -166,7 +168,7 @@ package = {
 
 -- xim: hooks for package manager
 
-import("xim.base.runtime")
+import("base.runtime")
 
 -- pkginfo = runtime.get_pkginfo()
 -- pkginfo = {install_file = "", install_dir = "", version = "x.x.x"}

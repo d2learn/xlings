@@ -1,9 +1,9 @@
 import("platform")
 import("common")
 
-import("xim.base.runtime")
+import("base.runtime")
 
-import("xim.libxpkg.log")
+import("libxpkg.log")
 
 function xpkg_args()
     return runtime.get_runtime_data().input_args.sysxpkg_args
@@ -22,11 +22,7 @@ function bindir()
 end
 
 function subos_sysrootdir()
-    local osname = os.host()
-    if is_host("linux") then
-        osname = "linux"
-    end
-    return path.join(platform.get_config_info().subosdir, osname)
+    return platform.get_config_info().subosdir
 end
 
 function exec(cmd, opt)

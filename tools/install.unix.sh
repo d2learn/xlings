@@ -93,10 +93,10 @@ cd "$ROOT_DIR/core"
 
 # 4. 创建软链接
 if [[ "$UID" -eq 0 ]]; then
-    ln -sf "$XLINGS_HOME/.xlings_data/bin/xlings" "$XLINGS_SYMLINK"
+    ln -sf "$XLINGS_HOME/data/bin/xlings" "$XLINGS_SYMLINK"
 fi
 
-export PATH="$XLINGS_HOME/.xlings_data/bin:$PATH"
+export PATH="$XLINGS_HOME/data/bin:$PATH"
 
 # 5. 检查 xlings 命令是否可用
 if ! command -v xlings &> /dev/null; then

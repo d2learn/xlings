@@ -1,55 +1,144 @@
 name: xlings-ci-windows
 
-on: [push]
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  GIT_TERMINAL_PROMPT: 0
 
 jobs:
-
-  windows-test:
+  build-and-test:
     runs-on: windows-latest
 
-    defaults:
-      run:
-        working-directory: tools
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: install xmake
+      # ── Phase 1: Configure Environment ──────────────────────────
+
+      - name: Install xmake
         uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
 
-      - name: Installation Xlings on Windows
-        run: install.win.bat
-        shell: cmd
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-      - name: XIM Test on Windows
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/xvm
+
+      - name: Configure xmake
+        run: xmake f -p windows -m release
+
+      # ── Phase 2: Build via Release Script ───────────────────────
+
+      - name: Build (windows_release)
+        shell: pwsh
         run: |
-          set PATH=C:\Users\Public\xlings\.xlings_data\bin;%PATH%
+          & "$env:GITHUB_WORKSPACE\tools\windows_release.ps1"
+
+      - name: Prepare release artifact
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem "build\xlings-*-windows-x86_64.zip" | Select-Object -First 1
+          if (-not $zip) { throw "No release zip found" }
+          Copy-Item $zip.FullName "build\release.zip"
+
+      # ── Phase 3: Test ───────────────────────────────────────────
+
+      - name: Setup xlings environment
+        shell: pwsh
+        run: |
+          $pkgDir = Get-ChildItem -Directory "build\xlings-*-windows-x86_64" | Select-Object -First 1
+          if (-not $pkgDir) { throw "Package dir not found" }
+          $XLINGS_HOME = $pkgDir.FullName
+          echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
+          echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
+          echo "XLINGS_SUBOS=$XLINGS_HOME\subos\current" >> $env:GITHUB_ENV
+          echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
+          echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
+
+      - name: "Test: basic commands"
+        shell: pwsh
+        run: |
           xlings -h
-          xim -h
-          xim -l
-          xim --detect
-          xim -s v
-          xim -i d2x::d2ds -y
-          xim -l
-          xim -r d2x::d2ds -y
-          xim -l
-        shell: cmd
-
-      - name: XVM Test on Windows
-        run: |
-          set PATH=C:\Users\Public\xlings\.xlings_data\bin;%PATH%
+          xlings config
           xvm --version
-          xvm -h
-          xvm add clear 0.0.1 --alias=cls
-          xvm info clear
-          xvm list c
-          xvm remove clear --yes
-        shell: cmd
+          xlings subos list
 
-      - name: D2X Test on Windows
+      - name: "Test: create subos s1, install d2x@0.1.1"
+        shell: pwsh
         run: |
-          set PATH=C:\Users\Public\xlings\.xlings_data\bin;%PATH%
-          d2x -h
-          d2x new helloworld
-        shell: cmd
+          Write-Host "=== Create subos s1 ==="
+          xlings subos new s1
+          xlings subos use s1
+          Write-Host "=== Install d2x@0.1.1 in s1 ==="
+          $out = (xlings install d2x@0.1.1 -y 2>&1) | Out-String
+          Write-Host $out
+          if ($out -notmatch "version.*0\.1\.1") {
+            throw "FAIL: [package] info doesn't show version 0.1.1"
+          }
+          if ($out -notmatch "d2x@0\.1\.1.*installed") {
+            throw "FAIL: d2x@0.1.1 install not confirmed"
+          }
+          Write-Host "OK: d2x@0.1.1 installed in s1, [package] info verified"
+
+      - name: "Test: create subos s2, install d2x@0.1.2"
+        shell: pwsh
+        run: |
+          Write-Host "=== Create subos s2 ==="
+          xlings subos new s2
+          xlings subos use s2
+          Write-Host "=== Install d2x@0.1.2 in s2 ==="
+          $out = (xlings install d2x@0.1.2 -y 2>&1) | Out-String
+          Write-Host $out
+          if ($out -notmatch "version.*0\.1\.2") {
+            throw "FAIL: [package] info doesn't show version 0.1.2"
+          }
+          if ($out -notmatch "d2x@0\.1\.2.*installed") {
+            throw "FAIL: d2x@0.1.2 install not confirmed"
+          }
+          Write-Host "OK: d2x@0.1.2 installed in s2, [package] info verified"
+
+      - name: "Test: switch subos and verify isolation"
+        shell: pwsh
+        run: |
+          Write-Host "=== Switch to s1 ==="
+          xlings subos use s1
+          Write-Host "OK: switched to s1"
+
+          Write-Host "=== Switch to s2 ==="
+          xlings subos use s2
+          Write-Host "OK: switched to s2"
+
+          Write-Host "=== subos list ==="
+          xlings subos list
+
+      - name: "Test: cleanup subos"
+        shell: pwsh
+        run: |
+          xlings subos use default
+          xlings subos remove s1
+          xlings subos remove s2
+          xlings subos list
+          Write-Host "OK: test subos removed"
+
+      - name: "Test: E2E usability script"
+        shell: pwsh
+        run: |
+          $env:SKIP_NETWORK_TESTS = "0"
+          & "$env:GITHUB_WORKSPACE\tests\e2e\windows_usability_test.ps1" -ArchivePath "$env:GITHUB_WORKSPACE\build\release.zip"
+
+      - name: Attach artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: xlings-windows-x86_64
+          path: build/release.zip

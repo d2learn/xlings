@@ -1,10 +1,21 @@
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
 use indexmap::IndexMap;
 
 use crate::versiondb::VData;
+
+fn expand_xlings_vars(value: &str) -> String {
+    let home = std::env::var("XLINGS_HOME").unwrap_or_default();
+    let data = std::env::var("XLINGS_DATA").unwrap_or_default();
+    let subos = std::env::var("XLINGS_SUBOS").unwrap_or_default();
+    value
+        .replace("${XLINGS_HOME}", &home)
+        .replace("${XLINGS_DATA}", &data)
+        .replace("${XLINGS_SUBOS}", &subos)
+}
 
 pub static XVM_ALIAS_WRAPPER: &str = "xvm-alias";
 /*
@@ -157,9 +168,15 @@ impl Program {
     }
 
     pub fn set_vdata(&mut self, vdata: &VData) {
-        self.set_path(&vdata.path);
+        self.set_path(&expand_xlings_vars(&vdata.path));
         if let Some(envs) = &vdata.envs {
-            self.add_envs(envs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice());
+            let expanded: Vec<(String, String)> = envs
+                .iter()
+                .map(|(k, v)| (k.clone(), expand_xlings_vars(v)))
+                .collect();
+            self.add_envs(
+                expanded.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice()
+            );
         }
         if let Some(bindings) = &vdata.bindings {
             self.bindings = bindings.clone();
@@ -185,11 +202,80 @@ impl Program {
             alias_args = alias.split_whitespace().collect();
         }
 
-        let status = Command::new(&target)
-            .args(alias_args)
+        // If path is set and we run the program by name (no alias), resolve executable (path/name or path/bin/name)
+        let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
+            // Resolve relative path against workspace dir (XLINGS_SUBOS) for package bootstrap entries
+            let mut base: std::path::PathBuf = if Path::new(&self.path).is_relative() {
+                XVM_WORKSPACE_DIR.get().map(|w| Path::new(w).join(&self.path)).unwrap_or_else(|| PathBuf::from(&self.path))
+            } else {
+                PathBuf::from(&self.path)
+            };
+            // Normalize base (resolve ".." and ".") so exists() and Command::new() find the binary reliably
+            if let Ok(canon) = fs::canonicalize(&base) {
+                base = canon;
+            }
+            let candidates: Vec<std::path::PathBuf> = if cfg!(target_os = "windows") {
+                let names = [
+                    format!("{}.exe", self.name),
+                    format!("{}.bat", self.name),
+                ];
+                let mut out = Vec::new();
+                for n in &names {
+                    out.push(base.join(n));
+                }
+                for n in &names {
+                    out.push(base.join("bin").join(n));
+                }
+                out
+            } else {
+                vec![
+                    base.join(&self.name),
+                    base.join("bin").join(&self.name),
+                ]
+            };
+            let exe_path = candidates.into_iter().find(|p| p.exists());
+            match exe_path {
+                Some(p) => Some(p),
+                None => {
+                    eprintln!("xvm: executable not found at {}", base.join(&self.name).display());
+                    eprintln!("  (also tried {})", base.join("bin").join(&self.name).display());
+                    #[cfg(target_os = "windows")]
+                    eprintln!("  (looked for {}.exe and {}.bat in path and path/bin)", self.name, self.name);
+                    eprintln!("  path: {}", self.path);
+                    eprintln!("  hint: install with e.g. xlings install {}@<version>", self.name);
+                    return 1;
+                }
+            }
+        } else {
+            None
+        };
+
+        let path_env = self.get_path_env();
+        let path_env_value = if let Some(ref p) = program_path {
+            if let Some(parent) = p.parent() {
+                let parent_str = parent.to_string_lossy();
+                if parent_str != self.path.as_str() {
+                    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+                    format!("{}{}{}", parent_str, sep, path_env.1)
+                } else {
+                    path_env.1
+                }
+            } else {
+                path_env.1
+            }
+        } else {
+            path_env.1
+        };
+
+        let mut cmd = if let Some(ref path) = program_path {
+            Command::new(path)
+        } else {
+            Command::new(&target)
+        };
+        let status = cmd
+            .args(&alias_args)
             .args(&self.args)
-            .envs([self.get_path_env()]) // .env("PATH", self.get_path_env())
-            // .env("XXLD_LIBRARY_PATH", self.get_ld_library_path_env())
+            .env("PATH", &path_env_value)
             .envs([self.get_ld_library_path_env()])
             .envs(build_extended_envs(self.envs.clone()))
             .status();
@@ -199,7 +285,32 @@ impl Program {
                 status.code().unwrap_or(1)
             },
             Err(e) => {
+                #[cfg(target_os = "linux")]
+                if e.kind() == std::io::ErrorKind::NotFound
+                    && program_path.is_some()
+                {
+                    let bin_path = program_path.as_ref().unwrap();
+                    let ld_env = self.get_ld_library_path_env();
+                    let extended = build_extended_envs(self.envs.clone());
+                    let status_fallback = run_via_system_loader(
+                        bin_path,
+                        &alias_args,
+                        &self.args,
+                        &path_env_value,
+                        &ld_env,
+                        &extended,
+                    );
+                    if let Ok(s) = status_fallback {
+                        return s.code().unwrap_or(1);
+                    }
+                }
                 eprintln!("Failed to execute `xvm run {}`: {}", target, e);
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    if let Some(ref path) = program_path {
+                        eprintln!("  path: {}", path.display());
+                        eprintln!("  hint: the binary or a required library/interpreter may be missing (e.g. in minimal/CI environments).");
+                    }
+                }
                 1
             }
         }
@@ -412,13 +523,14 @@ pub fn init(workspace_dir: &str) {
 pub fn try_create(target: &str, dir: &str) {
     let target_shim = shim_file(target, dir);
     if !fs::metadata(&target_shim).is_ok() {
-        // check dir
         if !fs::metadata(dir).is_ok() {
             fs::create_dir_all(dir).unwrap();
         }
 
-        // cp bindir/xvm-shim to target_shim
-        fs::copy(XVM_SHIM_BIN.get().unwrap(), &target_shim).unwrap();
+        let src = XVM_SHIM_BIN.get().unwrap();
+        if fs::hard_link(src, &target_shim).is_err() {
+            fs::copy(src, &target_shim).unwrap();
+        }
     }
 }
 
@@ -489,4 +601,41 @@ fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
             (key, new_val)
         })
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn system_loader_paths() -> Vec<&'static std::path::Path> {
+    use std::path::Path;
+    [
+        Path::new("/lib64/ld-linux-x86-64.so.2"),
+        Path::new("/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"),
+    ]
+    .to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn run_via_system_loader(
+    bin_path: &Path,
+    alias_args: &[&str],
+    args: &[String],
+    path_env_value: &str,
+    ld_env: &(String, String),
+    extended_envs: &[(String, String)],
+) -> std::io::Result<std::process::ExitStatus> {
+    let loader = system_loader_paths()
+        .into_iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no system ELF loader found"))?;
+    let mut cmd = Command::new(loader);
+    cmd.arg(bin_path)
+        .args(alias_args)
+        .args(args)
+        .env("PATH", path_env_value);
+    if ld_env.0 != "XVM_ENV_NULL" {
+        cmd.env(&ld_env.0, &ld_env.1);
+    }
+    for (k, v) in extended_envs {
+        cmd.env(k, v);
+    }
+    cmd.status()
 }

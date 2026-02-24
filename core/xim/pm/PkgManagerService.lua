@@ -1,8 +1,8 @@
-import("xim.base.utils")
-import("xim.pm.XPackage")
-import("xim.pm.XPkgManager")
-import("xim.pm.wrapper.PkgManagerWrapper")
-import("xim.pm.PkgManagerExecutor")
+import("base.utils")
+import("pm.XPackage")
+import("pm.XPkgManager")
+import("pm.wrapper.PkgManagerWrapper")
+import("pm.PkgManagerExecutor")
 
 local PkgManagerService = {}
 PkgManagerService.__index = PkgManagerService
@@ -37,11 +37,11 @@ function _dectect_and_load_pmanager()
 
     local pm = utils.local_package_manager()
     if pm then
-        local pm_impl = import("xim.pm.wrapper." .. pm)
+        local pm_impl = import("pm.wrapper." .. pm)
         pmanager[pm] = PkgManagerWrapper.new(pm_impl)
 
         if pm == "pacman" then
-            local pm_aur_impl = import("xim.pm.wrapper.aur")
+            local pm_aur_impl = import("pm.wrapper.aur")
             pmanager["aur"] = PkgManagerWrapper.new(pm_aur_impl)
         end
 

@@ -1,6 +1,7 @@
 import("privilege.sudo")
+import("lib.detect.find_tool")
 
-import("xim.base.runtime")
+import("base.runtime")
 
 __xvm_log_tag = true
 
@@ -153,16 +154,73 @@ function info(name, version)
     return info_table
 end
 
+-- Resolve path to xvm binary: bindir > xpkgs/xvm/<version>/bin > PATH.
+local function _resolve_xvm_path()
+    local name = is_host("windows") and "xvm.exe" or "xvm"
+    local candidate
+
+    -- 1) $XLINGS_DATA/bin/xvm (shim or direct)
+    local bindir = runtime.get_bindir()
+    if bindir and bindir ~= "" then
+        candidate = path.join(bindir, name)
+        if os.isfile(candidate) then
+            return candidate
+        end
+        candidate = path.join(bindir, "xvm-shim")
+        if os.isfile(candidate) then
+            return candidate
+        end
+    end
+
+    -- 2) xpkgs/xvm/<version>/bin/xvm or xpkgs/xvm/<version>/xvm
+    local xpkgs = runtime.get_xim_install_basedir()
+    if xpkgs and xpkgs ~= "" then
+        local xvm_base = path.join(xpkgs, "xvm")
+        if os.isdir(xvm_base) then
+            local versions = os.dirs(xvm_base .. "/*")
+            if versions and #versions > 0 then
+                table.sort(versions)
+                for i = #versions, 1, -1 do
+                    candidate = path.join(versions[i], "bin", name)
+                    if os.isfile(candidate) then
+                        return candidate
+                    end
+                    candidate = path.join(versions[i], name)
+                    if os.isfile(candidate) then
+                        return candidate
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3) PATH (e.g. system or user-installed xvm)
+    local tool = find_tool(name)
+    if tool and tool.program then
+        return tool.program
+    end
+
+    return nil
+end
+
 function __xvm_run(cmd, opt)
 
     opt = opt or { }
 
-    local xvm_path = path.join(runtime.get_bindir(), "xvm")
-    if is_host("windows") then
-        xvm_path = path.join(runtime.get_bindir(), "xvm.exe")
-    end
-    if not os.isfile(xvm_path) then
+    local xvm_path = _resolve_xvm_path()
+    if not xvm_path then
         os.exec("xlings install xvm -y")
+        xvm_path = _resolve_xvm_path()
+    end
+    if not xvm_path then
+        return try {
+            function () _G.error("xvm binary not found: install failed or not in bindir/xpkgs") end,
+            catch {
+                function (e)
+                    cprint("[xlings:xim]: xvm run failed - ${red}%s", e)
+                end
+            }
+        }
     end
     xvm_cmd = string.format([[%s %s]], xvm_path, cmd)
     if __xvm_log_tag then cprint("[xlings:xim]: xvm run - ${dim}%s", xvm_cmd) end

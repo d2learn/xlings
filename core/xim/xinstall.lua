@@ -1,9 +1,9 @@
 -- for package file script
 -- example:
---  import("xim.xinstall")
+--  import("xinstall")
 --  xinstall("vscode")
 
-import("xim.xim")
+import("xim")
 
 -- only support install
 function main(target)

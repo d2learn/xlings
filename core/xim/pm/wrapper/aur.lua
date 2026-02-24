@@ -1,9 +1,9 @@
 import("devel.git")
 import("core.base.json")
 
-import("xim.base.runtime")
-import("xim.base.utils")
-import("xim.pm.wrapper.pacman")
+import("base.runtime")
+import("base.utils")
+import("pm.wrapper.pacman")
 
 local aur_pkgs_dir = path.join(runtime.get_xim_data_dir(), "aur_pkgs")
 local aur_url_template = "https://aur.archlinux.org/%s.git"

@@ -1,4 +1,4 @@
-import("xim.xim")
+import("xim")
 
 -- only support uninstall
 function main(target)

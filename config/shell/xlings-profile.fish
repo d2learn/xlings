@@ -6,8 +6,8 @@ else
     set -x XLINGS_HOME "/home/xlings"
 end
 
-set -x XLINGS_DATA "$XLINGS_HOME/.xlings_data"
-set -x XLINGS_BIN "$XLINGS_HOME/.xlings_data/bin"
+set -x XLINGS_DATA "$XLINGS_HOME/data"
+set -x XLINGS_BIN "$XLINGS_HOME/data/bin"
 set -x PATH "$XLINGS_BIN" $PATH
 
 # XVM

@@ -1,7 +1,7 @@
 # Compiled Lua sources
 luac.out
 
-# luarocks build files
+# Lua rocks
 *.src.rock
 *.zip
 *.tar.gz
@@ -25,7 +25,7 @@ luac.out
 *.def
 *.exp
 
-# Shared objects (inc. Windows DLLs)
+# Shared objects
 *.dll
 *.so
 *.so.*
@@ -35,16 +35,18 @@ luac.out
 *.exe
 *.out
 *.app
-*.i*86
-*.x86_64
-*.hex
 
-# other
-bin/mdbook*
+# Build artifacts
 **/.xmake
 **/build
+**/target
+
+# IDE / OS
 .vscode
-**/.xlings
-**/__pycache__
-bin/xmake
 .DS_Store
+**/__pycache__
+
+# Runtime
+**/.xlings
+bin/xmake
+bin/mdbook*

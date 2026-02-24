@@ -1,8 +1,8 @@
 -- Package IndexManager
 
-import("xim.base.utils")
-import("xim.index.RepoManager")
-import("xim.index.IndexStore")
+import("base.utils")
+import("index.RepoManager")
+import("index.IndexStore")
 
 local IndexManager = {}
 IndexManager.__index = IndexManager
@@ -67,18 +67,24 @@ function IndexManager:search(query, opt)
         end
     end
 
+    local user_specified_namespace = query and query:find(":", 1, true)
     for name, pkg in pairs(self.index) do
         if name:find(query, 1, true) or query == "" then
-            local alias_name = nil
-            if pkg.ref then
-                alias_name = name
-                name, pkg = utils.deref(self.index, pkg.ref)
-            end
-            -- if ref to a nil, skip
-            if name and is_installed(opt, pkg) then 
-                add_name(names, name, alias_name)
-                if #names >= opt.limit then
-                    break
+            -- default search excludes awesome namespace unless user specified namespace in query
+            if not user_specified_namespace and name:sub(1, 8) == "awesome:" then
+                -- skip
+            else
+                local alias_name = nil
+                if pkg.ref then
+                    alias_name = name
+                    name, pkg = utils.deref(self.index, pkg.ref)
+                end
+                -- if ref to a nil, skip
+                if name and is_installed(opt, pkg) then
+                    add_name(names, name, alias_name)
+                    if #names >= opt.limit then
+                        break
+                    end
                 end
             end
         end
@@ -116,12 +122,15 @@ function IndexManager:match_package_version(target)
             table.insert(nonamespace_target_versions, name)
         elseif match_index and string.sub(name, match_index - 1, match_index - 1) == ":" then
             -- ???:xxxx@ matched
-            if pkg.installed then table.insert(installed_target_versions, name)  end
+            local skip_awesome = not target:find(":", 1, true) and name:sub(1, 8) == "awesome:"
+            if pkg.installed and not skip_awesome then table.insert(installed_target_versions, name)  end
             if string.find(name, "scode:", 1, true) == 1 then
                 -- special case for scode:xxxx@, put it to scode namespace list
                 table.insert(scode_namespace_versions, name)
             else
-                table.insert(target_versions, name)
+                if not skip_awesome then
+                    table.insert(target_versions, name)
+                end
             end
         end
     end

@@ -1,5 +1,5 @@
-import("xim.base.xvm")
-import("xim.base.runtime")
+import("base.xvm")
+import("base.runtime")
 
 function installed(xpkg)
     local old_value = xvm.log_tag(false)
