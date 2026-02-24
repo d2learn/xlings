@@ -34,19 +34,13 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
           xmake --version
 
-      - name: Install Xlings
-        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
-
-      - name: Install musl-gcc 15.1 with Xlings
+      - name: Download musl-gcc 15.1.0
         run: |
-          # Probe xlings binary: new path first, then legacy
-          if [[ -d "$HOME/.xlings/subos/current/bin" ]]; then
-            export PATH="$HOME/.xlings/subos/current/bin:$PATH"
-          else
-            export PATH="/home/xlings/.xlings_data/bin:$PATH"
-          fi
-          xlings install musl-gcc@15.1.0 -y
-          MUSL_SDK="$(dirname "$(dirname "$(which x86_64-linux-musl-gcc)")")"
+          MUSL_GCC_URL="https://github.com/xlings-res/musl-gcc/releases/download/15.1.0/musl-gcc-15.1.0-linux-x86_64.tar.gz"
+          curl -fSL --progress-bar -o /tmp/musl-gcc.tar.gz "$MUSL_GCC_URL"
+          tar -xzf /tmp/musl-gcc.tar.gz -C /tmp
+          MUSL_SDK="$(ls -d /tmp/musl-gcc-*-linux-x86_64 2>/dev/null | head -1)"
+          [[ -d "$MUSL_SDK" ]] || { echo "FAIL: musl-gcc extract dir not found"; exit 1; }
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
