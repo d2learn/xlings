@@ -56,13 +56,17 @@ cd "$PROJECT_DIR"
 info "Version: $VERSION  |  Arch: $ARCH"
 info "Building C++ binary..."
 # Ensure xmake is configured with a toolchain that supports `import std`.
-MUSL_SDK_DEFAULT="/home/xlings/.xlings_data/xpkgs/musl-gcc/15.1.0"
+MUSL_SDK_DEFAULT="${XLINGS_HOME:-$HOME/.xlings}/data/xpkgs/musl-gcc/15.1.0"
 MUSL_SDK="${MUSL_SDK:-$MUSL_SDK_DEFAULT}"
 if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
-  # Some musl-gcc toolchains are built with a fixed interpreter path.
-  # Ensure loader exists at that path for assembler/linker helpers.
-  mkdir -p /home/xlings/.xlings_data/lib
-  ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" /home/xlings/.xlings_data/lib/ld-musl-x86_64.so.1
+  # Some musl-gcc toolchains are built with a fixed interpreter path
+  # baked into helper binaries (cc1, as, collect2).  Create the loader
+  # symlink at that path so they can run during the build.
+  LOADER_DIR="/home/xlings/.xlings_data/lib"
+  if ! mkdir -p "$LOADER_DIR" 2>/dev/null; then
+    sudo mkdir -p "$LOADER_DIR" && sudo chown "$(id -u):$(id -g)" "$LOADER_DIR"
+  fi
+  ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
   export PATH="$MUSL_SDK/bin:$PATH"
