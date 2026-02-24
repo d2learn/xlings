@@ -7,6 +7,7 @@ else
     xim_root = path.join(os.projectdir(), "xim")
 end
 add_moduledirs(xim_root)
+add_moduledirs(path.directory(xim_root))
 
 task("xim")
     on_run(function ()
