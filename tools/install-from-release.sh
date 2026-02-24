@@ -178,7 +178,11 @@ if [[ "$PROFILE_ADDED" == "false" ]]; then
 fi
 
 # Apply profile for current session
-source "$XLINGS_PROFILE_SH"
+if [[ -f "$XLINGS_PROFILE_SH" ]]; then
+    source "$XLINGS_PROFILE_SH"
+else
+    export PATH="$XLINGS_BIN:$XLINGS_HOME/bin:$PATH"
+fi
 
 # Verify
 if "$XLINGS_HOME/bin/xlings" -h &>/dev/null; then

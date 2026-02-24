@@ -112,7 +112,11 @@ if (-not $psProfileContent -or $psProfileContent -notlike "*xlings-profile*") {
 }
 
 # Apply profile for current session
-if (Test-Path $XLINGS_PROFILE_PS1) { . $XLINGS_PROFILE_PS1 }
+if (Test-Path $XLINGS_PROFILE_PS1) {
+    . $XLINGS_PROFILE_PS1
+} else {
+    $env:Path = "$XLINGS_BIN;$XLINGS_HOME\bin;$env:Path"
+}
 
 # Verify
 try {
