@@ -55,6 +55,19 @@ cd "$PROJECT_DIR"
 # ── 1. Build C++ ─────────────────────────────────────────────────
 info "Version: $VERSION  |  Arch: $ARCH"
 info "Building C++ binary..."
+# Ensure xmake is configured with a toolchain that supports `import std`.
+MUSL_SDK_DEFAULT="/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0"
+MUSL_SDK="${MUSL_SDK:-$MUSL_SDK_DEFAULT}"
+if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
+  export CC="${CC:-x86_64-linux-musl-gcc}"
+  export CXX="${CXX:-x86_64-linux-musl-g++}"
+  export PATH="$MUSL_SDK/bin:$PATH"
+  xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y \
+    || fail "xmake configure with musl-gcc failed"
+else
+  info "Warning: musl std module file not found at $MUSL_SDK"
+  info "Warning: fallback to existing xmake config/toolchain"
+fi
 xmake clean -q 2>/dev/null || true
 xmake build xlings 2>&1 || fail "xmake build failed"
 

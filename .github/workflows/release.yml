@@ -43,7 +43,11 @@ jobs:
           xlings install musl-gcc@15.1.0 -y
           MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
+          echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
+          echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
           echo "PATH=$MUSL_SDK/bin:$PATH" >> "$GITHUB_ENV"
+          export PATH="$MUSL_SDK/bin:$PATH"
+          test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
 
       - name: Install Rust
@@ -61,7 +65,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl-
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
 
       - name: Build (linux_release)
         run: |
