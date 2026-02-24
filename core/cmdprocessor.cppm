@@ -121,9 +121,8 @@ int install_from_project_config() {
     namespace fs = std::filesystem;
     auto cfg = find_project_xlings_json();
     if (cfg.empty()) {
-        log::error("No project .xlings.json found in current/parent directories");
         std::println("Tip: create <project>/.xlings.json with deps, or run `xlings install <package>`");
-        return 1;
+        return 0;
     }
 
     nlohmann::json json;

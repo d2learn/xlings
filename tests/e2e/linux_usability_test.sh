@@ -112,35 +112,15 @@ scenario_self_and_cleanup() {
 scenario_project_deps() {
   log "scenario: project deps (.xlings.json)"
 
-  # T18: no .xlings.json → should fail with helpful error
   local tmpdir
   tmpdir="$(mktemp -d)"
   local out
-  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
-  assert_contains "$out" ".xlings.json" \
-    "xlings install (no args, no config) should mention .xlings.json"
 
   # T18: valid .xlings.json with deps array
-  cat > "$tmpdir/.xlings.json" <<'XJSON'
-{
-  "deps": [
-    "d2x@0.1.3"
-  ]
-}
-XJSON
+  printf '{"deps":["d2x@0.1.3"]}\n' > "$tmpdir/.xlings.json"
   out="$(cd "$tmpdir" && xlings install 2>&1)" || true
   assert_contains "$out" "d2x" \
     "xlings install should process d2x dep from .xlings.json"
-
-  # T18: invalid deps format → should fail with helpful error
-  cat > "$tmpdir/.xlings.json" <<'XJSON'
-{
-  "deps": { "d2x": "0.1.3" }
-}
-XJSON
-  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
-  assert_contains "$out" "invalid" \
-    "xlings install with object deps should report invalid format"
 
   rm -rf "$tmpdir"
   log "  project deps: OK"
@@ -217,22 +197,18 @@ scenario_network_install_optional() {
 }
 
 scenario_project_deps_offline() {
-  log "scenario: project deps offline (.xlings.json error handling)"
+  log "scenario: project deps offline (.xlings.json handling)"
 
-  # T18: no .xlings.json → error with hint
+  # T18: no .xlings.json → tip (exit 0)
   local tmpdir
   tmpdir="$(mktemp -d)"
   local out
-  out="$(cd "$tmpdir" && xlings install 2>&1)" || true
+  out="$(cd "$tmpdir" && xlings install 2>&1)"
   assert_contains "$out" ".xlings.json" \
     "xlings install (no args, no config) should mention .xlings.json"
 
   # T18: invalid deps format
-  cat > "$tmpdir/.xlings.json" <<'XJSON'
-{
-  "deps": { "d2x": "0.1.3" }
-}
-XJSON
+  printf '{"deps":{"d2x":"0.1.3"}}\n' > "$tmpdir/.xlings.json"
   out="$(cd "$tmpdir" && xlings install 2>&1)" || true
   assert_contains "$out" "invalid" \
     "xlings install with object deps should report invalid format"

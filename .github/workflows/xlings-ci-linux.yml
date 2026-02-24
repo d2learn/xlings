@@ -188,20 +188,16 @@ jobs:
 
       - name: "Test: .xlings.json project deps (T18)"
         run: |
-          echo "=== T18: no .xlings.json → error ==="
+          echo "=== T18: no .xlings.json → tip (exit 0) ==="
           cd /tmp
-          ERR_OUT=$(xlings install 2>&1) || true
+          ERR_OUT=$(xlings install 2>&1)
           echo "$ERR_OUT"
           echo "$ERR_OUT" | grep -qi ".xlings.json" || \
             { echo "FAIL: should mention .xlings.json"; exit 1; }
 
           echo "=== T18: valid .xlings.json ==="
           PROJ_DIR=$(mktemp -d)
-          cat > "$PROJ_DIR/.xlings.json" << 'EOF'
-          {
-            "deps": ["d2x@0.1.1"]
-          }
-          EOF
+          printf '{"deps":["d2x@0.1.1"]}\n' > "$PROJ_DIR/.xlings.json"
           cd "$PROJ_DIR"
           DEP_OUT=$(xlings install 2>&1) || true
           echo "$DEP_OUT"
@@ -209,11 +205,7 @@ jobs:
             { echo "FAIL: should process d2x from .xlings.json"; exit 1; }
 
           echo "=== T18: invalid deps format → error ==="
-          cat > "$PROJ_DIR/.xlings.json" << 'EOF'
-          {
-            "deps": { "d2x": "0.1.1" }
-          }
-          EOF
+          printf '{"deps":{"d2x":"0.1.1"}}\n' > "$PROJ_DIR/.xlings.json"
           cd "$PROJ_DIR"
           INV_OUT=$(xlings install 2>&1) || true
           echo "$INV_OUT"
