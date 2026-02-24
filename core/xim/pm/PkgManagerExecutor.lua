@@ -49,7 +49,9 @@ function _xpkgs_has_files(install_dir)
         return false
     end
     local files = os.files(path.join(install_dir, "*"))
-    return files and #files > 0
+    if files and #files > 0 then return true end
+    local dirs = os.dirs(path.join(install_dir, "*"))
+    return dirs and #dirs > 0
 end
 
 function PkgManagerExecutor:install()
