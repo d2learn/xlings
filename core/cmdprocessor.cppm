@@ -60,9 +60,24 @@ private:
     std::vector<CommandInfo> commands_;
 };
 
+// Resolve the xmake project directory that contains xim task definition.
+// Prefers version-specific xim next to the running binary (multi-version),
+// falls back to $XLINGS_HOME for global/development use.
+std::filesystem::path find_xim_project_dir() {
+    namespace fs = std::filesystem;
+    auto exePath = platform::get_executable_path();
+    if (!exePath.empty()) {
+        auto candidate = exePath.parent_path().parent_path();
+        if (fs::exists(candidate / "xim") && fs::exists(candidate / "xmake.lua")) {
+            return candidate;
+        }
+    }
+    return Config::paths().homeDir;
+}
+
 int xim_exec(const std::string& flags, int argc, char* argv[], int startIdx = 2) {
-    auto& p = Config::paths();
-    std::string cmd = "xmake xim -P \"" + p.homeDir.string() + "\"";
+    auto projectDir = find_xim_project_dir();
+    std::string cmd = "xmake xim -P \"" + projectDir.string() + "\"";
     if (!flags.empty()) {
         cmd += " " + flags;
     }
@@ -215,6 +230,22 @@ export CommandProcessor create_processor() {
                 return subos::run(argc, argv);
             },
             "xlings subos <new|use|list|ls|remove|rm|info|i> [name]")
+        .add("script", "run xpkg script",
+            [](int argc, char* argv[]) {
+                if (argc < 3) {
+                    std::println("Usage: xlings script <script-file> [args...]");
+                    return 1;
+                }
+                auto projectDir = find_xim_project_dir();
+                std::string cmd = "xmake xscript -P \"" + projectDir.string() + "\" --";
+                for (int i = 2; i < argc; ++i) {
+                    cmd += " \"";
+                    cmd += argv[i];
+                    cmd += "\"";
+                }
+                return platform::exec(cmd);
+            },
+            "xlings script <script-file> [args...]")
         .add("self", "self management (init/update/config/clean/migrate)",
             [](int argc, char* argv[]) {
                 return xself::run(argc, argv);
