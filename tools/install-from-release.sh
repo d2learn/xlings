@@ -64,29 +64,33 @@ detect_existing_xlings_home() {
     fi
 }
 
-if [[ -n "${XLINGS_HOME:-}" ]]; then
-    : # respect explicit XLINGS_HOME from environment
-else
+OLD_XLINGS_HOME=""
+if [[ -n "${XLINGS_HOME:-}" ]] && [[ "${XLINGS_HOME}" != "$DEFAULT_XLINGS_HOME" ]]; then
+    OLD_XLINGS_HOME="$XLINGS_HOME"
+fi
+
+if [[ -z "$OLD_XLINGS_HOME" ]]; then
     OLD_XLINGS_HOME=$(detect_existing_xlings_home || true)
-    if [[ -n "$OLD_XLINGS_HOME" ]] && [[ "$OLD_XLINGS_HOME" != "$DEFAULT_XLINGS_HOME" ]]; then
-        log_warn "Detected existing xlings at: ${CYAN}${OLD_XLINGS_HOME}${RESET}"
-        log_warn "Default install directory is: ${CYAN}${DEFAULT_XLINGS_HOME}${RESET}"
-        echo ""
-        echo -e "  [1] Overwrite existing installation at ${CYAN}${OLD_XLINGS_HOME}${RESET}"
-        echo -e "  [2] Install to default location ${CYAN}${DEFAULT_XLINGS_HOME}${RESET} (keep old)"
-        echo ""
-        read -rp "Choose [1/2] (default: 1): " choice
-        case "$choice" in
-            2)
-                XLINGS_HOME="$DEFAULT_XLINGS_HOME"
-                ;;
-            *)
-                XLINGS_HOME="$OLD_XLINGS_HOME"
-                ;;
-        esac
-    else
-        XLINGS_HOME="$DEFAULT_XLINGS_HOME"
-    fi
+fi
+
+if [[ -n "$OLD_XLINGS_HOME" ]] && [[ "$OLD_XLINGS_HOME" != "$DEFAULT_XLINGS_HOME" ]]; then
+    log_warn "Detected existing xlings at: ${CYAN}${OLD_XLINGS_HOME}${RESET}"
+    log_warn "Default install directory is: ${CYAN}${DEFAULT_XLINGS_HOME}${RESET}"
+    echo ""
+    echo -e "  [1] Overwrite existing installation at ${CYAN}${OLD_XLINGS_HOME}${RESET}"
+    echo -e "  [2] Install to default location ${CYAN}${DEFAULT_XLINGS_HOME}${RESET} (keep old)"
+    echo ""
+    read -rp "Choose [1/2] (default: 1): " choice
+    case "$choice" in
+        2)
+            XLINGS_HOME="$DEFAULT_XLINGS_HOME"
+            ;;
+        *)
+            XLINGS_HOME="$OLD_XLINGS_HOME"
+            ;;
+    esac
+else
+    XLINGS_HOME="$DEFAULT_XLINGS_HOME"
 fi
 
 log_info "Installing xlings to ${CYAN}${XLINGS_HOME}${RESET}"

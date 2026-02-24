@@ -127,7 +127,7 @@ fi
 log_info "Extracting..."
 tar -xzf "${WORK_DIR}/${TARBALL}" -C "$WORK_DIR"
 
-EXTRACT_DIR=$(find "$WORK_DIR" -maxdepth 1 -type d -name "xlings-*" | head -1)
+EXTRACT_DIR=$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d -name "xlings-*" | head -1)
 if [[ -z "$EXTRACT_DIR" ]] || [[ ! -f "$EXTRACT_DIR/install.sh" ]]; then
     log_error "Extracted package is invalid (missing install.sh)."
     exit 1
