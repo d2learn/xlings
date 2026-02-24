@@ -29,26 +29,30 @@ function Detect-ExistingXlingsHome {
     return $null
 }
 
-if ($env:XLINGS_HOME) {
-    $XLINGS_HOME = $env:XLINGS_HOME
-} else {
+$OLD_XLINGS_HOME = $null
+if ($env:XLINGS_HOME -and $env:XLINGS_HOME -ne $DEFAULT_XLINGS_HOME) {
+    $OLD_XLINGS_HOME = $env:XLINGS_HOME
+}
+
+if (-not $OLD_XLINGS_HOME) {
     $OLD_XLINGS_HOME = Detect-ExistingXlingsHome
-    if ($OLD_XLINGS_HOME -and $OLD_XLINGS_HOME -ne $DEFAULT_XLINGS_HOME) {
-        Write-Host "[xlings]: Detected existing xlings at: $OLD_XLINGS_HOME" -ForegroundColor Yellow
-        Write-Host "[xlings]: Default install directory is: $DEFAULT_XLINGS_HOME" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "  [1] Overwrite existing installation at $OLD_XLINGS_HOME" -ForegroundColor Cyan
-        Write-Host "  [2] Install to default location $DEFAULT_XLINGS_HOME (keep old)" -ForegroundColor Cyan
-        Write-Host ""
-        $choice = Read-Host "Choose [1/2] (default: 1)"
-        if ($choice -eq "2") {
-            $XLINGS_HOME = $DEFAULT_XLINGS_HOME
-        } else {
-            $XLINGS_HOME = $OLD_XLINGS_HOME
-        }
-    } else {
+}
+
+if ($OLD_XLINGS_HOME -and $OLD_XLINGS_HOME -ne $DEFAULT_XLINGS_HOME) {
+    Write-Host "[xlings]: Detected existing xlings at: $OLD_XLINGS_HOME" -ForegroundColor Yellow
+    Write-Host "[xlings]: Default install directory is: $DEFAULT_XLINGS_HOME" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  [1] Overwrite existing installation at $OLD_XLINGS_HOME" -ForegroundColor Cyan
+    Write-Host "  [2] Install to default location $DEFAULT_XLINGS_HOME (keep old)" -ForegroundColor Cyan
+    Write-Host ""
+    $choice = Read-Host "Choose [1/2] (default: 1)"
+    if ($choice -eq "2") {
         $XLINGS_HOME = $DEFAULT_XLINGS_HOME
+    } else {
+        $XLINGS_HOME = $OLD_XLINGS_HOME
     }
+} else {
+    $XLINGS_HOME = $DEFAULT_XLINGS_HOME
 }
 
 Write-Host "[xlings]: Installing xlings to $XLINGS_HOME" -ForegroundColor Green
