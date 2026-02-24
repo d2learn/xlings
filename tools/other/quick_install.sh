@@ -1,163 +1,141 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# One-line installer for xlings (Linux / macOS).
+#   curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
 
-# avoid sub-script side effects
-QI_RUN_DIR=`pwd`
-QI_INSTALL_DIR=".xlings_software_install"
+set -euo pipefail
 
-SOFTWARE_URL="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
-ZIP_FILE="software.zip"
-XLINGS_DIR="xlings-main"
-INSTALL_SCRIPT="tools/install.unix.sh"
+RED='\033[31m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+RESET='\033[0m'
 
-trap "echo 'Ctrl+C or killed...'; exit 1" INT TERM
+log_info()  { echo -e "${GREEN}[xlings]:${RESET} $1"; }
+log_warn()  { echo -e "${YELLOW}[xlings]:${RESET} $1"; }
+log_error() { echo -e "${RED}[xlings]:${RESET} $1"; }
 
-# ------------------------------
+trap 'log_error "Interrupted"; exit 1' INT TERM
+
+GITHUB_REPO="d2learn/xlings"
+GITHUB_MIRROR="${XLINGS_GITHUB_MIRROR:-}"
+
+# --------------- detect platform ---------------
+
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)  echo "linux" ;;
+        Darwin*) echo "macos" ;;
+        *)       echo "unknown" ;;
+    esac
+}
+
+detect_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64)   echo "x86_64" ;;
+        aarch64|arm64)  echo "arm64" ;;
+        *)              echo "unknown" ;;
+    esac
+}
+
+OS_TYPE=$(detect_os)
+ARCH_TYPE=$(detect_arch)
+
+if [[ "$OS_TYPE" == "unknown" ]]; then
+    log_error "Unsupported OS: $(uname -s)"
+    exit 1
+fi
+
+if [[ "$ARCH_TYPE" == "unknown" ]]; then
+    log_error "Unsupported architecture: $(uname -m)"
+    exit 1
+fi
+
+case "$OS_TYPE" in
+    linux) PLATFORM="linux" ;;
+    macos) PLATFORM="macosx" ;;
+esac
+
+# --------------- banner ---------------
 
 cat << 'EOF'
 
- __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.4
-  \ V /  | |     _  _ __    __ _  ___ 
+ __   __  _      _
+ \ \ / / | |    (_)
+  \ V /  | |     _  _ __    __ _  ___
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \
  /_/ \_\ |______|_||_| |_| \__, ||___/
-                            __/ |     
-                           |___/      
+                            __/ |
+                           |___/
 
 repo:  https://github.com/d2learn/xlings
 forum: https://forum.d2learn.org
 
----
 EOF
 
+# --------------- resolve download URL ---------------
 
-SOFTWARE_URL1="https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
-SOFTWARE_URL2="https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-measure_latency() {
-    local url="$1"
-    local domain=$(echo "$url" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
-    local latency
-
-    if command_exists ping; then
-        latency=$(ping -c 3 -q "$domain" 2>/dev/null | awk -F'/' 'END{print $5}')
-    elif command_exists curl; then
-        latency=$(curl -o /dev/null -s -w '%{time_total}\n' "$url")
-    else
-        echo "Error: Neither ping nor curl is available." >&2
+ensure_cmd() {
+    if ! command -v "$1" &>/dev/null; then
+        log_error "'$1' is required but not found. Please install it first."
         exit 1
     fi
-
-    if [ -n "$latency" ]; then
-        echo "$latency"
-    else
-        echo "999999"
-    fi
 }
 
-echo "Testing network..."
-latency1=$(measure_latency "$SOFTWARE_URL1")
-latency2=$(measure_latency "$SOFTWARE_URL2")
+ensure_cmd curl
+ensure_cmd tar
 
-echo "Latency for github.com : $latency1 ms"
-echo "Latency for gitee.com : $latency2 ms"
+LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+    | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')
 
-# 比较延迟并选择最快的 URL
-if command_exists bc; then
-    if (( $(echo "$latency1 < $latency2" | bc -l) )); then
-        SOFTWARE_URL=$SOFTWARE_URL1
-    else
-        SOFTWARE_URL=$SOFTWARE_URL2
-    fi
+if [[ -z "$LATEST_VERSION" ]]; then
+    log_error "Failed to query the latest release version."
+    exit 1
+fi
+
+VERSION_NUM="${LATEST_VERSION#v}"
+TARBALL="xlings-${VERSION_NUM}-${PLATFORM}-${ARCH_TYPE}.tar.gz"
+
+if [[ -n "$GITHUB_MIRROR" ]]; then
+    DOWNLOAD_URL="${GITHUB_MIRROR}/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${TARBALL}"
 else
-    # 如果 bc 不可用，使用简单的字符串比较
-    if [[ "$latency1" < "$latency2" ]]; then
-        SOFTWARE_URL=$SOFTWARE_URL1
-    else
-        SOFTWARE_URL=$SOFTWARE_URL2
-    fi
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${TARBALL}"
 fi
 
-# ------------------------------
+log_info "Latest version: ${CYAN}${LATEST_VERSION}${RESET}"
+log_info "Package:        ${CYAN}${TARBALL}${RESET}"
+log_info "Download URL:   ${CYAN}${DOWNLOAD_URL}${RESET}"
 
-install_tool() {
-    tool=$1
-    if command -v apt-get &> /dev/null; then
-        sudo apt-get update && sudo apt-get install -y $tool
-    elif command -v yum &> /dev/null; then
-        sudo yum install -y $tool
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y $tool
-    elif command -v zypper &> /dev/null; then
-        sudo zypper install -y $tool
-    elif command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm $tool
-    elif command -v brew &> /dev/null; then
-        brew install $tool
-    else
-        echo "Unable to install $tool. Please install it manually."
-        exit 1
-    fi
+# --------------- download & extract ---------------
+
+TMPDIR_ROOT="${TMPDIR:-/tmp}"
+WORK_DIR=$(mktemp -d "${TMPDIR_ROOT}/xlings-install.XXXXXX")
+
+cleanup() {
+    log_info "Cleaning up temporary files..."
+    rm -rf "$WORK_DIR"
 }
+trap 'cleanup; log_error "Interrupted"; exit 1' INT TERM
+trap cleanup EXIT
 
-check_and_install_tool() {
-    tool=$1
-    if ! command -v $tool &> /dev/null; then
-        echo "$tool is not installed. Attempting to install..."
-        install_tool $tool
-        if ! command -v $tool &> /dev/null; then
-            echo "Failed to install $tool. Please install it manually and try again."
-            exit 1
-        fi
-    fi
-}
-
-check_and_install_tool curl
-check_and_install_tool unzip
-check_and_install_tool git
-
-# ------------------------------
-
-# remove old dir
-if [ -d "$QI_INSTALL_DIR" ]; then
-    rm -rf "$QI_INSTALL_DIR"
-fi
-
-# create tmp dir
-mkdir -p "$QI_INSTALL_DIR"
-cd "$QI_INSTALL_DIR"
-
-echo "Downloading xlings..."
-curl -L -o "$ZIP_FILE" "$SOFTWARE_URL"
-
-# check download status
-if [ $? -ne 0 ]; then
-    echo "Failed to download the software. Please check your internet connection and try again."
+log_info "Downloading..."
+if ! curl -fSL --progress-bar -o "${WORK_DIR}/${TARBALL}" "$DOWNLOAD_URL"; then
+    log_error "Download failed. Please check your network or try setting XLINGS_GITHUB_MIRROR."
     exit 1
 fi
 
-echo "Extracting files..."
-unzip -q "$ZIP_FILE"
+log_info "Extracting..."
+tar -xzf "${WORK_DIR}/${TARBALL}" -C "$WORK_DIR"
 
-if [ $? -ne 0 ]; then
-    echo "Failed to extract the ZIP file. The file might be corrupted."
+EXTRACT_DIR=$(find "$WORK_DIR" -maxdepth 1 -type d -name "xlings-*" | head -1)
+if [[ -z "$EXTRACT_DIR" ]] || [[ ! -f "$EXTRACT_DIR/install.sh" ]]; then
+    log_error "Extracted package is invalid (missing install.sh)."
     exit 1
 fi
 
-echo "Running install.unix.sh..."
-cd "$XLINGS_DIR"
-source $INSTALL_SCRIPT disable_reopen
+# --------------- run installer ---------------
 
-source ~/.bashrc
-
-echo "Cleaning up..."
-cd $QI_RUN_DIR
-echo "Removing $QI_RUN_DIR/$QI_INSTALL_DIR(tmpfiles)..."
-rm -rf $QI_INSTALL_DIR
-
-echo "Installation completed!"
-exec bash # update env
+log_info "Running installer..."
+cd "$EXTRACT_DIR"
+chmod +x install.sh
+bash install.sh

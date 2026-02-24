@@ -512,7 +512,7 @@ xlings-<version>-<platform>-<arch>/
 | 平台 | 触发条件 | 产物 |
 |------|---------|------|
 | Linux x86_64 | push / PR | `xlings-<ver>-linux-x86_64.tar.gz` |
-| macOS arm64 | push / PR | `xlings-<ver>-macos-arm64.tar.gz` |
+| macOS arm64 | push / PR | `xlings-<ver>-macosx-arm64.tar.gz` |
 | Windows x86_64 | push / PR | `xlings-<ver>-windows-x86_64.zip` |
 
 ---

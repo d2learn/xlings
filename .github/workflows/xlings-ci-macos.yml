@@ -46,7 +46,7 @@ jobs:
 
       - name: Prepare release artifact
         run: |
-          tarball=$(ls build/xlings-*-macos-arm64.tar.gz 2>/dev/null | head -1)
+          tarball=$(ls build/xlings-*-macosx-arm64.tar.gz 2>/dev/null | head -1)
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
 
@@ -55,7 +55,7 @@ jobs:
       - name: Setup xlings environment
         run: |
           tar -xzf build/release.tar.gz -C build
-          pkg_dir=$(ls -d build/xlings-*-macos-arm64 2>/dev/null | head -1)
+          pkg_dir=$(ls -d build/xlings-*-macosx-arm64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
@@ -139,5 +139,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: xlings-macos-arm64
+          name: xlings-macosx-arm64
           path: build/release.tar.gz

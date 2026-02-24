@@ -51,18 +51,6 @@ local xlings_bin_dir = path.join(xlings_subos, "bin")
 local xlings_lib_dir = path.join(xlings_subos, "lib")
 local xlings_subos_dir = xlings_subos
 
-local command_clear = {
-    linux = "clear",
-    windows = xlings_install_dir .. "/tools/xlings_clear.bat",
-    macosx = xlings_install_dir .. "/tools/xlings_clear.sh",
-}
-
-local command_wrapper = {
-    linux = "",
-    windows = xlings_install_dir .. "/tools/win_cmd_wrapper.bat ",
-    macosx = ""
-}
-
 local xlings_sourcedir = path.directory(os.scriptdir())
 local xlings_projectdir = xlings_sourcedir
 
@@ -94,8 +82,6 @@ function get_config_info()
         homedir = xlings_home,
         install_dir = xlings_install_dir,
         sourcedir = xlings_sourcedir,
-        cmd_clear = command_clear[os.host()],
-        cmd_wrapper = command_wrapper[os.host()],
         projectdir = xlings_projectdir,
         bindir = xlings_bin_dir,
         libdir = xlings_lib_dir,

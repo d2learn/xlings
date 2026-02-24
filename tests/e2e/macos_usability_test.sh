@@ -32,7 +32,7 @@ assert_contains() {
 prepare_runtime_from_archive() {
   mkdir -p "$TMP_BASE"
   tar -xzf "$ARCHIVE_PATH" -C "$TMP_BASE"
-  PKG_DIR="$(ls -d "$TMP_BASE"/xlings-*-macos-arm64 2>/dev/null | head -1 || true)"
+  PKG_DIR="$(ls -d "$TMP_BASE"/xlings-*-macosx-arm64 2>/dev/null | head -1 || true)"
   [[ -n "$PKG_DIR" ]] || fail "failed to locate extracted package dir"
 }
 
@@ -43,7 +43,7 @@ prepare_runtime() {
   fi
 
   if [[ -z "$ARCHIVE_PATH" ]]; then
-    ARCHIVE_PATH="$(ls -t "$BUILD_DIR"/xlings-*-macos-arm64.tar.gz 2>/dev/null | head -1 || true)"
+    ARCHIVE_PATH="$(ls -t "$BUILD_DIR"/xlings-*-macosx-arm64.tar.gz 2>/dev/null | head -1 || true)"
   fi
   [[ -n "$ARCHIVE_PATH" ]] || fail "macOS release archive not found"
   [[ -f "$ARCHIVE_PATH" ]] || fail "archive not found: $ARCHIVE_PATH"

@@ -124,7 +124,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           VERSION=$(grep 'VERSION' core/config.cppm | grep -o '"[0-9.]*"' | tr -d '"' | head -1)
-          PKG_NAME="xlings-${VERSION}-macos-arm64"
+          PKG_NAME="xlings-${VERSION}-macosx-arm64"
           mkdir -p "build/${PKG_NAME}/bin"
           cp build/macosx/arm64/release/xlings "build/${PKG_NAME}/bin/.xlings.real"
           cp core/xvm/target/aarch64-apple-darwin/release/xvm "build/${PKG_NAME}/bin/"
@@ -142,7 +142,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           tar -xzf build/release.tar.gz -C build
-          PKG_DIR=$(ls -d build/xlings-*-macos-arm64 | head -1)
+          PKG_DIR=$(ls -d build/xlings-*-macosx-arm64 | head -1)
           export XLINGS_HOME="$GITHUB_WORKSPACE/$PKG_DIR"
           export PATH="$XLINGS_HOME/bin:$PATH"
           xlings --version || xlings -h
@@ -152,7 +152,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: xlings-macos-arm64
+          name: xlings-macosx-arm64
           path: build/release.tar.gz
 ```
 
@@ -283,7 +283,7 @@ GitHub Actions 页面确认三个 workflow 均显示 ✅ pass：
 | 平台 | 产物格式 | 文件名示例 |
 |------|---------|-----------|
 | Linux x86_64 | `.tar.gz` | `xlings-0.2.0-linux-x86_64.tar.gz` |
-| macOS arm64 | `.tar.gz` | `xlings-0.2.0-macos-arm64.tar.gz` |
+| macOS arm64 | `.tar.gz` | `xlings-0.2.0-macosx-arm64.tar.gz` |
 | Windows x86_64 | `.zip` | `xlings-0.2.0-windows-x86_64.zip` |
 
 ### 6.3 各平台 smoke test 通过

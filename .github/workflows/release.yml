@@ -108,8 +108,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: xlings-macos-arm64
-          path: build/xlings-*-macos-arm64.tar.gz
+          name: xlings-macosx-arm64
+          path: build/xlings-*-macosx-arm64.tar.gz
 
   build-windows:
     runs-on: windows-latest
@@ -178,12 +178,12 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: xlings ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
           files: |
             artifacts/xlings-linux-x86_64/xlings-*-linux-x86_64.tar.gz
-            artifacts/xlings-macos-arm64/xlings-*-macos-arm64.tar.gz
+            artifacts/xlings-macosx-arm64/xlings-*-macosx-arm64.tar.gz
             artifacts/xlings-windows-x86_64/xlings-*-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

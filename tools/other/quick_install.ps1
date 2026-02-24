@@ -1,175 +1,99 @@
-#!/usr/bin/env pwsh
-#Requires -version 5
+# One-line installer for xlings (Windows).
+#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex"
+#Requires -Version 5
 
-function Show-Progress {
-    param (
-        [string]$Activity,
-        [int]$PercentComplete
-    )
-    if ($PercentComplete -ge 100) {
-        Write-Progress -Activity $Activity -Completed
-    } else {
-        Write-Progress -Activity $Activity -PercentComplete $PercentComplete
-    }
-}
+$ErrorActionPreference = "Stop"
 
-$xlingsBinDir = "C:\Users\Public\xlings\data\bin"
-$softwareName = "xlings"
-$tempDir = [System.IO.Path]::GetTempPath()
-$installDir = Join-Path $tempDir $softwareName
-$zipFile = Join-Path $tempDir "$softwareName.zip"
-$downloadUrl = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
+# --------------- helpers ---------------
 
-# ---------------------------------------------------------------
+function Log-Info  { param([string]$Msg) Write-Host "[xlings]: $Msg" -ForegroundColor Green }
+function Log-Warn  { param([string]$Msg) Write-Host "[xlings]: $Msg" -ForegroundColor Yellow }
+function Log-Error { param([string]$Msg) Write-Host "[xlings]: $Msg" -ForegroundColor Red }
 
-$xlings = @"
- __   __  _      _                     
- \ \ / / | |    (_)    pre-v0.0.4                
-  \ V /  | |     _  _ __    __ _  ___ 
+$GITHUB_REPO = "d2learn/xlings"
+$GITHUB_MIRROR = $env:XLINGS_GITHUB_MIRROR
+
+# --------------- banner ---------------
+
+Write-Host @"
+
+ __   __  _      _
+ \ \ / / | |    (_)
+  \ V /  | |     _  _ __    __ _  ___
    > <   | |    | || '_ \  / _  |/ __|
   / . \  | |____| || | | || (_| |\__ \
  /_/ \_\ |______|_||_| |_| \__, ||___/
-                            __/ |     
-                           |___/      
+                            __/ |
+                           |___/
 
 repo:  https://github.com/d2learn/xlings
 forum: https://forum.d2learn.org
 
----
-"@
+"@ -ForegroundColor Cyan
 
-Write-Host $xlings -ForegroundColor Green
+# --------------- detect architecture ---------------
 
-
-$SOFTWARE_URL1 = "https://github.com/d2learn/xlings/archive/refs/heads/main.zip"
-$SOFTWARE_URL2 = "https://gitee.com/sunrisepeak/xlings-pkg/raw/master/xlings-main.zip"
-
-function Measure-Latency {
-    param (
-        [string]$Url
-    )
-
-    $domain = ([System.Uri]$Url).Host
-    try {
-        $ping = Test-Connection -ComputerName $domain -Count 3 -ErrorAction Stop
-        $latency = $ping | Measure-Object -Property ResponseTime -Average | Select-Object -ExpandProperty Average
-        return [math]::Round($latency, 2)
-    }
-    catch {
-        Write-Warning "Unable to ping $domain"
-        return 999999
-    }
+$arch = if ([System.Environment]::Is64BitOperatingSystem) { "x86_64" } else { "x86" }
+# ARM64 detection (Windows 11+)
+if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq "ARM64") {
+    $arch = "arm64"
 }
 
-Write-Host "Testing network..."
-$latency1 = Measure-Latency -Url $SOFTWARE_URL1
-$latency2 = Measure-Latency -Url $SOFTWARE_URL2
+# --------------- resolve download URL ---------------
 
-Write-Host "Latency for github.com : $latency1 ms"
-Write-Host "Latency for gitee.com : $latency2 ms"
-
-if ($latency1 -lt $latency2) {
-    $downloadUrl = $SOFTWARE_URL1
-}
-else {
-    $downloadUrl = $SOFTWARE_URL2
-}
-
-#Write-Host "Final URL: $downloadUrl"
-#exit 0
-
-# ---------------------------------------------------------------
-
-# Clear old-cache
-if (Test-Path $installDir) {
-    Remove-Item $installDir -Recurse -Force
-}
-
-if (Test-Path $zipFile) {
-    Remove-Item $zipFile -Force
-}
-
-
-# Create Dir
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-
-# Downloading
-Show-Progress -Activity "Downloading $softwareName" -PercentComplete 10
+Log-Info "Querying latest release..."
 try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile -UseBasicParsing
-}
-catch {
-    Write-Error "Failed to download the software: $_"
-    Read-Host "Press Enter to exit"
+    $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/$GITHUB_REPO/releases/latest" -UseBasicParsing
+    $latestVersion = $releaseInfo.tag_name
+} catch {
+    Log-Error "Failed to query the latest release: $_"
     exit 1
 }
 
-# Extracting
-Show-Progress -Activity "Extracting $softwareName" -PercentComplete 30
-try {
-    Expand-Archive -Path $zipFile -DestinationPath $installDir -Force
-}
-catch {
-    Write-Error "Failed to extract the software: $_"
-    Read-Host "Press Enter to exit"
-    exit 1
+$versionNum = $latestVersion -replace '^v', ''
+$zipName = "xlings-$versionNum-windows-$arch.zip"
+
+if ($GITHUB_MIRROR) {
+    $downloadUrl = "$GITHUB_MIRROR/$GITHUB_REPO/releases/download/$latestVersion/$zipName"
+} else {
+    $downloadUrl = "https://github.com/$GITHUB_REPO/releases/download/$latestVersion/$zipName"
 }
 
-# Install
-Show-Progress -Activity "Installing $softwareName" -PercentComplete 50
-$installScript = Get-ChildItem -Path $installDir -Recurse -Include "install.win.bat" | Select-Object -First 1
-if ($installScript) {
-    try {
-        Push-Location $installScript.Directory
-        cd $installDir\xlings-main
-        if ($installScript.Name -eq "install.win.bat") {
-            & cmd.exe /c $installScript.FullName disable_reopen
-        }
-        else {
-            #& $installScript.FullName
-        }
-        Pop-Location
-    }
-    catch {
-        Write-Error "Failed to run the installation script: $_"
-        Read-Host "Press Enter to exit"
+Log-Info "Latest version: $latestVersion"
+Log-Info "Package:        $zipName"
+Log-Info "Download URL:   $downloadUrl"
+
+# --------------- download & extract ---------------
+
+$tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "xlings-install-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
+New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+
+$zipPath = Join-Path $tempDir $zipName
+
+try {
+    Log-Info "Downloading..."
+    $progressPref = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
+    $ProgressPreference = $progressPref
+
+    Log-Info "Extracting..."
+    Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+
+    $extractDir = Get-ChildItem -Path $tempDir -Directory -Filter "xlings-*" | Select-Object -First 1
+    if (-not $extractDir -or -not (Test-Path (Join-Path $extractDir.FullName "install.ps1"))) {
+        Log-Error "Extracted package is invalid (missing install.ps1)."
         exit 1
     }
-}
-else {
-    Write-Error "Installation script not found: $installScript"
-    Read-Host "Press Enter to exit"
+
+    Log-Info "Running installer..."
+    Push-Location $extractDir.FullName
+    & powershell -ExecutionPolicy Bypass -File "install.ps1"
+    Pop-Location
+} catch {
+    Log-Error "Installation failed: $_"
     exit 1
+} finally {
+    Log-Info "Cleaning up temporary files..."
+    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
 }
-
-# Clear
-Show-Progress -Activity "Cleaning up..." -PercentComplete 70
-Write-Host "removing directory: $installDir (tmpfiles)"
-Remove-Item $installDir -Recurse -Force
-Remove-Item $zipFile -Force
-
-Show-Progress -Activity "Installation complete" -PercentComplete 100
-Write-Host "$softwareName has been successfully installed."
-
-# Update env - for current user
-$userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath -notlike "*$xlingsBinDir*") {
-    $userPath = "$xlingsBinDir;$userPath"
-    [System.Environment]::SetEnvironmentVariable("Path", $userPath, "User")
-}
-else {
-    Write-Host "Path already contains $xlingsBinDir"
-}
-
-if ($userPath -notlike "*C:\Users\$env:USERNAME\xmake*") {
-    $userPath += ";C:\Users\$env:USERNAME\xmake"
-    [System.Environment]::SetEnvironmentVariable("Path", $userPath, "User")
-}
-else {
-    Write-Host "Path already contains C:\Users\$env:USERNAME\xmake"
-}
-
-# Update env - for current window
-$env:Path = "$xlingsBinDir;C:\Users\$env:USERNAME\xmake;$env:Path"
-
-# powershell.exe -ExecutionPolicy Bypass -File tools/other/quick_install.ps1

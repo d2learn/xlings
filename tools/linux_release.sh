@@ -199,6 +199,10 @@ fi
 # xim index-repos placeholder (global shared)
 echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
 
+# Install script (bundled in package root)
+cp "$PROJECT_DIR/tools/install-from-release.sh" "$OUT_DIR/install.sh"
+chmod +x "$OUT_DIR/install.sh"
+
 info "Package assembled: $OUT_DIR"
 
 # ── 4. Verification ─────────────────────────────────────────────
@@ -307,9 +311,12 @@ info "Done."
 info "  Package:  $OUT_DIR"
 info "  Archive:  $ARCHIVE"
 info ""
-info "  Unpack & use:"
+info "  Unpack & install:"
 info "    tar -xzf ${PKG_NAME}.tar.gz"
 info "    cd $PKG_NAME"
+info "    ./install.sh"
+info ""
+info "  Or use without installing:"
 info "    export PATH=\"\$(pwd)/subos/current/bin:\$(pwd)/bin:\$PATH\""
 info "    xlings config"
 info ""
