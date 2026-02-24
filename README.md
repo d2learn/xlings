@@ -103,6 +103,13 @@ Or run both via script (full tests only when `XLINGS_SDK` is set):
 XLINGS_SDK=/path/to/gcc-15 ./tools/run_tests.sh   # include full tests
 ```
 
+E2E usability test (isolated release package scenarios):
+
+```bash
+bash tests/e2e/linux_usability_test.sh
+SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh
+```
+
 ## Contributing
 
 - [Issue Handling and Bug Fixing
