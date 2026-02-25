@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -30,8 +29,6 @@ pub static XVM_WORKSPACE_BINDIR: OnceLock<String> = OnceLock::new();
 pub static XVM_WORKSPACE_LIBDIR: OnceLock<String> = OnceLock::new();
 
 pub static XVM_SHIM_BIN: OnceLock<String> = OnceLock::new();
-const ENV_PROGRAM_LIBPATH: &str = "XLINGS_PROGRAM_LIBPATH";
-const ENV_EXTRA_LIBPATH: &str = "XLINGS_EXTRA_LIBPATH";
 
 // TODO: shim-mode, direct-mode
 pub enum Type {
@@ -578,44 +575,6 @@ fn shim_script_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str
     (sfile, args_placeholder, header)
 }
 
-fn compose_library_path(
-    program_closure: Option<&str>,
-    extra_libpath: Option<&str>,
-    workspace_lib: Option<&str>,
-    inherited: Option<&str>,
-    sep: char,
-) -> Option<String> {
-    let mut seen = HashSet::<String>::new();
-    let mut ordered = Vec::<String>::new();
-
-    let mut push_segments = |value: Option<&str>| {
-        if let Some(v) = value {
-            for raw in v.split(sep) {
-                let seg = raw.trim();
-                if seg.is_empty() {
-                    continue;
-                }
-                if seen.insert(seg.to_string()) {
-                    ordered.push(seg.to_string());
-                }
-            }
-        }
-    };
-
-    // fixed precedence: PROGRAM -> EXTRA -> subos/lib -> inherited
-    push_segments(program_closure);
-    push_segments(extra_libpath);
-    push_segments(workspace_lib);
-    push_segments(inherited);
-
-    if ordered.is_empty() {
-        None
-    } else {
-        let joiner = sep.to_string();
-        Some(ordered.join(&joiner))
-    }
-}
-
 fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
     let sep = if cfg!(windows) { ";" } else { ":" };
 
@@ -628,41 +587,6 @@ fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
             (key, new_val)
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::compose_library_path;
-
-    #[test]
-    fn compose_library_path_respects_precedence_and_dedup() {
-        let result = compose_library_path(
-            Some("/a:/b"),
-            Some("/b:/c"),
-            Some("/w"),
-            Some("/c:/sys"),
-            ':',
-        )
-        .expect("composed path should exist");
-        assert_eq!(result, "/a:/b:/c:/w:/sys");
-    }
-
-    #[test]
-    fn compose_library_path_handles_empty_inputs() {
-        let result = compose_library_path(None, None, Some("/w"), None, ':')
-            .expect("workspace fallback should exist");
-        assert_eq!(result, "/w");
-
-        let none = compose_library_path(None, None, None, None, ':');
-        assert!(none.is_none());
-    }
-
-    #[test]
-    fn legacy_ld_library_path_is_treated_as_extra_input() {
-        let result = compose_library_path(None, Some("/legacy"), Some("/workspace/lib"), None, ':')
-            .expect("composed path should exist");
-        assert_eq!(result, "/legacy:/workspace/lib");
-    }
 }
 
 #[cfg(target_os = "linux")]
