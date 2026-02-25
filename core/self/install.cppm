@@ -350,11 +350,11 @@ export int cmd_install() {
     if (fs::exists(targetHome / "subos" / "default" / "bin"))
         platform::make_files_executable(targetHome / "subos" / "default" / "bin");
 
-    // 5. Ensure subos/current link exists; do not recreate when already present (junction/symlink/dir)
+    // 5. Ensure subos/current link exists. Always recreate: Compress-Archive does not preserve
+    //    NTFS junctions, so the zip may have subos/current as an empty dir instead of a junction.
     auto currentLink = targetHome / "subos" / "current";
     auto defaultDir  = targetHome / "subos" / "default";
-    bool needLink = !fs::exists(currentLink);
-    if (needLink && fs::exists(defaultDir) && platform::create_directory_link(currentLink, defaultDir))
+    if (fs::exists(defaultDir) && platform::create_directory_link(currentLink, defaultDir))
         std::println("[xlings:self] subos/current -> default");
 
     setup_shell_profiles(targetHome);
