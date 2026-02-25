@@ -79,6 +79,7 @@ static fs::path detect_source_dir() {
     if (exe.empty()) return {};
     auto binDir = exe.parent_path();
     auto candidate = binDir.parent_path();
+    std::println("[xlings:self]: candidate: {}", candidate.string());
     if (fs::exists(candidate / "xim") && fs::exists(candidate / "bin")) {
         return fs::weakly_canonical(candidate);
     }

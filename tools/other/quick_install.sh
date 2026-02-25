@@ -133,6 +133,13 @@ if [[ -z "$EXTRACT_DIR" ]] || [[ ! -x "$EXTRACT_DIR/bin/xlings" && ! -f "$EXTRAC
     exit 1
 fi
 
+# --------------- macOS: remove quarantine (Gatekeeper) ---------------
+
+if [[ "$OS_TYPE" == "macos" ]]; then
+    log_info "Removing macOS quarantine attributes (Gatekeeper)..."
+    xattr -dr com.apple.quarantine "$EXTRACT_DIR" 2>/dev/null || true
+fi
+
 # --------------- run installer ---------------
 
 log_info "Running installer..."
