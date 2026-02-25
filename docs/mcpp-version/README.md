@@ -26,9 +26,13 @@ docs/mcpp-version/
 │   ├── xpkgs-subos-hybrid-design.md ← data/xpkgs + subos 混合视图设计
 │   ├── hybrid-libpath-order-subplan.md ← 混合视图子方案（RPATH 唯一真相与库路径优先级）
 <<<<<<< HEAD
+<<<<<<< HEAD
 │   ├── rpath-migration-summary.md ← RPATH 迁移方案总结与原理说明
 =======
 >>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
+=======
+│   ├── rpath-migration-summary.md ← RPATH 迁移方案总结与原理说明
+>>>>>>> 94f8573 (docs: add RPATH migration summary with illustrated examples)
 │   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
 │
 └── tasks/                    ← 任务拆分（13 个可并行任务）
@@ -182,6 +186,12 @@ docs/mcpp-version/
 完整的 RPATH 迁移方案总结，包含问题回顾、解决方案原理、d2x 包完整生命周期示例、4 级库路径优先级说明、多版本并存示例、musl-ldd 例外分析、CI 防线、与业界方案（Nix/Guix/Flatpak/Spack/Conda）对比。
 =======
 >>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
+
+---
+
+### [rpath-migration-summary.md](rpath-migration-summary.md) — RPATH 迁移方案总结与原理说明
+
+完整的 RPATH 迁移方案总结，包含问题回顾、解决方案原理、d2x 包完整生命周期示例、4 级库路径优先级说明、多版本并存示例、musl-ldd 例外分析、CI 防线、与业界方案（Nix/Guix/Flatpak/Spack/Conda）对比。
 
 ---
 
