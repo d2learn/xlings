@@ -20,6 +20,8 @@ namespace platform {
     export using platform_impl::get_home_dir;
     export using platform_impl::get_executable_path;
     export using platform_impl::set_env_variable;
+    export using platform_impl::make_files_executable;
+    export using platform_impl::create_directory_link;
     export using platform_impl::println;
 
     export [[nodiscard]] std::string get_rundir() {

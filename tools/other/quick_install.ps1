@@ -81,14 +81,15 @@ try {
     Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
 
     $extractDir = Get-ChildItem -Path $tempDir -Directory -Filter "xlings-*" | Select-Object -First 1
-    if (-not $extractDir -or -not (Test-Path (Join-Path $extractDir.FullName "install.ps1"))) {
-        Log-Error "Extracted package is invalid (missing install.ps1)."
+    $xlingsBin = if ($extractDir) { Join-Path $extractDir.FullName "bin\xlings.exe" } else { $null }
+    if (-not $extractDir -or -not (Test-Path $xlingsBin)) {
+        Log-Error "Extracted package is invalid (missing bin\xlings.exe)."
         exit 1
     }
 
     Log-Info "Running installer..."
     Push-Location $extractDir.FullName
-    & powershell -ExecutionPolicy Bypass -File "install.ps1"
+    & $xlingsBin self install
     Pop-Location
 } catch {
     Log-Error "Installation failed: $_"

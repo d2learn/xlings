@@ -57,17 +57,18 @@ jobs:
 
       # ── Phase 2.5: Test install script ─────────────────────────
 
-      - name: "Test: install script (install-from-release.ps1)"
+      - name: "Test: install script (xlings self install)"
         shell: pwsh
         run: |
+          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
           $installDir = Join-Path $env:RUNNER_TEMP "install-test"
           New-Item -ItemType Directory -Force -Path $installDir | Out-Null
           Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
           $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
-          & powershell -ExecutionPolicy Bypass -File install.ps1
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          & .\bin\xlings.exe self install
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config

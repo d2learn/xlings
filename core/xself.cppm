@@ -6,6 +6,8 @@ export module xlings.xself;
 
 import std;
 
+export import :install;
+
 import xlings.config;
 import xlings.json;
 import xlings.platform;
@@ -157,6 +159,7 @@ static int cmd_migrate() {
 static int cmd_help() {
     std::println(R"(
 xlings self [action]
+  install install xlings from extracted release package
   init    create home/data/subos dirs
   update  git pull in XLINGS_HOME (if a repo)
   config  print paths
@@ -169,6 +172,7 @@ xlings self [action]
 
 export int run(int argc, char* argv[]) {
     std::string action = (argc >= 3) ? argv[2] : "help";
+    if (action == "install") return cmd_install();
     if (action == "init") return cmd_init();
     if (action == "update") return cmd_update();
     if (action == "config") return cmd_config();
