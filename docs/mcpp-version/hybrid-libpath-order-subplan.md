@@ -7,24 +7,10 @@
 
 将父方案中的库解析优先级变成可执行约束，而不是文档约定：
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 1. 程序专属闭包路径（RPATH 内嵌于 ELF/Mach-O）
 2. 依赖闭包路径（RPATH 内嵌于 ELF/Mach-O）
 3. `subos/lib` 默认聚合路径（RPATH fallback）
 4. 系统默认搜索路径（ld-linux / dyld 默认行为）
-=======
-1. 程序专属闭包路径（RPATH 内嵌于 ELF）
-2. 依赖闭包路径（RPATH 内嵌于 ELF）
-3. `subos/lib` 默认聚合路径（RPATH fallback）
-4. 系统默认搜索路径（ld-linux 默认行为）
->>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
-=======
-1. 程序专属闭包路径（RPATH 内嵌于 ELF/Mach-O）
-2. 依赖闭包路径（RPATH 内嵌于 ELF/Mach-O）
-3. `subos/lib` 默认聚合路径（RPATH fallback）
-4. 系统默认搜索路径（ld-linux / dyld 默认行为）
->>>>>>> 562a657 (feat: add cross-platform RPATH CI tests and macOS elfpatch support)
 
 本子方案解决三个问题：
 
@@ -34,29 +20,15 @@
 
 ## 2. 设计原则
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 - **RPATH 是唯一真相**：库搜索路径写入二进制文件（Linux ELF 的 RUNPATH、macOS Mach-O 的 LC_RPATH），不依赖环境变量
 - **shim 不注入库路径变量**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`，消除环境变量传染
 - **elfpatch 是执行机制**：Linux 通过 `patchelf`、macOS 通过 `install_name_tool`，在安装时将闭包路径写入 RPATH
-=======
-- **RPATH 是唯一真相**：库搜索路径写入 ELF 二进制的 RUNPATH 字段，不依赖环境变量
-- **shim 不注入 LD_LIBRARY_PATH**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`，消除环境变量传染
-- **elfpatch 是执行机制**：通过 `patchelf` 在安装时将闭包路径写入 RUNPATH
->>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
-=======
-- **RPATH 是唯一真相**：库搜索路径写入二进制文件（Linux ELF 的 RUNPATH、macOS Mach-O 的 LC_RPATH），不依赖环境变量
-- **shim 不注入库路径变量**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`，消除环境变量传染
-- **elfpatch 是执行机制**：Linux 通过 `patchelf`、macOS 通过 `install_name_tool`，在安装时将闭包路径写入 RPATH
->>>>>>> 562a657 (feat: add cross-platform RPATH CI tests and macOS elfpatch support)
 - **显式例外最小化**：仅对无法使用 RPATH 的特殊场景（如 musl-ldd alias wrapper）允许直接设置 `LD_LIBRARY_PATH`，且必须通过 `envs` 字段显式声明
 
 ## 3. 运行时保证机制（RPATH 实现）
 
 ### 3.1 elfpatch 自动 RPATH 写入
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的二进制文件，按平台分别处理：
 
 **Linux（ELF）**：通过 `patchelf` 写入：
@@ -68,25 +40,6 @@
 - **LC_LOAD_DYLIB 修正**：将绝对路径依赖改为 `@rpath/<basename>`（`-change`）
 - 不需要修正 INTERP（macOS `dyld` 位置固定）
 
-=======
-在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的 ELF 文件，通过 `patchelf` 写入：
-=======
-在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的二进制文件，按平台分别处理：
->>>>>>> 562a657 (feat: add cross-platform RPATH CI tests and macOS elfpatch support)
-
-**Linux（ELF）**：通过 `patchelf` 写入：
-- **INTERP**（动态链接器）：指向 subos 或系统 loader
-- **RUNPATH**：由 `closure_lib_paths()` 生成的闭包路径
-
-<<<<<<< HEAD
->>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
-=======
-**macOS（Mach-O）**：通过 `install_name_tool` 写入：
-- **LC_RPATH**：由 `closure_lib_paths()` 生成的闭包路径（逐条 `-add_rpath`）
-- **LC_LOAD_DYLIB 修正**：将绝对路径依赖改为 `@rpath/<basename>`（`-change`）
-- 不需要修正 INTERP（macOS `dyld` 位置固定）
-
->>>>>>> 562a657 (feat: add cross-platform RPATH CI tests and macOS elfpatch support)
 ### 3.2 闭包路径生成规则
 
 `elfpatch.closure_lib_paths()` 按以下固定顺序生成 RPATH：
@@ -99,15 +52,7 @@
 
 ### 3.3 shim 层行为
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 `xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH / DYLD_LIBRARY_PATH**。此行为在 Linux 和 macOS 上一致。
-=======
-`xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH**。
->>>>>>> 9ce622e (refactor: full RPATH migration — eliminate LD_LIBRARY_PATH from shim layer)
-=======
-`xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH / DYLD_LIBRARY_PATH**。此行为在 Linux 和 macOS 上一致。
->>>>>>> 562a657 (feat: add cross-platform RPATH CI tests and macOS elfpatch support)
 
 已删除的组件：
 - 常量 `ENV_PROGRAM_LIBPATH`、`ENV_EXTRA_LIBPATH`

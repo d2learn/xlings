@@ -25,8 +25,11 @@
 
 ## 快速开始
 
+### 安装 (Github)
+
+
 <details>
-  <summary>点击查看xlings安装命令</summary>
+  <summary>点击查看xlings安装命令 (旧)</summary>
 
 ---
 
@@ -47,6 +50,21 @@ irm https://d2learn.org/xlings-install.ps1.txt | iex
 ---
 
 </details>
+
+#### Linux/MacOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+```
+
+#### Windows - PowerShell
+
+```bash
+irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+```
+
+
+### 使用
 
 **`类型1: 安装软件/工具`**
 
@@ -69,14 +87,12 @@ xlings install config:xxx
 xlings install d2x:mcpp-standard
 ```
 
-**👉 [更多细节...](https://xlings.d2learn.org/documents/quick-start/install-and-version.html)**
+👉 [更多细节...](https://xlings.d2learn.org/documents/quick-start/install-and-version.html)
 
-## 环境
+> [!CAUTION]
+> xlings 正在从 Lua 迁移到 MC++ 并进行模块化重构，部分包在迁移期间可能存在不稳定的情况。如遇问题，请通过 [Issues] 或 [论坛] 反馈。
 
-使用 **Linux 发行包**（如 `xlings-*-linux-x86_64.tar.gz`）时：
-
-- **`bin/`** — 真实二进制（`xlings`、`xvm`、`xvm-shim`）。沿用当前 `XLINGS_HOME`/`XLINGS_DATA` 或默认路径。将 `bin/` 加入 PATH 即使用默认/系统 xlings 行为。
-- **`data/bin/`** — xvm shim（含 `xlings`、`xvm`、`xvm-shim` 及已安装工具）。从 `data/bin/` 运行的命令均使用**包内隔离环境**（包的 `XLINGS_HOME`/`XLINGS_DATA`）。将 `data/bin/` 加入 PATH 即自包含使用该包。
+[Issues]: https://github.com/d2learn/xlings/issues
 
 ## 社区
 

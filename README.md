@@ -25,8 +25,11 @@
 
 ## Quick Start
 
+### Install (Github)
+
+
 <details>
-  <summary>click to view xlings installation command</summary>
+  <summary>click to view xlings installation command (old)</summary>
 
 ---
 
@@ -47,6 +50,21 @@ irm https://d2learn.org/xlings-install.ps1.txt | iex
 ---
 
 </details>
+
+#### Linux/MacOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+```
+
+#### Windows - PowerShell
+
+```bash
+irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+```
+
+
+### Useage
 
 **`Type1: Install Software/Tools`**
 
@@ -71,44 +89,16 @@ xlings install d2x:mcpp-standard
 
 👉 [more details...](https://xlings.d2learn.org/en/documents/quick-start/install-and-version.html)
 
-## Environment
 
-When using the **Linux release package** (e.g. `xlings-*-linux-x86_64.tar.gz`):
+> [!CAUTION]
+> xlings is currently migrating from Lua to MC++ with a modular architecture. Some packages may be unstable during this transition. If you run into any problems, please report them via [Issues] or the [Forum].
 
-- **`bin/`** — Real binaries (`xlings`, `xvm`, `xvm-shim`). Use these with your existing `XLINGS_HOME`/`XLINGS_DATA` (or defaults). Add `bin/` to PATH for the default/system xlings behavior.
-- **`data/bin/`** — xvm shims (including `xlings`, `xvm`, `xvm-shim` and any installed tools). Running anything from `data/bin/` uses the **package’s isolated environment** (package `XLINGS_HOME`/`XLINGS_DATA`). Add `data/bin/` to PATH to use the package in a self-contained way.
+[Issues]: https://github.com/d2learn/xlings/issues
 
 ## Community
 
 - Communication Group (Q): 167535744 / 1006282943
 - [Community Forum](https://forum.d2learn.org/category/9/xlings): Discussions on related technologies, features, and issues
-
-## Testing
-
-Unit tests use [Google Test](https://github.com/google/googletest). From the project root:
-
-```bash
-# Smoke test only (no C++ modules, no SDK required)
-xmake build xlings_smoke_test && xmake run xlings_smoke_test
-
-# Full tests (requires same SDK as main binary, e.g. for import std)
-xmake f --sdk=/path/to/gcc-15   # or your toolchain
-xmake build xlings_test && xmake run xlings_test
-```
-
-Or run both via script (full tests only when `XLINGS_SDK` is set):
-
-```bash
-./tools/run_tests.sh
-XLINGS_SDK=/path/to/gcc-15 ./tools/run_tests.sh   # include full tests
-```
-
-E2E usability test (isolated release package scenarios):
-
-```bash
-bash tests/e2e/linux_usability_test.sh
-SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh
-```
 
 ## Contributing
 
