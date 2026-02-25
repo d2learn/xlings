@@ -116,13 +116,13 @@ static void setup_shell_profiles(const fs::path& homeDir) {
         if (!fs::exists(prof)) continue;
         auto content = platform::read_file_to_string(prof.string());
         if (content.find("xlings-profile") != std::string::npos) {
-            std::println("[xlings:self] profile already configured in {}", prof.string());
+            std::println("[xlings:self] profile ok ({})", prof.filename().string());
             added = true;
             break;
         }
         std::string appendStr = "\n# xlings\n" + sourceLine + "\n";
         platform::write_string_to_file(prof.string(), content + appendStr);
-        std::println("[xlings:self] added profile to {}", prof.string());
+        std::println("[xlings:self] added profile ({})", prof.filename().string());
         added = true;
         break;
     }
@@ -138,15 +138,15 @@ static void setup_shell_profiles(const fs::path& homeDir) {
         if (fishContent.find("xlings-profile") == std::string::npos) {
             platform::write_string_to_file(fishConfig.string(),
                                            fishContent + "\n# xlings\n" + fishSourceLine + "\n");
-            std::println("[xlings:self] added profile to {}", fishConfig.string());
+            std::println("[xlings:self] added profile (config.fish)");
         } else {
-            std::println("[xlings:self] fish profile already configured");
+            std::println("[xlings:self] profile ok (fish)");
         }
         added = true;
     }
 
     if (!added) {
-        std::println("[xlings:self] no shell profile found. Manually add:");
+        std::println("[xlings:self] no shell profile found, add manually:");
         std::println("  {}", sourceLine);
     }
 #elif defined(_WIN32)
@@ -180,132 +180,113 @@ export int cmd_install() {
     auto srcDir = detect_source_dir();
     if (srcDir.empty()) {
         std::println(stderr, "[xlings:self] cannot detect source package directory.");
-        std::println(stderr, "  Run this command from inside a valid xlings release package.");
+        std::println(stderr, "  run this command from inside a valid xlings release package");
         return 1;
     }
 
     auto pkgVersion = read_version_from_json(srcDir);
     if (pkgVersion.empty()) pkgVersion = std::string(Info::VERSION);
-    std::println("[xlings:self] package version: v{}", pkgVersion);
-    std::println("[xlings:self] package source:  {}", srcDir.string());
-
     auto existingHome = detect_existing_home();
     auto targetHome = existingHome.empty() ? default_home() : existingHome;
-
-    std::println("[xlings:self] install target:  {}", targetHome.string());
-
     auto installedVersion = read_version_from_json(targetHome);
+
+    // Compact header
+    std::println("\n[xlings:self] install");
+    std::println("  package:  v{}", pkgVersion);
+    std::println("  target:   {}", targetHome.string());
     if (!installedVersion.empty())
-        std::println("[xlings:self] installed version at {}: v{}", targetHome.string(), installedVersion);
+        std::println("  existing: v{}", installedVersion);
 
     // Skip if source == target (equivalent returns unspecified when paths don't exist)
     std::error_code cmp_ec;
     bool sameDir = fs::equivalent(srcDir, targetHome, cmp_ec);
     if (!cmp_ec && sameDir) {
-        std::println("[xlings:self] already running from target directory, nothing to copy.");
+        std::println("\n[xlings:self] already in target dir, fixing links");
         auto currentLink = targetHome / "subos" / "current";
         auto defaultDir  = targetHome / "subos" / "default";
         platform::create_directory_link(currentLink, defaultDir);
         setup_shell_profiles(targetHome);
-        std::println("[xlings:self] install ok");
+        std::println("[xlings:self] ok\n");
         return 0;
     }
 
     // Version / overwrite confirmation
     if (!pkgVersion.empty() && !installedVersion.empty() && pkgVersion == installedVersion) {
-        if (!utils::ask_yes_no("[xlings:self] same version (v" + pkgVersion +
-                               ") is already installed. Continue reinstall? ", false)) {
-            std::println("[xlings:self] installation cancelled.");
+        if (!utils::ask_yes_no("\n[xlings:self] same version installed, reinstall? [y/N] ", false)) {
+            std::println("[xlings:self] cancelled\n");
             return 0;
         }
     } else if (fs::exists(targetHome / "bin") && fs::exists(targetHome / "subos")) {
-        if (!utils::ask_yes_no("[xlings:self] overwrite existing installation at " +
-                               targetHome.string() + "? ", true)) {
-            std::println("[xlings:self] installation cancelled.");
+        if (!utils::ask_yes_no("\n[xlings:self] overwrite existing installation? [Y/n] ", true)) {
+            std::println("[xlings:self] cancelled\n");
             return 0;
         }
     }
 
-    // Preserve cached data (data/ and subos/)
-    fs::path dataBackup, subosBackup;
-    auto dataPath  = targetHome / "data";
-    auto subosPath = targetHome / "subos";
-
-    bool preserveCache = false;
-    bool hasExistingCache = (fs::exists(dataPath)  && fs::is_directory(dataPath)) ||
-                            (fs::exists(subosPath) && fs::is_directory(subosPath));
-
-    if (hasExistingCache) {
-        preserveCache = utils::ask_yes_no(
-            "[xlings:self] keep existing cached data? ", true);
-    }
-
-    auto tmpDir = fs::temp_directory_path() / ("xlings-install-backup-" +
-                  std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));
-    fs::create_directories(tmpDir);
-
-    if (preserveCache && fs::exists(dataPath) && fs::is_directory(dataPath)) {
-        dataBackup = tmpDir / "data";
-        std::println("[xlings:self] backing up data ...");
-        copy_directory_contents(dataPath, dataBackup);
-    }
-    if (preserveCache && fs::exists(subosPath) && fs::is_directory(subosPath)) {
-        subosBackup = tmpDir / "subos";
-        std::println("[xlings:self] backing up subos ...");
-        copy_directory_contents(subosPath, subosBackup);
-    }
-
-    // Copy package to target
-    std::println("[xlings:self] installing to {} ...", targetHome.string());
+    // Selective install: never remove or overwrite data/ and subos/ (avoids backup/restore corruption)
+    std::println("[xlings:self] copying binaries and config ...");
     fs::create_directories(targetHome);
 
+    std::error_code ec;
+
+    // 1. Remove only non-user dirs (bin, config, xim, .xlings.json, xmake.lua, etc.); preserve data, subos
     if (fs::exists(targetHome)) {
-        std::error_code ec;
         for (auto& entry : fs::directory_iterator(targetHome)) {
+            auto name = entry.path().filename().string();
+            if (name == "data" || name == "subos") continue;
             fs::remove_all(entry.path(), ec);
+            ec.clear();
         }
     }
-    copy_directory_contents(srcDir, targetHome);
 
-    // Fix permissions (platform-dispatched)
+    // 2. Copy from release, skip data/subos when target already has them; merge subos static parts if exists
+    for (auto& entry : fs::directory_iterator(srcDir)) {
+        auto name = entry.path().filename().string();
+        if (name == "data") {
+            if (fs::exists(targetHome / "data") && fs::is_directory(targetHome / "data"))
+                continue;
+        }
+        if (name == "subos") {
+            if (fs::exists(targetHome / "subos") && fs::is_directory(targetHome / "subos")) {
+                continue;  // 已有 subos 则完全保留，不合并（多 subos 且 bin 等无需覆盖）
+            }
+        }
+        auto target = targetHome / name;
+        if (entry.is_directory()) {
+            fs::copy(entry.path(), target,
+                     fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+        } else {
+            fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing, ec);
+        }
+        if (ec) {
+            std::println(stderr, "[xlings:self] copy failed: {} -> {} ({})",
+                         entry.path().string(), target.string(), ec.message());
+            ec.clear();
+        }
+    }
+
+    // 3. First install: copy data and subos if target does not have them
+    if (!fs::exists(targetHome / "data") && fs::exists(srcDir / "data")) {
+        copy_directory_contents(srcDir / "data", targetHome / "data");
+    }
+    if (!fs::exists(targetHome / "subos") && fs::exists(srcDir / "subos")) {
+        copy_directory_contents(srcDir / "subos", targetHome / "subos");
+    }
+
+    // 4. Fix permissions (platform-dispatched)
     platform::make_files_executable(targetHome / "bin");
-    platform::make_files_executable(targetHome / "subos" / "default" / "bin");
+    if (fs::exists(targetHome / "subos" / "default" / "bin"))
+        platform::make_files_executable(targetHome / "subos" / "default" / "bin");
 
-    // Create subos/current link (platform-dispatched)
+    // 5. Ensure subos/current link exists; only create if missing or broken (do not overwrite valid link)
     auto currentLink = targetHome / "subos" / "current";
     auto defaultDir  = targetHome / "subos" / "default";
-    if (platform::create_directory_link(currentLink, defaultDir))
-        std::println("[xlings:self] created subos/current -> default");
+    bool needLink = !fs::is_symlink(currentLink) || !fs::exists(currentLink);
+    if (needLink && fs::exists(defaultDir) && platform::create_directory_link(currentLink, defaultDir))
+        std::println("[xlings:self] subos/current -> default");
 
-    // Restore preserved cached data
-    if (!dataBackup.empty() && fs::exists(dataBackup)) {
-        std::println("[xlings:self] restoring data ...");
-        std::error_code ec;
-        if (fs::exists(targetHome / "data"))
-            fs::remove_all(targetHome / "data", ec);
-        copy_directory_contents(dataBackup, targetHome / "data");
-        std::println("[xlings:self] data preserved.");
-    }
-    if (!subosBackup.empty() && fs::exists(subosBackup)) {
-        std::println("[xlings:self] restoring subos ...");
-        std::error_code ec;
-        if (fs::exists(targetHome / "subos"))
-            fs::remove_all(targetHome / "subos", ec);
-        copy_directory_contents(subosBackup, targetHome / "subos");
-        platform::create_directory_link(currentLink, defaultDir);
-        std::println("[xlings:self] subos preserved.");
-    }
-
-    // Cleanup backup
-    {
-        std::error_code ec;
-        fs::remove_all(tmpDir, ec);
-    }
-
-    // Setup shell profiles / PATH
     setup_shell_profiles(targetHome);
 
-    // Verify
     auto verifyBin = targetHome / "bin" /
 #ifdef _WIN32
         "xlings.exe";
@@ -315,18 +296,16 @@ export int cmd_install() {
     if (fs::exists(verifyBin)) {
         auto [rc, out] = platform::run_command_capture(
             "\"" + verifyBin.string() + "\" -h");
-        if (rc == 0)
-            std::println("[xlings:self] verification passed.");
-        else
-            std::println("[xlings:self] warning: binary test returned non-zero.");
+        if (rc != 0)
+            std::println(stderr, "[xlings:self] warning: verification failed");
     }
 
-    std::println("\n[xlings:self] xlings installed successfully!");
-    std::println("    Run 'xlings -h' to get started.");
+    std::println("\n[xlings:self] install ok");
+    std::println("  run 'xlings -h' to get started");
 #if defined(__linux__) || defined(__APPLE__)
-    std::println("    Restart your shell or run: source ~/.bashrc");
+    std::println("  restart shell or: source ~/.bashrc");
 #else
-    std::println("    Restart your terminal to refresh PATH.");
+    std::println("  restart terminal to refresh PATH");
 #endif
     std::println("");
     return 0;

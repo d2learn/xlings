@@ -2,7 +2,11 @@
 
 > 将 `install-from-release.sh` / `install-from-release.ps1` 的全部安装逻辑迁移到 xlings C++ 二进制中，通过 `xlings self install` 完成安装。仅保留薄的 quick install 脚本作为下载器。
 
-## 当前架构
+## 设计变更 (2026-02)
+
+**data/subos 保留策略**：原先采用「备份 → 全删 → 复制 → 恢复」，在本地已有 xlings 时升级可能导致 subos 损坏（`fs::copy` 对 symlink 处理不当）。现改为「直接不删除、选择性不覆盖」：安装时从不删除 data/subos；复制时若 target 已有 data/ 或 subos/ 则直接跳过（不合并任何内容）。subos 可有多个（default、s1、s2...），且 bin 等由 PATH 优先使用 bin/，故无需覆盖。release 包仍包含完整 data/subos 骨架，供首次安装使用。
+
+## 迁移前架构
 
 ```mermaid
 flowchart LR
@@ -19,7 +23,7 @@ flowchart LR
     QuickSH["quick_install.sh"] -->|download+extract| SelfInstall["xlings self install"]
     QuickPS["quick_install.ps1"] -->|download+extract| SelfInstall
     ManualUser["Manual user"] -->|from extracted pkg| SelfInstall
-    SelfInstall -->|"detect, prompt, copy, profile, data/subos preserve"| Done[Installed]
+    SelfInstall -->|"detect, prompt, selective copy, profile"| Done[Installed]
 ```
 
 ## 关键设计决策
@@ -32,23 +36,23 @@ flowchart LR
 
 ## `xlings self install` 必须完成的步骤
 
-这些步骤直接来自当前的 `install-from-release.sh`（341 行）和 `install-from-release.ps1`（246 行）：
-
 1. **检测源包目录** — 利用 `Config::paths()` 的 self-contained 检测（`core/config.cppm` 第 43 行已有）。
 2. **检测已有安装** — 检查 `$XLINGS_HOME`，在 PATH 中搜索 `xlings` 二进制，向上遍历找到安装根目录。
 3. **读取包版本** — 从源 `$SCRIPT_DIR/.xlings.json`（Config 已解析）。
 4. **读取已安装版本** — 从目标 `$HOME/.xlings/.xlings.json`。
 5. **提示：同版本重装** — 使用 `utils::ask_yes_no()`（`core/utils.cppm` 第 54 行）。
 6. **提示：覆盖确认** — 同上。
-7. **提示：保留缓存数据** — 统一询问用户是否保留已有 data/ 和 subos/，复制前备份到临时目录。
-9. **复制包到目标** — `std::filesystem::copy()` 带覆盖。
-10. **修复权限** — Unix 上通过 `platform::exec()` 执行 `chmod +x`；Windows 上无操作。
-11. **创建 subos/current symlink/junction** — Unix 上 `fs::create_directory_symlink()`；Windows 上通过 `platform::exec("cmd /c mklink /J ...")` 创建 junction。
+7. **选择性清理** — 仅删除 `bin/`、`config/`、`xim/`、`.xlings.json`、`xmake.lua` 等；**从不删除 data/、subos/**。
+8. **选择性复制** — 按 entry 遍历 release 包；若 target 已有 `data/` 或 `subos/` 则直接跳过；其余直接复制。
+9. **首次安装** — 若 target 无 `data/` 或 `subos/`，则从 release 完整复制。
+10. **修复权限** — Unix 上通过 `platform::make_files_executable()`；Windows 上无操作。
+11. **subos/current 链接** — 仅当不存在或已损坏时创建；若已存在且有效（如用户已切换到 s1）则不覆盖。
 12. **Shell profile 配置（Unix）** — 向 `~/.bashrc`/`~/.zshrc`/`~/.profile` 追加 source 行；fish 配置。
 13. **PowerShell profile 配置（Windows）** — 向 `$PROFILE` 追加。
 14. **用户 PATH 配置（Windows）** — 通过 `platform::exec()` 更新注册表 PATH。
-15. **恢复保留的 data/subos** — 将备份移回。
-16. **验证** — 从新位置运行 `xlings -h`。
+15. **验证** — 从新位置运行 `xlings -h`。
+
+> **data/subos 保留策略**：采用「直接不删除、选择性不覆盖」而非备份/恢复，避免 `fs::copy` 对 symlink 处理不当导致 subos 损坏。
 
 ## 模块架构
 
@@ -73,7 +77,7 @@ core/
 
 ### `core/self/install.cppm` — 分区 `:install`
 
-- `cmd_install()`（约 250 行）实现上述全部 16 个步骤
+- `cmd_install()` 实现上述 15 个步骤
 - 包含安装专用的辅助函数：`detect_source_dir()`, `detect_existing_home()`, `read_version_from_json()`, `copy_directory_contents()`, `setup_shell_profiles()`
 - `setup_shell_profiles()` 通过 `#ifdef` 条件编译处理：
   - Unix: bash/zsh/fish profile source 行
@@ -118,34 +122,35 @@ core/
 cmd_install():
   srcDir = 检测 self-contained 包目录（二进制运行所在位置）
   pkgVersion = 读取 srcDir/.xlings.json 版本
-
   targetHome = detect_existing_home() 或默认值 (~/.xlings)
   installedVersion = 读取 targetHome/.xlings.json 版本
 
-  打印 "Package version: vX.Y.Z"
-  打印 "Install target: targetHome"
-  如果 installedVersion:
-    打印 "Installed version at targetHome: vA.B.C"
+  打印紧凑头: package, target, existing
 
   如果 pkgVersion == installedVersion:
     如果 not ask_yes_no("Same version, reinstall?"): 退出
   否则如果 target 有 bin/ 和 subos/:
     如果 not ask_yes_no("Overwrite existing?"): 退出
 
-  preserveCache = false
-  如果 target/data 或 target/subos 存在:
-    preserveCache = ask_yes_no("Keep existing cached data?")
+  // 选择性清理：不删除 data/, subos/
+  for entry in targetHome:
+    if entry.name == "data" or "subos": continue
+    remove_all(entry)
 
-  如果保留则备份 data/ 和 subos/ 到临时目录
+  // 选择性复制
+  for entry in srcDir:
+    if entry == "data" && exists(target/data): continue
+    if entry == "subos" && exists(target/subos): continue  // 完全保留
+    copy(entry -> target)
 
-  复制 srcDir -> targetHome（跳过自引用复制）
-  修复权限（仅 Unix）
-  创建 subos/current symlink/junction
+  // 首次安装：复制 data/subos
+  if !exists(target/data): copy(src/data -> target/data)
+  if !exists(target/subos): copy(src/subos -> target/subos)
 
-  从备份恢复保留的 data/subos
+  修复权限（bin, subos/default/bin）
+  若 subos/current 不存在或损坏: 创建 subos/current -> default
 
   配置 shell profiles（平台特定）
-
   验证: 运行 targetHome/bin/xlings -h
   打印成功消息
 ```
