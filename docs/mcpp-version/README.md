@@ -23,6 +23,9 @@ docs/mcpp-version/
 │   ├── elfpatch-shrink-rpath-mode.md ← elfpatch 可选 shrink-rpath 模式
 │   ├── release-static-build.md ← Linux musl 静态构建方案
 │   ├── install-scripts-design.md ← 安装脚本方案与设计
+│   ├── xpkgs-subos-hybrid-design.md ← data/xpkgs + subos 混合视图设计
+│   ├── hybrid-libpath-order-subplan.md ← 混合视图子方案（RPATH 唯一真相与库路径优先级）
+│   ├── rpath-migration-summary.md ← RPATH 迁移方案总结与原理说明
 │   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
 │
 └── tasks/                    ← 任务拆分（13 个可并行任务）
@@ -158,6 +161,24 @@ docs/mcpp-version/
 
 ---
 
+### [xpkgs-subos-hybrid-design.md](xpkgs-subos-hybrid-design.md) — data/xpkgs + subos 混合视图设计
+
+明确 xlings 的双层模型：`data/xpkgs` 是固定真实包层，`subos` 是版本视图层；在此基础上同时支持聚合默认视图（`subos/lib`）与 per-program 闭包视图（直接指向 `data/xpkgs/<pkg>/<ver>/lib*`），并给出解析优先级、分阶段落地路径与验收标准。
+
+---
+
+### [hybrid-libpath-order-subplan.md](hybrid-libpath-order-subplan.md) — 混合视图子方案（RPATH 唯一真相与库路径优先级）
+
+将“闭包优先、聚合作为 fallback”的路径解析顺序固化为 ELF RUNPATH 字段，由 `elfpatch` 在安装时写入。shim 层不再注入 `LD_LIBRARY_PATH`，消除环境变量传染。已废弃 `XLINGS_PROGRAM_LIBPATH` / `XLINGS_EXTRA_LIBPATH` 字段，仅 `musl-ldd`/`musl-loader` 作为已记录例外使用直接 `LD_LIBRARY_PATH`。
+
+---
+
+### [rpath-migration-summary.md](rpath-migration-summary.md) — RPATH 迁移方案总结与原理说明
+
+完整的 RPATH 迁移方案总结，包含问题回顾、解决方案原理、d2x 包完整生命周期示例、4 级库路径优先级说明、多版本并存示例、musl-ldd 例外分析、CI 防线、与业界方案（Nix/Guix/Flatpak/Spack/Conda）对比。
+
+---
+
 ## 快速索引
 
 | 想了解 | 去看 |
@@ -176,6 +197,9 @@ docs/mcpp-version/
 | Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
 | 安装脚本方案与设计 | [install-scripts-design.md](install-scripts-design.md) |
 | xim 目录多版本兼容 | [xim-dir-compat.md](xim-dir-compat.md) |
+| xpkgs/subos 混合视图方案 | [xpkgs-subos-hybrid-design.md](xpkgs-subos-hybrid-design.md) |
+| 混合视图 RPATH 子方案 | [hybrid-libpath-order-subplan.md](hybrid-libpath-order-subplan.md) |
+| RPATH 迁移方案总结与原理 | [rpath-migration-summary.md](rpath-migration-summary.md) |
 | musl-gcc 构建任务 | [tasks/README.md](tasks/README.md) T11-T13 |
 | 实施任务和并行分组 | [tasks/README.md](tasks/README.md) |
 
@@ -190,7 +214,7 @@ docs/mcpp-version/
 | `core/platform/` | 部分实现 | 三平台已有，缺 `get_executable_path()` |
 | `core/env.cppm` | 未实现 | 需新建 |
 | `core/profile.cppm` | 未实现 | 需新建 |
-| `core/xvm/xvmlib/shims.rs` | 部分实现 | 已有 LD_LIBRARY_PATH 注入，缺 `${XLINGS_HOME}` 展开 |
+| `core/xvm/xvmlib/shims.rs` | 已迁移 RPATH | 已移除 LD_LIBRARY_PATH 组装逻辑，库路径通过 elfpatch RPATH 解决，缺 `${XLINGS_HOME}` 展开 |
 | `core/xim/pm/XPackage.lua` | 部分实现 | 已有 type 字段，缺 source / maintainer |
 | CI/CD | 部分实现 | 已有 Linux，缺 macOS / Windows |
 | `xmake.lua` Linux 链接 | 待切换 | glibc 动态 → musl 全静态（T11） |

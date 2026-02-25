@@ -19,6 +19,7 @@
 #   │       ├── xvm/            # xvm config
 #   │       └── generations/    # profile generations
 #   ├── tools/xmake/bin/xmake  # bundled xmake
+#   ├── bin/patchelf            # bundled patchelf (for elfpatch RPATH)
 #   ├── config/i18n/           # i18n json
 #   ├── xmake.lua              # package-root xim task
 #   └── .xlings.json           # config
@@ -27,6 +28,7 @@
 # Usage:   ./tools/linux_release.sh
 # Env:     SKIP_NETWORK_VERIFY=1   skip network-dependent tests
 #          SKIP_XMAKE_BUNDLE=1     skip downloading bundled xmake
+#          SKIP_PATCHELF_BUNDLE=1  skip downloading bundled patchelf
 #          GIT_CONNECT_TIMEOUT=N   git TCP timeout seconds (default 30)
 
 set -euo pipefail
@@ -169,6 +171,26 @@ if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
   fi
 fi
 
+# Bundled patchelf (for elfpatch RPATH patching at package install time)
+PATCHELF_READY=0
+if [[ "${SKIP_PATCHELF_BUNDLE:-}" != "1" ]]; then
+  PATCHELF_VER="0.18.0"
+  PATCHELF_URL="https://github.com/NixOS/patchelf/releases/download/${PATCHELF_VER}/patchelf-${PATCHELF_VER}-x86_64.tar.gz"
+  PATCHELF_TMP="$PROJECT_DIR/build/.patchelf_tmp_$$"
+  info "Downloading bundled patchelf ${PATCHELF_VER}..."
+  mkdir -p "$PATCHELF_TMP"
+  if curl -fSsL --connect-timeout 15 --max-time 60 -o "$PATCHELF_TMP/patchelf.tar.gz" "$PATCHELF_URL"; then
+    tar -xzf "$PATCHELF_TMP/patchelf.tar.gz" -C "$PATCHELF_TMP"
+    cp "$PATCHELF_TMP/bin/patchelf" "$OUT_DIR/bin/patchelf"
+    chmod +x "$OUT_DIR/bin/patchelf"
+    info "Bundled patchelf OK"
+    PATCHELF_READY=1
+  else
+    info "Warning: patchelf download failed — elfpatch will require system patchelf"
+  fi
+  rm -rf "$PATCHELF_TMP"
+fi
+
 # i18n
 mkdir -p "$OUT_DIR/config/i18n"
 cp -R config/i18n/*.json "$OUT_DIR/config/i18n/" 2>/dev/null || true
@@ -210,6 +232,9 @@ for f in bin/xlings bin/xvm bin/xvm-shim \
 done
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
   [[ -x "$OUT_DIR/bin/xmake" ]] || fail "bin/xmake is missing or not executable"
+fi
+if [[ "${SKIP_PATCHELF_BUNDLE:-}" != "1" && "$PATCHELF_READY" == "1" ]]; then
+  [[ -x "$OUT_DIR/bin/patchelf" ]] || fail "bin/patchelf is missing or not executable"
 fi
 info "OK: all binaries present and executable"
 

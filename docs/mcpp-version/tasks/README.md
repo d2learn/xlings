@@ -30,6 +30,7 @@
 | [T20](T20-xpkg-spec-v1.md) | xpkg spec 版本字段 + 字段规范化 | Lua | 4 | ~30 行 |
 | [T21](T21-indexdb-enrich.md) | Index DB 丰富化（type/desc/categories） | Lua | 4 | ~15 行 |
 | [T22](T22-repo-simplify.md) | 多仓库简化（xim-pkgindex + awesome） | Lua | 5 | ~40 行 |
+| [T23](T23-hybrid-view-impl.md) | data/xpkgs + subos 混合视图落地 | Lua/Rust | 6 | ~120 行 |
 
 ---
 
@@ -175,6 +176,12 @@ Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分�
 |------|------|------|
 | T22 | 多仓库简化（只保留 xim-pkgindex + awesome） | T20, T16 |
 
+### xim-Wave 6 — P2 混合视图落地，1 个 Agent
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T23 | data/xpkgs + subos 混合视图落地（聚合 + 闭包） | T14, T16, T17（建议含 T18） |
+
 ---
 
 ## 验收总标准
@@ -313,4 +320,5 @@ xim --update index
 | xpkg spec v1 规范 | [T20](T20-xpkg-spec-v1.md) §3 |
 | Index DB 丰富化 | [T21](T21-indexdb-enrich.md) §3 |
 | 多仓库简化方案 | [T22](T22-repo-simplify.md) §3 |
+| xpkgs/subos 混合视图落地 | [T23](T23-hybrid-view-impl.md) §3 |
 | xpkg 规范化总览与路线图 | [../xpkg-spec-design.md](../xpkg-spec-design.md) |
