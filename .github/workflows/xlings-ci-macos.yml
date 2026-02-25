@@ -143,6 +143,16 @@ jobs:
           echo "=== subos list ==="
           xlings subos list
 
+      - name: "Test: libpath RPATH-only policy (T23)"
+        run: |
+          chmod +x tests/e2e/libpath_order_test.sh
+          bash tests/e2e/libpath_order_test.sh
+
+      - name: "Test: RPATH binary verification (T23)"
+        run: |
+          chmod +x tests/e2e/rpath_verify_test.sh
+          D2X_VERSION=0.1.3 bash tests/e2e/rpath_verify_test.sh
+
       - name: "Test: cleanup subos"
         run: |
           xlings subos use default

@@ -8,6 +8,8 @@ import("libxpkg.pkginfo")
 local _index_manager = nil
 local _patchelf = nil
 local _readelf = nil
+local _install_name_tool = nil
+local _otool = nil
 
 local function _trim(s)
     if not s then
@@ -37,6 +39,18 @@ local function _get_tool(cache_key, toolname)
         end
         return _readelf
     end
+    if cache_key == "install_name_tool" then
+        if _install_name_tool == nil then
+            _install_name_tool = find_tool(toolname)
+        end
+        return _install_name_tool
+    end
+    if cache_key == "otool" then
+        if _otool == nil then
+            _otool = find_tool(toolname)
+        end
+        return _otool
+    end
     return nil
 end
 
@@ -57,6 +71,60 @@ local function _is_elf(filepath)
             end
         }
     }
+end
+
+local function _is_macho(filepath)
+    local otool = _get_tool("otool", "otool")
+    if not otool then
+        return true
+    end
+    return try {
+        function()
+            os.iorunv(otool.program, {"-h", filepath})
+            return true
+        end,
+        catch {
+            function()
+                return false
+            end
+        }
+    }
+end
+
+local function _fix_macho_dylib_refs(tool, filepath)
+    local otool = _get_tool("otool", "otool")
+    if not otool then return end
+    local output = try {
+        function()
+            return os.iorunv(otool.program, {"-L", filepath})
+        end,
+        catch {
+            function()
+                return nil
+            end
+        }
+    }
+    if not output then return end
+    for line in output:gmatch("[^\n]+") do
+        local dep = _trim(line:match("^%s*(.-)%s+%("))
+        if dep and dep ~= ""
+           and not dep:match("^@")
+           and not dep:match("^/usr/lib/")
+           and not dep:match("^/System/") then
+            local basename = path.filename(dep)
+            local new_ref = "@rpath/" .. basename
+            try {
+                function()
+                    os.vrunv(tool.program, {"-change", dep, new_ref, filepath})
+                end,
+                catch {
+                    function(e)
+                        log.warn("failed to change %s: %s", dep, tostring(e))
+                    end
+                }
+            }
+        end
+    end
 end
 
 local function _normalize_rpath(rpath)
@@ -165,23 +233,25 @@ local function _collect_targets(target, opts)
         include_shared_libs = true
     end
 
+    local is_binary = is_host("macosx") and _is_macho or _is_elf
+
     local pattern = recurse and path.join(target, "**") or path.join(target, "*")
     local files = os.files(pattern) or {}
-    local elfs = {}
+    local binaries = {}
     for _, f in ipairs(files) do
         if include_shared_libs then
-            if _is_elf(f) then
-                table.insert(elfs, f)
+            if is_binary(f) then
+                table.insert(binaries, f)
             end
         else
-            -- exclude obvious shared library names if caller only wants executables
             local is_shared = f:find("%.so", 1, true) ~= nil
-            if not is_shared and _is_elf(f) then
-                table.insert(elfs, f)
+                           or f:find("%.dylib", 1, true) ~= nil
+            if not is_shared and is_binary(f) then
+                table.insert(binaries, f)
             end
         end
     end
-    return elfs
+    return binaries
 end
 
 function auto(enable_or_opts)
@@ -311,20 +381,7 @@ function closure_lib_paths(opt)
     return values
 end
 
-function patch_elf_loader_rpath(target, opts)
-    opts = opts or {}
-    local result = {
-        scanned = 0,
-        patched = 0,
-        failed = 0,
-        shrinked = 0,
-        shrink_failed = 0
-    }
-
-    if not is_host("linux") then
-        return result
-    end
-
+local function _patch_elf(target, opts, result)
     local patch_tool = _get_tool("patchelf", "patchelf")
     if not patch_tool then
         log.warn("patchelf not found, skip patching")
@@ -392,6 +449,85 @@ function patch_elf_loader_rpath(target, opts)
         else
             result.failed = result.failed + 1
         end
+    end
+
+    return result
+end
+
+local function _patch_macho(target, opts, result)
+    local tool = _get_tool("install_name_tool", "install_name_tool")
+    if not tool then
+        log.warn("install_name_tool not found, skip patching")
+        return result
+    end
+
+    local rpath_paths = opts.rpath
+    if type(rpath_paths) == "string" then
+        rpath_paths = {}
+        for p in opts.rpath:gmatch("[^:]+") do
+            table.insert(rpath_paths, p)
+        end
+    end
+    if not rpath_paths or #rpath_paths == 0 then
+        return result
+    end
+
+    local targets = _collect_targets(target, opts)
+    for _, filepath in ipairs(targets) do
+        result.scanned = result.scanned + 1
+
+        local ok = try {
+            function()
+                for _, rp in ipairs(rpath_paths) do
+                    try {
+                        function()
+                            os.vrunv(tool.program, {"-add_rpath", rp, filepath})
+                        end,
+                        catch {
+                            function()
+                                -- rpath already exists, replace or ignore
+                            end
+                        }
+                    }
+                end
+                _fix_macho_dylib_refs(tool, filepath)
+                return true
+            end,
+            catch {
+                function(e)
+                    if opts.strict then
+                        raise(e)
+                    end
+                    return false
+                end
+            }
+        }
+
+        if ok then
+            log.info("patched: %s", filepath)
+            result.patched = result.patched + 1
+        else
+            result.failed = result.failed + 1
+        end
+    end
+
+    return result
+end
+
+function patch_elf_loader_rpath(target, opts)
+    opts = opts or {}
+    local result = {
+        scanned = 0,
+        patched = 0,
+        failed = 0,
+        shrinked = 0,
+        shrink_failed = 0
+    }
+
+    if is_host("linux") then
+        return _patch_elf(target, opts, result)
+    elseif is_host("macosx") then
+        return _patch_macho(target, opts, result)
     end
 
     return result

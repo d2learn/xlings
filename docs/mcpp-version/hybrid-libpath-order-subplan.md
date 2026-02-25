@@ -7,10 +7,10 @@
 
 将父方案中的库解析优先级变成可执行约束，而不是文档约定：
 
-1. 程序专属闭包路径（RPATH 内嵌于 ELF）
-2. 依赖闭包路径（RPATH 内嵌于 ELF）
+1. 程序专属闭包路径（RPATH 内嵌于 ELF/Mach-O）
+2. 依赖闭包路径（RPATH 内嵌于 ELF/Mach-O）
 3. `subos/lib` 默认聚合路径（RPATH fallback）
-4. 系统默认搜索路径（ld-linux 默认行为）
+4. 系统默认搜索路径（ld-linux / dyld 默认行为）
 
 本子方案解决三个问题：
 
@@ -20,19 +20,25 @@
 
 ## 2. 设计原则
 
-- **RPATH 是唯一真相**：库搜索路径写入 ELF 二进制的 RUNPATH 字段，不依赖环境变量
-- **shim 不注入 LD_LIBRARY_PATH**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`，消除环境变量传染
-- **elfpatch 是执行机制**：通过 `patchelf` 在安装时将闭包路径写入 RUNPATH
+- **RPATH 是唯一真相**：库搜索路径写入二进制文件（Linux ELF 的 RUNPATH、macOS Mach-O 的 LC_RPATH），不依赖环境变量
+- **shim 不注入库路径变量**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`，消除环境变量传染
+- **elfpatch 是执行机制**：Linux 通过 `patchelf`、macOS 通过 `install_name_tool`，在安装时将闭包路径写入 RPATH
 - **显式例外最小化**：仅对无法使用 RPATH 的特殊场景（如 musl-ldd alias wrapper）允许直接设置 `LD_LIBRARY_PATH`，且必须通过 `envs` 字段显式声明
 
 ## 3. 运行时保证机制（RPATH 实现）
 
 ### 3.1 elfpatch 自动 RPATH 写入
 
-在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的 ELF 文件，通过 `patchelf` 写入：
+在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的二进制文件，按平台分别处理：
 
+**Linux（ELF）**：通过 `patchelf` 写入：
 - **INTERP**（动态链接器）：指向 subos 或系统 loader
 - **RUNPATH**：由 `closure_lib_paths()` 生成的闭包路径
+
+**macOS（Mach-O）**：通过 `install_name_tool` 写入：
+- **LC_RPATH**：由 `closure_lib_paths()` 生成的闭包路径（逐条 `-add_rpath`）
+- **LC_LOAD_DYLIB 修正**：将绝对路径依赖改为 `@rpath/<basename>`（`-change`）
+- 不需要修正 INTERP（macOS `dyld` 位置固定）
 
 ### 3.2 闭包路径生成规则
 
@@ -46,7 +52,7 @@
 
 ### 3.3 shim 层行为
 
-`xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH**。
+`xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH / DYLD_LIBRARY_PATH**。此行为在 Linux 和 macOS 上一致。
 
 已删除的组件：
 - 常量 `ENV_PROGRAM_LIBPATH`、`ENV_EXTRA_LIBPATH`
@@ -146,7 +152,9 @@ CI 中的 `check-no-direct-ld-libpath.sh` 脚本：
 
 ### 5.3 诊断
 
-使用 `readelf -d <binary>` 或 `patchelf --print-rpath <binary>` 可直接查看写入 ELF 的 RPATH，无需设置调试开关。
+**Linux**：使用 `readelf -d <binary>` 或 `patchelf --print-rpath <binary>` 可直接查看写入 ELF 的 RPATH。
+
+**macOS**：使用 `otool -l <binary> | grep -A2 LC_RPATH` 查看 LC_RPATH 条目，`otool -L <binary>` 查看依赖引用是否已改为 `@rpath/` 前缀。
 
 ## 6. 与 T23 的映射
 
@@ -156,9 +164,9 @@ CI 中的 `check-no-direct-ld-libpath.sh` 脚本：
 
 ## 7. 验收标准
 
-- 文档中的 4 级优先级可由 RUNPATH 字段唯一推导
-- 任意程序的 RPATH 可通过 `readelf -d` 直接观测
+- 文档中的 4 级优先级可由 RUNPATH/LC_RPATH 字段唯一推导
+- 任意程序的 RPATH 可通过 `readelf -d`（Linux）或 `otool -l`（macOS）直接观测
 - xpkg 直写 `LD_LIBRARY_PATH` 在 CI 被拦截（已记录例外除外）
 - `XLINGS_PROGRAM_LIBPATH` 和 `XLINGS_EXTRA_LIBPATH` 在 CI 被拦截
 - 多版本并存测试稳定通过
-- shim 执行基础设施工具（xmake、curl 等）时不传染 LD_LIBRARY_PATH
+- shim 执行基础设施工具（xmake、curl 等）时不传染 LD_LIBRARY_PATH / DYLD_LIBRARY_PATH

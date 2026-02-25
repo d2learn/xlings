@@ -190,6 +190,11 @@ jobs:
             { echo "FAIL: d2x@0.1.1 should be recognized as installed (xpkgs reuse)"; exit 1; }
           echo "OK: xpkgs reuse confirmed — d2x@0.1.1 not re-downloaded"
 
+      - name: "Test: RPATH binary verification (T23)"
+        run: |
+          chmod +x tests/e2e/rpath_verify_test.sh
+          D2X_VERSION=0.1.1 bash tests/e2e/rpath_verify_test.sh
+
       - name: "Test: .xlings.json project deps (T18)"
         run: |
           echo "=== T18: no .xlings.json → tip (exit 0) ==="
