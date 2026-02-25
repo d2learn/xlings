@@ -468,6 +468,16 @@ impl Program {
             return ("XVM_ENV_NULL".to_string(), String::new());
         };
 
+        // Only compose LD_LIBRARY_PATH when the program declares explicit
+        // libpath inputs.  Without this guard, workspace_lib alone would
+        // force LD_LIBRARY_PATH on every shimmed program (xmake, xlings …),
+        // breaking system tools (curl etc.) that inherit the variable.
+        let has_explicit_libpath =
+            self.program_libpath_env.is_some() || self.extra_libpath_env.is_some();
+        if !has_explicit_libpath {
+            return ("XVM_ENV_NULL".to_string(), String::new());
+        }
+
         let workspace_lib = XVM_WORKSPACE_LIBDIR.get().map(|s| s.as_str());
         let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
 
