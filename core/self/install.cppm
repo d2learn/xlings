@@ -34,7 +34,21 @@ static std::string read_version_from_json(const fs::path& homeDir) {
 /// quick_install extract dir — we must install to ~/.xlings, not "fix links" in place.
 static bool is_under_temp_dir(const fs::path& p) {
     auto s = p.generic_string();  // forward slashes for portable comparison
+    // quick_install uses "xlings-install" in temp dir name — definitive indicator
+    if (s.find("xlings-install") != std::string::npos) return true;
     if (s.find("/tmp/") == 0 || s.find("/tmp") == 0) return true;
+#if defined(__APPLE__)
+    // macOS: /var/folders/... is system temp; canonical paths may use /private/var
+    if (s.find("/var/folders/") != std::string::npos ||
+        s.find("/private/var/folders/") != std::string::npos)
+        return true;
+#endif
+#if defined(_WIN32)
+    // Windows: match path segments /Temp/ or /Tmp/ (GetTempPath uses these)
+    if (s.find("/Temp/") != std::string::npos || s.find("/Tmp/") != std::string::npos ||
+        s.find("/temp/") != std::string::npos || s.find("/tmp/") != std::string::npos)
+        return true;
+#endif
     for (const char* env : {"TMPDIR", "TEMP", "TMP", "RUNNER_TEMP"}) {
         if (const char* v = std::getenv(env)) {
             auto prefix = fs::path(v).generic_string();
@@ -42,6 +56,11 @@ static bool is_under_temp_dir(const fs::path& p) {
             auto prefixSlash = prefix;
             if (prefixSlash.back() != '/') prefixSlash += '/';
             if (s.starts_with(prefixSlash) || s == prefix) return true;
+#if defined(__APPLE__)
+            // macOS: /var resolves to /private/var; canonical paths may have /private prefix
+            if (prefix.starts_with("/var/") && s.starts_with("/private" + prefixSlash))
+                return true;
+#endif
         }
     }
     return false;

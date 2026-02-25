@@ -84,7 +84,9 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Write-Host "=== Running quick install script ==="
           irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
-          $env:Path = "$env:USERPROFILE\.xlings\bin;$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
+          $xlingsBin = "$env:USERPROFILE\.xlings\subos\current\bin"
+          $env:Path = "$xlingsBin;$env:Path"
+          if (-not (Test-Path "$xlingsBin\xlings.exe")) { throw "xlings not installed at $xlingsBin" }
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config

@@ -111,6 +111,23 @@ jobs:
           echo "=== Cleanup install test ==="
           rm -rf "$HOME/.xlings" "$INSTALL_DIR"
 
+      - name: "Test: quick install script (curl | bash)"
+        env:
+          XLINGS_NON_INTERACTIVE: 1
+        run: |
+          unset XLINGS_HOME
+          rm -rf "$HOME/.xlings"
+          echo "=== Running quick install script ==="
+          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
+          [[ -x "$HOME/.xlings/subos/current/bin/xlings" ]] || { echo "xlings not installed at ~/.xlings/subos/current/bin"; exit 1; }
+          echo "=== Verify quick install ==="
+          xlings -h
+          xlings config
+          xvm --version
+          echo "=== Cleanup quick install test ==="
+          rm -rf "$HOME/.xlings"
+
       # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment
