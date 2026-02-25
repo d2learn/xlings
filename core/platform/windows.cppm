@@ -52,6 +52,25 @@ namespace platform_impl {
         ::_putenv_s(key.c_str(), value.c_str());
     }
 
+    export void make_files_executable(const std::filesystem::path&) {
+        // No-op: Windows does not use Unix file permissions
+    }
+
+    export bool create_directory_link(const std::filesystem::path& link,
+                                      const std::filesystem::path& target) {
+        std::error_code ec;
+        if (std::filesystem::is_symlink(link)) {
+            std::filesystem::remove(link, ec);
+        } else if (std::filesystem::exists(link)) {
+            std::filesystem::remove_all(link, ec);
+        }
+        auto canonTarget = std::filesystem::canonical(target, ec);
+        if (ec) canonTarget = target;
+        std::string cmd = "cmd /c mklink /J \"" + link.string() +
+                          "\" \"" + canonTarget.string() + "\" >nul 2>&1";
+        return std::system(cmd.c_str()) == 0;
+    }
+
     export template<typename... Args>
     void println(std::format_string<Args...> fmt, Args&&... args) {
         std::println(fmt, std::forward<Args>(args)...);

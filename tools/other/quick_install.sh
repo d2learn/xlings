@@ -18,6 +18,10 @@ trap 'log_error "Interrupted"; exit 1' INT TERM
 
 GITHUB_REPO="d2learn/xlings"
 GITHUB_MIRROR="${XLINGS_GITHUB_MIRROR:-}"
+HAS_TTY=0
+if [[ -r /dev/tty ]]; then
+    HAS_TTY=1
+fi
 
 # --------------- detect platform ---------------
 
@@ -128,8 +132,8 @@ log_info "Extracting..."
 tar -xzf "${WORK_DIR}/${TARBALL}" -C "$WORK_DIR"
 
 EXTRACT_DIR=$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d -name "xlings-*" | head -1)
-if [[ -z "$EXTRACT_DIR" ]] || [[ ! -f "$EXTRACT_DIR/install.sh" ]]; then
-    log_error "Extracted package is invalid (missing install.sh)."
+if [[ -z "$EXTRACT_DIR" ]] || [[ ! -x "$EXTRACT_DIR/bin/xlings" && ! -f "$EXTRACT_DIR/bin/xlings" ]]; then
+    log_error "Extracted package is invalid (missing bin/xlings)."
     exit 1
 fi
 
@@ -137,5 +141,9 @@ fi
 
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
-chmod +x install.sh
-bash install.sh
+chmod +x bin/xlings
+if [[ "$HAS_TTY" -eq 1 ]]; then
+    ./bin/xlings self install < /dev/tty
+else
+    ./bin/xlings self install
+fi

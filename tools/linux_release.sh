@@ -204,7 +204,7 @@ cp core/xim/xmake.lua "$OUT_DIR/xmake.lua"
 
 # .xlings.json
 if command -v jq &>/dev/null && [[ -f config/xlings.json ]]; then
-  jq '. + {"activeSubos":"default","subos":{"default":{"dir":""}}}' \
+  jq --arg version "$VERSION" '. + {"version":$version,"activeSubos":"default","subos":{"default":{"dir":""}}}' \
     config/xlings.json > "$OUT_DIR/.xlings.json"
 else
   cat > "$OUT_DIR/.xlings.json" << DOTJSON
@@ -214,10 +214,6 @@ fi
 
 # xim index-repos placeholder (global shared)
 echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
-
-# Install script (bundled in package root)
-cp "$PROJECT_DIR/tools/install-from-release.sh" "$OUT_DIR/install.sh"
-chmod +x "$OUT_DIR/install.sh"
 
 info "Package assembled: $OUT_DIR"
 
@@ -333,7 +329,7 @@ info ""
 info "  Unpack & install:"
 info "    tar -xzf ${PKG_NAME}.tar.gz"
 info "    cd $PKG_NAME"
-info "    ./install.sh"
+info "    ./bin/xlings self install"
 info ""
 info "  Or use without installing:"
 info "    export PATH=\"\$(pwd)/subos/current/bin:\$(pwd)/bin:\$PATH\""

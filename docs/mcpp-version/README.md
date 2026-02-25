@@ -138,7 +138,7 @@ docs/mcpp-version/
 
 ### [install-scripts-design.md](install-scripts-design.md) — 安装脚本方案与设计
 
-安装体系分为两层：`quick_install`（一键在线安装）和 `install-from-release`（包内安装器）。
+安装体系分为两层：`quick_install`（一键在线安装/下载器）和 `xlings self install`（C++ 内置安装器）。
 
 **关键结论**:
 - 新版安装流程零编译依赖：下载预编译 release 包 → 拷贝到 XLINGS_HOME → 配置 PATH

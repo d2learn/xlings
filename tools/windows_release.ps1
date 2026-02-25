@@ -107,13 +107,12 @@ Copy-Item -Recurse "core\xim\*" "$OUT_DIR\xim\" -ErrorAction SilentlyContinue
 Copy-Item "config\i18n\*.json" "$OUT_DIR\config\i18n\" -ErrorAction SilentlyContinue
 Copy-Item "config\shell\*" "$OUT_DIR\config\shell\" -ErrorAction SilentlyContinue
 
-# Install script (bundled in package root)
-Copy-Item "$PROJECT_DIR\tools\install-from-release.ps1" "$OUT_DIR\install.ps1"
 '{}' | Set-Content "$OUT_DIR\data\xim-index-repos\xim-indexrepos.json" -Encoding UTF8
 
 $configSrc = "$PROJECT_DIR\config\xlings.json"
 if (Test-Path $configSrc) {
   $base = Get-Content $configSrc -Raw | ConvertFrom-Json
+  $base | Add-Member -NotePropertyName "version" -NotePropertyValue $VERSION -Force
   $base | Add-Member -NotePropertyName "activeSubos" -NotePropertyValue "default" -Force
   $base | Add-Member -NotePropertyName "subos" -NotePropertyValue @{default=@{dir=""}} -Force
   $base | ConvertTo-Json -Depth 10 -Compress | Set-Content "$OUT_DIR\.xlings.json" -Encoding UTF8
@@ -178,4 +177,4 @@ Info ""
 Info "  Unpack & install:"
 Info "    Expand-Archive $PKG_NAME.zip -DestinationPath ."
 Info "    cd $PKG_NAME"
-Info "    powershell -ExecutionPolicy Bypass -File install.ps1"
+Info "    .\bin\xlings.exe self install"

@@ -92,14 +92,14 @@ jobs:
 
       # ── Phase 2.5: Test install script ─────────────────────────
 
-      - name: "Test: install script (install-from-release.sh)"
+      - name: "Test: install script (xlings self install)"
         run: |
           INSTALL_DIR=$(mktemp -d)
           tar -xzf build/release.tar.gz -C "$INSTALL_DIR"
           pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-linux-x86_64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           cd "$pkg_dir"
-          bash ./install.sh
+          ./bin/xlings self install
           export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
           echo "=== Verify install ==="
           xlings -h
