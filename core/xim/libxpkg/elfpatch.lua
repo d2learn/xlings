@@ -336,15 +336,13 @@ function patch_elf_loader_rpath(target, opts)
                     if opts.strict then
                         raise(e)
                     end
-                    if opts.verbose then
-                        log.warn("skip patch %s: %s", filepath, tostring(e))
-                    end
                     return false
                 end
             }
         }
 
         if ok then
+            log.info("patched: %s", filepath)
             if opts.shrink == true then
                 local shrink_ok = try {
                     function()
@@ -355,9 +353,6 @@ function patch_elf_loader_rpath(target, opts)
                         function(e)
                             if opts.strict then
                                 raise(e)
-                            end
-                            if opts.verbose then
-                                log.warn("skip shrink-rpath %s: %s", filepath, tostring(e))
                             end
                             return false
                         end
