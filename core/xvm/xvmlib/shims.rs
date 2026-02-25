@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -30,8 +29,6 @@ pub static XVM_WORKSPACE_BINDIR: OnceLock<String> = OnceLock::new();
 pub static XVM_WORKSPACE_LIBDIR: OnceLock<String> = OnceLock::new();
 
 pub static XVM_SHIM_BIN: OnceLock<String> = OnceLock::new();
-const ENV_PROGRAM_LIBPATH: &str = "XLINGS_PROGRAM_LIBPATH";
-const ENV_EXTRA_LIBPATH: &str = "XLINGS_EXTRA_LIBPATH";
 
 // TODO: shim-mode, direct-mode
 pub enum Type {
@@ -48,8 +45,6 @@ pub struct Program {
     alias: Option<String>,    // source file
     path: String,
     path_env: String,
-    program_libpath_env: Option<String>,
-    extra_libpath_env: Option<String>,
     envs: Vec<(String, String)>,
     bindings: IndexMap<String, String>,
     args: Vec<String>,
@@ -65,8 +60,6 @@ impl Program {
             alias: None,
             path: String::new(),
             path_env: String::new(),
-            program_libpath_env: None,
-            extra_libpath_env: None,
             envs: Vec::new(),
             bindings: IndexMap::new(),
             args: Vec::new(),
@@ -94,9 +87,6 @@ impl Program {
     }
 
     pub fn add_env(&mut self, key: &str, value: &str) {
-        // if key is PATH or LD_LIBRARY_PATH/DYLD_LIBRARY_PATH, then append to the existing value
-        // PATH -> self.path_env
-        // LD_LIBRARY_PATH -> self.ld_library_path_env
         let mut spe = if cfg!(target_os = "windows") {
             ";"
         } else {
@@ -107,37 +97,9 @@ impl Program {
                 spe = "";
             }
             self.path_env = format!("{}{}{}", self.path_env, spe, value);
-        } else if key == ENV_PROGRAM_LIBPATH {
-            if self.program_libpath_env.is_none() {
-                spe = "";
-            }
-            self.program_libpath_env = Some(format!(
-                "{}{}{}",
-                self.program_libpath_env.clone().unwrap_or_default(),
-                spe,
-                value
-            ));
-        } else if key == ENV_EXTRA_LIBPATH {
-            if self.extra_libpath_env.is_none() {
-                spe = "";
-            }
-            self.extra_libpath_env = Some(format!(
-                "{}{}{}",
-                self.extra_libpath_env.clone().unwrap_or_default(),
-                spe,
-                value
-            ));
-        } else if key == "LD_LIBRARY_PATH" || key == "DYLD_LIBRARY_PATH" {
-            // Backward compatibility: migrate legacy direct LD_LIBRARY_PATH into EXTRA input.
-            if self.extra_libpath_env.is_none() {
-                spe = "";
-            }
-            self.extra_libpath_env = Some(format!(
-                "{}{}{}",
-                self.extra_libpath_env.clone().unwrap_or_default(),
-                spe,
-                value
-            ));
+        } else if key == "XLINGS_PROGRAM_LIBPATH" || key == "XLINGS_EXTRA_LIBPATH" {
+            // Legacy fields from the LD_LIBRARY_PATH composition era -- silently
+            // ignore them.  Library resolution now uses RPATH exclusively.
         } else {
             self.envs.push((key.to_string(), value.to_string()));
         }
@@ -181,15 +143,8 @@ impl Program {
 
     pub fn vdata(&self) -> VData {
         let mut envs_tmp = self.envs.clone();
-        // push path_env and ld_library_path_env to envs
         if !self.path_env.is_empty() {
             envs_tmp.push(("PATH".to_string(), self.path_env.clone()));
-        }
-        if let Some(program_libpath) = &self.program_libpath_env {
-            envs_tmp.push((ENV_PROGRAM_LIBPATH.to_string(), program_libpath.clone()));
-        }
-        if let Some(extra_libpath) = &self.extra_libpath_env {
-            envs_tmp.push((ENV_EXTRA_LIBPATH.to_string(), extra_libpath.clone()));
         }
         VData {
             alias: self.alias.clone(),
@@ -458,45 +413,11 @@ impl Program {
     }
 
     pub fn get_ld_library_path_env(&self) -> (String, String) {
-        // linux and macos(DYLD_LIBRARY_PATH)
-        let (ld_library_path_env_name, sep) = if cfg!(target_os = "linux") {
-            ("LD_LIBRARY_PATH", ':')
-        } else if cfg!(target_os = "macos") {
-            ("DYLD_LIBRARY_PATH", ':')
-        } else {
-            // unsupported OS - WINDOWS?
-            return ("XVM_ENV_NULL".to_string(), String::new());
-        };
-
-        // Only compose LD_LIBRARY_PATH when the program declares explicit
-        // libpath inputs.  Without this guard, workspace_lib alone would
-        // force LD_LIBRARY_PATH on every shimmed program (xmake, xlings …),
-        // breaking system tools (curl etc.) that inherit the variable.
-        let has_explicit_libpath =
-            self.program_libpath_env.is_some() || self.extra_libpath_env.is_some();
-        if !has_explicit_libpath {
-            return ("XVM_ENV_NULL".to_string(), String::new());
-        }
-
-        let workspace_lib = XVM_WORKSPACE_LIBDIR.get().map(|s| s.as_str());
-        let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
-
-        let composed = compose_library_path(
-            self.program_libpath_env.as_deref(),
-            self.extra_libpath_env.as_deref(),
-            workspace_lib,
-            if current_ld_path.is_empty() {
-                None
-            } else {
-                Some(current_ld_path.as_str())
-            },
-            sep,
-        );
-
-        match composed {
-            Some(value) if !value.is_empty() => (ld_library_path_env_name.to_string(), value),
-            _ => ("XVM_ENV_NULL".to_string(), String::new()),
-        }
+        // Library resolution is handled by RPATH/RUNPATH written into ELF
+        // binaries at install time (via elfpatch).  The shim never injects
+        // LD_LIBRARY_PATH; per-program exceptions (e.g. musl-ldd) flow
+        // through the general `envs` + `build_extended_envs` path instead.
+        ("XVM_ENV_NULL".to_string(), String::new())
     }
 
     pub fn print_info(&self) {
@@ -542,24 +463,10 @@ impl Program {
         let target_path = format!("{}/{}", target_dir, target_filename);
         println!("TPath: {}", target_path);
 
-        if !self.envs.is_empty()
-            || !self.path_env.is_empty()
-            || self.program_libpath_env.is_some()
-            || self.extra_libpath_env.is_some()
-        {
+        if !self.envs.is_empty() || !self.path_env.is_empty() {
             println!("Envs:");
             if !self.path_env.is_empty() {
                 println!("  PATH={}", self.path_env);
-            }
-            if let Some(ld_path) = &self.program_libpath_env {
-                println!("  {}={}", ENV_PROGRAM_LIBPATH, ld_path);
-            }
-            if let Some(ld_path) = &self.extra_libpath_env {
-                println!("  {}={}", ENV_EXTRA_LIBPATH, ld_path);
-            }
-            let resolved_ld = self.get_ld_library_path_env();
-            if resolved_ld.0 != "XVM_ENV_NULL" {
-                println!("  LD_LIBRARY_PATH={}", resolved_ld.1);
             }
             for (key, value) in &self.envs {
                 println!("  {}={}", key, value);
@@ -668,44 +575,6 @@ fn shim_script_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str
     (sfile, args_placeholder, header)
 }
 
-fn compose_library_path(
-    program_closure: Option<&str>,
-    extra_libpath: Option<&str>,
-    workspace_lib: Option<&str>,
-    inherited: Option<&str>,
-    sep: char,
-) -> Option<String> {
-    let mut seen = HashSet::<String>::new();
-    let mut ordered = Vec::<String>::new();
-
-    let mut push_segments = |value: Option<&str>| {
-        if let Some(v) = value {
-            for raw in v.split(sep) {
-                let seg = raw.trim();
-                if seg.is_empty() {
-                    continue;
-                }
-                if seen.insert(seg.to_string()) {
-                    ordered.push(seg.to_string());
-                }
-            }
-        }
-    };
-
-    // fixed precedence: PROGRAM -> EXTRA -> subos/lib -> inherited
-    push_segments(program_closure);
-    push_segments(extra_libpath);
-    push_segments(workspace_lib);
-    push_segments(inherited);
-
-    if ordered.is_empty() {
-        None
-    } else {
-        let joiner = sep.to_string();
-        Some(ordered.join(&joiner))
-    }
-}
-
 fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
     let sep = if cfg!(windows) { ";" } else { ":" };
 
@@ -718,41 +587,6 @@ fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
             (key, new_val)
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::compose_library_path;
-
-    #[test]
-    fn compose_library_path_respects_precedence_and_dedup() {
-        let result = compose_library_path(
-            Some("/a:/b"),
-            Some("/b:/c"),
-            Some("/w"),
-            Some("/c:/sys"),
-            ':',
-        )
-        .expect("composed path should exist");
-        assert_eq!(result, "/a:/b:/c:/w:/sys");
-    }
-
-    #[test]
-    fn compose_library_path_handles_empty_inputs() {
-        let result = compose_library_path(None, None, Some("/w"), None, ':')
-            .expect("workspace fallback should exist");
-        assert_eq!(result, "/w");
-
-        let none = compose_library_path(None, None, None, None, ':');
-        assert!(none.is_none());
-    }
-
-    #[test]
-    fn legacy_ld_library_path_is_treated_as_extra_input() {
-        let result = compose_library_path(None, Some("/legacy"), Some("/workspace/lib"), None, ':')
-            .expect("composed path should exist");
-        assert_eq!(result, "/legacy:/workspace/lib");
-    }
 }
 
 #[cfg(target_os = "linux")]

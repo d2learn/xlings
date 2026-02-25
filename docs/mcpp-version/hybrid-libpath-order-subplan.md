@@ -1,4 +1,4 @@
-# 混合视图子方案：库路径优先级保证与 xpkg 规范
+# 混合视图子方案：RPATH 唯一真相与库路径优先级
 
 > 父文档: [xpkgs-subos-hybrid-design.md](xpkgs-subos-hybrid-design.md)
 > 关联任务: [tasks/T23-hybrid-view-impl.md](tasks/T23-hybrid-view-impl.md)
@@ -7,10 +7,10 @@
 
 将父方案中的库解析优先级变成可执行约束，而不是文档约定：
 
-1. 程序专属闭包路径
-2. 程序二进制内 RUNPATH/RPATH
-3. `subos/lib` 默认聚合路径
-4. 系统默认搜索路径
+1. 程序专属闭包路径（RPATH 内嵌于 ELF）
+2. 依赖闭包路径（RPATH 内嵌于 ELF）
+3. `subos/lib` 默认聚合路径（RPATH fallback）
+4. 系统默认搜索路径（ld-linux 默认行为）
 
 本子方案解决三个问题：
 
@@ -20,148 +20,120 @@
 
 ## 2. 设计原则
 
-- 单一真相：最终 `LD_LIBRARY_PATH` 只能由 shim 组装
-- 元数据与结果分离：xpkg 只声明闭包输入，不直接写最终路径
-- 默认兼容：未声明闭包时仍可回退到 `subos/lib`
-- 可观测：最终路径可打印、可测试、可审计
+- **RPATH 是唯一真相**：库搜索路径写入 ELF 二进制的 RUNPATH 字段，不依赖环境变量
+- **shim 不注入 LD_LIBRARY_PATH**：`xvm-shim` 不再组装或设置 `LD_LIBRARY_PATH`，消除环境变量传染
+- **elfpatch 是执行机制**：通过 `patchelf` 在安装时将闭包路径写入 RUNPATH
+- **显式例外最小化**：仅对无法使用 RPATH 的特殊场景（如 musl-ldd alias wrapper）允许直接设置 `LD_LIBRARY_PATH`，且必须通过 `envs` 字段显式声明
 
-## 3. 运行时保证机制（实现约束）
+## 3. 运行时保证机制（RPATH 实现）
 
-### 3.1 单入口组装
+### 3.1 elfpatch 自动 RPATH 写入
 
-在 `core/xvm/xvmlib/shims.rs` 增加单一组装函数（示意）：
+在包安装阶段，`elfpatch.apply_auto()` 自动扫描安装目录中的 ELF 文件，通过 `patchelf` 写入：
 
-```rust
-fn compose_ld_library_path(program_closure: &[String], workspace_lib: &str) -> String
+- **INTERP**（动态链接器）：指向 subos 或系统 loader
+- **RUNPATH**：由 `closure_lib_paths()` 生成的闭包路径
+
+### 3.2 闭包路径生成规则
+
+`elfpatch.closure_lib_paths()` 按以下固定顺序生成 RPATH：
+
+1. **包自身的 lib 目录**（`install_dir/lib64` 或 `install_dir/lib`）
+2. **依赖闭包路径**（按 `deps_list` 顺序，每个依赖的 `lib64` 或 `lib`）
+3. **subos/lib 聚合路径**（作为 fallback，保证未声明闭包的库也能通过视图层解析）
+
+去重保序（first-win），空路径过滤。
+
+### 3.3 shim 层行为
+
+`xvm-shim`（`core/xvm/xvmlib/shims.rs`）的 `get_ld_library_path_env()` 始终返回空值（`XVM_ENV_NULL`），**不再组装任何 LD_LIBRARY_PATH**。
+
+已删除的组件：
+- 常量 `ENV_PROGRAM_LIBPATH`、`ENV_EXTRA_LIBPATH`
+- `Program` 结构体字段 `program_libpath_env`、`extra_libpath_env`
+- 函数 `compose_library_path()`
+- 相关单元测试
+
+### 3.4 LD_LIBRARY_PATH 的显式例外
+
+对于无法使用 RPATH 的场景，包定义可通过 `envs` 字段直接设置 `LD_LIBRARY_PATH`。该值通过 `Program::envs` → `build_extended_envs` 传递给子进程，**不经过任何组装逻辑**。
+
+当前唯一例外：`musl-gcc.lua` 中的 `musl-ldd` 和 `musl-loader` 命令。
+
+原因：这两个命令是 alias wrapper（`alias = "libc.so --list"` / `alias = "libc.so"`），通过 shell 脚本调用 musl 动态链接器本身，无法使用 RPATH。musl 动态链接器会消费 `LD_LIBRARY_PATH` 而非传递给子进程，因此不会产生传染。
+
+```lua
+xvm.add("musl-ldd", {
+    version = "musl-gcc-" .. pkginfo.version(),
+    bindir = musl_lib_dir,
+    alias = "libc.so --list",
+    envs = {
+        LD_LIBRARY_PATH = musl_lib_dir,
+    },
+    binding = binding_tree_root,
+})
 ```
-
-组装规则固定为：
-
-- 先拼 `program_closure`
-- 再拼 `workspace_lib`（即 `subos/lib`）
-- 最后拼当前环境继承值（若有）
-- 全流程去重并保持稳定顺序
-
-### 3.2 禁止旁路写入
-
-禁止其他代码路径直接写最终 `LD_LIBRARY_PATH` 字符串。  
-如必须兼容历史逻辑，统一改为写入“输入字段”，由组装函数消费。
-
-### 3.3 去重与稳定排序
-
-需要提供路径归一化与去重逻辑：
-
-- 规范化绝对路径
-- 去重保序（first-win）
-- 空路径过滤
-
-这能避免同一路径重复拼接导致的不可预期行为。
-
-### 3.4 闭包生成时机（关键约束）
-
-闭包路径不得在发布阶段写死为机器绝对路径。应采用：
-
-- 发布产物仅携带依赖规则（deps/版本/占位符）
-- 在当前环境中动态生成最终路径（运行时或激活时）
-- 支持变量占位（如 `${XLINGS_DATA}`、`${XLINGS_SUBOS}`）并在 shim 侧展开
-
-这样可保证 `XLINGS_HOME` 变更后仍能得到正确路径，不受构建机目录影响。
 
 ## 4. xpkg 规范（输入约束）
 
-### 4.1 字段定义（建议）
+### 4.1 已废弃字段
 
-建议在 xpkg config 元数据层使用以下输入字段：
+以下字段已被移除，不再被 shim 识别：
 
-- `XLINGS_PROGRAM_LIBPATH`
-  - 含义：程序专属闭包路径（通常由框架根据 deps 自动生成）
-  - 特性：最高优先级输入，面向“隔离运行”
-- `XLINGS_EXTRA_LIBPATH`
-  - 含义：包作者的补充库路径（可选）
-  - 特性：仅作为补充输入，不直接覆盖闭包路径
+- ~~`XLINGS_PROGRAM_LIBPATH`~~：已删除，shim 会静默忽略
+- ~~`XLINGS_EXTRA_LIBPATH`~~：已删除，shim 会静默忽略
 
-`LD_LIBRARY_PATH` 不作为 xpkg 直写字段（不允许在包定义中直接设置最终值）。
+### 4.2 当前规范（红线）
 
-### 4.2 规范要求（红线）
-
-- xpkg 包定义层禁止直接设置 `LD_LIBRARY_PATH`
-- 包作者只能声明“输入”，不能声明“最终值”
-- 最终 `LD_LIBRARY_PATH` 必须由 shim 统一组装并去重
-- 组装顺序固定：`PROGRAM_LIBPATH -> EXTRA_LIBPATH -> subos/lib -> inherited`
+- xpkg 包定义层**禁止**直接设置 `LD_LIBRARY_PATH`（除已记录的例外）
+- 库路径通过 `elfpatch.auto()` 在安装时写入 RUNPATH
+- 包作者只需声明 `deps`（依赖），`elfpatch` 自动计算闭包路径
+- 如需显式 RPATH，在 `install()` 中调用 `elfpatch.patch_elf_loader_rpath()`
 
 ### 4.3 最简单示例
 
-#### 旧写法（不推荐）
+#### 标准包（使用 elfpatch 自动 RPATH）
 
 ```lua
-xvm.add("demo-tool", {
+function install()
+    -- ... 解压/安装逻辑 ...
+    elfpatch.auto({enable = true, shrink = true})
+    return true
+end
+```
+
+elfpatch 会根据 `deps` 自动生成 RPATH，无需手动指定路径。
+
+#### 特殊情况（需要 LD_LIBRARY_PATH 的 alias 命令）
+
+```lua
+xvm.add("musl-ldd", {
+    bindir = musl_lib_dir,
+    alias = "libc.so --list",
     envs = {
-        LD_LIBRARY_PATH = "/abs/a:/abs/b"
-    }
+        LD_LIBRARY_PATH = musl_lib_dir,  -- 已记录的例外
+    },
 })
 ```
 
-问题：包作者直接写最终路径，无法保证全局顺序，也容易和其他包冲突。
-
-#### 新写法（推荐）
-
-```lua
-xvm.add("demo-tool", {
-    envs = {
-        XLINGS_PROGRAM_LIBPATH = "/data/xpkgs/libA/1.0/lib64:/data/xpkgs/libB/2.1/lib64",
-        XLINGS_EXTRA_LIBPATH = "/opt/vendor/lib"
-    }
-})
-```
-
-运行时由 shim 统一合成（示意）：
-
-```text
-LD_LIBRARY_PATH=
-/data/xpkgs/libA/1.0/lib64:
-/data/xpkgs/libB/2.1/lib64:
-/opt/vendor/lib:
-${XLINGS_SUBOS}/lib:
-${INHERITED_LD_LIBRARY_PATH}
-```
-
-如果需要跨机器可移植，推荐在元数据层保存变量形式而非硬编码绝对路径，例如：
-
-```text
-${XLINGS_DATA}/xpkgs/libA/1.0/lib64
-${XLINGS_DATA}/xpkgs/libB/2.1/lib64
-```
-
-### 4.4 项目内真实示例（建议对照）
+### 4.4 项目内真实示例
 
 - `xim-pkgindex/pkgs/d/d2x.lua`
-  - Linux 依赖 `glibc` + `openssl@3.1.5`
-  - 作为“程序闭包输入由 deps 推导”的典型示例
+  - 使用 `elfpatch.auto({enable=true, shrink=true})`
+  - 依赖 `glibc` + `openssl@3.1.5`，RPATH 由 elfpatch 自动生成
 - `xim-pkgindex/pkgs/g/glibc.lua`
-  - 主要注册 libc/libm/loader 等基础库，不直写 `LD_LIBRARY_PATH`
-  - 作为“基础运行时库通过视图层暴露”的示例
-- `xim-pkgindex/pkgs/o/openssl.lua`
-  - 注册 `libssl.so.3`/`libcrypto.so.3`，不直写 `LD_LIBRARY_PATH`
-  - 作为“共享库包按 deps + 视图工作”的示例
+  - 基础运行时库，通过视图层暴露
 - `xim-pkgindex/pkgs/m/musl-gcc.lua`
-  - `musl-ldd` / `musl-loader` 使用 `XLINGS_EXTRA_LIBPATH`
-  - 作为“历史 LD_LIBRARY_PATH 写法迁移到输入字段”的示例
-
-### 4.5 过渡策略
-
-对历史包分三阶段兼容：
-
-1. **兼容阶段**：若发现旧字段 `LD_LIBRARY_PATH`，自动迁移为 `XLINGS_EXTRA_LIBPATH`
-2. **告警阶段**：输出 warning，并在 CI 标记为“待修复”
-3. **收敛阶段**：升级为 hard error，阻止新包继续直写
+  - `musl-ldd` / `musl-loader` 使用直接 `LD_LIBRARY_PATH`（唯一例外）
 
 ## 5. 校验与防回归
 
 ### 5.1 静态检查
 
-在 CI 增加规则：
+CI 中的 `check-no-direct-ld-libpath.sh` 脚本：
 
-- 扫描 xpkg 文件，若发现直接写 `LD_LIBRARY_PATH`，标记违规
+- 扫描 xpkg 文件，若发现直接写 `LD_LIBRARY_PATH`，仅允许已记录的例外（`musl-ldd`、`musl-loader`）
+- 拒绝 `XLINGS_PROGRAM_LIBPATH` 和 `XLINGS_EXTRA_LIBPATH`（已废弃字段）
 - 扫描关键可执行文件，检查 `RUNPATH/INTERP` 不含构建机私有路径
 
 ### 5.2 运行时集成测试
@@ -169,28 +141,24 @@ ${XLINGS_DATA}/xpkgs/libB/2.1/lib64
 最小回归用例：
 
 - A 依赖 `b@0.0.1`，C 依赖 `b@0.0.2`
-- 同一 subos 下启动 A/C，验证各自命中不同闭包路径
-- 不启用闭包的旧程序仍可通过 `subos/lib` 正常运行
+- 同一 subos 下启动 A/C，验证各自 RUNPATH 指向不同版本的库
+- 不启用闭包的旧程序仍可通过 `subos/lib`（RPATH fallback）正常运行
 
-### 5.3 诊断开关
+### 5.3 诊断
 
-增加调试输出（例如 `XLINGS_DEBUG_LIBPATH=1`）打印：
-
-- program closure paths
-- aggregate fallback path
-- final LD_LIBRARY_PATH
-- 去重后顺序
+使用 `readelf -d <binary>` 或 `patchelf --print-rpath <binary>` 可直接查看写入 ELF 的 RPATH，无需设置调试开关。
 
 ## 6. 与 T23 的映射
 
-- T23-A：实现 shim 单入口组装 + 去重逻辑
-- T23-B：引入/迁移 xpkg 输入字段，禁直写 `LD_LIBRARY_PATH`
-- T23-C：补齐 CI 静态检查与多版本并存集成测试
+- T23-A：elfpatch 闭包路径生成 + subos/lib fallback
+- T23-B：shim 层清除 LD_LIBRARY_PATH 组装逻辑
+- T23-C：CI 静态检查更新 + 多版本并存集成测试
 
 ## 7. 验收标准
 
-- 文档中的 4 级优先级可由代码路径唯一推导
-- 任意程序的最终库路径可观测、可复现
-- xpkg 直写 `LD_LIBRARY_PATH` 在 CI 被拦截
+- 文档中的 4 级优先级可由 RUNPATH 字段唯一推导
+- 任意程序的 RPATH 可通过 `readelf -d` 直接观测
+- xpkg 直写 `LD_LIBRARY_PATH` 在 CI 被拦截（已记录例外除外）
+- `XLINGS_PROGRAM_LIBPATH` 和 `XLINGS_EXTRA_LIBPATH` 在 CI 被拦截
 - 多版本并存测试稳定通过
-
+- shim 执行基础设施工具（xmake、curl 等）时不传染 LD_LIBRARY_PATH

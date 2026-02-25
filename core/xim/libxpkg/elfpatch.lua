@@ -298,6 +298,16 @@ function closure_lib_paths(opt)
             end
         end
     end
+
+    local cfg = import("platform").get_config_info()
+    if cfg and cfg.subosdir then
+        local subos_lib = path.join(cfg.subosdir, "lib")
+        if not seen[subos_lib] then
+            seen[subos_lib] = true
+            table.insert(values, subos_lib)
+        end
+    end
+
     return values
 end
 
