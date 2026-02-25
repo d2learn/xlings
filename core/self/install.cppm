@@ -30,6 +30,23 @@ static std::string read_version_from_json(const fs::path& homeDir) {
     return "";
 }
 
+/// True if path is under a temp dir (e.g. /tmp, $TMPDIR, $TEMP, $RUNNER_TEMP). Used to detect
+/// quick_install extract dir — we must install to ~/.xlings, not "fix links" in place.
+static bool is_under_temp_dir(const fs::path& p) {
+    auto s = p.generic_string();  // forward slashes for portable comparison
+    if (s.find("/tmp/") == 0 || s.find("/tmp") == 0) return true;
+    for (const char* env : {"TMPDIR", "TEMP", "TMP", "RUNNER_TEMP"}) {
+        if (const char* v = std::getenv(env)) {
+            auto prefix = fs::path(v).generic_string();
+            if (prefix.empty()) continue;
+            auto prefixSlash = prefix;
+            if (prefixSlash.back() != '/') prefixSlash += '/';
+            if (s.starts_with(prefixSlash) || s == prefix) return true;
+        }
+    }
+    return false;
+}
+
 static fs::path detect_source_dir() {
     auto exe = platform::get_executable_path();
     if (exe.empty()) return {};
@@ -55,33 +72,28 @@ static fs::path detect_existing_home() {
         "command -v xlings 2>/dev/null"
 #endif
     );
-    auto binPath = utils::trim_string(out);
-    if (!binPath.empty() && fs::exists(binPath)) {
+    (void)rc;
+    // "where"/"command -v" may return multiple lines; use first valid path
+    auto lines = utils::split_string(out, '\n');
+    for (const auto& line : lines) {
+        auto binPath = utils::trim_string(line);
+        if (binPath.empty() || !fs::exists(binPath)) continue;
         auto p = fs::weakly_canonical(fs::path(binPath));
-        auto candidate = p.parent_path().parent_path().parent_path().parent_path();
-        if (fs::exists(candidate / "bin") && fs::exists(candidate / "subos"))
-            return candidate;
+        // Walk upward from the executable directory and locate install root by markers.
+        // This is more robust than hard-coding parent depth across different layouts.
+        for (auto cur = p.parent_path(); !cur.empty(); cur = cur.parent_path()) {
+            if (!fs::exists(cur / "bin") || !fs::exists(cur / "subos")) continue;
+            // Ignore temp extract dir (quick_install) — install to ~/.xlings instead.
+            if (!is_under_temp_dir(cur))
+                return cur;
+            break;
+        }
     }
     return {};
 }
 
 static fs::path default_home() {
     return fs::path(platform::get_home_dir()) / ".xlings";
-}
-
-/// True if path is under a temp dir (e.g. /tmp, $TMPDIR, $RUNNER_TEMP). Used to detect
-/// quick_install extract dir — we must install to ~/.xlings, not "fix links" in place.
-static bool is_under_temp_dir(const fs::path& p) {
-    auto s = p.string();
-    if (s.find("/tmp/") == 0 || s.find("/tmp") == 0) return true;
-    for (const char* env : {"TMPDIR", "TEMP", "TMP", "RUNNER_TEMP"}) {
-        if (const char* v = std::getenv(env)) {
-            std::string prefix = std::string(v);
-            if (!prefix.empty() && prefix.back() != '/') prefix += '/';
-            if (s.starts_with(prefix) || s == std::string(v)) return true;
-        }
-    }
-    return false;
 }
 
 static void copy_directory_contents(const fs::path& src, const fs::path& dst) {
@@ -231,7 +243,7 @@ export int cmd_install() {
         auto defaultDir  = targetHome / "subos" / "default";
         platform::create_directory_link(currentLink, defaultDir);
         setup_shell_profiles(targetHome);
-        std::println("[xlings:self] ok\n");
+        std::println("[xlings:self] {} ({}) - ok\n", targetHome.string(), pkgVersion);
         return 0;
     }
 
@@ -311,10 +323,10 @@ export int cmd_install() {
     if (fs::exists(targetHome / "subos" / "default" / "bin"))
         platform::make_files_executable(targetHome / "subos" / "default" / "bin");
 
-    // 5. Ensure subos/current link exists; only create if missing or broken (do not overwrite valid link)
+    // 5. Ensure subos/current link exists; do not recreate when already present (junction/symlink/dir)
     auto currentLink = targetHome / "subos" / "current";
     auto defaultDir  = targetHome / "subos" / "default";
-    bool needLink = !fs::is_symlink(currentLink) || !fs::exists(currentLink);
+    bool needLink = !fs::exists(currentLink);
     if (needLink && fs::exists(defaultDir) && platform::create_directory_link(currentLink, defaultDir))
         std::println("[xlings:self] subos/current -> default");
 

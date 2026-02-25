@@ -130,35 +130,42 @@ std::filesystem::path find_project_xlings_json() {
     return {};
 }
 
-int install_from_project_config() {
+std::filesystem::path find_project_legacy_xlings_lua() {
     namespace fs = std::filesystem;
-    auto cfg = find_project_xlings_json();
-    if (cfg.empty()) {
-        std::println("Tip: create <project>/.xlings.json with deps, or run `xlings install <package>`");
-        return 0;
-    }
+    std::error_code ec;
 
-    nlohmann::json json;
-    try {
-        auto content = platform::read_file_to_string(cfg.string());
-        json = nlohmann::json::parse(content, nullptr, false);
-    } catch (...) {
-        json = nlohmann::json::object();
-    }
-    if (json.is_discarded() || !json.is_object()) {
-        log::error("Invalid JSON in {}", cfg.string());
-        return 1;
-    }
-    if (!json.contains("deps") || !json["deps"].is_array()) {
-        log::error("Missing or invalid `deps` array in {}", cfg.string());
-        return 1;
-    }
+    auto cwd = fs::current_path(ec);
+    if (ec) return {};
+    auto homeDir = Config::paths().homeDir;
 
+    fs::path cur = cwd;
+    while (!cur.empty()) {
+        auto cfg = cur / "config.xlings";
+        if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {
+            auto curNorm = fs::weakly_canonical(cur, ec);
+            if (!ec) {
+                auto homeNorm = fs::weakly_canonical(homeDir, ec);
+                if (!ec && curNorm == homeNorm) {
+                    // Skip global config under $XLINGS_HOME
+                } else {
+                    return cfg;
+                }
+            } else {
+                return cfg;
+            }
+        }
+
+        auto parent = cur.parent_path();
+        if (parent == cur) break;
+        cur = parent;
+    }
+    return {};
+}
+
+static int install_targets_from_list(const std::vector<std::string>& targets) {
     auto& p = Config::paths();
     int rc = 0;
-    for (const auto& dep : json["deps"]) {
-        if (!dep.is_string()) continue;
-        auto target = dep.get<std::string>();
+    for (const auto& target : targets) {
         if (target.empty()) continue;
         std::string cmd = std::format(
             "xmake xim -P \"{}\" -- {} -y",
@@ -172,6 +179,51 @@ int install_from_project_config() {
         }
     }
     return rc;
+}
+
+static int install_from_legacy_config_xlings_via_xim(const std::filesystem::path& cfg) {
+    auto projectDir = find_xim_project_dir();
+    std::string cmd = "xmake xim -P \"" + projectDir.string() + "\" -- --install-config-xlings \"" + cfg.string() + "\" -y";
+    return platform::exec(cmd);
+}
+
+int install_from_project_config() {
+    auto cfg = find_project_xlings_json();
+    if (!cfg.empty()) {
+        nlohmann::json json;
+        try {
+            auto content = platform::read_file_to_string(cfg.string());
+            json = nlohmann::json::parse(content, nullptr, false);
+        } catch (...) {
+            json = nlohmann::json::object();
+        }
+        if (json.is_discarded() || !json.is_object()) {
+            log::error("Invalid JSON in {}", cfg.string());
+            return 1;
+        }
+        if (!json.contains("deps") || !json["deps"].is_array()) {
+            log::error("Missing or invalid `deps` array in {}", cfg.string());
+            return 1;
+        }
+
+        std::vector<std::string> targets;
+        for (const auto& dep : json["deps"]) {
+            if (!dep.is_string()) continue;
+            auto target = dep.get<std::string>();
+            if (!target.empty()) targets.push_back(std::move(target));
+        }
+        return install_targets_from_list(targets);
+    }
+
+    // Forward-compat for legacy project config.xlings (Lua):
+    // delegate loading/parsing/installing to xim (Lua runtime).
+    auto legacyCfg = find_project_legacy_xlings_lua();
+    if (!legacyCfg.empty()) {
+        return install_from_legacy_config_xlings_via_xim(legacyCfg);
+    }
+
+    std::println("Tip: create <project>/.xlings.json with deps (preferred), or use config.xlings xim table, or run `xlings install <package>`");
+    return 0;
 }
 
 export CommandProcessor create_processor() {

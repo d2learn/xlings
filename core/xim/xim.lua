@@ -33,6 +33,7 @@ function _input_process(args)
         ["--add-indexrepo"] = false,  -- --add-indexrepo (string)
         ["--xpkg-args"] = false, -- --xpkg-args (string)
         ["--use"] = false, -- --use (string)
+        ["--install-config-xlings"] = false, -- load legacy Lua config.xlings and install xim deps
     }
 
     -- When xlings passes "update --update index" / "search d2x" / "install -l" (after --), parse first word as command
@@ -102,6 +103,7 @@ function _input_process(args)
 
         info_json = boolean_cmds["--info-json"],
         sys_use = kv_cmds["--use"],
+        install_config_xlings = kv_cmds["--install-config-xlings"],
     }
 
     return main_target, cmds

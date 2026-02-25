@@ -269,6 +269,8 @@ function CmdProcessor:run_nontarget_cmds()
         self:list()
     elseif self.cmds.update then
         self:update()
+    elseif self.cmds.install_config_xlings and self.cmds.install_config_xlings ~= "" then
+        self:install_from_legacy_config_xlings()
     elseif self.cmds.sysdetect then
         self:sys_detect()
     elseif self.cmds.sysupdate then
@@ -279,6 +281,80 @@ function CmdProcessor:run_nontarget_cmds()
         self:sys_add_indexrepo()
     else
         self:help()
+    end
+end
+
+function CmdProcessor:install_from_legacy_config_xlings()
+    local cfg = self.cmds.install_config_xlings
+    if not cfg or cfg == "" then
+        raise("missing --install-config-xlings argument")
+    end
+    if not os.isfile(cfg) then
+        cfg = path.absolute(cfg)
+    end
+    if not os.isfile(cfg) then
+        raise("config.xlings not found: " .. tostring(self.cmds.install_config_xlings))
+    end
+
+    -- Compatibility path: copy config.xlings into local .xlings module file,
+    -- then load by utils.load_module so parsing/execution stays on xmake side.
+    local cfgdir = path.directory(cfg)
+    local compat_dir = path.join(cfgdir, ".xlings")
+    if not os.isdir(compat_dir) then
+        os.mkdir(compat_dir)
+    end
+
+    local cfg_content = io.readfile(cfg)
+    if not cfg_content or cfg_content == "" then
+        raise("read config.xlings failed: " .. cfg)
+    end
+
+    local compat_file = path.join(compat_dir, "__legacy_config_xlings.lua")
+    -- Keep original content, append a return table so module loader can read fields.
+    local wrapped = cfg_content .. "\n\nreturn { xim = xim, xdeps = xdeps }\n"
+    io.writefile(compat_file, wrapped)
+
+    local mod = nil
+    try {
+        function()
+            mod = utils.load_module(compat_file, compat_dir)
+        end,
+        catch {
+            function(e)
+                raise("load legacy config module failed: " .. tostring(e))
+            end
+        }
+    }
+    local ximcfg = mod and (mod.xim or mod.xdeps)
+    if type(ximcfg) ~= "table" then
+        raise("missing deps table (`xim` or `xdeps`) in " .. cfg)
+    end
+
+    local targets = {}
+    for name, ver in pairs(ximcfg) do
+        if type(name) == "string" and name ~= "xppcmds" and type(ver) == "string" then
+            local dep = name
+            if ver ~= "" then
+                dep = name .. "@" .. ver
+            end
+            table.insert(targets, dep)
+        end
+    end
+    table.sort(targets)
+
+    if #targets == 0 then
+        raise("no installable deps in xim table: " .. cfg)
+    end
+
+    cprint("[xlings:xim]: install deps from legacy config - %s", cfg)
+    for _, dep in ipairs(targets) do
+        cprint("${dim}---${clear}" .. dep)
+        new(dep, {
+            install = true,
+            yes = true,
+            disable_info = true
+        }):run()
+        cprint("${dim}---${clear}")
     end
 end
 
