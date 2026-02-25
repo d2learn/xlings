@@ -138,5 +138,11 @@ fi
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
 chmod +x bin/xlings
-# Use /dev/tty for interactive prompts when piped (curl|bash); fallback when CI has no /dev/tty
-( ./bin/xlings self install < /dev/tty ) || ./bin/xlings self install
+# Use /dev/tty for interactive prompts when piped (curl|bash); set XLINGS_NON_INTERACTIVE=1 in CI
+if [[ -n "${XLINGS_NON_INTERACTIVE:-}" ]]; then
+  ./bin/xlings self install
+elif [[ -e /dev/tty ]] && [[ -r /dev/tty ]]; then
+  ./bin/xlings self install < /dev/tty
+else
+  ./bin/xlings self install
+fi

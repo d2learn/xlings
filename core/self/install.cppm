@@ -69,6 +69,21 @@ static fs::path default_home() {
     return fs::path(platform::get_home_dir()) / ".xlings";
 }
 
+/// True if path is under a temp dir (e.g. /tmp, $TMPDIR, $RUNNER_TEMP). Used to detect
+/// quick_install extract dir — we must install to ~/.xlings, not "fix links" in place.
+static bool is_under_temp_dir(const fs::path& p) {
+    auto s = p.string();
+    if (s.find("/tmp/") == 0 || s.find("/tmp") == 0) return true;
+    for (const char* env : {"TMPDIR", "TEMP", "TMP", "RUNNER_TEMP"}) {
+        if (const char* v = std::getenv(env)) {
+            std::string prefix = std::string(v);
+            if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+            if (s.starts_with(prefix) || s == std::string(v)) return true;
+        }
+    }
+    return false;
+}
+
 static void copy_directory_contents(const fs::path& src, const fs::path& dst) {
     std::error_code ec;
     fs::create_directories(dst, ec);
@@ -190,17 +205,27 @@ export int cmd_install() {
     auto targetHome = existingHome.empty() ? default_home() : existingHome;
     auto installedVersion = read_version_from_json(targetHome);
 
-    // Compact header
-    std::println("\n[xlings:self] install");
-    std::println("  package:  v{}", pkgVersion);
-    std::println("  target:   {}", targetHome.string());
-    if (!installedVersion.empty())
-        std::println("  existing: v{}", installedVersion);
-
-    // Skip if source == target (equivalent returns unspecified when paths don't exist)
+    // When running from a temp extract (quick_install), install to ~/.xlings — temp dir will be deleted.
     std::error_code cmp_ec;
     bool sameDir = fs::equivalent(srcDir, targetHome, cmp_ec);
-    if (!cmp_ec && sameDir) {
+    bool fromTempExtract = false;
+    fs::path existingPath = targetHome;  // path of existing install (may differ from target)
+    if (!cmp_ec && sameDir && is_under_temp_dir(srcDir)) {
+        targetHome = default_home();
+        installedVersion = read_version_from_json(targetHome);
+        existingPath = targetHome;
+        fromTempExtract = true;  // no TTY in CI, skip prompts, always proceed
+    }
+
+    // Install header: show existing (if any) and install target; paths may differ
+    std::println("\n[xlings:self] install");
+    if (!installedVersion.empty()) {
+        std::println("  existing: v{} -> {}", installedVersion, existingPath.string());
+    }
+    std::println("  install:  v{} -> {}", pkgVersion, targetHome.string());
+
+    // Skip if source == target and not temp — "fix links" in place (e.g. dev from source).
+    if (!cmp_ec && sameDir && !fromTempExtract) {
         std::println("\n[xlings:self] already in target dir, fixing links");
         auto currentLink = targetHome / "subos" / "current";
         auto defaultDir  = targetHome / "subos" / "default";
@@ -210,30 +235,38 @@ export int cmd_install() {
         return 0;
     }
 
-    // Version / overwrite confirmation
-    if (!pkgVersion.empty() && !installedVersion.empty() && pkgVersion == installedVersion) {
-        if (!utils::ask_yes_no("\n[xlings:self] same version installed, reinstall? [y/N] ", false)) {
-            std::println("[xlings:self] cancelled\n");
-            return 0;
-        }
-    } else if (fs::exists(targetHome / "bin") && fs::exists(targetHome / "subos")) {
-        if (!utils::ask_yes_no("\n[xlings:self] overwrite existing installation? [Y/n] ", true)) {
-            std::println("[xlings:self] cancelled\n");
-            return 0;
+    // Version / overwrite confirmation (skip when from temp extract — CI / quick_install)
+    bool overwriteDataSubos = false;
+    if (!fromTempExtract) {
+        if (!pkgVersion.empty() && !installedVersion.empty() && pkgVersion == installedVersion) {
+            if (!utils::ask_yes_no("\n[xlings:self] same version installed, reinstall? ", false)) {
+                std::println("[xlings:self] cancelled\n");
+                return 0;
+            }
+            if (fs::exists(targetHome / "data") || fs::exists(targetHome / "subos")) {
+                overwriteDataSubos = utils::ask_yes_no("[xlings:self] overwrite data and subos? ", false);
+            }
+        } else if (fs::exists(targetHome / "bin") && fs::exists(targetHome / "subos")) {
+            if (!utils::ask_yes_no("\n[xlings:self] overwrite existing installation? ", true)) {
+                std::println("[xlings:self] cancelled\n");
+                return 0;
+            }
         }
     }
 
-    // Selective install: never remove or overwrite data/ and subos/ (avoids backup/restore corruption)
+    // Selective install: preserve data/ and subos/ unless user chose to overwrite
     std::println("[xlings:self] copying binaries and config ...");
     fs::create_directories(targetHome);
 
     std::error_code ec;
 
-    // 1. Remove only non-user dirs (bin, config, xim, .xlings.json, xmake.lua, etc.); preserve data, subos
+    // 1. Remove non-user dirs; preserve data/subos unless user chose overwrite
     if (fs::exists(targetHome)) {
         for (auto& entry : fs::directory_iterator(targetHome)) {
             auto name = entry.path().filename().string();
-            if (name == "data" || name == "subos") continue;
+            if (name == "data" || name == "subos") {
+                if (!overwriteDataSubos) continue;
+            }
             fs::remove_all(entry.path(), ec);
             ec.clear();
         }

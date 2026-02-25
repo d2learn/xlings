@@ -36,6 +36,8 @@ jobs:
           xmake --version
 
       - name: Install Xlings
+        env:
+          XLINGS_NON_INTERACTIVE: 1
         run: |
           curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
           echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
