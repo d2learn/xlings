@@ -18,10 +18,6 @@ trap 'log_error "Interrupted"; exit 1' INT TERM
 
 GITHUB_REPO="d2learn/xlings"
 GITHUB_MIRROR="${XLINGS_GITHUB_MIRROR:-}"
-HAS_TTY=0
-if [[ -r /dev/tty ]]; then
-    HAS_TTY=1
-fi
 
 # --------------- detect platform ---------------
 
@@ -142,8 +138,5 @@ fi
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
 chmod +x bin/xlings
-if [[ "$HAS_TTY" -eq 1 ]]; then
-    ./bin/xlings self install < /dev/tty
-else
-    ./bin/xlings self install
-fi
+# Do not use </dev/tty - fails in CI (No such device). Install uses defaults when stdin is not a TTY.
+./bin/xlings self install

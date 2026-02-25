@@ -1,5 +1,15 @@
 # Change Log | [xlings论坛](https://forum.d2learn.org/category/9/xlings)
 
+## 2026
+
+### 2026-02
+
+- **xlings self install 安装逻辑优化**
+  - data/subos 保留策略改为「直接不删除、选择性不覆盖」，不再使用备份/恢复
+  - 升级时 data/subos 完全保留不合并，避免 subos 损坏
+  - 移除「保留缓存数据」交互提示，data/subos 自动保留
+  - 优化用户提示与打印布局
+
 ## 2025
 
 ### 2025-08

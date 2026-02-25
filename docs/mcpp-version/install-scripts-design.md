@@ -30,9 +30,9 @@
                     │
                     ├─ 检测源包目录和已有安装
                     ├─ 版本比对 + 用户确认
-                    ├─ 备份/恢复缓存数据 (data/ + subos/)
-                    ├─ 拷贝到 XLINGS_HOME
-                    ├─ 重建 subos/current 链接
+                    ├─ 选择性清理（不删除 data/subos）+ 选择性拷贝
+                    ├─ 升级时 data/subos 完全保留，不合并
+                    ├─ 必要时重建 subos/current 链接
                     ├─ 写入 shell profile / 注册表 PATH
                     └─ 验证安装结果
 ```
@@ -64,15 +64,16 @@
 2. 检测已有安装: 检查 XLINGS_HOME 环境变量，在 PATH 中搜索 xlings 二进制
 3. 读取版本: 从源包和目标的 .xlings.json 分别读取版本号
 4. 用户确认: 同版本重装确认 / 覆盖确认
-5. 缓存保留: 询问用户是否保留已有缓存数据 (data/ 和 subos/ 统一询问)
-6. 备份: 将需要保留的 data/ 和 subos/ 备份到临时目录
-7. 拷贝: 将包内容拷贝到 XLINGS_HOME
+5. 选择性清理: 仅删除 bin/config/xim/.xlings.json/xmake.lua 等，不删除 data/、subos/
+6. 选择性拷贝: 按 entry 遍历 release；target 已有 data/ 或 subos/ 则直接跳过
+7. 首次安装: 若 target 无 data/ 或 subos/，则从 release 完整复制
 8. 权限修复: Unix 上 chmod +x bin/* 和 subos/default/bin/*
-9. 符号链接: 重建 subos/current → default (Unix: symlink, Windows: junction)
-10. 恢复: 将备份的 data/ 和 subos/ 恢复到目标
-11. Shell profile: 配置 bash/zsh/fish profile (Unix) 或 PowerShell profile + PATH (Windows)
-12. 验证: 从新位置运行 xlings -h 确认可执行
+9. 符号链接: 仅当 subos/current 不存在或损坏时创建，不覆盖有效链接（如用户已切换 subos）
+10. Shell profile: 配置 bash/zsh/fish profile (Unix) 或 PowerShell profile + PATH (Windows)
+11. 验证: 从新位置运行 xlings -h 确认可执行
 ```
+
+> **data/subos 保留**：采用「直接不删除、选择性不覆盖」，不再使用备份/恢复，避免复制过程中 symlink 处理导致 subos 损坏。
 
 ### 3.3 平台差异
 
@@ -194,9 +195,9 @@ quick_install → 下载 main 分支 zip → 解压源码 → install.unix.sh / 
 ```
 quick_install → GitHub API 查最新版 → 下载预编译 release 包 → xlings self install
                                                                   │
-                                                                  ├─ 拷贝预编译文件到 XLINGS_HOME
-                                                                  ├─ 保留已有缓存数据 (data/ + subos/)
-                                                                  ├─ 重建 subos/current 链接
+                                                                  ├─ 选择性拷贝到 XLINGS_HOME（不删除、不覆盖 data/subos）
+                                                                  ├─ 升级时 data/subos 完全保留
+                                                                  ├─ 必要时重建 subos/current 链接
                                                                   └─ 配置 PATH / shell profile
 ```
 
