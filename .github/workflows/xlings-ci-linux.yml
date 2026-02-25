@@ -234,7 +234,7 @@ jobs:
           xlings subos list
           echo "OK: test subos removed"
 
-      - name: "Test: libpath compose order (T23)"
+      - name: "Test: libpath RPATH-only policy (T23)"
         run: |
           chmod +x tests/e2e/libpath_order_test.sh
           bash tests/e2e/libpath_order_test.sh
