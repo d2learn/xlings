@@ -48,6 +48,14 @@ static bool is_under_temp_dir(const fs::path& p) {
 }
 
 static fs::path detect_source_dir() {
+    // Check CWD first: on Windows/PowerShell, `xlings` resolves to the PATH-installed
+    // binary even when the user is inside a new release package directory.
+    std::error_code ec;
+    auto cwd = fs::current_path(ec);
+    if (!ec && !cwd.empty() && fs::exists(cwd / "xim") && fs::exists(cwd / "bin")) {
+        return fs::weakly_canonical(cwd);
+    }
+
     auto exe = platform::get_executable_path();
     if (exe.empty()) return {};
     auto binDir = exe.parent_path();
@@ -345,7 +353,8 @@ export int cmd_install() {
             std::println(stderr, "[xlings:self] warning: verification failed");
     }
 
-    std::println("\n[xlings:self] install ok");
+    std::println("\n[xlings:self] install: {} ({}) - ok", targetHome.string(), pkgVersion);
+    std::println("");
     std::println("  run 'xlings -h' to get started");
 #if defined(__linux__) || defined(__APPLE__)
     std::println("  restart shell or: source ~/.bashrc");

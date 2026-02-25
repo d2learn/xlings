@@ -86,7 +86,7 @@ ensure_cmd curl
 ensure_cmd tar
 
 LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":\s*"([^"]+)".*/\1/')
+    | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/')
 
 if [[ -z "$LATEST_VERSION" ]]; then
     log_error "Failed to query the latest release version."
