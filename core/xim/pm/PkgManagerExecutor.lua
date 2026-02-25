@@ -55,7 +55,8 @@ function _xpkgs_has_files(install_dir)
     return dirs and #dirs > 0
 end
 
-function PkgManagerExecutor:install()
+function PkgManagerExecutor:install(opts)
+    opts = opts or {}
     -- reset to data dir
 
     os.cd(runtime.get_runtime_dir())
@@ -74,6 +75,7 @@ function PkgManagerExecutor:install()
             namespace = pkg.namespace,
             install_dir = install_dir,
             deps_list = deps_list,
+            resolved_deps_list = opts.resolved_deps_list or {},
             -- default manual mode; package author can switch to auto in install()
             elfpatch_auto = false
         })
