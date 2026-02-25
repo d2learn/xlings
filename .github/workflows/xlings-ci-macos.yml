@@ -57,13 +57,14 @@ jobs:
 
       - name: "Test: install script (xlings self install)"
         run: |
+          unset XLINGS_HOME
           INSTALL_DIR=$(mktemp -d)
           tar -xzf build/release.tar.gz -C "$INSTALL_DIR"
           pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-macosx-arm64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           cd "$pkg_dir"
           ./bin/xlings self install
-          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
           echo "=== Verify install ==="
           xlings -h
           xlings config

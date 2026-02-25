@@ -60,6 +60,7 @@ jobs:
       - name: "Test: install script (xlings self install)"
         shell: pwsh
         run: |
+          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
           $installDir = Join-Path $env:RUNNER_TEMP "install-test"
           New-Item -ItemType Directory -Force -Path $installDir | Out-Null
           Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
@@ -67,7 +68,7 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
