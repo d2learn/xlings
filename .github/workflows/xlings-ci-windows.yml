@@ -77,6 +77,21 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
 
+      - name: "Test: quick install script (irm | iex)"
+        shell: pwsh
+        run: |
+          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          Write-Host "=== Running quick install script ==="
+          irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+          $env:Path = "$env:USERPROFILE\.xlings\bin;$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
+          Write-Host "=== Verify quick install ==="
+          xlings -h
+          xlings config
+          xvm --version
+          Write-Host "=== Cleanup quick install test ==="
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+
       # ── Phase 3: Test ───────────────────────────────────────────
 
       - name: Setup xlings environment
