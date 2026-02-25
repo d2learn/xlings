@@ -35,6 +35,12 @@ static std::string read_version_from_json(const fs::path& homeDir) {
 static bool is_under_temp_dir(const fs::path& p) {
     auto s = p.generic_string();  // forward slashes for portable comparison
     if (s.find("/tmp/") == 0 || s.find("/tmp") == 0) return true;
+#if defined(_WIN32)
+    // Windows: match path segments /Temp/ or /Tmp/ (GetTempPath uses these)
+    if (s.find("/Temp/") != std::string::npos || s.find("/Tmp/") != std::string::npos ||
+        s.find("/temp/") != std::string::npos || s.find("/tmp/") != std::string::npos)
+        return true;
+#endif
     for (const char* env : {"TMPDIR", "TEMP", "TMP", "RUNNER_TEMP"}) {
         if (const char* v = std::getenv(env)) {
             auto prefix = fs::path(v).generic_string();
