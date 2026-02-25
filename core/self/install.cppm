@@ -108,8 +108,8 @@ static fs::path detect_existing_home() {
         if (binPath.empty() || !fs::exists(binPath)) continue;
         auto p = fs::weakly_canonical(fs::path(binPath));
         // Walk upward from the executable directory and locate install root by markers.
-        // This is more robust than hard-coding parent depth across different layouts.
-        for (auto cur = p.parent_path(); !cur.empty(); cur = cur.parent_path()) {
+        // Note: path("/").parent_path() returns "/" on Unix (root's parent is itself) — must check to avoid infinite loop.
+        for (auto cur = p.parent_path(); cur != cur.parent_path(); cur = cur.parent_path()) {
             if (!fs::exists(cur / "bin") || !fs::exists(cur / "subos")) continue;
             // Ignore temp extract dir (quick_install) — install to ~/.xlings instead.
             if (!is_under_temp_dir(cur))
