@@ -33,6 +33,9 @@ jobs:
         with:
           workspaces: core/xvm
 
+      - name: Test Rust unit tests (xvm)
+        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
+
       - name: Configure xmake
         run: |
           xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20

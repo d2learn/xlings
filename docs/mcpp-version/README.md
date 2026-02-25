@@ -23,6 +23,8 @@ docs/mcpp-version/
 │   ├── elfpatch-shrink-rpath-mode.md ← elfpatch 可选 shrink-rpath 模式
 │   ├── release-static-build.md ← Linux musl 静态构建方案
 │   ├── install-scripts-design.md ← 安装脚本方案与设计
+│   ├── xpkgs-subos-hybrid-design.md ← data/xpkgs + subos 混合视图设计
+│   ├── hybrid-libpath-order-subplan.md ← 混合视图子方案（优先级保证与 xpkg 规范）
 │   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
 │
 └── tasks/                    ← 任务拆分（13 个可并行任务）
@@ -158,6 +160,18 @@ docs/mcpp-version/
 
 ---
 
+### [xpkgs-subos-hybrid-design.md](xpkgs-subos-hybrid-design.md) — data/xpkgs + subos 混合视图设计
+
+明确 xlings 的双层模型：`data/xpkgs` 是固定真实包层，`subos` 是版本视图层；在此基础上同时支持聚合默认视图（`subos/lib`）与 per-program 闭包视图（直接指向 `data/xpkgs/<pkg>/<ver>/lib*`），并给出解析优先级、分阶段落地路径与验收标准。
+
+---
+
+### [hybrid-libpath-order-subplan.md](hybrid-libpath-order-subplan.md) — 混合视图子方案（优先级保证与 xpkg 规范）
+
+将“闭包优先、聚合作为 fallback”的路径解析顺序固化为可执行约束，包含 shim 单入口组装、xpkg 输入字段规范（禁直写 `LD_LIBRARY_PATH`）、CI 静态检查与多版本并存回归测试方案。
+
+---
+
 ## 快速索引
 
 | 想了解 | 去看 |
@@ -176,6 +190,8 @@ docs/mcpp-version/
 | Linux 静态构建方案 | [release-static-build.md](release-static-build.md) |
 | 安装脚本方案与设计 | [install-scripts-design.md](install-scripts-design.md) |
 | xim 目录多版本兼容 | [xim-dir-compat.md](xim-dir-compat.md) |
+| xpkgs/subos 混合视图方案 | [xpkgs-subos-hybrid-design.md](xpkgs-subos-hybrid-design.md) |
+| 混合视图顺序保证子方案 | [hybrid-libpath-order-subplan.md](hybrid-libpath-order-subplan.md) |
 | musl-gcc 构建任务 | [tasks/README.md](tasks/README.md) T11-T13 |
 | 实施任务和并行分组 | [tasks/README.md](tasks/README.md) |
 

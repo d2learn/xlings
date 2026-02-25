@@ -63,6 +63,9 @@ jobs:
         with:
           workspaces: core/xvm
 
+      - name: Test Rust unit tests (xvm)
+        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
+
       - name: Add Rust musl target (for xvm release-build.sh)
         run: rustup target add x86_64-unknown-linux-musl
 
@@ -230,6 +233,11 @@ jobs:
           xlings subos remove s2
           xlings subos list
           echo "OK: test subos removed"
+
+      - name: "Test: libpath compose order (T23)"
+        run: |
+          chmod +x tests/e2e/libpath_order_test.sh
+          bash tests/e2e/libpath_order_test.sh
 
       - name: "Test: E2E usability script"
         run: |

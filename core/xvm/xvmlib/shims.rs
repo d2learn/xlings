@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -29,6 +30,8 @@ pub static XVM_WORKSPACE_BINDIR: OnceLock<String> = OnceLock::new();
 pub static XVM_WORKSPACE_LIBDIR: OnceLock<String> = OnceLock::new();
 
 pub static XVM_SHIM_BIN: OnceLock<String> = OnceLock::new();
+const ENV_PROGRAM_LIBPATH: &str = "XLINGS_PROGRAM_LIBPATH";
+const ENV_EXTRA_LIBPATH: &str = "XLINGS_EXTRA_LIBPATH";
 
 // TODO: shim-mode, direct-mode
 pub enum Type {
@@ -42,10 +45,11 @@ pub struct Program {
     version: String,
     vtype: Option<String>,
     filename: Option<String>, // lib: target file
-    alias: Option<String>, // source file
+    alias: Option<String>,    // source file
     path: String,
     path_env: String,
-    ld_library_path_env: Option<String>,
+    program_libpath_env: Option<String>,
+    extra_libpath_env: Option<String>,
     envs: Vec<(String, String)>,
     bindings: IndexMap<String, String>,
     args: Vec<String>,
@@ -61,7 +65,8 @@ impl Program {
             alias: None,
             path: String::new(),
             path_env: String::new(),
-            ld_library_path_env: None,
+            program_libpath_env: None,
+            extra_libpath_env: None,
             envs: Vec::new(),
             bindings: IndexMap::new(),
             args: Vec::new(),
@@ -92,15 +97,46 @@ impl Program {
         // if key is PATH or LD_LIBRARY_PATH/DYLD_LIBRARY_PATH, then append to the existing value
         // PATH -> self.path_env
         // LD_LIBRARY_PATH -> self.ld_library_path_env
-        let mut spe = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let mut spe = if cfg!(target_os = "windows") {
+            ";"
+        } else {
+            ":"
+        };
         if key == "PATH" {
-            if self.path_env.is_empty() { spe = ""; }
+            if self.path_env.is_empty() {
+                spe = "";
+            }
             self.path_env = format!("{}{}{}", self.path_env, spe, value);
+        } else if key == ENV_PROGRAM_LIBPATH {
+            if self.program_libpath_env.is_none() {
+                spe = "";
+            }
+            self.program_libpath_env = Some(format!(
+                "{}{}{}",
+                self.program_libpath_env.clone().unwrap_or_default(),
+                spe,
+                value
+            ));
+        } else if key == ENV_EXTRA_LIBPATH {
+            if self.extra_libpath_env.is_none() {
+                spe = "";
+            }
+            self.extra_libpath_env = Some(format!(
+                "{}{}{}",
+                self.extra_libpath_env.clone().unwrap_or_default(),
+                spe,
+                value
+            ));
         } else if key == "LD_LIBRARY_PATH" || key == "DYLD_LIBRARY_PATH" {
-            if self.ld_library_path_env.is_none() { spe = ""; }
-            self.ld_library_path_env = Some(format!("{}{}{}",
-                self.ld_library_path_env.clone().unwrap_or_default(),
-                spe, value
+            // Backward compatibility: migrate legacy direct LD_LIBRARY_PATH into EXTRA input.
+            if self.extra_libpath_env.is_none() {
+                spe = "";
+            }
+            self.extra_libpath_env = Some(format!(
+                "{}{}{}",
+                self.extra_libpath_env.clone().unwrap_or_default(),
+                spe,
+                value
             ));
         } else {
             self.envs.push((key.to_string(), value.to_string()));
@@ -115,9 +151,13 @@ impl Program {
 
     pub fn add_binding(&mut self, target: &str, version: &str) {
         if self.bindings.contains_key(target) {
-            eprintln!("Warning: bind for [ {} ] already exists, overwriting", target);
+            eprintln!(
+                "Warning: bind for [ {} ] already exists, overwriting",
+                target
+            );
         }
-        self.bindings.insert(target.to_string(), version.to_string());
+        self.bindings
+            .insert(target.to_string(), version.to_string());
     }
 
     pub fn get_bindings(&self) -> &IndexMap<String, String> {
@@ -145,11 +185,11 @@ impl Program {
         if !self.path_env.is_empty() {
             envs_tmp.push(("PATH".to_string(), self.path_env.clone()));
         }
-        if let Some(ld_path) = &self.ld_library_path_env {
-            envs_tmp.push((
-                if cfg!(target_os = "linux") { "LD_LIBRARY_PATH" } else { "DYLD_LIBRARY_PATH" }.to_string(),
-                ld_path.clone())
-            );
+        if let Some(program_libpath) = &self.program_libpath_env {
+            envs_tmp.push((ENV_PROGRAM_LIBPATH.to_string(), program_libpath.clone()));
+        }
+        if let Some(extra_libpath) = &self.extra_libpath_env {
+            envs_tmp.push((ENV_EXTRA_LIBPATH.to_string(), extra_libpath.clone()));
         }
         VData {
             alias: self.alias.clone(),
@@ -175,7 +215,11 @@ impl Program {
                 .map(|(k, v)| (k.clone(), expand_xlings_vars(v)))
                 .collect();
             self.add_envs(
-                expanded.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>().as_slice()
+                expanded
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect::<Vec<_>>()
+                    .as_slice(),
             );
         }
         if let Some(bindings) = &vdata.bindings {
@@ -203,59 +247,73 @@ impl Program {
         }
 
         // If path is set and we run the program by name (no alias), resolve executable (path/name or path/bin/name)
-        let program_path: Option<std::path::PathBuf> = if self.alias.is_none() && !self.path.is_empty() {
-            // Resolve relative path against workspace dir (XLINGS_SUBOS) for package bootstrap entries
-            let mut base: std::path::PathBuf = if Path::new(&self.path).is_relative() {
-                XVM_WORKSPACE_DIR.get().map(|w| Path::new(w).join(&self.path)).unwrap_or_else(|| PathBuf::from(&self.path))
+        let program_path: Option<std::path::PathBuf> =
+            if self.alias.is_none() && !self.path.is_empty() {
+                // Resolve relative path against workspace dir (XLINGS_SUBOS) for package bootstrap entries
+                let mut base: std::path::PathBuf = if Path::new(&self.path).is_relative() {
+                    XVM_WORKSPACE_DIR
+                        .get()
+                        .map(|w| Path::new(w).join(&self.path))
+                        .unwrap_or_else(|| PathBuf::from(&self.path))
+                } else {
+                    PathBuf::from(&self.path)
+                };
+                // Normalize base (resolve ".." and ".") so exists() and Command::new() find the binary reliably
+                if let Ok(canon) = fs::canonicalize(&base) {
+                    base = canon;
+                }
+                let candidates: Vec<std::path::PathBuf> = if cfg!(target_os = "windows") {
+                    let names = [format!("{}.exe", self.name), format!("{}.bat", self.name)];
+                    let mut out = Vec::new();
+                    for n in &names {
+                        out.push(base.join(n));
+                    }
+                    for n in &names {
+                        out.push(base.join("bin").join(n));
+                    }
+                    out
+                } else {
+                    vec![base.join(&self.name), base.join("bin").join(&self.name)]
+                };
+                let exe_path = candidates.into_iter().find(|p| p.exists());
+                match exe_path {
+                    Some(p) => Some(p),
+                    None => {
+                        eprintln!(
+                            "xvm: executable not found at {}",
+                            base.join(&self.name).display()
+                        );
+                        eprintln!(
+                            "  (also tried {})",
+                            base.join("bin").join(&self.name).display()
+                        );
+                        #[cfg(target_os = "windows")]
+                        eprintln!(
+                            "  (looked for {}.exe and {}.bat in path and path/bin)",
+                            self.name, self.name
+                        );
+                        eprintln!("  path: {}", self.path);
+                        eprintln!(
+                            "  hint: install with e.g. xlings install {}@<version>",
+                            self.name
+                        );
+                        return 1;
+                    }
+                }
             } else {
-                PathBuf::from(&self.path)
+                None
             };
-            // Normalize base (resolve ".." and ".") so exists() and Command::new() find the binary reliably
-            if let Ok(canon) = fs::canonicalize(&base) {
-                base = canon;
-            }
-            let candidates: Vec<std::path::PathBuf> = if cfg!(target_os = "windows") {
-                let names = [
-                    format!("{}.exe", self.name),
-                    format!("{}.bat", self.name),
-                ];
-                let mut out = Vec::new();
-                for n in &names {
-                    out.push(base.join(n));
-                }
-                for n in &names {
-                    out.push(base.join("bin").join(n));
-                }
-                out
-            } else {
-                vec![
-                    base.join(&self.name),
-                    base.join("bin").join(&self.name),
-                ]
-            };
-            let exe_path = candidates.into_iter().find(|p| p.exists());
-            match exe_path {
-                Some(p) => Some(p),
-                None => {
-                    eprintln!("xvm: executable not found at {}", base.join(&self.name).display());
-                    eprintln!("  (also tried {})", base.join("bin").join(&self.name).display());
-                    #[cfg(target_os = "windows")]
-                    eprintln!("  (looked for {}.exe and {}.bat in path and path/bin)", self.name, self.name);
-                    eprintln!("  path: {}", self.path);
-                    eprintln!("  hint: install with e.g. xlings install {}@<version>", self.name);
-                    return 1;
-                }
-            }
-        } else {
-            None
-        };
 
         let path_env = self.get_path_env();
         let path_env_value = if let Some(ref p) = program_path {
             if let Some(parent) = p.parent() {
                 let parent_str = parent.to_string_lossy();
                 if parent_str != self.path.as_str() {
-                    let sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+                    let sep = if cfg!(target_os = "windows") {
+                        ";"
+                    } else {
+                        ":"
+                    };
                     format!("{}{}{}", parent_str, sep, path_env.1)
                 } else {
                     path_env.1
@@ -281,14 +339,10 @@ impl Program {
             .status();
 
         match status {
-            Ok(status) => {
-                status.code().unwrap_or(1)
-            },
+            Ok(status) => status.code().unwrap_or(1),
             Err(e) => {
                 #[cfg(target_os = "linux")]
-                if e.kind() == std::io::ErrorKind::NotFound
-                    && program_path.is_some()
-                {
+                if e.kind() == std::io::ErrorKind::NotFound && program_path.is_some() {
                     let bin_path = program_path.as_ref().unwrap();
                     let ld_env = self.get_ld_library_path_env();
                     let extended = build_extended_envs(self.envs.clone());
@@ -318,10 +372,13 @@ impl Program {
         //println!("Program [{}] finished", self.name);
     }
 
-    // TODO: 
+    // TODO:
     pub fn link_to(&self, dir: &str, recover: bool) {
         let source_libname = self.alias.clone().unwrap();
-        let target_libname = self.filename.clone().unwrap_or_else(|| source_libname.clone());
+        let target_libname = self
+            .filename
+            .clone()
+            .unwrap_or_else(|| source_libname.clone());
         let lib_real_path = format!("{}/{}", self.path, source_libname);
         let lib_path = format!("{}/{}", dir, target_libname);
 
@@ -364,8 +421,11 @@ impl Program {
     ///// private methods
 
     fn get_path_env(&self) -> (String, String) {
-
-        let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let separator = if cfg!(target_os = "windows") {
+            ";"
+        } else {
+            ":"
+        };
         let mut new_path = self.path_env.clone();
 
         // append workspace/bin to path
@@ -374,7 +434,8 @@ impl Program {
         new_path.push_str(separator);
         new_path.push_str(XVM_WORKSPACE_BINDIR.get().unwrap());
 
-        if cfg!(target_os = "windows") { // libpath -> path
+        if cfg!(target_os = "windows") {
+            // libpath -> path
             // on windows, we need to append the workspace/lib to path
             new_path.push_str(separator);
             new_path.push_str(XVM_WORKSPACE_LIBDIR.get().unwrap());
@@ -397,33 +458,34 @@ impl Program {
     }
 
     pub fn get_ld_library_path_env(&self) -> (String, String) {
-        if let Some(mut ld_path) = self.ld_library_path_env.clone() {
-
-            ld_path.push(':');
-            ld_path.push_str(XVM_WORKSPACE_LIBDIR.get().unwrap());
-
-            // linux and macos(DYLD_LIBRARY_PATH)
-            let ld_library_path_env_name = if cfg!(target_os = "linux") {
-                "LD_LIBRARY_PATH"
-            } else if cfg!(target_os = "macos") {
-                "DYLD_LIBRARY_PATH"
-            } else { // unsupported OS - WINDOWS? 
-                return ("XVM_ENV_NULL".to_string(), String::new());
-            };
-
-            let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
-
-            let new_ld_path = if current_ld_path.is_empty() {
-                ld_path.to_string()
-            } else {
-                //let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
-                format!("{}:{}", ld_path, current_ld_path)
-            };
-
-            (ld_library_path_env_name.to_string(), new_ld_path)
+        // linux and macos(DYLD_LIBRARY_PATH)
+        let (ld_library_path_env_name, sep) = if cfg!(target_os = "linux") {
+            ("LD_LIBRARY_PATH", ':')
+        } else if cfg!(target_os = "macos") {
+            ("DYLD_LIBRARY_PATH", ':')
         } else {
-            // return a null env
-            (String::from("XVM_ENV_NULL"), String::new())
+            // unsupported OS - WINDOWS?
+            return ("XVM_ENV_NULL".to_string(), String::new());
+        };
+
+        let workspace_lib = XVM_WORKSPACE_LIBDIR.get().map(|s| s.as_str());
+        let current_ld_path = std::env::var(ld_library_path_env_name).unwrap_or_default();
+
+        let composed = compose_library_path(
+            self.program_libpath_env.as_deref(),
+            self.extra_libpath_env.as_deref(),
+            workspace_lib,
+            if current_ld_path.is_empty() {
+                None
+            } else {
+                Some(current_ld_path.as_str())
+            },
+            sep,
+        );
+
+        match composed {
+            Some(value) if !value.is_empty() => (ld_library_path_env_name.to_string(), value),
+            _ => ("XVM_ENV_NULL".to_string(), String::new()),
         }
     }
 
@@ -470,13 +532,24 @@ impl Program {
         let target_path = format!("{}/{}", target_dir, target_filename);
         println!("TPath: {}", target_path);
 
-        if !self.envs.is_empty() {
+        if !self.envs.is_empty()
+            || !self.path_env.is_empty()
+            || self.program_libpath_env.is_some()
+            || self.extra_libpath_env.is_some()
+        {
             println!("Envs:");
             if !self.path_env.is_empty() {
                 println!("  PATH={}", self.path_env);
             }
-            if let Some(ld_path) = &self.ld_library_path_env {
-                println!("  LD_LIBRARY_PATH={}", ld_path);
+            if let Some(ld_path) = &self.program_libpath_env {
+                println!("  {}={}", ENV_PROGRAM_LIBPATH, ld_path);
+            }
+            if let Some(ld_path) = &self.extra_libpath_env {
+                println!("  {}={}", ENV_EXTRA_LIBPATH, ld_path);
+            }
+            let resolved_ld = self.get_ld_library_path_env();
+            if resolved_ld.0 != "XVM_ENV_NULL" {
+                println!("  LD_LIBRARY_PATH={}", resolved_ld.1);
             }
             for (key, value) in &self.envs {
                 println!("  {}={}", key, value);
@@ -498,19 +571,13 @@ impl Program {
 }
 
 pub fn init(workspace_dir: &str) {
-    XVM_WORKSPACE_DIR.get_or_init(|| {
-        workspace_dir.to_string()
-    });
+    XVM_WORKSPACE_DIR.get_or_init(|| workspace_dir.to_string());
 
     let bindir = format!("{}/bin", workspace_dir);
 
-    XVM_WORKSPACE_BINDIR.get_or_init(|| {
-        bindir.clone()
-    });
+    XVM_WORKSPACE_BINDIR.get_or_init(|| bindir.clone());
 
-    XVM_WORKSPACE_LIBDIR.get_or_init(|| {
-        format!("{}/lib", workspace_dir)
-    });
+    XVM_WORKSPACE_LIBDIR.get_or_init(|| format!("{}/lib", workspace_dir));
 
     XVM_SHIM_BIN.get_or_init(|| {
         let bin = shim_file("xvm-shim", &bindir);
@@ -542,18 +609,20 @@ pub fn delete(target: &str, dir: &str) {
 }
 
 fn create_shim_script_file(target: &str, dir: &str, content: &str) {
-
     let (sfile, args_placeholder, header) = shim_script_file(target, dir);
 
     if !fs::metadata(&sfile).is_ok() {
-
         if !fs::metadata(dir).is_ok() {
             fs::create_dir_all(dir).unwrap();
         }
 
         //println!("creating shim file for [{}]", target);
 
-        fs::write(&sfile, &format!("{}\n{} {}", header, content, args_placeholder)).unwrap();
+        fs::write(
+            &sfile,
+            &format!("{}\n{} {}", header, content, args_placeholder),
+        )
+        .unwrap();
 
         #[cfg(unix)]
         {
@@ -589,6 +658,44 @@ fn shim_script_file<'a>(target: &str, dir: &'a str) -> (String, &'a str, &'a str
     (sfile, args_placeholder, header)
 }
 
+fn compose_library_path(
+    program_closure: Option<&str>,
+    extra_libpath: Option<&str>,
+    workspace_lib: Option<&str>,
+    inherited: Option<&str>,
+    sep: char,
+) -> Option<String> {
+    let mut seen = HashSet::<String>::new();
+    let mut ordered = Vec::<String>::new();
+
+    let mut push_segments = |value: Option<&str>| {
+        if let Some(v) = value {
+            for raw in v.split(sep) {
+                let seg = raw.trim();
+                if seg.is_empty() {
+                    continue;
+                }
+                if seen.insert(seg.to_string()) {
+                    ordered.push(seg.to_string());
+                }
+            }
+        }
+    };
+
+    // fixed precedence: PROGRAM -> EXTRA -> subos/lib -> inherited
+    push_segments(program_closure);
+    push_segments(extra_libpath);
+    push_segments(workspace_lib);
+    push_segments(inherited);
+
+    if ordered.is_empty() {
+        None
+    } else {
+        let joiner = sep.to_string();
+        Some(ordered.join(&joiner))
+    }
+}
+
 fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
     let sep = if cfg!(windows) { ";" } else { ":" };
 
@@ -601,6 +708,41 @@ fn build_extended_envs(envs: Vec<(String, String)>) -> Vec<(String, String)> {
             (key, new_val)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compose_library_path;
+
+    #[test]
+    fn compose_library_path_respects_precedence_and_dedup() {
+        let result = compose_library_path(
+            Some("/a:/b"),
+            Some("/b:/c"),
+            Some("/w"),
+            Some("/c:/sys"),
+            ':',
+        )
+        .expect("composed path should exist");
+        assert_eq!(result, "/a:/b:/c:/w:/sys");
+    }
+
+    #[test]
+    fn compose_library_path_handles_empty_inputs() {
+        let result = compose_library_path(None, None, Some("/w"), None, ':')
+            .expect("workspace fallback should exist");
+        assert_eq!(result, "/w");
+
+        let none = compose_library_path(None, None, None, None, ':');
+        assert!(none.is_none());
+    }
+
+    #[test]
+    fn legacy_ld_library_path_is_treated_as_extra_input() {
+        let result = compose_library_path(None, Some("/legacy"), Some("/workspace/lib"), None, ':')
+            .expect("composed path should exist");
+        assert_eq!(result, "/legacy:/workspace/lib");
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -625,7 +767,9 @@ fn run_via_system_loader(
     let loader = system_loader_paths()
         .into_iter()
         .find(|p| p.exists())
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no system ELF loader found"))?;
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "no system ELF loader found")
+        })?;
     let mut cmd = Command::new(loader);
     cmd.arg(bin_path)
         .args(alias_args)

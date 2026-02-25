@@ -34,6 +34,10 @@ jobs:
         with:
           workspaces: core/xvm
 
+      - name: Test Rust unit tests (xvm)
+        shell: pwsh
+        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
+
       - name: Configure xmake
         run: xmake f -p windows -m release
 
