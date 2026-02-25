@@ -63,15 +63,37 @@ if [[ "$OS" == "Linux" ]]; then
 elif [[ "$OS" == "Darwin" ]]; then
   RPATH_OUT="$(otool -l "$D2X_BIN" 2>&1)" || fail "otool -l failed on $D2X_BIN"
 
-  if ! echo "$RPATH_OUT" | grep -q "LC_RPATH"; then
-    echo "$RPATH_OUT"
-    fail "no LC_RPATH found in d2x binary"
-  fi
+  # On macOS, LC_RPATH is only needed when the binary has non-system dylib
+  # dependencies.  If all deps are under /usr/lib/ or /System/, elfpatch
+  # correctly skips RPATH injection.
+  DYLIB_OUT="$(otool -L "$D2X_BIN" 2>&1)" || fail "otool -L failed on $D2X_BIN"
+  HAS_NON_SYSTEM_DEPS=false
+  while IFS= read -r line; do
+    dep="$(echo "$line" | sed -n 's/^[[:space:]]*\(.*\) (compatibility.*/\1/p')"
+    if [[ -n "$dep" && "$dep" != "$D2X_BIN"* \
+       && "$dep" != /usr/lib/* && "$dep" != /System/* \
+       && "$dep" != @* ]]; then
+      HAS_NON_SYSTEM_DEPS=true
+      break
+    fi
+  done <<< "$DYLIB_OUT"
 
-  log "  LC_RPATH entries:"
-  echo "$RPATH_OUT" | grep -A2 "LC_RPATH" | while IFS= read -r line; do
-    log "    $line"
-  done
+  if [[ "$HAS_NON_SYSTEM_DEPS" == "true" ]]; then
+    if ! echo "$RPATH_OUT" | grep -q "LC_RPATH"; then
+      echo "$RPATH_OUT"
+      fail "non-system deps found but no LC_RPATH in binary"
+    fi
+    log "  LC_RPATH entries:"
+    echo "$RPATH_OUT" | grep -A2 "LC_RPATH" | while IFS= read -r line; do
+      log "    $line"
+    done
+  else
+    log "  binary only links system dylibs — LC_RPATH not required (OK)"
+    log "  dylibs:"
+    echo "$DYLIB_OUT" | grep -v "^$D2X_BIN" | head -10 | while IFS= read -r line; do
+      log "    $line"
+    done
+  fi
 fi
 
 # ── Test 2: runtime — libraries resolve through RPATH alone ─────────────
