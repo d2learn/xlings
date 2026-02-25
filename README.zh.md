@@ -89,6 +89,11 @@ xlings install d2x:mcpp-standard
 
 👉 [更多细节...](https://xlings.d2learn.org/documents/quick-start/install-and-version.html)
 
+> [!CAUTION]
+> xlings 正在从 Lua 迁移到 MC++ 并进行模块化重构，部分包在迁移期间可能存在不稳定的情况。如遇问题，请通过 [Issues] 或 [论坛] 反馈。
+
+[Issues]: https://github.com/d2learn/xlings/issues
+
 ## 社区
 
 - 交流群 (Q): 167535744 / 1006282943
