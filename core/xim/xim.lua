@@ -128,6 +128,8 @@ function main(...)
             local main_target, cmds = _input_process(args)
             --print("main_target: ", main_target)
             --print("cmds: ", cmds)
+            -- reset rundir to workingdir (os.curdir is -P projectdir not xmake/xlings rundir )
+            os.cd(os.workingdir())
             CmdProcessor.new(main_target, cmds):run()
         end,
         catch {

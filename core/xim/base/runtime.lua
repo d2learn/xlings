@@ -102,9 +102,9 @@ function set_pkginfo(info)
 end
 
 function get_rundir()
-    local rundir = platform.get_config_info().rundir
+    local rundir = xim_runtime_data.rundir
     if rundir == nil or not os.isdir(rundir) then
-        rundir = path.absolute(".")
+        rundir = platform.get_config_info().rundir
     end
     return rundir
 end

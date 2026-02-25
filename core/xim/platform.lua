@@ -86,7 +86,7 @@ function get_config_info()
         bindir = xlings_bin_dir,
         libdir = xlings_lib_dir,
         subosdir = xlings_subos_dir,
-        rundir = xlings_rundir,
+        rundir = xlings_rundir or os.workingdir(),
         rcachedir = xlings_root_cache_dir,
         cachedir = xlings_cachedir,
         name = xname,
