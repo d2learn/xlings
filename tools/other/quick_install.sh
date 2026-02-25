@@ -138,5 +138,5 @@ fi
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
 chmod +x bin/xlings
-# Do not use </dev/tty - fails in CI (No such device). Install uses defaults when stdin is not a TTY.
-./bin/xlings self install
+# Use /dev/tty for interactive prompts when piped (curl|bash); fallback when CI has no /dev/tty
+( ./bin/xlings self install < /dev/tty ) || ./bin/xlings self install
