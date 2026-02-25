@@ -3,6 +3,7 @@ import("lib.detect.find_tool")
 import("index.IndexManager")
 import("pm.XPackage")
 import("libxpkg.log")
+import("libxpkg.pkginfo")
 
 local _index_manager = nil
 local _patchelf = nil
@@ -218,15 +219,23 @@ function is_shrink()
 end
 
 local function _resolve_dep_install_dir(dep_spec)
-    local index = _index()
-    local matched = index:match_package_version(dep_spec)
-    if not matched then
-        return nil
-    end
+    local dep_name = dep_spec and dep_spec:gsub("@.*", "") or ""
+    dep_name = dep_name:gsub("^.+:", "")
+    local dep_version = (dep_spec and dep_spec:find("@", 1, true)) and dep_spec:match("@(.+)") or nil
 
+    local index = _index()
+    local matched = dep_spec
     local pkg_meta = index:load_package(matched)
     if not pkg_meta then
-        return nil
+        matched = index:match_package_version(dep_spec)
+        if not matched then
+            return pkginfo.dep_install_dir(dep_name, dep_version)
+        end
+        pkg_meta = index:load_package(matched)
+    end
+
+    if not pkg_meta then
+        return pkginfo.dep_install_dir(dep_name, dep_version)
     end
 
     local xpkg = try {
@@ -240,7 +249,7 @@ local function _resolve_dep_install_dir(dep_spec)
         }
     }
     if not xpkg then
-        return nil
+        return pkginfo.dep_install_dir(dep_name, dep_version)
     end
     local effective_name = xpkg.name
     if xpkg.namespace then
@@ -250,12 +259,17 @@ local function _resolve_dep_install_dir(dep_spec)
     if os.isdir(install_dir) then
         return install_dir
     end
-    return nil
+    return pkginfo.dep_install_dir(dep_name, dep_version)
 end
 
 function closure_lib_paths(opt)
     opt = opt or {}
+    local resolved_deps_list = opt.resolved_deps_list or runtime.get_pkginfo().resolved_deps_list or {}
     local deps_list = opt.deps_list or runtime.get_pkginfo().deps_list or {}
+    local dep_specs = resolved_deps_list
+    if #dep_specs == 0 then
+        dep_specs = deps_list
+    end
     local values = {}
     local seen = {}
 
@@ -271,7 +285,7 @@ function closure_lib_paths(opt)
         end
     end
 
-    for _, dep_spec in ipairs(deps_list) do
+    for _, dep_spec in ipairs(dep_specs) do
         local dep_dir = _resolve_dep_install_dir(dep_spec)
         if dep_dir then
             for _, sub in ipairs({"lib64", "lib"}) do
@@ -380,7 +394,10 @@ function apply_auto(opts)
     end
     local pkg = runtime.get_pkginfo()
     local target = opts.target or pkg.install_dir
-    local rpath = opts.rpath or closure_lib_paths({deps_list = pkg.deps_list})
+    local rpath = opts.rpath or closure_lib_paths({
+        deps_list = pkg.deps_list,
+        resolved_deps_list = pkg.resolved_deps_list
+    })
     local shrink = opts.shrink
     if shrink == nil then
         shrink = is_shrink()

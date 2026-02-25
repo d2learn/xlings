@@ -323,6 +323,7 @@ function CmdProcessor:install()
             end
 
             local deps_list = self._pm_executor:deps()
+            local resolved_deps_list = {}
             if deps_list and not table.empty(deps_list) then
                 cprint("[xlings:xim]: check ${bright green}" .. self.target .. "${clear} dependencies...")
                 for _, dep_name in ipairs(deps_list) do
@@ -330,6 +331,7 @@ function CmdProcessor:install()
                     if not dep_pkgname then
                         cprint("${dim}[xlings:xim]: skip dependency (not in index): %s${clear}", dep_name)
                     else
+                        table.insert(resolved_deps_list, dep_pkgname)
                         cprint("${dim}---${clear}" .. dep_name)
                         new(dep_name, {
                             install = true,
@@ -341,7 +343,9 @@ function CmdProcessor:install()
                 end
             end
 
-            if self._pm_executor:install(xpkg) then
+            if self._pm_executor:install({
+                resolved_deps_list = resolved_deps_list
+            }) then
                 self:_restart_tips()
                 local cfg = platform.get_config_info()
                 if cfg.subosdir and deps_list and not table.empty(deps_list) then

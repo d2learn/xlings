@@ -15,6 +15,7 @@ xim_runtime_data = {
         install_file = "xim-0.0.0.exe",
         install_dir = "namespace-x-name/version",
         deps_list = {},
+        resolved_deps_list = {},
         elfpatch_auto = false,
         elfpatch_shrink = false,
     },
@@ -88,6 +89,9 @@ function set_pkginfo(info)
     end
     if info.deps_list ~= nil then
         xim_runtime_data.pkginfo.deps_list = info.deps_list
+    end
+    if info.resolved_deps_list ~= nil then
+        xim_runtime_data.pkginfo.resolved_deps_list = info.resolved_deps_list
     end
     if info.elfpatch_auto ~= nil then
         xim_runtime_data.pkginfo.elfpatch_auto = info.elfpatch_auto
