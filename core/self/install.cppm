@@ -198,9 +198,10 @@ export int cmd_install() {
     if (!installedVersion.empty())
         std::println("[xlings:self] installed version at {}: v{}", targetHome.string(), installedVersion);
 
-    // Skip if source == target
+    // Skip if source == target (equivalent returns unspecified when paths don't exist)
     std::error_code cmp_ec;
-    if (fs::equivalent(srcDir, targetHome, cmp_ec)) {
+    bool sameDir = fs::equivalent(srcDir, targetHome, cmp_ec);
+    if (!cmp_ec && sameDir) {
         std::println("[xlings:self] already running from target directory, nothing to copy.");
         auto currentLink = targetHome / "subos" / "current";
         auto defaultDir  = targetHome / "subos" / "default";
