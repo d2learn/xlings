@@ -34,6 +34,7 @@
 | [T24](T24-shim-init-module.md) | init 模块 + config/xvm 模板 + xself cmd_init | C++ | 独立 | ~120 行 |
 | [T25](T25-subos-create-unified.md) | subos create 改用 init + 从 config 复制 xvm | C++ | 依赖 T24 | ~40 行 |
 | [T26](T26-release-scripts-unified.md) | 发布脚本三平台统一（xmake + config + init） | Bash/PS1 | 依赖 T24 | ~80 行 |
+| [T27](T27-ci-fix-shim-mirror-macos.md) | CI 修复：shim 初始化 + 镜像切换 + macOS 兼容 | YAML/Bash/C++ | 依赖 T24-T26 | ~50 行 |
 
 ---
 
@@ -196,6 +197,7 @@ Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分�
 | T24 | init 模块 + config/xvm 模板 + xself cmd_init 调用 ensure_subos_shims | 无 |
 | T25 | subos create 从 config 复制 xvm，调用 ensure_subos_shims | T24 |
 | T26 | 发布脚本三平台统一：xmake 打包、config 复制两次、调用 init | T24 |
+| T27 | CI 修复：Phase 3 添加 self init + 镜像切换 + macOS xmake bundle 跳过 | T24-T26 |
 
 ---
 
@@ -360,3 +362,4 @@ pwsh ./tools/windows_release.ps1
 | init 模块与 ensure_subos_shims | [T24](T24-shim-init-module.md) §3 |
 | subos create 统一逻辑 | [T25](T25-subos-create-unified.md) §4 |
 | 发布脚本三平台统一 | [T26](T26-release-scripts-unified.md) §4 |
+| CI 修复（shim/镜像/macOS）| [T27](T27-ci-fix-shim-mirror-macos.md) §3 |
