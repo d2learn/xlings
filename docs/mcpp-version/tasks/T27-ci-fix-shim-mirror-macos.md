@@ -19,7 +19,7 @@ PR #151 将 shim 创建从打包时改为安装时，引入 `config/xvm` 模板�
 |---|------|------|---------|------|
 | 1 | Phase 3 无 shim，xvm 无法创建新 shim | Phase 3 直接解压包、未运行 install/init | ✅ 正确修复 | Phase 3 setup 中调用 `xlings self init` |
 | 2 | CI/E2E 索引同步超时（Gitee 不可达） | `config/xlings.json` 默认 `mirror: "CN"` | ✅ 根源修复 | 改 `config/xlings.json` 默认值为 GLOBAL |
-| 3 | macOS xmake bundle SIGABRT 崩溃 | `xmake-bundle-v3.0.7.macos.arm64` 二进制有问题 | ⚠️ Workaround | macOS CI 设 `SKIP_XMAKE_BUNDLE=1` |
+| 3 | macOS xmake bundle SIGABRT 崩溃 | `xmake-bundle-v3.0.7.macos.arm64` 二进制有问题 | ✅ 正确修复 | 从 `macos_release.sh` 删除 bundle 代码，macOS 使用 brew 的 xmake |
 | 4 | macOS 复制二进制后签名失效 | Apple Silicon 要求 ad-hoc codesign | ✅ 正确修复 | `make_files_executable` 对 Mach-O 文件调用 codesign |
 | 5 | `platform::exec` 返回原始 waitpid 值 | `std::system()` 返回编码后的状态 | ✅ Bug 修复 | 用 `WEXITSTATUS`/`WIFSIGNALED` 提取正确退出码 |
 
@@ -54,15 +54,16 @@ export XLINGS_HOME XLINGS_DATA="$XLINGS_HOME/data" XLINGS_SUBOS="$XLINGS_HOME/su
 
 CN 镜像保留在 `mirrors` 字段中，中国用户可通过 `xlings self config` 或手动切换。
 
-### 3.3 macOS 跳过 xmake bundle（问题 #3 — Workaround）
+### 3.3 删除 macOS xmake bundle（问题 #3）
 
-**改动文件**：`.github/workflows/xlings-ci-macos.yml`
+**改动文件**：`tools/macos_release.sh`
 
-```yaml
-SKIP_NETWORK_VERIFY=1 SKIP_XMAKE_BUNDLE=1 ./tools/macos_release.sh
-```
+PR #151 新增了 macOS xmake bundle 打包功能，但 `xmake-bundle-v3.0.7.macos.arm64` 在 Apple Silicon 上 SIGABRT 崩溃。直接删除该功能代码（恢复 PR 之前的行为），macOS 用户通过 `brew install xmake` 安装 xmake。
 
-**遗留**：需要单独排查 `xmake-bundle-v3.0.7.macos.arm64` SIGABRT 原因。
+**优于 CI workaround 的理由**：
+- 不需要 `SKIP_XMAKE_BUNDLE=1` 环境变量
+- release 脚本中没有已知坏的代码
+- 保留注释说明未来可恢复
 
 ### 3.4 macOS codesign 优化（问题 #4）
 
@@ -114,7 +115,8 @@ export int exec(const std::string& cmd) {
 | `core/platform.cppm` | 修改 | `exec()` 正确提取退出码 |
 | `core/platform/macos.cppm` | 修改 | `make_files_executable()` 优化 codesign |
 | `.github/workflows/xlings-ci-linux.yml` | 修改 | Phase 3 添加 `self init` |
-| `.github/workflows/xlings-ci-macos.yml` | 修改 | Phase 3 添加 `self init` + `SKIP_XMAKE_BUNDLE=1` |
+| `.github/workflows/xlings-ci-macos.yml` | 修改 | Phase 3 添加 `self init` |
+| `tools/macos_release.sh` | 修改 | 删除 xmake bundle（SIGABRT），保留注释 |
 
 ---
 
@@ -122,5 +124,5 @@ export int exec(const std::string& cmd) {
 
 | 问题 | 建议 |
 |------|------|
-| `xmake-bundle-v3.0.7.macos.arm64` SIGABRT | 单独 issue：排查 xmake bundle macOS 兼容性，可能需要 codesign 或换 bundle 版本 |
+| macOS xmake bundle 未来恢复 | 排查 `xmake-bundle-v3.0.7.macos.arm64` SIGABRT 后可恢复 `macos_release.sh` 中的 bundle 代码 |
 | 中国用户首次安装默认走 GitHub | 安装脚本可通过 IP/locale 自动检测并设置 CN 镜像 |

@@ -82,27 +82,10 @@ mkdir -p "$OUT_DIR/config/xvm"
 cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
 cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
-# Bundled xmake (same as Linux)
-XMAKE_READY=0
-if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
-  XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.macos.arm64"
-  XMAKE_BIN="$OUT_DIR/bin/xmake"
-  info "Downloading bundled xmake..."
-  if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
-    chmod +x "$XMAKE_BIN"
-    info "Bundled xmake OK"
-    XMAKE_READY=1
-  else
-    info "curl failed, trying wget..."
-    if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
-      chmod +x "$XMAKE_BIN"
-      info "Bundled xmake OK (wget fallback)"
-      XMAKE_READY=1
-    else
-      fail "bundled xmake download failed (curl + wget)"
-    fi
-  fi
-fi
+# NOTE: xmake bundle is NOT included on macOS — the xmake-bundle binary
+# currently crashes with SIGABRT on Apple Silicon (arm64).
+# macOS users install xmake via: brew install xmake
+# When the upstream bundle is fixed, re-enable bundling here.
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
@@ -140,9 +123,6 @@ info "=== Verification ==="
 for f in bin/xlings bin/xvm bin/xvm-shim; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
-if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
-  [[ -x "$OUT_DIR/bin/xmake" ]] || fail "bin/xmake is missing or not executable"
-fi
 info "OK: all binaries present and executable"
 
 for d in subos/default/bin subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell config/xvm; do
