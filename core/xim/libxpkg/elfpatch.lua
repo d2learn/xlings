@@ -6,10 +6,6 @@ import("libxpkg.log")
 import("libxpkg.pkginfo")
 
 local _index_manager = nil
-local _patchelf = nil
-local _readelf = nil
-local _install_name_tool = nil
-local _otool = nil
 
 local function _trim(s)
     if not s then
@@ -26,32 +22,40 @@ local function _index()
     return _index_manager
 end
 
-local function _get_tool(cache_key, toolname)
-    if cache_key == "patchelf" then
-        if _patchelf == nil then
-            _patchelf = find_tool(toolname)
+-- Probe a tool by running it directly; returns {program=toolname} or nil.
+local function _try_probe_tool(toolname)
+    local probe_args_list = {{"--version"}, {"--help"}, {"-h"}}
+    for _, probe_args in ipairs(probe_args_list) do
+        local ok = try {
+            function()
+                os.iorunv(toolname, probe_args)
+                return true
+            end,
+            catch { function() return false end }
+        }
+        if ok then
+            return {program = toolname}
         end
-        return _patchelf
-    end
-    if cache_key == "readelf" then
-        if _readelf == nil then
-            _readelf = find_tool(toolname)
-        end
-        return _readelf
-    end
-    if cache_key == "install_name_tool" then
-        if _install_name_tool == nil then
-            _install_name_tool = find_tool(toolname)
-        end
-        return _install_name_tool
-    end
-    if cache_key == "otool" then
-        if _otool == nil then
-            _otool = find_tool(toolname)
-        end
-        return _otool
     end
     return nil
+end
+
+local _tool_cache = {}
+
+local function _get_tool(cache_key, toolname)
+    if _tool_cache[cache_key] ~= nil then
+        if _tool_cache[cache_key] == false then return nil end
+        return _tool_cache[cache_key]
+    end
+    local tool = find_tool(toolname)
+    if not tool then
+        tool = _try_probe_tool(toolname)
+    end
+    if not tool then
+        log.warn("%s not found, related operations will be skipped", toolname)
+    end
+    _tool_cache[cache_key] = tool or false
+    return tool
 end
 
 local function _is_elf(filepath)
@@ -457,7 +461,7 @@ end
 local function _patch_macho(target, opts, result)
     local tool = _get_tool("install_name_tool", "install_name_tool")
     if not tool then
-        log.warn("install_name_tool not found, skip patching")
+        log.warn("install_name_tool not found, skip patching (try: xcode-select --install)")
         return result
     end
 

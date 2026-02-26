@@ -61,18 +61,39 @@ private:
 };
 
 // Resolve the xmake project directory that contains xim task definition.
-// Prefers version-specific xim next to the running binary (multi-version),
-// falls back to $XLINGS_HOME for global/development use.
+// The xim task is defined in a xmake.lua that lives next to an xim/ directory
+// (release/installed layout).  The source tree keeps xim code under core/xim/
+// which is NOT a valid -P target; in that case we fall through to the default
+// installed home (~/.xlings) which always has the correct layout.
 std::filesystem::path find_xim_project_dir() {
     namespace fs = std::filesystem;
+
+    auto is_xim_project = [](const fs::path& dir) {
+        return fs::exists(dir / "xim") && fs::exists(dir / "xmake.lua");
+    };
+
+    // 1. Prefer layout next to the running binary (multi-version / release package)
     auto exePath = platform::get_executable_path();
     if (!exePath.empty()) {
         auto candidate = exePath.parent_path().parent_path();
-        if (fs::exists(candidate / "xim") && fs::exists(candidate / "xmake.lua")) {
+        if (is_xim_project(candidate)) {
             return candidate;
         }
     }
-    return Config::paths().homeDir;
+
+    // 2. $XLINGS_HOME (installed)
+    auto homeDir = Config::paths().homeDir;
+    if (is_xim_project(homeDir)) {
+        return homeDir;
+    }
+
+    // 3. Default fallback (~/.xlings) when homeDir is the source tree
+    auto defaultHome = std::filesystem::path(platform::get_home_dir()) / ".xlings";
+    if (is_xim_project(defaultHome)) {
+        return defaultHome;
+    }
+
+    return homeDir;
 }
 
 int xim_exec(const std::string& flags, int argc, char* argv[], int startIdx = 2) {
