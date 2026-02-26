@@ -473,8 +473,22 @@ end
 
 function CmdProcessor:search(opt)
     opt = opt or {}
-    local names = index_manager:search(self.target, opt)
-    print(names)
+    local names_table = index_manager:search(self.target, opt)
+    for name, alias in pairs(names_table) do
+        local alias_str = table.concat(alias, ", ")
+        if alias_str ~= "" then
+            cprint(
+                "${dim bright}->${clear} ${dim yellow}%s${clear} ${dim}(%s)",
+                name,
+                alias_str
+            )
+        else
+            cprint(
+                "${dim bright}->${clear} ${dim yellow}%s${clear}",
+                name
+            )
+        end
+    end
 end
 
 function CmdProcessor:remove()
