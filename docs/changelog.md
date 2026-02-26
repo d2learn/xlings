@@ -4,6 +4,12 @@
 
 ### 2026-02
 
+- **Bug fixes: xim task / xvm path quoting / elfpatch tool detection**
+  - Fix `xlings install`/`search` failing with "invalid task: xim" on Windows when `find_xim_project_dir` falls back to source tree root (which lacks `task("xim")` definition). Now falls through to `~/.xlings` installed layout automatically.
+  - Fix `xvm add --path` breaking when path contains spaces (e.g. macOS `/Applications/My App/`). The `--path` argument is now properly quoted, consistent with `--alias`, `--type`, etc.
+  - Replace `find_tool()` in elfpatch with direct execution probe (`_try_probe_tool`). Tools like `install_name_tool`/`otool` on macOS and `patchelf`/`readelf` on Linux are now detected by actually running them, with `try{}` catching failures gracefully and printing actionable hints.
+  - Added `tests/e2e/bugfix_regression_test.sh` covering all three fixes.
+
 - **xlings self install 安装逻辑优化**
   - data/subos 保留策略改为「直接不删除、选择性不覆盖」，不再使用备份/恢复
   - 升级时 data/subos 完全保留不合并，避免 subos 损坏

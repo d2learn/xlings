@@ -279,6 +279,11 @@ jobs:
           chmod +x tests/e2e/libpath_order_test.sh
           bash tests/e2e/libpath_order_test.sh
 
+      - name: "Test: bugfix regression (Bug 1/2/3)"
+        run: |
+          chmod +x tests/e2e/bugfix_regression_test.sh
+          bash tests/e2e/bugfix_regression_test.sh
+
       - name: "Test: E2E usability script"
         run: |
           chmod +x tests/e2e/linux_usability_test.sh
