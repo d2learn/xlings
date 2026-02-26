@@ -83,9 +83,6 @@ cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/
 cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
 # Bundled xmake
-# NOTE: xmake-bundle-v3.0.7.macos.arm64 crashes with SIGABRT on Apple Silicon.
-# Set SKIP_XMAKE_BUNDLE=1 in CI until the upstream bundle is fixed.
-# When skipped, the system xmake (e.g., from brew) is used for testing.
 XMAKE_READY=0
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
   XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.macos.arm64"
@@ -93,14 +90,14 @@ if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
   info "Downloading bundled xmake..."
   if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
     chmod +x "$XMAKE_BIN"
-    codesign -s - -f "$XMAKE_BIN" 2>/dev/null || true
+    xattr -cr "$XMAKE_BIN" 2>/dev/null || true
     info "Bundled xmake OK"
     XMAKE_READY=1
   else
     info "curl failed, trying wget..."
     if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
       chmod +x "$XMAKE_BIN"
-      codesign -s - -f "$XMAKE_BIN" 2>/dev/null || true
+      xattr -cr "$XMAKE_BIN" 2>/dev/null || true
       info "Bundled xmake OK (wget fallback)"
       XMAKE_READY=1
     else

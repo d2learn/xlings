@@ -45,7 +45,7 @@ jobs:
       - name: Build (macos_release)
         run: |
           chmod +x ./tools/macos_release.sh
-          SKIP_NETWORK_VERIFY=1 SKIP_XMAKE_BUNDLE=1 ./tools/macos_release.sh
+          SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 
       - name: Prepare release artifact
         run: |

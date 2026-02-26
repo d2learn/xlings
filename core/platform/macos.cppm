@@ -59,14 +59,11 @@ namespace platform_impl {
     export void make_files_executable(const std::filesystem::path& dir) {
         if (!std::filesystem::exists(dir)) return;
         for (auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) continue;
-            ::chmod(entry.path().c_str(), 0755);
-            auto ext = entry.path().extension().string();
-            if (ext.empty() || ext == ".dylib" || ext == ".so") {
-                std::string cmd = "codesign -s - -f \"" + entry.path().string() + "\" 2>/dev/null";
-                std::system(cmd.c_str());
-            }
+            if (entry.is_regular_file())
+                ::chmod(entry.path().c_str(), 0755);
         }
+        std::string cmd = "xattr -cr \"" + dir.string() + "\" 2>/dev/null";
+        std::system(cmd.c_str());
     }
 
     export bool create_directory_link(const std::filesystem::path& link,
