@@ -145,11 +145,17 @@ jobs:
           echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
           echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH"
-          export XLINGS_HOME XLINGS_DATA="$XLINGS_HOME/data" XLINGS_SUBOS="$XLINGS_HOME/subos/current"
-          echo "=== Create subos shims (shims are created at install/init time) ==="
-          "$XLINGS_HOME/bin/xlings" self init
-          echo "=== subos/current symlink ==="
+
+      - name: "Init subos shims and switch mirrors"
+        run: |
+          if command -v jq &>/dev/null; then
+            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
+                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
+                .repo = "https://github.com/d2learn/xlings.git"' \
+              "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
+              mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
+          fi
+          xlings self init
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
 
