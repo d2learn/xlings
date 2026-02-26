@@ -67,7 +67,12 @@ function IndexManager:search(query, opt)
         end
     end
 
-    local user_specified_namespace = query and query:find(":", 1, true)
+    -- Consider "awesome" or "awesome:xxx" as user explicitly asking for awesome namespace
+    local user_specified_namespace = query and (
+        query:find(":", 1, true) or
+        query == "awesome" or
+        (query:sub(1, 8) == "awesome:" and #query > 8)
+    )
     for name, pkg in pairs(self.index) do
         if name:find(query, 1, true) or query == "" then
             -- default search excludes awesome namespace unless user specified namespace in query
@@ -115,6 +120,7 @@ function IndexManager:match_package_version(target)
     local nonamespace_target_versions = {}
     local target_versions = {}
     local scode_namespace_versions = {}
+    local user_wants_awesome = target:find(":", 1, true) or target == "awesome"
     for name, pkg in pairs(self.index) do
         local match_index = name:find(target_match_str, 1, true)
         if match_index == 1 then -- xxxx@ matched
@@ -122,7 +128,7 @@ function IndexManager:match_package_version(target)
             table.insert(nonamespace_target_versions, name)
         elseif match_index and string.sub(name, match_index - 1, match_index - 1) == ":" then
             -- ???:xxxx@ matched
-            local skip_awesome = not target:find(":", 1, true) and name:sub(1, 8) == "awesome:"
+            local skip_awesome = not user_wants_awesome and name:sub(1, 8) == "awesome:"
             if pkg.installed and not skip_awesome then table.insert(installed_target_versions, name)  end
             if string.find(name, "scode:", 1, true) == 1 then
                 -- special case for scode:xxxx@, put it to scode namespace list
