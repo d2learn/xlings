@@ -129,8 +129,20 @@ jobs:
           readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
             { echo "FAIL: subos/current not pointing to s1"; exit 1; }
           echo "=== Install d2x@0.1.3 in s1 ==="
-          INSTALL_OUT=$(xlings install d2x@0.1.3 -y 2>&1)
+          echo "DEBUG: which xlings = $(which xlings)"
+          echo "DEBUG: which xmake = $(which xmake)"
+          echo "DEBUG: XLINGS_HOME=$XLINGS_HOME"
+          echo "DEBUG: XLINGS_SUBOS=$XLINGS_SUBOS"
+          ls -la "$XLINGS_HOME/subos/current/bin/" | head -10
+          INSTALL_RC=0
+          INSTALL_OUT=$(xlings install d2x@0.1.3 -y 2>&1) || INSTALL_RC=$?
           echo "$INSTALL_OUT"
+          if [[ $INSTALL_RC -ne 0 ]]; then
+            echo "FAIL: xlings install exited with code $INSTALL_RC"
+            echo "DEBUG: trying direct xmake call..."
+            "$XLINGS_HOME/bin/xmake" xim -P "$XLINGS_HOME" -- install d2x@0.1.3 -y 2>&1 || true
+            exit 1
+          fi
           echo "$INSTALL_OUT" | grep -q "version.*0\.1\.3" || \
             { echo "FAIL: [package] info doesn't show version 0.1.3"; exit 1; }
           echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.3.*installed" || \
