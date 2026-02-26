@@ -65,7 +65,7 @@ function add(name, config)
     end
 
     __xvm_run(string.format(
-        [[add %s %s --path %s %s %s %s %s %s]],
+        [[add %s %s --path "%s" %s %s %s %s %s]],
         name, version, bindir,
         type_arg, filename_arg, binding_arg, alias_arg, envs_args
     ))
@@ -222,7 +222,7 @@ function __xvm_run(cmd, opt)
             }
         }
     end
-    xvm_cmd = string.format([[%s %s]], xvm_path, cmd)
+    xvm_cmd = string.format([["%s" %s]], xvm_path, cmd)
     if __xvm_log_tag then cprint("[xlings:xim]: xvm run - ${dim}%s", xvm_cmd) end
     return try {
         function ()
