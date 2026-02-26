@@ -82,26 +82,26 @@ mkdir -p "$OUT_DIR/config/xvm"
 cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
 cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
-# Bundled xmake
+# Bundled xmake — prefer system xmake (brew), fallback to download bundle
 XMAKE_READY=0
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
-  XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.macos.arm64"
   XMAKE_BIN="$OUT_DIR/bin/xmake"
-  info "Downloading bundled xmake..."
-  if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
+  SYS_XMAKE="$(command -v xmake 2>/dev/null || true)"
+  if [[ -n "$SYS_XMAKE" && -x "$SYS_XMAKE" ]]; then
+    cp "$SYS_XMAKE" "$XMAKE_BIN"
     chmod +x "$XMAKE_BIN"
-    codesign -s - -f "$XMAKE_BIN" 2>/dev/null || true
-    info "Bundled xmake OK"
+    info "Bundled xmake OK (copied from system: $SYS_XMAKE)"
     XMAKE_READY=1
   else
-    info "curl failed, trying wget..."
-    if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
+    XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.macos.arm64"
+    info "Downloading bundled xmake..."
+    if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
       chmod +x "$XMAKE_BIN"
       codesign -s - -f "$XMAKE_BIN" 2>/dev/null || true
-      info "Bundled xmake OK (wget fallback)"
+      info "Bundled xmake OK (downloaded)"
       XMAKE_READY=1
     else
-      fail "bundled xmake download failed (curl + wget)"
+      fail "bundled xmake download failed and no system xmake found"
     fi
   fi
 fi
