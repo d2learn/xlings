@@ -49,7 +49,12 @@ local function _get_tool(cache_key, toolname)
     end
     local tool = find_tool(toolname)
     if not tool then
-        tool = _try_probe_tool(toolname)
+        -- check /usr/bin/install_name_tool, avoid install_name_tool not found issue (xlings install)
+        if os.isfile("/usr/bin/install_name_tool") then
+            tool = { program = "/usr/bin/install_name_tool" }
+        else
+            tool = _try_probe_tool(toolname)
+        end
     end
     if not tool then
         log.warn("%s not found, related operations will be skipped", toolname)
