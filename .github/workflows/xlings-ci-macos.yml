@@ -109,6 +109,7 @@ jobs:
 
       - name: "Init subos shims and switch mirrors"
         run: |
+          xattr -cr "$XLINGS_HOME" 2>/dev/null || true
           if command -v jq &>/dev/null; then
             jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
                 .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
