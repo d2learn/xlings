@@ -108,14 +108,6 @@ jobs:
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
           export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH"
           export XLINGS_HOME XLINGS_DATA="$XLINGS_HOME/data" XLINGS_SUBOS="$XLINGS_HOME/subos/current"
-          echo "=== Switch mirrors to GLOBAL (GitHub) for CI reliability ==="
-          if command -v jq &>/dev/null; then
-            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
-                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
-                .repo = "https://github.com/d2learn/xlings.git"' \
-              "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
-              mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
-          fi
           echo "=== Create subos shims (shims are created at install/init time) ==="
           "$XLINGS_HOME/bin/xlings" self init
           echo "=== subos/current symlink ==="

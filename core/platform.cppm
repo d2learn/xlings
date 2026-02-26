@@ -1,6 +1,9 @@
 module;
 
 #include <cstdio>
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#endif
 
 export module xlings.platform;
 
@@ -56,7 +59,16 @@ namespace platform {
     }
 
     export int exec(const std::string& cmd) {
-        return std::system(cmd.c_str());
+        int status = std::system(cmd.c_str());
+#if !defined(_WIN32)
+        if (WIFEXITED(status))
+            return WEXITSTATUS(status);
+        if (WIFSIGNALED(status))
+            return 128 + WTERMSIG(status);
+        return status;
+#else
+        return status;
+#endif
     }
 
     export [[nodiscard]] std::string read_file_to_string(const std::string& filepath) {

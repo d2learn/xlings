@@ -57,14 +57,6 @@ prepare_runtime() {
   export XLINGS_SUBOS="$PKG_DIR/subos/current"
   export PATH="$PKG_DIR/subos/current/bin:$PKG_DIR/bin:$PATH"
 
-  # Switch mirrors to GLOBAL (GitHub) for CI reliability
-  if command -v jq &>/dev/null && [[ -f "$PKG_DIR/.xlings.json" ]]; then
-    jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
-        .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
-        .repo = "https://github.com/d2learn/xlings.git"' \
-      "$PKG_DIR/.xlings.json" > "$PKG_DIR/.xlings.json.tmp" && \
-      mv "$PKG_DIR/.xlings.json.tmp" "$PKG_DIR/.xlings.json"
-  fi
 }
 
 scenario_basic_commands() {
