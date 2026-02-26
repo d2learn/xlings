@@ -4,6 +4,7 @@
 #
 # Output:  build/xlings-<ver>-windows-x86_64.zip
 # Usage:   pwsh ./tools/windows_release.ps1
+# Env:     SKIP_XMAKE_BUNDLE=1  skip downloading bundled xmake
 
 $ErrorActionPreference = "Stop"
 
@@ -61,6 +62,7 @@ $dirs = @(
   "$OUT_DIR\subos\default\generations",
   "$OUT_DIR\config\i18n",
   "$OUT_DIR\config\shell",
+  "$OUT_DIR\config\xvm",
   "$OUT_DIR\tools"
 )
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
@@ -73,34 +75,23 @@ Copy-Item "$XVM_DIR\xvm.exe" "$OUT_DIR\bin\"
 
 if (-not (Test-Path "$XVM_DIR\xvm-shim.exe")) { Fail "xvm-shim.exe not found (cargo build --release in core/xvm)" }
 Copy-Item "$XVM_DIR\xvm-shim.exe" "$OUT_DIR\bin\"
-foreach ($shim in @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xinstall.exe", "xsubos.exe", "xself.exe")) {
-  Copy-Item "$OUT_DIR\bin\xvm-shim.exe" "$OUT_DIR\subos\default\bin\$shim"
+
+# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
+Copy-Item "config\xvm\*" "$OUT_DIR\config\xvm\" -ErrorAction SilentlyContinue
+Copy-Item "config\xvm\*" "$OUT_DIR\subos\default\xvm\" -ErrorAction SilentlyContinue
+
+# Bundled xmake
+if ($env:SKIP_XMAKE_BUNDLE -ne "1") {
+  $XMAKE_URL = "https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.win64.exe"
+  $XMAKE_BIN = "$OUT_DIR\bin\xmake.exe"
+  Info "Downloading bundled xmake..."
+  try {
+    Invoke-WebRequest -Uri $XMAKE_URL -OutFile $XMAKE_BIN -UseBasicParsing -TimeoutSec 120
+    Info "Bundled xmake OK"
+  } catch {
+    Fail "bundled xmake download failed: $_"
+  }
 }
-
-@"
----
-xvm-wmetadata:
-  name: global
-  active: true
-  inherit: true
-versions:
-  xlings: bootstrap
-  xvm: bootstrap
-  xvm-shim: bootstrap
-"@ | Set-Content "$OUT_DIR\subos\default\xvm\.workspace.xvm.yaml" -Encoding UTF8
-
-@"
----
-xlings:
-  bootstrap:
-    path: "../../bin"
-xvm:
-  bootstrap:
-    path: "../../bin"
-xvm-shim:
-  bootstrap:
-    path: "../../bin"
-"@ | Set-Content "$OUT_DIR\subos\default\xvm\versions.xvm.yaml" -Encoding UTF8
 
 Copy-Item -Recurse "core\xim\*" "$OUT_DIR\xim\" -ErrorAction SilentlyContinue
 Copy-Item "config\i18n\*.json" "$OUT_DIR\config\i18n\" -ErrorAction SilentlyContinue
@@ -124,6 +115,8 @@ if (Test-Path $configSrc) {
 # xmake.lua (package root) — reuse core/xim/xmake.lua which auto-detects layout
 Copy-Item "core\xim\xmake.lua" "$OUT_DIR\xmake.lua"
 
+# Shims are created at install time (not in package) to reduce archive size
+
 Info "Package assembled: $OUT_DIR"
 
 # -- 4. Verification ---------------------------------------------
@@ -137,7 +130,7 @@ Info "OK: all binaries present"
 
 $requiredDirs = @(
   "subos\default\bin", "subos\default\lib", "subos\default\xvm",
-  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell"
+  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell", "config\xvm"
 )
 foreach ($d in $requiredDirs) {
   if (-not (Test-Path "$OUT_DIR\$d")) { Fail "directory $d missing" }

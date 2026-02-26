@@ -69,6 +69,11 @@ jobs:
           xlings -h
           xlings config
           xvm --version
+          echo "=== Verify shims created at install time ==="
+          for shim in xlings xvm xvm-shim xim xsubos xself; do
+            [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
+          done
+          echo "OK: all shims present in subos/default/bin"
           echo "=== Cleanup install test ==="
           rm -rf "$HOME/.xlings" "$INSTALL_DIR"
 

@@ -11,6 +11,7 @@ What it validates in an isolated extracted release package:
 - basic CLI availability (`xlings -h`, `xlings config`, `xvm --version`)
 - `xlings info <target>` mapping to `xvm info`
 - `subos` lifecycle (`new`, `use`, `list`, `info`, `remove`)
+- `subos new` fails when `config/xvm` is missing (package incomplete)
 - new `subos` short aliases (`ls`, `i`, `rm`)
 - backward compatibility for existing `subos` commands
 - self-maintenance dry-run command
@@ -35,6 +36,10 @@ SKIP_NETWORK_TESTS=1 bash tests/e2e/linux_usability_test.sh
 ```
 
 Same toggle works for macOS and Windows scripts.
+
+## Install-time shims
+
+CI verifies that after `xlings self install`, `subos/default/bin` contains all required shims (xlings, xvm, xvm-shim, xim, xsubos, xself). Shims are created at install time, not in the package, to reduce archive size.
 
 ## E2E macOS Usability Test
 

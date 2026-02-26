@@ -1,0 +1,10 @@
+---
+xvm-wmetadata:
+  name: global
+  active: true
+  inherit: true
+versions:
+  xlings: bootstrap
+  xvm: bootstrap
+  xvm-shim: bootstrap
+  xmake: bootstrap

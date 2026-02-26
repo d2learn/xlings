@@ -98,6 +98,24 @@ function Scenario-SelfAndCleanup {
   Assert-Contains $out "dry-run"
 }
 
+function Scenario-SubosCreateRequiresConfigXvm {
+  Log "scenario: subos new fails when config/xvm missing"
+  $configXvm = Join-Path $env:XLINGS_HOME "config\xvm"
+  if (-not (Test-Path $configXvm -PathType Container)) {
+    Fail "config/xvm must exist in package"
+  }
+
+  Move-Item $configXvm "$configXvm.bak" -Force
+  try {
+    $out = (xlings subos new testcfgxvm 2>&1) | Out-String
+    Assert-Contains $out "config/xvm"
+    Assert-Contains $out "package incomplete"
+  } finally {
+    Move-Item "$configXvm.bak" $configXvm -Force
+  }
+  Log "  subos create requires config/xvm: OK"
+}
+
 function Scenario-NetworkInstallOptional {
   if ($SkipNetworkTests -eq "1") {
     Log "scenario: network install (skipped, SKIP_NETWORK_TESTS=1)"
@@ -117,6 +135,7 @@ try {
   Scenario-BasicCommands
   Scenario-InfoMapping
   Scenario-SubosLifecycleAndAliases
+  Scenario-SubosCreateRequiresConfigXvm
   Scenario-SelfAndCleanup
   Scenario-NetworkInstallOptional
 

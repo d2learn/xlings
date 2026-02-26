@@ -26,9 +26,10 @@ docs/mcpp-version/
 │   ├── xpkgs-subos-hybrid-design.md ← data/xpkgs + subos 混合视图设计
 │   ├── hybrid-libpath-order-subplan.md ← 混合视图子方案（RPATH 唯一真相与库路径优先级）
 │   ├── rpath-migration-summary.md ← RPATH 迁移方案总结与原理说明
-│   └── xim-dir-compat.md    ← xim 目录兼容方案（临时）
+│   ├── xim-dir-compat.md    ← xim 目录兼容方案（临时）
+│   └── shim-unified-design.md ← 短命令与 xvm 配置全平台统一设计
 │
-└── tasks/                    ← 任务拆分（13 个可并行任务）
+└── tasks/                    ← 任务拆分
     ├── README.md             ← 任务总览 + 依赖拓扑 + 并行分组
     ├── T01-platform-exe-path.md
     ├── T02-config-multienv.md
@@ -42,7 +43,10 @@ docs/mcpp-version/
     ├── T10-pkg-taxonomy-impl.md
     ├── T11-xmake-musl-static.md
     ├── T12-ci-musl-gcc.md
-    └── T13-verify-static-binary.md
+    ├── T13-verify-static-binary.md
+    ├── T24-shim-init-module.md
+    ├── T25-subos-create-unified.md
+    └── T26-release-scripts-unified.md
 ```
 
 ---
@@ -149,6 +153,17 @@ docs/mcpp-version/
 
 ---
 
+### [shim-unified-design.md](shim-unified-design.md) — 短命令与 xvm 配置全平台统一
+
+将 xlings 短命令（xim、xsubos、xself 等）的生成逻辑统一到 `core/self/init.cppm`，由 `xlings self init` 统一负责；xvm 默认配置提取到 `config/xvm/`，打包时复制两次；macOS/Windows 与 Linux 一样打包 xmake；发布脚本改为调用 `xlings self init` 完成 shim 创建。
+
+**关键结论**:
+- 短命令单一数据源：SHIM_NAMES_BASE + SHIM_NAMES_OPTIONAL（xmake）
+- config/xvm 单套模板，打包时复制到 config/xvm 与 subos/default/xvm
+- 三平台均含 8 个短命令 shim
+
+---
+
 ### [xim-dir-compat.md](xim-dir-compat.md) — xim 目录兼容方案（临时）
 
 解决 `xlings install xlings` 多版本共存时，每个版本的 xlings 二进制应加载自身版本的 xim Lua 代码而非全局代码的问题。
@@ -183,6 +198,7 @@ docs/mcpp-version/
 
 | 想了解 | 去看 |
 |--------|------|
+| 短命令与 xvm 配置统一（xim/xsubos 等 + config/xvm 模板） | [shim-unified-design.md](shim-unified-design.md) |
 | 项目整体目标和迁移范围 | [main.md §1](main.md#一项目定位与迁移目标) |
 | 新旧架构对比 | [env-analysis.md](env-analysis.md) |
 | `xlings env` 命令设计 | [main.md §5](main.md#五多环境管理设计) |

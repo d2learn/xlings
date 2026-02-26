@@ -7,6 +7,7 @@ export module xlings.xself;
 import std;
 
 export import :install;
+export import :init;
 
 import xlings.config;
 import xlings.json;
@@ -39,6 +40,14 @@ static int cmd_init() {
         std::error_code ec;
         fs::create_directory_symlink(p.subosDir, currentLink, ec);
         if (!ec) std::println("[xlings:self]: created subos/current -> {}", p.subosDir.filename().string());
+    }
+
+    auto shimSrc = p.homeDir / "bin" / "xvm-shim";
+    if (!fs::exists(shimSrc)) shimSrc = p.homeDir / "bin" / "xvm-shim.exe";
+    if (fs::exists(shimSrc)) {
+        ensure_subos_shims(p.binDir, shimSrc, p.homeDir);
+    } else {
+        std::println("[xlings:self]: bin/xvm-shim not found, skip shim creation");
     }
 
     std::println("[xlings:self]: init ok");
