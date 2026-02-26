@@ -15,6 +15,31 @@ namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
+// Local copy of shim creation (avoids circular import with init partition)
+static void ensure_subos_shims_install(const fs::path& target_bin_dir,
+                                       const fs::path& shim_src,
+                                       const fs::path& pkg_root) {
+    if (!fs::exists(shim_src)) return;
+    std::string ext = shim_src.extension().string();
+    static constexpr std::array<std::string_view, 7> BASE = {
+        "xvm-shim", "xlings", "xvm", "xim", "xinstall", "xsubos", "xself"};
+    for (auto name : BASE) {
+        auto dst = target_bin_dir / (std::string(name) + ext);
+        std::error_code ec;
+        fs::copy_file(shim_src, dst, fs::copy_options::overwrite_existing, ec);
+        if (ec) std::println(stderr, "[xlings:self]: failed to copy shim {} - {}",
+                             dst.string(), ec.message());
+    }
+    auto bin_dir = pkg_root / "bin";
+    if (fs::exists(bin_dir / ("xmake" + ext))) {
+        auto dst = target_bin_dir / ("xmake" + ext);
+        std::error_code ec;
+        fs::copy_file(shim_src, dst, fs::copy_options::overwrite_existing, ec);
+        if (ec) std::println(stderr, "[xlings:self]: failed to copy xmake shim - {}", ec.message());
+    }
+    platform::make_files_executable(target_bin_dir);
+}
+
 static std::string read_version_from_json(const fs::path& homeDir) {
     auto conf = homeDir / ".xlings.json";
     if (!fs::exists(conf)) return "";
@@ -270,6 +295,11 @@ export int cmd_install() {
         auto currentLink = targetHome / "subos" / "current";
         auto defaultDir  = targetHome / "subos" / "default";
         platform::create_directory_link(currentLink, defaultDir);
+        auto shimBinDir = defaultDir / "bin";
+        fs::create_directories(shimBinDir);
+        auto shimSrc = targetHome / "bin" / "xvm-shim";
+        if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xvm-shim.exe";
+        if (fs::exists(shimSrc)) ensure_subos_shims_install(shimBinDir, shimSrc, targetHome);
         setup_shell_profiles(targetHome);
         std::println("[xlings:self] {} ({}) - ok\n", targetHome.string(), pkgVersion);
         return 0;
@@ -348,10 +378,15 @@ export int cmd_install() {
 
     // 4. Fix permissions (platform-dispatched)
     platform::make_files_executable(targetHome / "bin");
-    if (fs::exists(targetHome / "subos" / "default" / "bin"))
-        platform::make_files_executable(targetHome / "subos" / "default" / "bin");
 
-    // 5. Ensure subos/current link exists. Always recreate: Compress-Archive does not preserve
+    // 5. Create subos/default/bin shims (at install time to reduce package size)
+    auto shimBinDir = targetHome / "subos" / "default" / "bin";
+    fs::create_directories(shimBinDir);
+    auto shimSrc = targetHome / "bin" / "xvm-shim";
+    if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xvm-shim.exe";
+    if (fs::exists(shimSrc)) ensure_subos_shims_install(shimBinDir, shimSrc, targetHome);
+
+    // 6. Ensure subos/current link exists. Always recreate: Compress-Archive does not preserve
     //    NTFS junctions, so the zip may have subos/current as an empty dir instead of a junction.
     auto currentLink = targetHome / "subos" / "current";
     auto defaultDir  = targetHome / "subos" / "default";

@@ -73,6 +73,14 @@ jobs:
           xlings -h
           xlings config
           xvm --version
+          Write-Host "=== Verify shims created at install time ==="
+          $shims = @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xsubos.exe", "xself.exe")
+          foreach ($s in $shims) {
+            if (-not (Test-Path "$env:USERPROFILE\.xlings\subos\default\bin\$s")) {
+              throw "FAIL: shim $s missing after install"
+            }
+          }
+          Write-Host "OK: all shims present in subos/default/bin"
           Write-Host "=== Cleanup install test ==="
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue

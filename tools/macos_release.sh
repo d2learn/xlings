@@ -6,6 +6,7 @@
 # Output:  build/xlings-<ver>-macosx-arm64.tar.gz
 # Usage:   ./tools/macos_release.sh
 # Env:     SKIP_NETWORK_VERIFY=1   skip network-dependent tests
+#          SKIP_XMAKE_BUNDLE=1     skip downloading bundled xmake
 
 set -euo pipefail
 
@@ -76,35 +77,34 @@ cp "$XVM_DIR/xvm"      "$OUT_DIR/bin/xvm"
 cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
 
-for shim in xlings xvm xvm-shim; do
-  cp "$OUT_DIR/bin/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
-  chmod +x "$OUT_DIR/subos/default/bin/$shim"
-done
+# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
+mkdir -p "$OUT_DIR/config/xvm"
+cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
+cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
-cat > "$OUT_DIR/subos/default/xvm/versions.xvm.yaml" << 'YAML'
----
-xlings:
-  bootstrap:
-    path: "../../bin"
-xvm:
-  bootstrap:
-    path: "../../bin"
-xvm-shim:
-  bootstrap:
-    path: "../../bin"
-YAML
-
-cat > "$OUT_DIR/subos/default/xvm/.workspace.xvm.yaml" << 'YAML'
----
-xvm-wmetadata:
-  name: global
-  active: true
-  inherit: true
-versions:
-  xlings: bootstrap
-  xvm: bootstrap
-  xvm-shim: bootstrap
-YAML
+# Bundled xmake
+XMAKE_READY=0
+if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
+  XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.macos.arm64"
+  XMAKE_BIN="$OUT_DIR/bin/xmake"
+  info "Downloading bundled xmake..."
+  if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
+    chmod +x "$XMAKE_BIN"
+    xattr -cr "$XMAKE_BIN" 2>/dev/null || true
+    info "Bundled xmake OK"
+    XMAKE_READY=1
+  else
+    info "curl failed, trying wget..."
+    if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
+      chmod +x "$XMAKE_BIN"
+      xattr -cr "$XMAKE_BIN" 2>/dev/null || true
+      info "Bundled xmake OK (wget fallback)"
+      XMAKE_READY=1
+    else
+      fail "bundled xmake download failed (curl + wget)"
+    fi
+  fi
+fi
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
@@ -116,26 +116,8 @@ cp -R config/i18n/*.json "$OUT_DIR/config/i18n/" 2>/dev/null || true
 mkdir -p "$OUT_DIR/config/shell"
 cp -R config/shell/* "$OUT_DIR/config/shell/" 2>/dev/null || true
 
-# xmake.lua (package root)
-cat > "$OUT_DIR/xmake.lua" << 'LUA'
-add_moduledirs("xim")
-add_moduledirs(".")
-task("xim")
-    on_run(function ()
-        import("core.base.option")
-        local xim_dir = path.join(os.projectdir(), "xim")
-        local xim_entry = import("xim", {rootdir = xim_dir, anonymous = true})
-        local args = option.get("arguments") or { "-h" }
-        xim_entry.main(table.unpack(args))
-    end)
-    set_menu{
-        usage = "xmake xim [arguments]",
-        description = "xim package manager",
-        options = {
-            {nil, "arguments", "vs", nil, "xim arguments"},
-        }
-    }
-LUA
+# xmake.lua (package root) — reuse core/xim/xmake.lua which auto-detects layout
+cp core/xim/xmake.lua "$OUT_DIR/xmake.lua"
 
 # .xlings.json
 if command -v jq &>/dev/null && [[ -f config/xlings.json ]]; then
@@ -150,18 +132,22 @@ fi
 # xim index-repos placeholder
 echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
 
+# Shims are created at install time (not in package) to reduce archive size
+
 info "Package assembled: $OUT_DIR"
 
 # ── 4. Verification ─────────────────────────────────────────────
 info "=== Verification ==="
 
-for f in bin/xlings bin/xvm bin/xvm-shim \
-         subos/default/bin/xlings subos/default/bin/xvm subos/default/bin/xvm-shim; do
+for f in bin/xlings bin/xvm bin/xvm-shim; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
+if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
+  [[ -x "$OUT_DIR/bin/xmake" ]] || fail "bin/xmake is missing or not executable"
+fi
 info "OK: all binaries present and executable"
 
-for d in subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell; do
+for d in subos/default/bin subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell config/xvm; do
   [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
 done
 [[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"

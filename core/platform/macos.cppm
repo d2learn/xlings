@@ -62,6 +62,8 @@ namespace platform_impl {
             if (entry.is_regular_file())
                 ::chmod(entry.path().c_str(), 0755);
         }
+        std::string cmd = "xattr -cr \"" + dir.string() + "\" 2>/dev/null";
+        std::system(cmd.c_str());
     }
 
     export bool create_directory_link(const std::filesystem::path& link,

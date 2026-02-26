@@ -31,6 +31,10 @@
 | [T21](T21-indexdb-enrich.md) | Index DB 丰富化（type/desc/categories） | Lua | 4 | ~15 行 |
 | [T22](T22-repo-simplify.md) | 多仓库简化（xim-pkgindex + awesome） | Lua | 5 | ~40 行 |
 | [T23](T23-hybrid-view-impl.md) | data/xpkgs + subos 混合视图落地 | Lua/Rust | 6 | ~120 行 |
+| [T24](T24-shim-init-module.md) | init 模块 + config/xvm 模板 + xself cmd_init | C++ | 独立 | ~120 行 |
+| [T25](T25-subos-create-unified.md) | subos create 改用 init + 从 config 复制 xvm | C++ | 依赖 T24 | ~40 行 |
+| [T26](T26-release-scripts-unified.md) | 发布脚本三平台统一（xmake + config + init） | Bash/PS1 | 依赖 T24 | ~80 行 |
+| [T27](T27-ci-fix-shim-mirror-macos.md) | CI 修复：shim 初始化 + 镜像切换 + macOS 兼容 | YAML/Bash/C++ | 依赖 T24-T26 | ~50 行 |
 
 ---
 
@@ -184,6 +188,19 @@ Agent 并行执行策略：同一 Wave 内的任务互相独立，可同时分�
 
 ---
 
+### 短命令与 xvm 统一（T24-T26）
+
+> 设计文档: [../shim-unified-design.md](../shim-unified-design.md)
+
+| 任务 | 说明 | 依赖 |
+|------|------|------|
+| T24 | init 模块 + config/xvm 模板 + xself cmd_init 调用 ensure_subos_shims | 无 |
+| T25 | subos create 从 config 复制 xvm，调用 ensure_subos_shims | T24 |
+| T26 | 发布脚本三平台统一：xmake 打包、config 复制两次、调用 init | T24 |
+| T27 | CI 修复：Phase 3 添加 self init + 镜像切换 + macOS xmake bundle 跳过 | T24-T26 |
+
+---
+
 ## 验收总标准
 
 所有任务完成后，执行以下验证：
@@ -292,6 +309,25 @@ xim --update index
 # T22: 多仓库简化
 # 新安装 xlings 首次 sync 不拉取子仓库
 # 已有用户 xim-indexrepos.json 继续工作
+
+# ── 短命令与 xvm 统一验收（T24-T26）──────────────────────────
+
+# T24: init 模块
+xlings self init                    # 开发环境不报错
+# 发布包解压后
+XLINGS_HOME=/path/to/pkg ./bin/xlings self init
+ls subos/default/bin/               # 8 个 shim
+
+# T25: subos create
+xlings subos new test
+ls ~/.xlings/subos/test/bin/        # 7 或 8 个 shim
+ls ~/.xlings/subos/test/xvm/        # versions.xvm.yaml, .workspace.xvm.yaml
+
+# T26: 发布脚本
+./tools/linux_release.sh
+./tools/macos_release.sh
+pwsh ./tools/windows_release.ps1
+# 解压各平台包，检查 subos/default/bin 含 8 个 shim
 ```
 
 ---
@@ -322,3 +358,8 @@ xim --update index
 | 多仓库简化方案 | [T22](T22-repo-simplify.md) §3 |
 | xpkgs/subos 混合视图落地 | [T23](T23-hybrid-view-impl.md) §3 |
 | xpkg 规范化总览与路线图 | [../xpkg-spec-design.md](../xpkg-spec-design.md) |
+| 短命令与 xvm 配置统一设计 | [../shim-unified-design.md](../shim-unified-design.md) |
+| init 模块与 ensure_subos_shims | [T24](T24-shim-init-module.md) §3 |
+| subos create 统一逻辑 | [T25](T25-subos-create-unified.md) §4 |
+| 发布脚本三平台统一 | [T26](T26-release-scripts-unified.md) §4 |
+| CI 修复（shim/镜像/macOS）| [T27](T27-ci-fix-shim-mirror-macos.md) §3 |

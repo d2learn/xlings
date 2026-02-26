@@ -113,39 +113,10 @@ cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
 cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
 
-for shim in xlings xvm xvm-shim xmake xim xinstall xsubos xself; do
-  cp "$XVM_DIR/xvm-shim" "$OUT_DIR/subos/default/bin/$shim"
-  chmod +x "$OUT_DIR/subos/default/bin/$shim"
-done
-
-cat > "$OUT_DIR/subos/default/xvm/versions.xvm.yaml" << 'YAML'
----
-xlings:
-  bootstrap:
-    path: "../../bin"
-xvm:
-  bootstrap:
-    path: "../../bin"
-xvm-shim:
-  bootstrap:
-    path: "../../bin"
-xmake:
-  bootstrap:
-    path: "../../bin"
-YAML
-
-cat > "$OUT_DIR/subos/default/xvm/.workspace.xvm.yaml" << 'YAML'
----
-xvm-wmetadata:
-  name: global
-  active: true
-  inherit: true
-versions:
-  xlings: bootstrap
-  xvm: bootstrap
-  xvm-shim: bootstrap
-  xmake: bootstrap
-YAML
+# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
+mkdir -p "$OUT_DIR/config/xvm"
+cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
+cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
@@ -215,15 +186,15 @@ fi
 # xim index-repos placeholder (global shared)
 echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
 
+# Shims are created at install time (not in package) to reduce archive size
+
 info "Package assembled: $OUT_DIR"
 
 # ── 4. Verification ─────────────────────────────────────────────
 info "=== Verification ==="
 
-# 4a. Check binaries exist and are executable
-for f in bin/xlings bin/xvm bin/xvm-shim \
-         subos/default/bin/xlings subos/default/bin/xvm subos/default/bin/xvm-shim \
-         subos/default/bin/xmake; do
+# 4a. Check binaries exist (shims created at install time)
+for f in bin/xlings bin/xvm bin/xvm-shim; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
@@ -234,8 +205,8 @@ if [[ "${SKIP_PATCHELF_BUNDLE:-}" != "1" && "$PATCHELF_READY" == "1" ]]; then
 fi
 info "OK: all binaries present and executable"
 
-# 4b. Check directory structure
-for d in subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell; do
+# 4b. Check directory structure (subos/default/bin empty; shims created at install)
+for d in subos/default/bin subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell config/xvm; do
   [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
 done
 [[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"

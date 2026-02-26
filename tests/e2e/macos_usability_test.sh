@@ -56,6 +56,14 @@ setup_env() {
   export XLINGS_DATA="$PKG_DIR/data"
   export XLINGS_SUBOS="$PKG_DIR/subos/current"
   export PATH="$PKG_DIR/subos/current/bin:$PKG_DIR/bin:$PATH"
+
+  if command -v jq &>/dev/null && [[ -f "$PKG_DIR/.xlings.json" ]]; then
+    jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
+        .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
+        .repo = "https://github.com/d2learn/xlings.git"' \
+      "$PKG_DIR/.xlings.json" > "$PKG_DIR/.xlings.json.tmp" && \
+      mv "$PKG_DIR/.xlings.json.tmp" "$PKG_DIR/.xlings.json"
+  fi
 }
 
 scenario_basic_commands() {
@@ -108,6 +116,21 @@ scenario_self_and_cleanup() {
   assert_contains "$out" "dry-run" "clean dry-run output mismatch"
 }
 
+scenario_subos_create_requires_config_xvm() {
+  log "scenario: subos new fails when config/xvm missing"
+  local config_xvm="$XLINGS_HOME/config/xvm"
+  [[ -d "$config_xvm" ]] || fail "config/xvm must exist in package"
+
+  mv "$config_xvm" "${config_xvm}.bak" || fail "backup config/xvm failed"
+  local out
+  out="$(xlings subos new testcfgxvm 2>&1)" || true
+  mv "${config_xvm}.bak" "$config_xvm" || fail "restore config/xvm failed"
+
+  assert_contains "$out" "config/xvm" "subos new should error when config/xvm missing"
+  assert_contains "$out" "package incomplete" "error should mention package incomplete"
+  log "  subos create requires config/xvm: OK"
+}
+
 scenario_network_install_optional() {
   if [[ "$SKIP_NETWORK_TESTS" == "1" ]]; then
     log "scenario: network install (skipped, SKIP_NETWORK_TESTS=1)"
@@ -136,6 +159,7 @@ main() {
   scenario_basic_commands
   scenario_info_mapping
   scenario_subos_lifecycle_and_aliases
+  scenario_subos_create_requires_config_xvm
   scenario_self_and_cleanup
   scenario_network_install_optional
 

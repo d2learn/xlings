@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -69,6 +69,11 @@ jobs:
           xlings -h
           xlings config
           xvm --version
+          echo "=== Verify shims created at install time ==="
+          for shim in xlings xvm xvm-shim xim xsubos xself; do
+            [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
+          done
+          echo "OK: all shims present in subos/default/bin"
           echo "=== Cleanup install test ==="
           rm -rf "$HOME/.xlings" "$INSTALL_DIR"
 
@@ -101,7 +106,18 @@ jobs:
           echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
           echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
-          echo "=== subos/current symlink ==="
+
+      - name: "Init subos shims and switch mirrors"
+        run: |
+          xattr -cr "$XLINGS_HOME" 2>/dev/null || true
+          if command -v jq &>/dev/null; then
+            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
+                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
+                .repo = "https://github.com/d2learn/xlings.git"' \
+              "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
+              mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
+          fi
+          xlings self init
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
 
