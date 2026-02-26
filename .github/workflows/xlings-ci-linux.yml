@@ -144,8 +144,8 @@ jobs:
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
           echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
           echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
-          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$XLINGS_HOME/tools/xmake/bin:$PATH"
+          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
+          export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH"
           export XLINGS_HOME XLINGS_DATA="$XLINGS_HOME/data" XLINGS_SUBOS="$XLINGS_HOME/subos/current"
           echo "=== Create subos shims (shims are created at install/init time) ==="
           "$XLINGS_HOME/bin/xlings" self init
