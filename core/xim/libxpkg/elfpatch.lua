@@ -54,6 +54,31 @@ local function _get_tool(cache_key, toolname)
     return nil
 end
 
+local function _resolve_tool_program(cache_key, toolname, opts)
+    local tool = _get_tool(cache_key, toolname)
+    if tool and tool.program and tool.program ~= "" then
+        return tool.program, false
+    end
+    if opts and opts.allow_direct_name then
+        return toolname, true
+    end
+    return nil, false
+end
+
+local function _is_tool_missing_error(err)
+    local msg = tostring(err or ""):lower()
+    return msg:find("not found", 1, true) ~= nil
+       or msg:find("no such file", 1, true) ~= nil
+       or msg:find("cannot find", 1, true) ~= nil
+end
+
+local function _is_duplicate_rpath_error(err)
+    local msg = tostring(err or ""):lower()
+    return msg:find("would duplicate path", 1, true) ~= nil
+       or msg:find("already has lc_rpath", 1, true) ~= nil
+       or msg:find("already exists", 1, true) ~= nil
+end
+
 local function _is_elf(filepath)
     local readelf = _get_tool("readelf", "readelf")
     if not readelf then
@@ -74,32 +99,33 @@ local function _is_elf(filepath)
 end
 
 local function _is_macho(filepath)
-    local otool = _get_tool("otool", "otool")
-    if not otool then
-        return true
-    end
+    local otool_program = _resolve_tool_program("otool", "otool", {allow_direct_name = true})
     return try {
         function()
-            os.iorunv(otool.program, {"-h", filepath})
+            os.iorunv(otool_program, {"-h", filepath})
             return true
         end,
         catch {
-            function()
+            function(e)
+                if _is_tool_missing_error(e) then
+                    -- Best effort fallback: do not block scanning due to tool detection issues.
+                    return true
+                end
                 return false
             end
         }
     }
 end
 
-local function _fix_macho_dylib_refs(tool, filepath)
-    local otool = _get_tool("otool", "otool")
-    if not otool then return end
+local function _fix_macho_dylib_refs(tool_program, filepath)
+    local otool_program = _resolve_tool_program("otool", "otool", {allow_direct_name = true})
     local output = try {
         function()
-            return os.iorunv(otool.program, {"-L", filepath})
+            return os.iorunv(otool_program, {"-L", filepath})
         end,
         catch {
-            function()
+            function(e)
+                log.warn("failed to inspect dylibs for %s via %s: %s", filepath, otool_program, tostring(e))
                 return nil
             end
         }
@@ -115,11 +141,11 @@ local function _fix_macho_dylib_refs(tool, filepath)
             local new_ref = "@rpath/" .. basename
             try {
                 function()
-                    os.vrunv(tool.program, {"-change", dep, new_ref, filepath})
+                    os.vrunv(tool_program, {"-change", dep, new_ref, filepath})
                 end,
                 catch {
                     function(e)
-                        log.warn("failed to change %s: %s", dep, tostring(e))
+                        log.warn("failed to change %s in %s via %s: %s", dep, filepath, tool_program, tostring(e))
                     end
                 }
             }
@@ -455,10 +481,13 @@ local function _patch_elf(target, opts, result)
 end
 
 local function _patch_macho(target, opts, result)
-    local tool = _get_tool("install_name_tool", "install_name_tool")
-    if not tool then
-        log.warn("install_name_tool not found, skip patching")
-        return result
+    local tool_program, fallback_to_direct = _resolve_tool_program(
+        "install_name_tool",
+        "install_name_tool",
+        {allow_direct_name = true}
+    )
+    if fallback_to_direct then
+        log.warn("find_tool(install_name_tool) failed, fallback to direct command: install_name_tool")
     end
 
     local rpath_paths = opts.rpath
@@ -481,20 +510,23 @@ local function _patch_macho(target, opts, result)
                 for _, rp in ipairs(rpath_paths) do
                     try {
                         function()
-                            os.vrunv(tool.program, {"-add_rpath", rp, filepath})
+                            os.vrunv(tool_program, {"-add_rpath", rp, filepath})
                         end,
                         catch {
-                            function()
-                                -- rpath already exists, replace or ignore
+                            function(e)
+                                if not _is_duplicate_rpath_error(e) then
+                                    raise(e)
+                                end
                             end
                         }
                     }
                 end
-                _fix_macho_dylib_refs(tool, filepath)
+                _fix_macho_dylib_refs(tool_program, filepath)
                 return true
             end,
             catch {
                 function(e)
+                    log.warn("failed to patch macho file %s via %s: %s", filepath, tool_program, tostring(e))
                     if opts.strict then
                         raise(e)
                     end

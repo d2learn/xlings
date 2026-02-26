@@ -29,6 +29,15 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local output="$1"
+  local unexpected="$2"
+  local hint="${3:-}"
+  if [[ "$output" == *"$unexpected"* ]]; then
+    fail "expected output NOT to contain '$unexpected'. ${hint}"
+  fi
+}
+
 prepare_runtime_from_archive() {
   mkdir -p "$TMP_BASE"
   tar -xzf "$ARCHIVE_PATH" -C "$TMP_BASE"
@@ -146,6 +155,8 @@ scenario_network_install_optional() {
   out="$(xlings install "d2x@${D2X_VERSION}" -y 2>&1)" || fail "xlings install d2x@${D2X_VERSION} failed"
   assert_contains "$out" "0.1" "install output should show d2x version"
   assert_contains "$out" "installed" "install output should confirm installed"
+  assert_not_contains "$out" "install_name_tool not found, skip patching" \
+    "install_name_tool fallback regression detected"
 
   xlings subos use default >/dev/null 2>&1 || true
   xlings subos rm netmac >/dev/null 2>&1 || true
