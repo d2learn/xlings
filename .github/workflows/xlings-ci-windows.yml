@@ -85,6 +85,27 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
 
+      - name: "Test: xvm runtime PATH check accepts current/bin without XLINGS_HOME"
+        shell: pwsh
+        run: |
+          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
+          Remove-Item Env:XLINGS_SUBOS -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          $installDir = Join-Path $env:RUNNER_TEMP "xvm-runtime-test"
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
+          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
+          if (-not $pkgDir) { throw "Package dir not found" }
+          Set-Location $pkgDir.FullName
+          & .\bin\xlings.exe self install
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          $out = (xvm --version 2>&1) | Out-String
+          Write-Host $out
+          if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
+          if ($out -notmatch "xvm") { throw "FAIL: xvm --version output missing" }
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+
       - name: "Test: quick install script (irm | iex)"
         shell: pwsh
         run: |
