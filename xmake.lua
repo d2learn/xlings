@@ -1,3 +1,9 @@
+-- mcpplibs package repository
+add_repositories("mcpplibs-index https://github.com/mcpplibs/mcpplibs-index.git")
+
+-- cmdline: C++23 command-line parsing library
+add_requires("cmdline 0.0.1")
+
 add_rules("mode.debug", "mode.release")
 
 set_languages("c++23")
@@ -9,6 +15,7 @@ target("xlings")
     add_files("core/**.cppm")
     add_includedirs("core/json")
     set_policy("build.c++.modules", true)
+    add_packages("cmdline")
 
     if is_plat("macosx") then
         local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
