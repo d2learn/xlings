@@ -122,6 +122,9 @@ jobs:
           xlings -h
           xlings config
           xvm --version
+          $searchOut = (xlings search d 2>&1) | Out-String
+          Write-Host $searchOut
+          if ($searchOut -match "(?i)invalid task:\s*xim") { throw "FAIL: quick install search hit invalid task: xim" }
           Write-Host "=== Cleanup quick install test ==="
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
 
