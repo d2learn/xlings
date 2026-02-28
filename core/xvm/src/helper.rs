@@ -60,19 +60,52 @@ pub fn runtime_check_and_tips() -> bool {
     let path_to_check = baseinfo::bindir();
     let path_var = env::var("PATH").unwrap_or_default();
     let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+    let expected_paths = expected_runtime_bindirs(&path_to_check);
 
-    let mut paths = path_var.split(separator).filter(|p| !p.is_empty());
+    if path_var
+        .split(separator)
+        .filter(|p| !p.is_empty())
+        .any(|p| path_matches_expected(p, &expected_paths))
+    {
+        true
+    } else {
+        print_commands(&path_to_check);
+        false
+    }
+}
 
-    match paths.next() {
-        Some(first) if first == path_to_check =>  true,
-        _ => {
-            if paths.any(|p| { p == path_to_check }) {
-                true
-            } else {
-                print_commands(&path_to_check);
-                false
-            }
+fn expected_runtime_bindirs(path_to_check: &str) -> Vec<String> {
+    let mut expected = vec![normalize_runtime_path(path_to_check)];
+    if cfg!(target_os = "windows") {
+        let lower = expected[0].clone();
+        if let Some(prefix) = lower.strip_suffix("\\subos\\default\\bin") {
+            expected.push(format!("{}\\subos\\current\\bin", prefix));
+        } else if let Some(prefix) = lower.strip_suffix("\\subos\\current\\bin") {
+            expected.push(format!("{}\\subos\\default\\bin", prefix));
         }
+    }
+    expected
+}
+
+fn path_matches_expected(path_in_env: &str, expected_paths: &[String]) -> bool {
+    let normalized = normalize_runtime_path(path_in_env);
+    expected_paths.iter().any(|p| p == &normalized)
+}
+
+fn normalize_runtime_path(path: &str) -> String {
+    let trimmed = path.trim().trim_matches('"');
+    if cfg!(target_os = "windows") {
+        let mut p = trimmed.replace('/', "\\").to_ascii_lowercase();
+        while p.ends_with('\\') {
+            p.pop();
+        }
+        p
+    } else {
+        let mut p = trimmed.to_string();
+        while p.ends_with('/') {
+            p.pop();
+        }
+        p
     }
 }
 

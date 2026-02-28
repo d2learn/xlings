@@ -231,6 +231,12 @@ static void setup_shell_profiles(const fs::path& homeDir) {
     }
 #elif defined(_WIN32)
     auto xlingsBin = homeDir / "subos" / "current" / "bin";
+    std::string setHomeCmd = "powershell -NoProfile -Command \""
+        "[System.Environment]::SetEnvironmentVariable('XLINGS_HOME','"
+        + homeDir.string() + "','User');"
+        "Write-Host 'XLINGS_HOME updated'\"";
+    platform::exec(setHomeCmd);
+
     std::string checkCmd = "powershell -NoProfile -Command \""
         "$p=[System.Environment]::GetEnvironmentVariable('Path','User');"
         "if($p -notlike '*" + xlingsBin.string() + "*'){"

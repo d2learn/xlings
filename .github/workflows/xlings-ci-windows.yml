@@ -68,7 +68,7 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
@@ -85,6 +85,27 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
 
+      - name: "Test: xvm runtime PATH check accepts current/bin without XLINGS_HOME"
+        shell: pwsh
+        run: |
+          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
+          Remove-Item Env:XLINGS_SUBOS -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          $installDir = Join-Path $env:RUNNER_TEMP "xvm-runtime-test"
+          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
+          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
+          if (-not $pkgDir) { throw "Package dir not found" }
+          Set-Location $pkgDir.FullName
+          & .\bin\xlings.exe self install
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
+          $out = (xvm --version 2>&1) | Out-String
+          Write-Host $out
+          if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
+          if ($out -notmatch "xvm") { throw "FAIL: xvm --version output missing" }
+          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+
       - name: "Test: quick install script (irm | iex)"
         shell: pwsh
         run: |
@@ -92,15 +113,16 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Write-Host "=== Running quick install script ==="
           irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
-          # Add both paths: subos/current/bin (primary) and bin (fallback; junction may be broken in older zips)
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
           $atSubos = Test-Path "$env:USERPROFILE\.xlings\subos\current\bin\xlings.exe"
-          $atBin = Test-Path "$env:USERPROFILE\.xlings\bin\xlings.exe"
-          if (-not $atSubos -and -not $atBin) { throw "xlings not installed under .xlings" }
+          if (-not $atSubos) { throw "xlings not installed at .xlings\\subos\\current\\bin" }
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config
           xvm --version
+          $searchOut = (xlings search d 2>&1) | Out-String
+          Write-Host $searchOut
+          if ($searchOut -match "(?i)invalid task:\s*xim") { throw "FAIL: quick install search hit invalid task: xim" }
           Write-Host "=== Cleanup quick install test ==="
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
 
@@ -115,6 +137,7 @@ jobs:
           echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
           echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
           echo "XLINGS_SUBOS=$XLINGS_HOME\subos\current" >> $env:GITHUB_ENV
+          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings.exe entry.
           echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
           echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
 
