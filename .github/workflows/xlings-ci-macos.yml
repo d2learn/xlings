@@ -105,6 +105,7 @@ jobs:
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
           echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
           echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
+          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings entry.
           echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: "Init subos shims and switch mirrors"

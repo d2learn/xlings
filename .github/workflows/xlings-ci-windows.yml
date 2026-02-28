@@ -137,6 +137,7 @@ jobs:
           echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
           echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
           echo "XLINGS_SUBOS=$XLINGS_HOME\subos\current" >> $env:GITHUB_ENV
+          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings.exe entry.
           echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
           echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
 
