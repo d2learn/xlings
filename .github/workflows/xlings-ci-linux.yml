@@ -41,7 +41,7 @@ jobs:
         run: |
           curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
           echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
-          echo "PATH=$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/.xlings/subos/current/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install musl-gcc 15.1 with Xlings
         run: |
@@ -103,7 +103,7 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           cd "$pkg_dir"
           ./bin/xlings self install
-          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
+          export PATH="$HOME/.xlings/subos/current/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
           echo "=== Verify install ==="
           xlings -h
           xlings config
@@ -124,7 +124,7 @@ jobs:
           rm -rf "$HOME/.xlings"
           echo "=== Running quick install script ==="
           curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
-          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
+          export PATH="$HOME/.xlings/subos/current/bin:$PATH"
           [[ -x "$HOME/.xlings/subos/current/bin/xlings" ]] || { echo "xlings not installed at ~/.xlings/subos/current/bin"; exit 1; }
           echo "=== Verify quick install ==="
           xlings -h

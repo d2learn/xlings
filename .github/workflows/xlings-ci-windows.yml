@@ -68,7 +68,7 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
@@ -98,7 +98,7 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
           $out = (xvm --version 2>&1) | Out-String
           Write-Host $out
           if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
@@ -113,11 +113,9 @@ jobs:
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Write-Host "=== Running quick install script ==="
           irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
-          # Add both paths: subos/current/bin (primary) and bin (fallback; junction may be broken in older zips)
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
           $atSubos = Test-Path "$env:USERPROFILE\.xlings\subos\current\bin\xlings.exe"
-          $atBin = Test-Path "$env:USERPROFILE\.xlings\bin\xlings.exe"
-          if (-not $atSubos -and -not $atBin) { throw "xlings not installed under .xlings" }
+          if (-not $atSubos) { throw "xlings not installed at .xlings\\subos\\current\\bin" }
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config
