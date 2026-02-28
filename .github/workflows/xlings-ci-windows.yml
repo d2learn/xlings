@@ -39,7 +39,7 @@ jobs:
         run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
 
       - name: Configure xmake
-        run: xmake f -p windows -m release
+        run: xmake f -p windows -m release -y
 
       # ── Phase 2: Build via Release Script ───────────────────────
 
