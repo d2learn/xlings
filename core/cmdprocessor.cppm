@@ -1,6 +1,7 @@
 export module xlings.cmdprocessor;
 
 import std;
+import mcpplibs.cmdline;
 
 import xlings.log;
 import xlings.json;
@@ -11,60 +12,11 @@ import xlings.xself;
 
 namespace xlings::cmdprocessor {
 
-struct CommandInfo {
-    std::string name;
-    std::string description;
-    std::string usage;
-    std::function<int(int argc, char* argv[])> func;
-};
+using namespace mcpplibs;
 
-class CommandProcessor {
-public:
-    CommandProcessor& add(std::string name, std::string description,
-                          std::function<int(int argc, char* argv[])> func,
-                          std::string usage = "") {
-        if (usage.empty()) usage = std::format("xlings {}", name);
-        commands_.push_back({std::move(name), std::move(description),
-                            std::move(usage), std::move(func)});
-        return *this;
-    }
-
-    int run(int argc, char* argv[]) {
-        if (argc <= 1) return print_help();
-
-        std::string cmd = argv[1];
-        if (cmd == "help" || cmd == "--help" || cmd == "-h" || cmd == "--version") {
-            return print_help();
-        }
-
-        for (const auto& c : commands_) {
-            if (c.name == cmd) return c.func(argc, argv);
-        }
-
-        log::error("Unknown command: {}", cmd);
-        std::println("Use 'xlings help' for usage information");
-        return 1;
-    }
-
-    int print_help() const {
-        std::println("xlings version: {}\n", Info::VERSION);
-        std::println("Usage: $ xlings [command] [target] [options]\n");
-        std::println("Commands:");
-        for (const auto& c : commands_) {
-            std::println("\t {:12}\t{}", c.name, c.description);
-        }
-        return 0;
-    }
-
-private:
-    std::vector<CommandInfo> commands_;
-};
-
-// Resolve the xmake project directory that contains xim task definition.
-// The xim task is defined in a xmake.lua that lives next to an xim/ directory
-// (release/installed layout).  The source tree keeps xim code under core/xim/
-// which is NOT a valid -P target; in that case we fall through to the default
-// installed home (~/.xlings) which always has the correct layout.
+// ---------------------------------------------------------------------------
+// Helper: resolve the xmake project directory that contains xim task.
+// ---------------------------------------------------------------------------
 std::filesystem::path find_xim_project_dir() {
     namespace fs = std::filesystem;
 
@@ -72,7 +24,7 @@ std::filesystem::path find_xim_project_dir() {
         return fs::exists(dir / "xim") && fs::exists(dir / "xmake.lua");
     };
 
-    // 1. Prefer layout next to the running binary (multi-version / release package)
+    // 1. Prefer layout next to the running binary (release package)
     auto exePath = platform::get_executable_path();
     if (!exePath.empty()) {
         auto candidate = exePath.parent_path().parent_path();
@@ -237,7 +189,6 @@ int install_from_project_config() {
     }
 
     // Forward-compat for legacy project config.xlings (Lua):
-    // delegate loading/parsing/installing to xim (Lua runtime).
     auto legacyCfg = find_project_legacy_xlings_lua();
     if (!legacyCfg.empty()) {
         return install_from_legacy_config_xlings_via_xim(legacyCfg);
@@ -246,6 +197,100 @@ int install_from_project_config() {
     std::println("Tip: create <project>/.xlings.json with deps (preferred), or use config.xlings xim table, or run `xlings install <package>`");
     return 0;
 }
+
+// ---------------------------------------------------------------------------
+// CommandProcessor: backed by mcpplibs::cmdline::App for subcommand
+// registration and dispatch. Help/version are handled with the original
+// format to stay compatible with existing tests and users.
+// ---------------------------------------------------------------------------
+
+struct CmdEntry {
+    std::string name;
+    std::string description;
+    std::string usage;
+    std::function<int(int, char**)> func;
+};
+
+export class CommandProcessor {
+public:
+    CommandProcessor() : app_("xlings") {}
+
+    CommandProcessor& add(std::string name, std::string description,
+                          std::function<int(int argc, char* argv[])> func,
+                          std::string usage = "") {
+        if (usage.empty()) usage = std::format("xlings {}", name);
+        // Register in cmdline App for structured subcommand dispatch
+        app_.subcommand(name).description(description).end();
+        cmds_.push_back({std::move(name), std::move(description),
+                        std::move(usage), std::move(func)});
+        return *this;
+    }
+
+    int run(int argc, char* argv[]) {
+        if (argc <= 1) return print_help();
+
+        std::string_view first = argv[1];
+
+        // Intercept help/version before delegating to cmdline so we control
+        // the output format (E2E tests expect "Commands:", not "SUBCOMMANDS:").
+        if (first == "-h" || first == "--help" || first == "help" || first == "--version") {
+            if (first == "--version") {
+                std::println("{}", Info::VERSION);
+                return 0;
+            }
+            return print_help();
+        }
+
+        // Build a synthetic argv for cmdline::App::parse() that inserts "--"
+        // after argv[1] (the subcommand token). This stops cmdline from
+        // interpreting downstream flags (-y, --global, --dry-run, …) as its
+        // own unknown options, while still letting it identify the subcommand.
+        std::string sep = "--";
+        std::vector<char*> synth;
+        synth.reserve(static_cast<std::size_t>(argc) + 1);
+        synth.push_back(argv[0]);
+        synth.push_back(argv[1]);
+        synth.push_back(sep.data());
+        for (int i = 2; i < argc; ++i) synth.push_back(argv[i]);
+        int synth_argc = static_cast<int>(synth.size());
+
+        auto result = app_.parse(synth_argc, synth.data());
+        if (!result) {
+            if (result.error().is_error()) {
+                log::error("Unknown command: {}", first);
+                std::println("Use 'xlings help' for usage information");
+            }
+            return result.error().is_error() ? 1 : 0;
+        }
+
+        if (result->has_subcommand()) {
+            auto sub_name = std::string(result->subcommand_name());
+            for (const auto& cmd : cmds_) {
+                if (cmd.name == sub_name) {
+                    return cmd.func(argc, argv);  // pass original argv
+                }
+            }
+        }
+
+        log::error("Unknown command: {}", first);
+        std::println("Use 'xlings help' for usage information");
+        return 1;
+    }
+
+    int print_help() const {
+        std::println("xlings version: {}\n", Info::VERSION);
+        std::println("Usage: $ xlings [command] [target] [options]\n");
+        std::println("Commands:");
+        for (const auto& cmd : cmds_) {
+            std::println("\t {:12}\t{}", cmd.name, cmd.description);
+        }
+        return 0;
+    }
+
+private:
+    cmdline::App app_;
+    std::vector<CmdEntry> cmds_;
+};
 
 export CommandProcessor create_processor() {
     return CommandProcessor{}
