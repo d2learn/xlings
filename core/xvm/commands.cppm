@@ -84,6 +84,39 @@ void install_libs(const std::string& libdir, const fs::path& sysroot_lib,
     }
 }
 
+// Install all library entries from source libdir into sysroot lib/
+void install_libdir(const std::string& libdir, const fs::path& sysroot_lib) {
+    fs::create_directories(sysroot_lib);
+    std::error_code ec;
+    fs::path src(libdir);
+    if (!fs::exists(src, ec)) return;
+    for (auto& entry : platform::dir_entries(src)) {
+        auto target = sysroot_lib / entry.path().filename();
+        if (fs::exists(target, ec) || fs::is_symlink(target, ec)) {
+            fs::remove_all(target, ec);
+        }
+        create_link_(entry.path(), target);
+    }
+}
+
+// Remove library symlinks that were installed from source libdir
+void remove_libdir(const std::string& libdir, const fs::path& sysroot_lib) {
+    if (libdir.empty()) return;
+    fs::path src(libdir);
+    std::error_code ec;
+    if (!fs::exists(src, ec)) return;
+    for (auto& entry : platform::dir_entries(src)) {
+        auto target = sysroot_lib / entry.path().filename();
+        if (fs::is_symlink(target, ec)) {
+            fs::remove(target, ec);
+#if defined(_WIN32)
+        } else if (fs::exists(target, ec)) {
+            fs::remove_all(target, ec);
+#endif
+        }
+    }
+}
+
 // xlings use <target> <version>
 // Updates the active subos workspace and creates/updates bin/ hardlinks
 int cmd_use(const std::string& target, const std::string& version) {
@@ -109,18 +142,23 @@ int cmd_use(const std::string& target, const std::string& version) {
         return 1;
     }
 
-    // Header switching: remove old, install new
+    // Header & lib switching: remove old, install new
     auto sysroot_include = p.subosDir / "usr" / "include";
+    auto sysroot_lib     = p.subosDir / "usr" / "lib";
     auto workspace = Config::effective_workspace();
     auto old_active = get_active_version(workspace, target);
     if (!old_active.empty() && old_active != resolved) {
         auto old_vdata = get_vdata(db, target, old_active);
         if (old_vdata && !old_vdata->includedir.empty())
             remove_headers(old_vdata->includedir, sysroot_include);
+        if (old_vdata && !old_vdata->libdir.empty())
+            remove_libdir(old_vdata->libdir, sysroot_lib);
     }
     auto new_vdata = get_vdata(db, target, resolved);
     if (new_vdata && !new_vdata->includedir.empty())
         install_headers(new_vdata->includedir, sysroot_include);
+    if (new_vdata && !new_vdata->libdir.empty())
+        install_libdir(new_vdata->libdir, sysroot_lib);
 
     // Update workspace
     Config::workspace_mut()[target] = resolved;
