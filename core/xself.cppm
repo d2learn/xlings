@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 static int cmd_init() {
     auto& p = Config::paths();
     auto dirs = {p.homeDir, p.dataDir, p.subosDir, p.binDir, p.libDir,
-                 p.subosDir / "usr", p.subosDir / "xvm", p.subosDir / "generations"};
+                 p.subosDir / "usr", p.subosDir / "generations"};
     for (const auto& d : dirs) {
         if (d.empty()) continue;
         if (!fs::exists(d)) {
@@ -42,12 +42,17 @@ static int cmd_init() {
         if (!ec) std::println("[xlings:self]: created subos/current -> {}", p.subosDir.filename().string());
     }
 
-    auto shimSrc = p.homeDir / "bin" / "xvm-shim";
-    if (!fs::exists(shimSrc)) shimSrc = p.homeDir / "bin" / "xvm-shim.exe";
-    if (fs::exists(shimSrc)) {
-        ensure_subos_shims(p.binDir, shimSrc, p.homeDir);
-    } else {
-        std::println("[xlings:self]: bin/xvm-shim not found, skip shim creation");
+    // Create subos shims from xlings binary (single-binary multicall)
+    auto xlingsBin = p.homeDir / "xlings";
+    if (!fs::exists(xlingsBin)) xlingsBin = p.homeDir / "bin" / "xlings";
+    if (fs::exists(xlingsBin)) {
+        ensure_subos_shims(p.binDir, xlingsBin, p.homeDir);
+    }
+
+    // Create subos .xlings.json if missing
+    auto subosConfig = p.subosDir / ".xlings.json";
+    if (!fs::exists(subosConfig)) {
+        platform::write_string_to_file(subosConfig.string(), "{\"workspace\":{}}");
     }
 
     std::println("[xlings:self]: init ok");

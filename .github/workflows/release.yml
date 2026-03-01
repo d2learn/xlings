@@ -50,19 +50,6 @@ jobs:
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Add Rust musl target
-        run: rustup target add x86_64-unknown-linux-musl
-
       - name: Configure xmake
         run: |
           xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
@@ -86,16 +73,6 @@ jobs:
 
       - name: Install system deps
         run: brew install xmake llvm@20
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
 
       - name: Configure xmake
         run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
@@ -121,16 +98,6 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
 
       - name: Configure xmake
         run: xmake f -p windows -m release

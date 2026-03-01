@@ -1,6 +1,32 @@
 # xlings Tests
 
-This directory contains end-to-end usability tests for `xlings`.
+This directory contains unit tests and end-to-end usability tests for `xlings`.
+
+## Unit Tests
+
+Script: `tests/unit/test_main.cpp` (51 gtest tests, 11 suites)
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| I18nTest | 7 | 多语言翻译 |
+| LogTest | 4 | 日志级别与文件输出 |
+| UtilsTest | 5 | 字符串工具 |
+| CmdlineTest | 4 | CLI 解析 |
+| UiTest | 2 | UI 组件 |
+| XimTypesTest | 4 | PlanNode, InstallPlan 等类型 |
+| XimIndexTest | 9 | 索引构建/搜索/版本匹配/加载 |
+| XimResolverTest | 4 | 依赖解析/拓扑排序/循环检测 |
+| XimDownloaderTest | 3 | 下载任务/归档解压 |
+| XimInstallerTest | 4 | 安装编排/错误处理 |
+| XimCommandsTest | 5 | 命令执行 (search/list/info) |
+
+### Run
+
+```bash
+xmake build xlings_tests && xmake run xlings_tests
+```
+
+Note: XimIndex/Resolver/Installer/Commands tests require the `xim-pkgindex` repo at a known path. They will `GTEST_SKIP` if not found.
 
 ## E2E Linux Usability Test
 
@@ -24,7 +50,7 @@ What it validates in an isolated extracted release package:
 bash tests/e2e/linux_usability_test.sh
 
 # specify archive explicitly
-bash tests/e2e/linux_usability_test.sh build/xlings-0.2.0-linux-x86_64.tar.gz
+bash tests/e2e/linux_usability_test.sh build/xlings-0.4.0-linux-x86_64.tar.gz
 ```
 
 ### Network Scenario
@@ -59,4 +85,3 @@ powershell -ExecutionPolicy Bypass -File tests/e2e/windows_usability_test.ps1
 $env:SKIP_NETWORK_TESTS = "0"
 powershell -ExecutionPolicy Bypass -File tests/e2e/windows_usability_test.ps1
 ```
-

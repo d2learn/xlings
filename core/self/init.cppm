@@ -14,8 +14,8 @@ namespace xlings::xself {
 namespace fs = std::filesystem;
 
 // Base shim names (always created)
-inline constexpr std::array<std::string_view, 7> SHIM_NAMES_BASE = {
-    "xvm-shim", "xlings", "xvm", "xim", "xinstall", "xsubos", "xself"
+inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
+    "xlings", "xim", "xinstall", "xsubos", "xself"
 };
 
 // Optional shims (created only when pkg_root/bin/<name> exists)

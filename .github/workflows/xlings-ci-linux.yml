@@ -55,22 +55,6 @@ jobs:
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
-      - name: Add Rust musl target (for xvm release-build.sh)
-        run: rustup target add x86_64-unknown-linux-musl
-
       - name: Configure xmake
         run: |
           xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
@@ -107,9 +91,8 @@ jobs:
           echo "=== Verify install ==="
           xlings -h
           xlings config
-          xvm --version
           echo "=== Verify shims created at install time ==="
-          for shim in xlings xvm xvm-shim xim xsubos xself; do
+          for shim in xlings xim xsubos xself; do
             [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
           done
           echo "OK: all shims present in subos/default/bin"
@@ -129,7 +112,7 @@ jobs:
           echo "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           echo "=== Cleanup quick install test ==="
           rm -rf "$HOME/.xlings"
 
@@ -164,7 +147,7 @@ jobs:
         run: |
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.1"

@@ -23,19 +23,6 @@ jobs:
         run: |
           brew install xmake llvm@20
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
       - name: Configure xmake
         run: |
           xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
@@ -68,9 +55,9 @@ jobs:
           echo "=== Verify install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           echo "=== Verify shims created at install time ==="
-          for shim in xlings xvm xvm-shim xim xsubos xself; do
+          for shim in xlings xim xsubos xself; do
             [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
           done
           echo "OK: all shims present in subos/default/bin"
@@ -90,7 +77,7 @@ jobs:
           echo "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           echo "=== Cleanup quick install test ==="
           rm -rf "$HOME/.xlings"
 
@@ -126,7 +113,7 @@ jobs:
         run: |
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.3"

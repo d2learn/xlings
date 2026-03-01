@@ -21,8 +21,8 @@ static void ensure_subos_shims_install(const fs::path& target_bin_dir,
                                        const fs::path& pkg_root) {
     if (!fs::exists(shim_src)) return;
     std::string ext = shim_src.extension().string();
-    static constexpr std::array<std::string_view, 7> BASE = {
-        "xvm-shim", "xlings", "xvm", "xim", "xinstall", "xsubos", "xself"};
+    static constexpr std::array<std::string_view, 5> BASE = {
+        "xlings", "xim", "xinstall", "xsubos", "xself"};
     for (auto name : BASE) {
         auto dst = target_bin_dir / (std::string(name) + ext);
         std::error_code ec;
@@ -303,8 +303,8 @@ export int cmd_install() {
         platform::create_directory_link(currentLink, defaultDir);
         auto shimBinDir = defaultDir / "bin";
         fs::create_directories(shimBinDir);
-        auto shimSrc = targetHome / "bin" / "xvm-shim";
-        if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xvm-shim.exe";
+        auto shimSrc = targetHome / "bin" / "xlings";
+        if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xlings.exe";
         if (fs::exists(shimSrc)) ensure_subos_shims_install(shimBinDir, shimSrc, targetHome);
         setup_shell_profiles(targetHome);
         std::println("[xlings:self] {} ({}) - ok\n", targetHome.string(), pkgVersion);
@@ -388,8 +388,8 @@ export int cmd_install() {
     // 5. Create subos/default/bin shims (at install time to reduce package size)
     auto shimBinDir = targetHome / "subos" / "default" / "bin";
     fs::create_directories(shimBinDir);
-    auto shimSrc = targetHome / "bin" / "xvm-shim";
-    if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xvm-shim.exe";
+    auto shimSrc = targetHome / "bin" / "xlings";
+    if (!fs::exists(shimSrc)) shimSrc = targetHome / "bin" / "xlings.exe";
     if (fs::exists(shimSrc)) ensure_subos_shims_install(shimBinDir, shimSrc, targetHome);
 
     // 6. Ensure subos/current link exists. Always recreate: Compress-Archive does not preserve

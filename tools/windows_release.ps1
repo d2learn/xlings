@@ -34,17 +34,7 @@ if ($LASTEXITCODE -ne 0) { Fail "xmake build failed" }
 $BIN_SRC = "build\windows\x64\release\xlings.exe"
 if (-not (Test-Path $BIN_SRC)) { Fail "C++ binary not found at $BIN_SRC" }
 
-# -- 2. Build xvm (Rust) -----------------------------------------
-Info "Building xvm (Rust)..."
-Push-Location core\xvm
-cargo build --release
-if ($LASTEXITCODE -ne 0) { Fail "cargo build failed" }
-Pop-Location
-
-$XVM_DIR = "core\xvm\target\release"
-if (-not (Test-Path "$XVM_DIR\xvm.exe")) { Fail "xvm.exe not found" }
-
-# -- 3. Assemble package -----------------------------------------
+# -- 2. Assemble package -----------------------------------------
 Info "Assembling $OUT_DIR ..."
 if (Test-Path $OUT_DIR) { Remove-Item -Recurse -Force $OUT_DIR }
 
@@ -58,11 +48,9 @@ $dirs = @(
   "$OUT_DIR\subos\default\bin",
   "$OUT_DIR\subos\default\lib",
   "$OUT_DIR\subos\default\usr",
-  "$OUT_DIR\subos\default\xvm",
   "$OUT_DIR\subos\default\generations",
   "$OUT_DIR\config\i18n",
   "$OUT_DIR\config\shell",
-  "$OUT_DIR\config\xvm",
   "$OUT_DIR\tools"
 )
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
@@ -71,14 +59,6 @@ $defaultAbs = (Resolve-Path "$OUT_DIR\subos\default").Path
 New-Item -ItemType Junction -Path "$OUT_DIR\subos\current" -Target $defaultAbs | Out-Null
 
 Copy-Item $BIN_SRC "$OUT_DIR\bin\"
-Copy-Item "$XVM_DIR\xvm.exe" "$OUT_DIR\bin\"
-
-if (-not (Test-Path "$XVM_DIR\xvm-shim.exe")) { Fail "xvm-shim.exe not found (cargo build --release in core/xvm)" }
-Copy-Item "$XVM_DIR\xvm-shim.exe" "$OUT_DIR\bin\"
-
-# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
-Copy-Item "config\xvm\*" "$OUT_DIR\config\xvm\" -ErrorAction SilentlyContinue
-Copy-Item "config\xvm\*" "$OUT_DIR\subos\default\xvm\" -ErrorAction SilentlyContinue
 
 # Bundled xmake
 if ($env:SKIP_XMAKE_BUNDLE -ne "1") {
@@ -122,15 +102,15 @@ Info "Package assembled: $OUT_DIR"
 # -- 4. Verification ---------------------------------------------
 Info "=== Verification ==="
 
-$requiredBins = @("bin\xlings.exe", "bin\xvm.exe")
+$requiredBins = @("bin\xlings.exe")
 foreach ($f in $requiredBins) {
   if (-not (Test-Path "$OUT_DIR\$f")) { Fail "$f is missing" }
 }
 Info "OK: all binaries present"
 
 $requiredDirs = @(
-  "subos\default\bin", "subos\default\lib", "subos\default\xvm",
-  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell", "config\xvm"
+  "subos\default\bin", "subos\default\lib",
+  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell"
 )
 foreach ($d in $requiredDirs) {
   if (-not (Test-Path "$OUT_DIR\$d")) { Fail "directory $d missing" }
@@ -149,9 +129,6 @@ $env:PATH = "$OUT_DIR\subos\current\bin;$OUT_DIR\bin;$env:PATH"
 $helpOut = & "$OUT_DIR\bin\xlings.exe" -h 2>&1 | Out-String
 if ($helpOut -notmatch "subos") { Fail "xlings -h missing 'subos' command" }
 Info "OK: xlings -h shows subos/self commands"
-
-$xvmOut = & "$OUT_DIR\bin\xvm.exe" --version 2>&1 | Out-String
-Info "OK: xvm --version = $($xvmOut.Trim())"
 
 # -- 5. Create archive -------------------------------------------
 Info ""

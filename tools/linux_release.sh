@@ -3,7 +3,7 @@
 #
 # Directory layout (v0.2.0+):
 #   xlings-<ver>-linux-x86_64/
-#   ├── bin/                   # real binaries (xlings, xvm, xvm-shim)
+#   ├── bin/                   # real binaries (xlings)
 #   ├── xim/                   # xim Lua source code
 #   ├── data/                  # global shared data (XLINGS_DATA)
 #   │   ├── xpkgs/             # package store (populated at runtime)
@@ -13,10 +13,9 @@
 #   ├── subos/
 #   │   ├── current -> default # symlink to active subos
 #   │   └── default/           # default sub-os (XLINGS_SUBOS = sysroot)
-#   │       ├── bin/            # shim copies (xlings, xvm, xvm-shim)
+#   │       ├── bin/            # shim hardlinks (xlings, xim, etc.)
 #   │       ├── lib/            # library symlinks (populated at runtime)
 #   │       ├── usr/            # headers (populated at runtime)
-#   │       ├── xvm/            # xvm config
 #   │       └── generations/    # profile generations
 #   ├── tools/xmake/bin/xmake  # bundled xmake
 #   ├── bin/patchelf            # bundled patchelf (for elfpatch RPATH)
@@ -84,14 +83,7 @@ xmake build xlings 2>&1 || fail "xmake build failed"
 BIN_SRC="build/linux/${ARCH}/release/xlings"
 [[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"
 
-# ── 2. Build xvm (Rust) ─────────────────────────────────────────
-info "Building xvm (Rust musl)..."
-(cd core/xvm && chmod +x release-build.sh && ./release-build.sh linux)
-XVM_DIR="core/xvm/target/x86_64-unknown-linux-musl/release"
-[[ -f "$XVM_DIR/xvm" ]]      || fail "xvm binary not found"
-[[ -f "$XVM_DIR/xvm-shim" ]] || fail "xvm-shim binary not found"
-
-# ── 3. Assemble package ─────────────────────────────────────────
+# ── 2. Assemble package ─────────────────────────────────────────
 info "Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
 
@@ -99,7 +91,6 @@ mkdir -p "$OUT_DIR/bin"
 mkdir -p "$OUT_DIR/subos/default/bin"
 mkdir -p "$OUT_DIR/subos/default/lib"
 mkdir -p "$OUT_DIR/subos/default/usr"
-mkdir -p "$OUT_DIR/subos/default/xvm"
 mkdir -p "$OUT_DIR/subos/default/generations"
 ln -sfn default "$OUT_DIR/subos/current"
 mkdir -p "$OUT_DIR/xim"
@@ -109,14 +100,7 @@ mkdir -p "$OUT_DIR/data/xim-index-repos"
 mkdir -p "$OUT_DIR/data/local-indexrepo"
 
 cp "$BIN_SRC"         "$OUT_DIR/bin/xlings"
-cp "$XVM_DIR/xvm"     "$OUT_DIR/bin/xvm"
-cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
-
-# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
-mkdir -p "$OUT_DIR/config/xvm"
-cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
-cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
 cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
 
@@ -194,7 +178,7 @@ info "Package assembled: $OUT_DIR"
 info "=== Verification ==="
 
 # 4a. Check binaries exist (shims created at install time)
-for f in bin/xlings bin/xvm bin/xvm-shim; do
+for f in bin/xlings; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
@@ -206,7 +190,7 @@ fi
 info "OK: all binaries present and executable"
 
 # 4b. Check directory structure (subos/default/bin empty; shims created at install)
-for d in subos/default/bin subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell config/xvm; do
+for d in subos/default/bin subos/default/lib subos/default/usr subos/default/generations xim data/xpkgs config/i18n config/shell; do
   [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
 done
 [[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"
@@ -246,9 +230,6 @@ info "OK: xlings subos list shows default"
 
 GC_OUT=$("$OUT_DIR/bin/xlings" self clean --dry-run 2>&1) || fail "xlings self clean --dry-run failed"
 info "OK: xlings self clean --dry-run works"
-
-XVM_OUT=$("$OUT_DIR/bin/xvm" --version 2>&1) || fail "xvm --version failed"
-info "OK: xvm --version = $XVM_OUT"
 
 # 4e. Network-dependent tests
 if [[ "${SKIP_NETWORK_VERIFY:-}" == "1" ]]; then

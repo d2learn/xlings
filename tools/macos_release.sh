@@ -47,14 +47,7 @@ if otool -L "$BIN_SRC" | grep -q "llvm"; then
 fi
 info "OK: binary has no LLVM runtime dependency"
 
-# ── 2. Build xvm (Rust) ─────────────────────────────────────────
-info "Building xvm (Rust)..."
-(cd core/xvm && cargo build --release)
-XVM_DIR="core/xvm/target/release"
-[[ -f "$XVM_DIR/xvm" ]]      || fail "xvm binary not found"
-[[ -f "$XVM_DIR/xvm-shim" ]] || fail "xvm-shim binary not found"
-
-# ── 3. Assemble package ─────────────────────────────────────────
+# ── 2. Assemble package ─────────────────────────────────────────
 info "Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
 
@@ -62,7 +55,6 @@ mkdir -p "$OUT_DIR/bin"
 mkdir -p "$OUT_DIR/subos/default/bin"
 mkdir -p "$OUT_DIR/subos/default/lib"
 mkdir -p "$OUT_DIR/subos/default/usr"
-mkdir -p "$OUT_DIR/subos/default/xvm"
 mkdir -p "$OUT_DIR/subos/default/generations"
 ln -sfn default "$OUT_DIR/subos/current"
 mkdir -p "$OUT_DIR/xim"
@@ -73,14 +65,7 @@ mkdir -p "$OUT_DIR/data/local-indexrepo"
 mkdir -p "$OUT_DIR/tools"
 
 cp "$BIN_SRC"          "$OUT_DIR/bin/xlings"
-cp "$XVM_DIR/xvm"      "$OUT_DIR/bin/xvm"
-cp "$XVM_DIR/xvm-shim" "$OUT_DIR/bin/xvm-shim"
 chmod +x "$OUT_DIR/bin/"*
-
-# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
-mkdir -p "$OUT_DIR/config/xvm"
-cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/config/xvm/"
-cp config/xvm/versions.xvm.yaml config/xvm/.workspace.xvm.yaml "$OUT_DIR/subos/default/xvm/"
 
 # Bundled xmake
 XMAKE_READY=0
@@ -139,7 +124,7 @@ info "Package assembled: $OUT_DIR"
 # ── 4. Verification ─────────────────────────────────────────────
 info "=== Verification ==="
 
-for f in bin/xlings bin/xvm bin/xvm-shim; do
+for f in bin/xlings; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
 if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
@@ -147,7 +132,7 @@ if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
 fi
 info "OK: all binaries present and executable"
 
-for d in subos/default/bin subos/default/lib subos/default/usr subos/default/xvm subos/default/generations xim data/xpkgs config/i18n config/shell config/xvm; do
+for d in subos/default/bin subos/default/lib subos/default/usr subos/default/generations xim data/xpkgs config/i18n config/shell; do
   [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
 done
 [[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"
@@ -176,9 +161,6 @@ info "OK: xlings config prints correct paths"
 SUBOS_OUT=$("$OUT_DIR/bin/xlings" subos list 2>&1) || fail "xlings subos list failed"
 echo "$SUBOS_OUT" | grep -q "default" || fail "subos list missing 'default'"
 info "OK: xlings subos list shows default"
-
-XVM_OUT=$("$OUT_DIR/bin/xvm" --version 2>&1) || fail "xvm --version failed"
-info "OK: xvm --version = $XVM_OUT"
 
 if [[ "${SKIP_NETWORK_VERIFY:-}" == "1" ]]; then
   info "Skip: network-dependent tests (SKIP_NETWORK_VERIFY=1)"

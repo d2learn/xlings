@@ -24,20 +24,6 @@ jobs:
         with:
           xmake-version: latest
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        shell: pwsh
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
       - name: Configure xmake
         run: xmake f -p windows -m release
 
@@ -72,9 +58,9 @@ jobs:
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           Write-Host "=== Verify shims created at install time ==="
-          $shims = @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xsubos.exe", "xself.exe")
+          $shims = @("xlings.exe", "xim.exe", "xsubos.exe", "xself.exe")
           foreach ($s in $shims) {
             if (-not (Test-Path "$env:USERPROFILE\.xlings\subos\default\bin\$s")) {
               throw "FAIL: shim $s missing after install"
@@ -82,27 +68,6 @@ jobs:
           }
           Write-Host "OK: all shims present in subos/default/bin"
           Write-Host "=== Cleanup install test ==="
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
-
-      - name: "Test: xvm runtime PATH check accepts current/bin without XLINGS_HOME"
-        shell: pwsh
-        run: |
-          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
-          Remove-Item Env:XLINGS_SUBOS -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          $installDir = Join-Path $env:RUNNER_TEMP "xvm-runtime-test"
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
-          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
-          if (-not $pkgDir) { throw "Package dir not found" }
-          Set-Location $pkgDir.FullName
-          & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
-          $out = (xvm --version 2>&1) | Out-String
-          Write-Host $out
-          if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
-          if ($out -notmatch "xvm") { throw "FAIL: xvm --version output missing" }
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
 
@@ -119,7 +84,7 @@ jobs:
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           $searchOut = (xlings search d 2>&1) | Out-String
           Write-Host $searchOut
           if ($searchOut -match "(?i)invalid task:\s*xim") { throw "FAIL: quick install search hit invalid task: xim" }
@@ -146,7 +111,7 @@ jobs:
         run: |
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.1"
