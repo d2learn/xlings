@@ -116,24 +116,6 @@ scenario_self_and_cleanup() {
   assert_contains "$out" "dry-run" "clean dry-run output mismatch"
 }
 
-scenario_subos_create_requires_config_xvm() {
-  log "scenario: subos new fails when config/xvm missing"
-  local config_xvm="$XLINGS_HOME/config/xvm"
-  if [[ ! -d "$config_xvm" ]]; then
-    log "  SKIP: config/xvm dir not present (xvm integrated into C++ binary)"
-    return
-  fi
-
-  mv "$config_xvm" "${config_xvm}.bak" || fail "backup config/xvm failed"
-  local out
-  out="$(xlings subos new testcfgxvm 2>&1)" || true
-  mv "${config_xvm}.bak" "$config_xvm" || fail "restore config/xvm failed"
-
-  assert_contains "$out" "config/xvm" "subos new should error when config/xvm missing"
-  assert_contains "$out" "package incomplete" "error should mention package incomplete"
-  log "  subos create requires config/xvm: OK"
-}
-
 scenario_project_deps() {
   log "scenario: project deps (.xlings.json)"
 
@@ -246,7 +228,6 @@ main() {
   scenario_basic_commands
   scenario_info_mapping
   scenario_subos_lifecycle_and_aliases
-  scenario_subos_create_requires_config_xvm
   scenario_self_and_cleanup
   scenario_project_deps_offline
   scenario_network_install_optional

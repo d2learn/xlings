@@ -25,8 +25,6 @@ esac
 
 D2X_VERSION="${D2X_VERSION:-$DEFAULT_D2X_VERSION}"
 XLINGS_DATA="${XLINGS_DATA:-${XLINGS_HOME:?XLINGS_HOME must be set}/data}"
-XVM_BIN="${XVM_BIN:-xvm}"
-
 log()  { echo "[rpath-verify] $*"; }
 fail() { echo "[rpath-verify] FAIL: $*" >&2; exit 1; }
 
@@ -109,35 +107,4 @@ unset DYLD_LIBRARY_PATH 2>/dev/null || true
 D2X_RUN_OUT="$(d2x --version 2>&1)" || fail "d2x --version failed — RPATH may be broken"
 log "  d2x output: $D2X_RUN_OUT"
 
-# ── Test 3: shim does not leak library-path variables ───────────────────
-
-log "Test 3: shim does not inject library-path variables into child env"
-
-if ! command -v "$XVM_BIN" &>/dev/null; then
-  log "SKIP Test 3: standalone xvm binary not found (integrated into xlings multicall)"
-  log "PASS: RPATH verification tests 1-2 passed (Test 3 skipped)"
-  exit 0
-fi
-
-TARGET_NAME="xvm-rpath-env-test"
-cleanup() { "$XVM_BIN" remove "$TARGET_NAME" -y >/dev/null 2>&1 || true; }
-trap cleanup EXIT
-
-"$XVM_BIN" add "$TARGET_NAME" 0.0.1 --alias "env" >/dev/null
-
-CHILD_ENV="$("$XVM_BIN" run "$TARGET_NAME" 2>&1)" || true
-
-if [[ "$OS" == "Linux" ]]; then
-  LIB_VAR="LD_LIBRARY_PATH"
-else
-  LIB_VAR="DYLD_LIBRARY_PATH"
-fi
-
-if echo "$CHILD_ENV" | grep -q "^${LIB_VAR}="; then
-  echo "$CHILD_ENV"
-  fail "$LIB_VAR unexpectedly present in child environment"
-fi
-
-log "  no $LIB_VAR contamination"
-
-log "PASS: all RPATH verification tests passed"
+log "PASS: RPATH verification tests passed"
