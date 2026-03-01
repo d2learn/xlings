@@ -243,15 +243,15 @@ else
     if command -v timeout &>/dev/null; then timeout "$t" "$@"; else "$@"; fi
   }
 
-  info "Verify: xim --update index (timeout 300s)..."
+  info "Verify: xlings update (timeout 300s)..."
   if ! run_with_timeout 300 bash -c \
-    'cd "$1" && xmake xim -P . -- --update index' _ "$OUT_DIR"; then
-    fail "xim --update index failed (network?). Set SKIP_NETWORK_VERIFY=1 to skip."
+    'PATH="$1/subos/current/bin:$1/bin:/usr/local/bin:/usr/bin:/bin" "$1/bin/xlings" update' _ "$OUT_DIR"; then
+    fail "xlings update failed (network?). Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
   info "Verify: xlings install d2x@0.1.3 -y (timeout 300s)..."
   if ! run_with_timeout 300 bash -c \
-    'cd "$1" && PATH="$1/subos/current/bin:$1/bin:/usr/local/bin:/usr/bin:/bin" ./bin/xlings install d2x@0.1.3 -y' _ "$OUT_DIR"; then
+    'PATH="$1/subos/current/bin:$1/bin:/usr/local/bin:/usr/bin:/bin" "$1/bin/xlings" install d2x@0.1.3 -y' _ "$OUT_DIR"; then
     fail "install d2x@0.1.3 failed. Set SKIP_NETWORK_VERIFY=1 to skip."
   fi
 
