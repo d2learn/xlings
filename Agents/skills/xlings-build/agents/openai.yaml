@@ -1,0 +1,4 @@
+interface:
+  display_name: "XLINGS Build"
+  short_description: "Build xlings on Linux, macOS, and Windows"
+  default_prompt: "Use $xlings-build to build xlings on Linux, macOS, or Windows with the right toolchain and verification steps."

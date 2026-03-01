@@ -1,0 +1,4 @@
+interface:
+  display_name: "XLINGS Quickstart"
+  short_description: "Xlings install, index, namespace, and subos guide"
+  default_prompt: "Handle xlings operations: install/use/search/update, namespace packages, custom index repos, and multi-version subos workflows."
