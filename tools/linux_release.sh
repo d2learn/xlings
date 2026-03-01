@@ -68,6 +68,11 @@ if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
     sudo mkdir -p "$LOADER_DIR" && sudo chown "$(id -u):$(id -g)" "$LOADER_DIR"
   fi
   ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
+  # Configure musl library search path so musl-linked binaries find libstdc++/libgcc_s
+  MUSL_LD_PATH="/etc/ld-musl-x86_64.path"
+  if [[ ! -f "$MUSL_LD_PATH" ]] || ! grep -q "$MUSL_SDK" "$MUSL_LD_PATH" 2>/dev/null; then
+    echo "$MUSL_SDK/x86_64-linux-musl/lib" | sudo tee "$MUSL_LD_PATH" > /dev/null 2>&1 || true
+  fi
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
   export PATH="$MUSL_SDK/bin:$PATH"
