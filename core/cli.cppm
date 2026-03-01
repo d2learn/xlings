@@ -4,6 +4,7 @@ import std;
 
 import mcpplibs.cmdline;
 import xlings.config;
+import xlings.json;
 import xlings.log;
 import xlings.i18n;
 import xlings.platform;
@@ -14,7 +15,7 @@ import xlings.xvm.commands;
 
 namespace xlings::cli {
 
-// Project config install (legacy compat)
+// Install packages from project .xlings.json deps
 int install_from_project_config_() {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -22,6 +23,7 @@ int install_from_project_config_() {
     if (ec) return 1;
     auto homeDir = Config::paths().homeDir;
 
+    // Walk up from cwd looking for .xlings.json with deps
     fs::path cur = cwd;
     while (!cur.empty()) {
         auto cfg = cur / ".xlings.json";
@@ -29,28 +31,25 @@ int install_from_project_config_() {
             auto curNorm = fs::weakly_canonical(cur, ec);
             auto homeNorm = fs::weakly_canonical(homeDir, ec);
             if (curNorm != homeNorm) {
-                std::string ximCmd = std::format(
-                    "xmake xim -P \"{}\" -- --install-config-xlings \"{}\" -y",
-                    homeDir.string(), cfg.string());
-                return platform::exec(ximCmd);
-            }
-        }
-        auto parent = cur.parent_path();
-        if (parent == cur) break;
-        cur = parent;
-    }
-
-    // Check for config.xlings (legacy Lua)
-    cur = cwd;
-    while (!cur.empty()) {
-        auto cfg = cur / "config.xlings";
-        if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {
-            auto curNorm = fs::weakly_canonical(cur, ec);
-            auto homeNorm = fs::weakly_canonical(homeDir, ec);
-            if (curNorm != homeNorm) {
-                std::string cmd = "xmake xim -P \"" + homeDir.string() +
-                                  "\" -- --install-config-xlings \"" + cfg.string() + "\" -y";
-                return platform::exec(cmd);
+                // Parse deps from project .xlings.json
+                try {
+                    auto content = platform::read_file_to_string(cfg.string());
+                    auto json = nlohmann::json::parse(content, nullptr, false);
+                    if (!json.is_discarded() && json.contains("deps") && json["deps"].is_array()) {
+                        std::vector<std::string> targets;
+                        for (auto it = json["deps"].begin(); it != json["deps"].end(); ++it) {
+                            if (it->is_string()) {
+                                targets.push_back(it->get<std::string>());
+                            }
+                        }
+                        if (!targets.empty()) {
+                            return xim::cmd_install(targets, true, false);
+                        }
+                    }
+                } catch (...) {
+                    log::error("failed to parse {}", cfg.string());
+                    return 1;
+                }
             }
         }
         auto parent = cur.parent_path();

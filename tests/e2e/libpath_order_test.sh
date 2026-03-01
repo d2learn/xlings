@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This test validated the standalone xvm binary's libpath policy.
+# Since xvm is now integrated into the xlings multicall binary,
+# the standalone xvm CLI no longer exists. Skip gracefully.
+
+XVM_BIN="${XVM_BIN:-xvm}"
+
+if ! command -v "$XVM_BIN" &>/dev/null; then
+  echo "[libpath-test] SKIP: standalone xvm binary not found (integrated into xlings)"
+  echo "[libpath-test] libpath policy is enforced by C++ shim module (tested in unit tests)"
+  exit 0
+fi
+
 TARGET_DEPRECATED="xvm-libpath-deprecated-test"
 TARGET_DIRECT="xvm-libpath-direct-test"
-XVM_BIN="${XVM_BIN:-xvm}"
 
 xvm_cmd() {
   "$XVM_BIN" "$@"

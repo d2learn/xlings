@@ -61,6 +61,11 @@ test_bug1_xim_project_dir() {
 test_bug2_xvm_path_spaces() {
   log "Bug 2: xvm add --path with spaces"
 
+  if ! command -v xvm &>/dev/null; then
+    log "  SKIP: standalone xvm binary not found (integrated into xlings multicall)"
+    return
+  fi
+
   local test_dir="/tmp/xlings-test-path with spaces"
   mkdir -p "$test_dir/bin"
   printf '#!/bin/sh\necho hello\n' > "$test_dir/bin/bugtest2"
@@ -107,7 +112,7 @@ test_bug3_elfpatch_tool_detection() {
     log "  elfpatch.lua not found at $elfpatch_file, skip"
   fi
 
-  # Verify xvm.lua --path quoting
+  # Verify xvm.lua --path quoting (only if old Lua xvm module exists)
   local xvm_file="$ROOT_DIR/core/xim/base/xvm.lua"
   if [[ -f "$xvm_file" ]]; then
     if grep -q '\-\-path "%s"' "$xvm_file"; then
@@ -115,6 +120,8 @@ test_bug3_elfpatch_tool_detection() {
     else
       fail "--path not quoted in xvm.lua"
     fi
+  else
+    log "  xvm.lua not found at $xvm_file (xvm integrated into C++), skip"
   fi
 
   log "  Bug 3: PASS"
