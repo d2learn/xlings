@@ -74,6 +74,43 @@ export int run(int argc, char* argv[]) {
     // Special: subos, self, script need raw argc/argv
     if (argc >= 2) {
         std::string cmd { argv[1] };
+
+        // Handle -h/--help/--version before cmdline library to avoid
+        // std::format width-specifier crash in GCC 15 C++23 modules.
+        if (cmd == "-h" || cmd == "--help") {
+            auto pad = [](std::string s, std::size_t w) {
+                while (s.size() < w) s += ' ';
+                return s;
+            };
+            std::println("xlings {}", Info::VERSION);
+            std::println("\nA modern package manager and development environment tool\n");
+            std::println("USAGE:");
+            std::println("    xlings [OPTIONS] [SUBCOMMAND]\n");
+            std::println("OPTIONS:");
+            std::println("    {}  {}", pad("-y, --yes", 24), "Skip confirmation prompts");
+            std::println("    {}  {}", pad("-v, --verbose", 24), "Enable verbose output");
+            std::println("    {}  {}", pad("-q, --quiet", 24), "Suppress non-essential output");
+            std::println("    {}  {}", pad("--lang <LANG>", 24), "Override language (en/zh)");
+            std::println("    {}  {}", pad("--mirror <MIRROR>", 24), "Override mirror (GLOBAL/CN)");
+            std::println("\nSUBCOMMANDS:");
+            std::println("    {}  {}", pad("install", 12), "Install packages (e.g. xlings install gcc@15 node)");
+            std::println("    {}  {}", pad("remove", 12), "Remove a package");
+            std::println("    {}  {}", pad("update", 12), "Update package index or a specific package");
+            std::println("    {}  {}", pad("search", 12), "Search for packages");
+            std::println("    {}  {}", pad("list", 12), "List installed packages");
+            std::println("    {}  {}", pad("info", 12), "Show package information");
+            std::println("    {}  {}", pad("use", 12), "Switch tool version");
+            std::println("    {}  {}", pad("config", 12), "Show xlings configuration");
+            std::println("    {}  {}", pad("subos", 12), "Manage sub-OS environments");
+            std::println("    {}  {}", pad("self", 12), "Manage xlings itself (install, update, clean)");
+            std::println("    {}  {}", pad("script", 12), "Run xlings scripts");
+            return 0;
+        }
+        if (cmd == "--version") {
+            std::println("xlings {}", Info::VERSION);
+            return 0;
+        }
+
         if (cmd == "subos") return subos::run(argc, argv);
         if (cmd == "self") return xself::run(argc, argv);
         if (cmd == "script") {
