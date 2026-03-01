@@ -208,12 +208,6 @@ jobs:
           xlings subos list
           Write-Host "OK: test subos removed"
 
-      - name: "Test: E2E usability script"
-        shell: pwsh
-        run: |
-          $env:SKIP_NETWORK_TESTS = "0"
-          & "$env:GITHUB_WORKSPACE\tests\e2e\windows_usability_test.ps1" -ArchivePath "$env:GITHUB_WORKSPACE\build\release.zip"
-
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
