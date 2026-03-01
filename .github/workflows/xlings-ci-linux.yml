@@ -65,7 +65,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 

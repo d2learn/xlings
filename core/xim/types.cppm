@@ -35,19 +35,29 @@ struct PlanNode {
 
     // Explicit special members to work around GCC 15 module linker bug
     PlanNode() = default;
+#if defined(_MSC_VER)
+    ~PlanNode() = default;
+    PlanNode(const PlanNode&) = default;
+    PlanNode& operator=(const PlanNode&) = default;
+    PlanNode(PlanNode&&) noexcept = default;
+    PlanNode& operator=(PlanNode&&) noexcept = default;
+#else
     ~PlanNode();
     PlanNode(const PlanNode&);
     PlanNode& operator=(const PlanNode&);
     PlanNode(PlanNode&&) noexcept;
     PlanNode& operator=(PlanNode&&) noexcept;
+#endif
 };
 
+#if !defined(_MSC_VER)
 // Out-of-line definitions force GCC to emit symbols in this TU
 PlanNode::~PlanNode() = default;
 PlanNode::PlanNode(const PlanNode&) = default;
 PlanNode& PlanNode::operator=(const PlanNode&) = default;
 PlanNode::PlanNode(PlanNode&&) noexcept = default;
 PlanNode& PlanNode::operator=(PlanNode&&) noexcept = default;
+#endif
 
 // DAG install plan (topologically sorted)
 struct InstallPlan {
@@ -63,18 +73,28 @@ struct InstallPlan {
     }
 
     InstallPlan() = default;
+#if defined(_MSC_VER)
+    ~InstallPlan() = default;
+    InstallPlan(const InstallPlan&) = default;
+    InstallPlan& operator=(const InstallPlan&) = default;
+    InstallPlan(InstallPlan&&) noexcept = default;
+    InstallPlan& operator=(InstallPlan&&) noexcept = default;
+#else
     ~InstallPlan();
     InstallPlan(const InstallPlan&);
     InstallPlan& operator=(const InstallPlan&);
     InstallPlan(InstallPlan&&) noexcept;
     InstallPlan& operator=(InstallPlan&&) noexcept;
+#endif
 };
 
+#if !defined(_MSC_VER)
 InstallPlan::~InstallPlan() = default;
 InstallPlan::InstallPlan(const InstallPlan&) = default;
 InstallPlan& InstallPlan::operator=(const InstallPlan&) = default;
 InstallPlan::InstallPlan(InstallPlan&&) noexcept = default;
 InstallPlan& InstallPlan::operator=(InstallPlan&&) noexcept = default;
+#endif
 
 // Download task for a single resource
 struct DownloadTask {

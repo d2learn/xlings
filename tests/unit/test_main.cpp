@@ -575,22 +575,33 @@ TEST(XimCommandsTest, DetectPlatform) {
 }
 
 TEST(XimCommandsTest, SearchNonexistentReturnsZero) {
-    // search for something that won't match anything
+    namespace fs = std::filesystem;
+    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
+        GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 0);  // returns 0 with "no packages found" message
 }
 
 TEST(XimCommandsTest, ListWithFilter) {
+    namespace fs = std::filesystem;
+    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
+        GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_list("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoKnownPackage) {
+    namespace fs = std::filesystem;
+    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
+        GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_info("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoUnknownPackage) {
+    namespace fs = std::filesystem;
+    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
+        GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 1);
 }
