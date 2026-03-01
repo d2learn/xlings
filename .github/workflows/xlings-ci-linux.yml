@@ -64,6 +64,10 @@ jobs:
           # Configure musl's library search path so musl-linked binaries can find
           # libstdc++.so.6 and libgcc_s.so.1 (without affecting glibc's ld.so).
           echo "$MUSL_SDK/x86_64-linux-musl/lib" | sudo tee /etc/ld-musl-x86_64.path > /dev/null
+          # Also symlink the C++ runtime libs into /lib/ (musl default search path)
+          # in case the musl loader was built with a custom sysconfdir.
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libstdc++.so.6" /lib/libstdc++.so.6
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libgcc_s.so.1" /lib/libgcc_s.so.1
 
       - name: Configure xmake
         run: |
