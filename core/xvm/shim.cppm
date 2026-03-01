@@ -166,8 +166,9 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     setup_envs(*vdata, exe_path.string(), xlings_home);
 
     // Build argv for execvp
+    auto exe_str = exe_path.string();
     std::vector<const char*> new_argv;
-    new_argv.push_back(exe_path.c_str());
+    new_argv.push_back(exe_str.c_str());
     for (int i = 1; i < argc; ++i) {
         new_argv.push_back(argv[i]);
     }

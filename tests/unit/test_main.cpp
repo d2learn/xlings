@@ -1,4 +1,3 @@
-module;
 #include <gtest/gtest.h>
 
 import std;
