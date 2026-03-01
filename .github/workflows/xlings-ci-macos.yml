@@ -38,7 +38,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+          xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20 -y
 
       # ── Phase 2: Build via Release Script ───────────────────────
 

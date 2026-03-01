@@ -65,7 +65,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
 
       - name: Build (linux_release)
         run: |
@@ -98,7 +98,7 @@ jobs:
           workspaces: core/xvm
 
       - name: Configure xmake
-        run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+        run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20 -y
 
       - name: Build (macos_release)
         run: |
@@ -133,7 +133,7 @@ jobs:
           workspaces: core/xvm
 
       - name: Configure xmake
-        run: xmake f -p windows -m release
+        run: xmake f -p windows -m release -y
 
       - name: Build (windows_release)
         shell: pwsh
