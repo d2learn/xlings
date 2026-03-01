@@ -54,6 +54,11 @@ jobs:
           export PATH="$MUSL_SDK/bin:$PATH"
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
+          # Create musl loader symlink so toolchain binaries (as, cc1, collect2) can execute.
+          # These were built with a hardcoded interpreter path that must exist on the host.
+          LOADER_DIR="/home/xlings/.xlings_data/lib"
+          sudo mkdir -p "$LOADER_DIR"
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
 
       - name: Configure xmake
         run: |
