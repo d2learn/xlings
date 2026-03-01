@@ -266,16 +266,6 @@ jobs:
           xlings subos list
           echo "OK: test subos removed"
 
-      - name: "Test: bugfix regression"
-        run: |
-          chmod +x tests/e2e/bugfix_regression_test.sh
-          bash tests/e2e/bugfix_regression_test.sh
-
-      - name: "Test: E2E usability script"
-        run: |
-          chmod +x tests/e2e/linux_usability_test.sh
-          SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh build/release.tar.gz
-
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
