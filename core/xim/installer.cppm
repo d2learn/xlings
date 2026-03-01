@@ -205,7 +205,7 @@ public:
             if (onStatus) {
                 onStatus({ node.name, InstallPhase::Done, 1.0f, "" });
             }
-            log::info("{} installed successfully", node.name);
+            log::info("{}@{} installed successfully", node.name, node.version);
         }
 
         return {};

@@ -76,7 +76,10 @@ select_package(std::span<const std::pair<std::string, std::string>> items) {
     std::vector<std::string> labels;
     labels.reserve(items.size());
     for (auto& [name, desc] : items) {
-        labels.push_back(std::format("{:<20s} {}", name, desc));
+        // Avoid {:<20s} — GCC 15 modules crash on width specifiers
+        std::string padded = name;
+        while (padded.size() < 20) padded += ' ';
+        labels.push_back(padded + " " + desc);
     }
 
     auto menu = Menu(&labels, &selected);

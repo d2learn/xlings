@@ -126,7 +126,7 @@ constexpr MsgEntry gMessages_[] = {
     // DOWNLOAD_START
     { "Downloading {} ...",                        "正在下载 {} ..." },
     // DOWNLOAD_PROGRESS
-    { "  {} {:>3.0f}%",                            "  {} {:>3.0f}%" },
+    { "  {} {}%",                                   "  {} {}%" },
     // DOWNLOAD_DONE
     { "Downloaded {}",                             "已下载 {}" },
     // DOWNLOAD_FAILED

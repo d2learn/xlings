@@ -211,8 +211,9 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
             if (!referenced.count(key)) {
                 auto size = dir_size_(verEntry.path());
                 if (dryRun) {
-                    std::println("  would remove xpkgs/{}/{} ({:.1f} MB)",
-                        pkgName, ver, static_cast<double>(size) / 1e6);
+                    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
+                    auto mb = static_cast<int>(static_cast<double>(size) / 1e5) / 10.0;
+                    std::println("  would remove xpkgs/{}/{} ({} MB)", pkgName, ver, mb);
                 } else {
                     std::error_code ec;
                     fs::remove_all(verEntry.path(), ec);
@@ -225,12 +226,14 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
         }
     }
 
+    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
+    auto totalMb = static_cast<int>(static_cast<double>(freedBytes) / 1e5) / 10.0;
     if (dryRun) {
-        std::println("[xlings:store] gc dry-run: {} packages, {:.1f} MB would be freed",
-            removedCount, static_cast<double>(freedBytes) / 1e6);
+        std::println("[xlings:store] gc dry-run: {} packages, {} MB would be freed",
+            removedCount, totalMb);
     } else {
-        std::println("[xlings:store] gc: {} packages removed, {:.1f} MB freed",
-            removedCount, static_cast<double>(freedBytes) / 1e6);
+        std::println("[xlings:store] gc: {} packages removed, {} MB freed",
+            removedCount, totalMb);
     }
     return 0;
 }
