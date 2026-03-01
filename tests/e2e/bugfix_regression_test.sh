@@ -47,6 +47,8 @@ test_bug1_xim_project_dir() {
     assert_not_contains "$out" "invalid task" "xim task should be found in installed home"
     assert_contains "$out" "xim" "xim help should appear"
     log "  installed home layout: OK"
+  else
+    log "  xim/ dir not in XLINGS_HOME (xim integrated into C++ binary), skip xmake check"
   fi
 
   # Verify source root does NOT have xim/ dir (only core/xim/)
