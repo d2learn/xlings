@@ -1191,16 +1191,19 @@ TEST_F(XvmHeaderSymlinkTest, InstallAndRemoveHeaders) {
     auto sysrootInclude = testDir_ / "sysroot" / "usr" / "include";
     xlings::xvm::install_headers(srcInclude.string(), sysrootInclude);
 
-    // Verify symlinks created
+    // Verify links created (symlinks on Unix, hard links/copies on Windows)
+    EXPECT_TRUE(fs::exists(sysrootInclude / "stdio.h"));
+    EXPECT_TRUE(fs::exists(sysrootInclude / "bits"));
+#if !defined(_WIN32)
     EXPECT_TRUE(fs::is_symlink(sysrootInclude / "stdio.h"));
-    EXPECT_TRUE(fs::is_symlink(sysrootInclude / "bits"));
     EXPECT_EQ(fs::read_symlink(sysrootInclude / "stdio.h").string(),
               (srcInclude / "stdio.h").string());
+#endif
 
     // Remove headers
     xlings::xvm::remove_headers(srcInclude.string(), sysrootInclude);
 
-    // Verify symlinks removed
+    // Verify links removed
     EXPECT_FALSE(fs::exists(sysrootInclude / "stdio.h"));
     EXPECT_FALSE(fs::exists(sysrootInclude / "bits"));
 }
@@ -1219,14 +1222,20 @@ TEST_F(XvmHeaderSymlinkTest, InstallHeadersOverwrite) {
 
     // Install first, then overwrite with second
     xlings::xvm::install_headers(srcInclude1.string(), sysrootInclude);
+    EXPECT_TRUE(fs::exists(sysrootInclude / "common.h"));
+#if !defined(_WIN32)
     EXPECT_TRUE(fs::is_symlink(sysrootInclude / "common.h"));
     EXPECT_EQ(fs::read_symlink(sysrootInclude / "common.h").string(),
               (srcInclude1 / "common.h").string());
+#endif
 
     xlings::xvm::install_headers(srcInclude2.string(), sysrootInclude);
+    EXPECT_TRUE(fs::exists(sysrootInclude / "common.h"));
+#if !defined(_WIN32)
     EXPECT_TRUE(fs::is_symlink(sysrootInclude / "common.h"));
     EXPECT_EQ(fs::read_symlink(sysrootInclude / "common.h").string(),
               (srcInclude2 / "common.h").string());
+#endif
 }
 
 TEST_F(XvmHeaderSymlinkTest, RemoveHeadersNonexistentDir) {

@@ -59,13 +59,15 @@ jobs:
           LOADER_DIR="/home/xlings/.xlings_data/lib"
           sudo mkdir -p "$LOADER_DIR"
           sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
+          # Also create symlink at /lib/ for binaries BUILT by musl-gcc (default interpreter path)
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" /lib/ld-musl-x86_64.so.1
           # Configure musl's library search path so musl-linked binaries can find
           # libstdc++.so.6 and libgcc_s.so.1 (without affecting glibc's ld.so).
           echo "$MUSL_SDK/x86_64-linux-musl/lib" | sudo tee /etc/ld-musl-x86_64.path > /dev/null
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 

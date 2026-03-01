@@ -150,7 +150,7 @@ export XLINGS_DATA="$OUT_DIR/data"
 export XLINGS_SUBOS="$OUT_DIR/subos/current"
 export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$PATH"
 
-HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1) || fail "xlings -h failed"
+HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1) || { echo "[release] xlings -h output: $HELP_OUT"; fail "xlings -h failed"; }
 echo "$HELP_OUT" | grep -q "subos" || fail "xlings -h missing 'subos' command"
 info "OK: xlings -h shows subos/self commands"
 
