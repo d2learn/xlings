@@ -124,6 +124,7 @@ jobs:
             }
           }
           xlings self init
+          xlings update
 
       - name: "Test: basic commands"
         shell: pwsh

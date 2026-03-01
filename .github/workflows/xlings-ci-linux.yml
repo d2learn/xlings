@@ -159,6 +159,7 @@ jobs:
               mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
           fi
           xlings self init
+          xlings update
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
 
