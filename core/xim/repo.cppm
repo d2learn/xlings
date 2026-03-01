@@ -65,10 +65,10 @@ bool sync_repo(const std::filesystem::path& localDir,
 }
 
 // Sync all index repos from config's index_repos list
-// Uses effective_data_dir() which respects project-level config
+// Always uses global data dir (index is shared, not project-local)
 bool sync_all_repos(bool force = false) {
     namespace fs = std::filesystem;
-    auto dataDir = Config::effective_data_dir();
+    auto dataDir = Config::paths().dataDir;
     auto mirror = Config::mirror();
 
     // Read index_repos from config
@@ -102,10 +102,10 @@ bool sync_all_repos(bool force = false) {
     return true;
 }
 
-// Get the main index repo directory path (respects project-local config)
+// Get the main index repo directory path (always global)
 std::filesystem::path main_repo_dir() {
     auto& repos = Config::index_repos();
-    auto dataDir = Config::effective_data_dir();
+    auto dataDir = Config::paths().dataDir;
     if (!repos.empty()) {
         return dataDir / repos[0].name;
     }

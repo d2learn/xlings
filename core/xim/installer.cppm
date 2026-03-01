@@ -33,7 +33,7 @@ public:
                 std::format("plan has errors: {}", plan.errors[0]));
         }
 
-        auto dataDir = Config::effective_data_dir();
+        auto dataDir = Config::paths().dataDir;
         auto platform = detect_platform_();
 
         // Phase 1: Collect download tasks for non-installed packages
@@ -232,7 +232,7 @@ public:
         ctx.pkg_name = name;
         ctx.platform = platform;
         ctx.bin_dir = Config::paths().binDir;
-        ctx.install_dir = Config::effective_data_dir() / "xpkgs" / name;
+        ctx.install_dir = Config::paths().dataDir / "xpkgs" / name;
         ctx.xpkg_dir = entry->path.parent_path();
         ctx.subos_sysrootdir = Config::paths().subosDir.string();
 
