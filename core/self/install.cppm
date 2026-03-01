@@ -152,7 +152,7 @@ static fs::path default_home() {
 static void copy_directory_contents(const fs::path& src, const fs::path& dst) {
     std::error_code ec;
     fs::create_directories(dst, ec);
-    for (auto& entry : fs::directory_iterator(src)) {
+    for (auto& entry : platform::dir_entries(src)) {
         auto target = dst / entry.path().filename();
         if (entry.is_directory()) {
             fs::copy(entry.path(), target,
@@ -338,7 +338,7 @@ export int cmd_install() {
 
     // 1. Remove non-user dirs; preserve data/subos unless user chose overwrite
     if (fs::exists(targetHome)) {
-        for (auto& entry : fs::directory_iterator(targetHome)) {
+        for (auto& entry : platform::dir_entries(targetHome)) {
             auto name = entry.path().filename().string();
             if (name == "data" || name == "subos") {
                 if (!overwriteDataSubos) continue;
@@ -349,7 +349,7 @@ export int cmd_install() {
     }
 
     // 2. Copy from release, skip data/subos when target already has them; merge subos static parts if exists
-    for (auto& entry : fs::directory_iterator(srcDir)) {
+    for (auto& entry : platform::dir_entries(srcDir)) {
         auto name = entry.path().filename().string();
         if (name == "data") {
             if (fs::exists(targetHome / "data") && fs::is_directory(targetHome / "data"))

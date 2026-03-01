@@ -47,7 +47,7 @@ export std::vector<SubosInfo> list_all() {
             int toolCount = 0;
             auto binDir   = dir / "bin";
             if (fs::exists(binDir)) {
-                for (auto& e : fs::directory_iterator(binDir)) {
+                for (auto& e : platform::dir_entries(binDir)) {
                     auto stem = e.path().stem().string();
                     if (!xself::is_builtin_shim(stem) && stem != "xvm-alias")
                         ++toolCount;
@@ -193,7 +193,7 @@ export std::optional<SubosInfo> info(const std::string& name) {
     int toolCount = 0;
     auto binDir = dir / "bin";
     if (fs::exists(binDir)) {
-        for (auto& e : fs::directory_iterator(binDir)) {
+        for (auto& e : platform::dir_entries(binDir)) {
             auto stem = e.path().stem().string();
             if (!xself::is_builtin_shim(stem) && stem != "xvm-alias")
                 ++toolCount;

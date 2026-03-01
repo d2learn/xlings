@@ -56,9 +56,9 @@ namespace platform_impl {
 
     export void make_files_executable(const std::filesystem::path& dir) {
         if (!std::filesystem::exists(dir)) return;
-        for (auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (entry.is_regular_file())
-                ::chmod(entry.path().c_str(), 0755);
+        for (auto it = std::filesystem::directory_iterator(dir); it != std::default_sentinel; ++it) {
+            if (it->is_regular_file())
+                ::chmod(it->path().c_str(), 0755);
         }
     }
 

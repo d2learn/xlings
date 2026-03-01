@@ -241,7 +241,7 @@ public:
         std::vector<std::string> names;
         auto dir = instance_().paths_.homeDir / "subos";
         if (!std::filesystem::exists(dir)) return names;
-        for (auto& entry : std::filesystem::directory_iterator(dir)) {
+        for (auto& entry : platform::dir_entries(dir)) {
             if (entry.is_directory()) {
                 auto name = entry.path().filename().string();
                 if (name != "current") names.push_back(name);

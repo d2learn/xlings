@@ -42,7 +42,7 @@ void install_headers(const std::string& includedir, const fs::path& sysroot_incl
     std::error_code ec;
     fs::path src(includedir);
     if (!fs::exists(src, ec)) return;
-    for (auto& entry : fs::directory_iterator(src)) {
+    for (auto& entry : platform::dir_entries(src)) {
         auto target = sysroot_include / entry.path().filename();
         if (fs::exists(target, ec) || fs::is_symlink(target, ec)) {
             log::info("[xvm] overwriting header: {}", entry.path().filename().string());
@@ -58,7 +58,7 @@ void remove_headers(const std::string& includedir, const fs::path& sysroot_inclu
     fs::path src(includedir);
     std::error_code ec;
     if (!fs::exists(src, ec)) return;
-    for (auto& entry : fs::directory_iterator(src)) {
+    for (auto& entry : platform::dir_entries(src)) {
         auto target = sysroot_include / entry.path().filename();
         if (fs::is_symlink(target, ec)) {
             fs::remove(target, ec);
