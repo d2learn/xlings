@@ -5,11 +5,9 @@ module;
 export module xlings.xself;
 
 import std;
-import :init;
-import :install;
 
-export import :install;
 export import :init;
+export import :install;
 
 import xlings.config;
 import xlings.json;
