@@ -106,7 +106,18 @@ jobs:
           echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
 
       - name: Configure xmake
-        run: xmake f -c -p macosx -m release --toolchain=llvm --sdk="$LLVM_PREFIX" -y
+        run: |
+          # Temporary workaround: the legacy bootstrap xlings release and the
+          # current llvm package metadata do not fully agree on tool discovery.
+          # Pin clang/clang++ to the absolute LLVM toolchain path before build.
+          xmake f -c -p macosx -m release \
+            --toolchain=llvm \
+            --sdk="$LLVM_PREFIX" \
+            --cc="$LLVM_PREFIX/bin/clang" \
+            --cxx="$LLVM_PREFIX/bin/clang++" \
+            --ld="$LLVM_PREFIX/bin/clang++" \
+            --sh="$LLVM_PREFIX/bin/clang++" \
+            -y
 
       - name: Build (macos_release)
         run: |
