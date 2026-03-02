@@ -141,8 +141,21 @@ extract_archive(const std::filesystem::path& archive,
         cmd = std::format("tar xf \"{}\" -C \"{}\"",
                           archive.string(), destDir.string());
     } else if (ext == ".zip") {
+#ifdef _WIN32
+        // TODO: 统一优化跨平台解压方案，消除对外部 unzip 命令的依赖
+        auto [probe_rc, _] = platform::run_command_capture("where unzip");
+        if (probe_rc == 0) {
+            cmd = std::format("unzip -o \"{}\" -d \"{}\"",
+                              archive.string(), destDir.string());
+        } else {
+            cmd = std::format(
+                "powershell -NoProfile -Command \"Expand-Archive -Path '{}' -DestinationPath '{}' -Force\"",
+                archive.string(), destDir.string());
+        }
+#else
         cmd = std::format("unzip -o \"{}\" -d \"{}\"",
                           archive.string(), destDir.string());
+#endif
     } else if (stem.ends_with(".tar")) {
         cmd = std::format("tar xf \"{}\" -C \"{}\"",
                           archive.string(), destDir.string());
