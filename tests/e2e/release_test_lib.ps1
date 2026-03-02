@@ -16,7 +16,12 @@ function Fail($msg) {
 }
 
 function Get-MinimalSystemPath {
-    return "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
+    $base = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem"
+    # Include Git usr/bin for tar, unzip, curl etc. (needed by xlings package extraction)
+    $gitUsrBin = Join-Path $env:ProgramFiles 'Git\usr\bin'
+    $gitCmd = Join-Path $env:ProgramFiles 'Git\cmd'
+    if (Test-Path $gitUsrBin) { $base = "$gitUsrBin;$gitCmd;$base" }
+    return $base
 }
 
 function Require-ReleaseArchive($path) {
@@ -54,7 +59,17 @@ function Write-FixtureReleaseConfig($pkgDir) {
 }
 
 function Require-FixtureIndex {
-    & "$ROOT_DIR\tests\e2e\prepare_fixture_index.sh" $FIXTURE_INDEX_DIR 2>$null
+    if (Test-Path "$FIXTURE_INDEX_DIR\pkgs") {
+        Log "reuse existing fixture index: $FIXTURE_INDEX_DIR"
+        return
+    }
+    $ref = if ($env:XIM_PKGINDEX_REF) { $env:XIM_PKGINDEX_REF } else { 'xlings_0.4.0' }
+    $url = if ($env:XIM_PKGINDEX_URL) { $env:XIM_PKGINDEX_URL } else { 'https://github.com/d2learn/xim-pkgindex.git' }
+    if (Test-Path $FIXTURE_INDEX_DIR) { Remove-Item -Recurse -Force $FIXTURE_INDEX_DIR }
+    $parentDir = Split-Path $FIXTURE_INDEX_DIR
+    New-Item -ItemType Directory -Force -Path $parentDir | Out-Null
+    Log "cloning $url (ref: $ref) -> $FIXTURE_INDEX_DIR"
+    git clone --depth 1 --branch $ref $url $FIXTURE_INDEX_DIR
     if (-not (Test-Path "$FIXTURE_INDEX_DIR\pkgs")) {
         Fail "fixture index repo missing at $FIXTURE_INDEX_DIR"
     }
