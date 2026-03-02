@@ -83,6 +83,9 @@ Scenario scripts:
 - `tests/e2e/project_xlings_res_region_map_test.sh`
 - `tests/e2e/project_xlings_res_multi_server_test.sh`
 - `tests/e2e/subos_payload_refcount_test.sh`
+- `tests/e2e/release_self_install_test.sh`
+- `tests/e2e/release_quick_install_test.sh`
+- `tests/e2e/release_subos_smoke_test.sh`
 
 Aggregate scripts:
 
@@ -106,12 +109,18 @@ What they validate:
 - multi-server resource selection that falls back from an unreachable endpoint to the fastest reachable one
 - real shim execution after `xlings use`
 - shared payload reuse across multiple subos, with final payload GC only after the last reference is removed
+- release archive `self install` into an isolated user home
+- quick-install bootstrap into an isolated user home
+- extracted release package basic commands, subos lifecycle, d2x reuse, and RPATH verification
 
 ### Run
 
 ```bash
 bash tests/e2e/project_data_routing_test.sh
 bash tests/e2e/project_e2e_test.sh
+bash tests/e2e/release_self_install_test.sh build/release.tar.gz
+bash tests/e2e/release_quick_install_test.sh
+bash tests/e2e/release_subos_smoke_test.sh build/release.tar.gz
 ```
 
 ## E2E Bootstrap Home
