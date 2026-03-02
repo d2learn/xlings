@@ -106,7 +106,7 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     }
 
     // Resolve version (fuzzy match)
-    auto& db = Config::versions();
+    auto db = Config::versions();
     auto resolved_version = match_version(db, program_name, version);
     if (resolved_version.empty()) {
         std::println(stderr, "xlings: version '{}' not found for '{}'", version, program_name);

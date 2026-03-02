@@ -11,11 +11,12 @@ import xlings.platform;
 import xlings.subos;
 import xlings.xself;
 import xlings.xim.commands;
+import xlings.xvm.db;
 import xlings.xvm.commands;
 
 namespace xlings::cli {
 
-// Install packages from project .xlings.json deps
+// Install packages from project .xlings.json workspace
 int install_from_project_config_() {
     namespace fs = std::filesystem;
     std::error_code ec;
@@ -23,7 +24,7 @@ int install_from_project_config_() {
     if (ec) return 1;
     auto homeDir = Config::paths().homeDir;
 
-    // Walk up from cwd looking for .xlings.json with deps
+    // Walk up from cwd looking for .xlings.json with workspace
     fs::path cur = cwd;
     while (!cur.empty()) {
         auto cfg = cur / ".xlings.json";
@@ -31,17 +32,13 @@ int install_from_project_config_() {
             auto curNorm = fs::weakly_canonical(cur, ec);
             auto homeNorm = fs::weakly_canonical(homeDir, ec);
             if (curNorm != homeNorm) {
-                // Parse deps from project .xlings.json
+                // Parse workspace install targets from project .xlings.json
                 try {
                     auto content = platform::read_file_to_string(cfg.string());
                     auto json = nlohmann::json::parse(content, nullptr, false);
-                    if (!json.is_discarded() && json.contains("deps") && json["deps"].is_array()) {
-                        std::vector<std::string> targets;
-                        for (auto it = json["deps"].begin(); it != json["deps"].end(); ++it) {
-                            if (it->is_string()) {
-                                targets.push_back(it->get<std::string>());
-                            }
-                        }
+                    if (!json.is_discarded() && json.contains("workspace") && json["workspace"].is_object()) {
+                        auto workspace = xvm::workspace_from_json(json["workspace"]);
+                        auto targets = Config::workspace_install_targets(workspace);
                         if (!targets.empty()) {
                             return xim::cmd_install(targets, true, false);
                         }
@@ -57,7 +54,7 @@ int install_from_project_config_() {
         cur = parent;
     }
 
-    std::println("Tip: create <project>/.xlings.json with deps, or run `xlings install <package>`");
+    std::println("Tip: create <project>/.xlings.json with workspace, or run `xlings install <package>`");
     return 0;
 }
 

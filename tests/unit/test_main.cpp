@@ -7,6 +7,7 @@ import xlings.utils;
 import xlings.ui;
 import xlings.xim.types;
 import xlings.xim.index;
+import xlings.xim.catalog;
 import xlings.xim.resolver;
 import xlings.xim.downloader;
 import xlings.xim.installer;
@@ -20,6 +21,34 @@ import xlings.platform;
 import xlings.json;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
+
+namespace {
+
+std::optional<std::filesystem::path> find_pkgindex_repo() {
+    namespace fs = std::filesystem;
+
+    if (auto env = std::getenv("XIM_PKGINDEX_DIR")) {
+        fs::path path(env);
+        if (fs::exists(path / "pkgs")) return path;
+    }
+
+    const std::vector<fs::path> candidates = {
+        fs::current_path() / "tests/fixtures/xim-pkgindex",
+        fs::current_path() / "../xim-pkgindex",
+        fs::current_path() / "../d2learn/xim-pkgindex",
+        fs::current_path() / "../../xim-pkgindex",
+        fs::current_path() / "../../d2learn/xim-pkgindex",
+    };
+
+    for (auto& path : candidates) {
+        std::error_code ec;
+        if (fs::exists(path / "pkgs", ec)) return fs::weakly_canonical(path, ec);
+    }
+
+    return std::nullopt;
+}
+
+}  // namespace
 
 // ============================================================
 // i18n tests
@@ -287,24 +316,148 @@ TEST(XimTypesTest, DownloadTaskInit) {
     EXPECT_EQ(task.sha256, "abcdef");
 }
 
+TEST(XimCatalogTest, CanonicalPackageNameAndStoreName) {
+    EXPECT_EQ(xlings::xim::canonical_package_name("official", "gcc"), "official:gcc");
+    EXPECT_EQ(xlings::xim::canonical_package_name("", "gcc"), "gcc");
+    EXPECT_EQ(xlings::xim::package_store_name("official", "gcc"), "official-x-gcc");
+    EXPECT_EQ(xlings::xim::package_store_name("", "gcc"), "gcc");
+}
+
+TEST(XimCatalogTest, FormatAmbiguousCandidates) {
+    std::vector<xlings::xim::PackageMatch> matches = {
+        {
+            .name = "gcc",
+            .version = "15.1.0",
+            .namespaceName = "official",
+            .canonicalName = "official:gcc",
+            .repoName = "official",
+            .scope = xlings::xim::PackageScope::Global,
+        },
+        {
+            .name = "gcc",
+            .version = "15.1.0",
+            .namespaceName = "project",
+            .canonicalName = "project:gcc",
+            .repoName = "project",
+            .scope = xlings::xim::PackageScope::Project,
+        },
+    };
+
+    auto msg = xlings::xim::format_ambiguous_candidates("gcc", matches);
+    EXPECT_NE(msg.find("package 'gcc' is ambiguous"), std::string::npos);
+    EXPECT_NE(msg.find("1. official:gcc@15.1.0"), std::string::npos);
+    EXPECT_NE(msg.find("2. project:gcc@15.1.0"), std::string::npos);
+    EXPECT_NE(msg.find("from global repo 'official'"), std::string::npos);
+    EXPECT_NE(msg.find("from project repo 'project'"), std::string::npos);
+    EXPECT_NE(msg.find("xlings install official:gcc@15.1.0"), std::string::npos);
+}
+
+TEST(ConfigTest, WorkspaceInstallTargets) {
+    xlings::xvm::Workspace ws;
+    ws["gcc"] = "15.1.0";
+    ws["node"] = "";
+
+    auto targets = xlings::Config::workspace_install_targets(ws);
+    ASSERT_EQ(targets.size(), 2u);
+    EXPECT_EQ(targets[0], "gcc@15.1.0");
+    EXPECT_EQ(targets[1], "node");
+}
+
+TEST(ConfigTest, MergedWorkspaceAnonymousOverridesGlobal) {
+    xlings::xvm::Workspace globalWs;
+    globalWs["gcc"] = "15.1.0";
+    globalWs["node"] = "22.0.0";
+
+    xlings::xvm::Workspace projectWs;
+    projectWs["gcc"] = "14.2.0";
+    projectWs["python"] = "3.12.0";
+
+    auto effective = xlings::Config::merged_workspace(
+        globalWs, projectWs, {}, xlings::ProjectSubosMode::Anonymous);
+
+    ASSERT_EQ(effective.size(), 3u);
+    EXPECT_EQ(effective["gcc"], "14.2.0");
+    EXPECT_EQ(effective["node"], "22.0.0");
+    EXPECT_EQ(effective["python"], "3.12.0");
+}
+
+TEST(ConfigTest, MergedWorkspaceNamedDoesNotInheritGlobal) {
+    xlings::xvm::Workspace globalWs;
+    globalWs["gcc"] = "15.1.0";
+    globalWs["node"] = "22.0.0";
+
+    xlings::xvm::Workspace projectWs;
+    projectWs["gcc"] = "14.2.0";
+
+    xlings::xvm::Workspace subosWs;
+    subosWs["clang"] = "18.1.0";
+
+    auto effective = xlings::Config::merged_workspace(
+        globalWs, projectWs, subosWs, xlings::ProjectSubosMode::Named);
+
+    ASSERT_EQ(effective.size(), 2u);
+    EXPECT_EQ(effective["gcc"], "14.2.0");
+    EXPECT_EQ(effective["clang"], "18.1.0");
+    EXPECT_FALSE(effective.contains("node"));
+}
+
+TEST(ConfigTest, MergedVersionsProjectOverridesGlobal) {
+    xlings::xvm::VersionDB globalDb;
+    xlings::xvm::add_version(globalDb, "gcc", "15.1.0", "/global/gcc-15");
+    xlings::xvm::add_version(globalDb, "node", "22.0.0", "/global/node-22");
+
+    xlings::xvm::VersionDB projectDb;
+    xlings::xvm::add_version(projectDb, "gcc", "14.2.0", "/project/gcc-14");
+    xlings::xvm::add_version(projectDb, "python", "3.12.0", "/project/python-3.12");
+
+    auto merged = xlings::Config::merged_versions(globalDb, projectDb);
+    ASSERT_EQ(merged.size(), 3u);
+    EXPECT_TRUE(xlings::xvm::has_version(merged, "gcc", "15.1.0"));
+    EXPECT_TRUE(xlings::xvm::has_version(merged, "gcc", "14.2.0"));
+    EXPECT_TRUE(xlings::xvm::has_version(merged, "node", "22.0.0"));
+    EXPECT_TRUE(xlings::xvm::has_version(merged, "python", "3.12.0"));
+}
+
+TEST(ConfigTest, ResolveRepoSourceAbsolutePath) {
+    xlings::IndexRepo repo { .name = "local", .url = "/tmp/xim-pkgindex" };
+    auto path = xlings::Config::resolve_repo_source(repo, false);
+    EXPECT_EQ(path, std::filesystem::path("/tmp/xim-pkgindex"));
+    EXPECT_TRUE(xlings::Config::is_local_repo_source(repo, false));
+}
+
+TEST(ConfigTest, ResolveRepoSourceFileScheme) {
+    xlings::IndexRepo repo { .name = "local", .url = "file:///tmp/xim-pkgindex" };
+    auto path = xlings::Config::resolve_repo_source(repo, false);
+    EXPECT_EQ(path, std::filesystem::path("/tmp/xim-pkgindex"));
+    EXPECT_TRUE(xlings::Config::is_local_repo_source(repo, false));
+}
+
+TEST(ConfigTest, ResolveRepoSourceRemoteUrlReturnsEmpty) {
+    xlings::IndexRepo repo {
+        .name = "official",
+        .url = "https://github.com/d2learn/xim-pkgindex.git"
+    };
+    EXPECT_TRUE(xlings::Config::resolve_repo_source(repo, false).empty());
+    EXPECT_FALSE(xlings::Config::is_local_repo_source(repo, false));
+}
+
 // ============================================================
 // xim index tests (requires xim-pkgindex repo)
 // ============================================================
 
 class XimIndexTest : public ::testing::Test {
 protected:
-    static constexpr auto REPO_DIR = "/home/speak/workspace/github/d2learn/xim-pkgindex";
+    std::filesystem::path repoDir_;
 
     void SetUp() override {
-        namespace fs = std::filesystem;
-        if (!fs::exists(std::string(REPO_DIR) + "/pkgs")) {
-            GTEST_SKIP() << "xim-pkgindex repo not found at " << REPO_DIR;
-        }
+        auto repo = find_pkgindex_repo();
+        if (!repo) GTEST_SKIP() << "xim-pkgindex repo not found";
+        repoDir_ = *repo;
     }
 };
 
 TEST_F(XimIndexTest, BuildIndex) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto result = mgr.rebuild();
     ASSERT_TRUE(result.has_value()) << result.error();
     EXPECT_TRUE(mgr.is_loaded());
@@ -312,7 +465,7 @@ TEST_F(XimIndexTest, BuildIndex) {
 }
 
 TEST_F(XimIndexTest, SearchPackage) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -330,7 +483,7 @@ TEST_F(XimIndexTest, SearchPackage) {
 }
 
 TEST_F(XimIndexTest, MatchVersion) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -342,7 +495,7 @@ TEST_F(XimIndexTest, MatchVersion) {
 }
 
 TEST_F(XimIndexTest, FindEntry) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -355,7 +508,7 @@ TEST_F(XimIndexTest, FindEntry) {
 }
 
 TEST_F(XimIndexTest, LoadPackage) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -368,7 +521,7 @@ TEST_F(XimIndexTest, LoadPackage) {
 }
 
 TEST_F(XimIndexTest, AllNames) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -379,7 +532,7 @@ TEST_F(XimIndexTest, AllNames) {
 }
 
 TEST_F(XimIndexTest, MarkInstalled) {
-    xlings::xim::IndexManager mgr(REPO_DIR);
+    xlings::xim::IndexManager mgr(repoDir_);
     auto r = mgr.rebuild();
     ASSERT_TRUE(r.has_value()) << r.error();
 
@@ -414,14 +567,14 @@ TEST_F(XimIndexTest, NonexistentRepoDirFails) {
 
 class XimResolverTest : public ::testing::Test {
 protected:
-    static constexpr auto REPO_DIR = "/home/speak/workspace/github/d2learn/xim-pkgindex";
-    xlings::xim::IndexManager mgr_ { REPO_DIR };
+    std::filesystem::path repoDir_;
+    xlings::xim::IndexManager mgr_;
 
     void SetUp() override {
-        namespace fs = std::filesystem;
-        if (!fs::exists(std::string(REPO_DIR) + "/pkgs")) {
-            GTEST_SKIP() << "xim-pkgindex repo not found";
-        }
+        auto repo = find_pkgindex_repo();
+        if (!repo) GTEST_SKIP() << "xim-pkgindex repo not found";
+        repoDir_ = *repo;
+        mgr_ = xlings::xim::IndexManager(repoDir_);
         auto r = mgr_.rebuild();
         if (!r) GTEST_SKIP() << "rebuild failed: " << r.error();
     }
@@ -515,14 +668,14 @@ TEST(XimDownloaderTest, DownloadAllEmpty) {
 
 class XimInstallerTest : public ::testing::Test {
 protected:
-    static constexpr auto REPO_DIR = "/home/speak/workspace/github/d2learn/xim-pkgindex";
-    xlings::xim::IndexManager mgr_ { REPO_DIR };
+    std::filesystem::path repoDir_;
+    xlings::xim::IndexManager mgr_;
 
     void SetUp() override {
-        namespace fs = std::filesystem;
-        if (!fs::exists(std::string(REPO_DIR) + "/pkgs")) {
-            GTEST_SKIP() << "xim-pkgindex repo not found";
-        }
+        auto repo = find_pkgindex_repo();
+        if (!repo) GTEST_SKIP() << "xim-pkgindex repo not found";
+        repoDir_ = *repo;
+        mgr_ = xlings::xim::IndexManager(repoDir_);
         auto r = mgr_.rebuild();
         if (!r) GTEST_SKIP() << "rebuild failed: " << r.error();
     }
@@ -575,33 +728,25 @@ TEST(XimCommandsTest, DetectPlatform) {
 }
 
 TEST(XimCommandsTest, SearchNonexistentReturnsZero) {
-    namespace fs = std::filesystem;
-    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
-        GTEST_SKIP() << "xim-pkgindex repo not available";
+    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 0);  // returns 0 with "no packages found" message
 }
 
 TEST(XimCommandsTest, ListWithFilter) {
-    namespace fs = std::filesystem;
-    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
-        GTEST_SKIP() << "xim-pkgindex repo not available";
+    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_list("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoKnownPackage) {
-    namespace fs = std::filesystem;
-    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
-        GTEST_SKIP() << "xim-pkgindex repo not available";
+    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_info("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoUnknownPackage) {
-    namespace fs = std::filesystem;
-    if (!fs::exists("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs"))
-        GTEST_SKIP() << "xim-pkgindex repo not available";
+    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
     auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 1);
 }

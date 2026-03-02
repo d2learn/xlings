@@ -63,6 +63,55 @@ SKIP_NETWORK_TESTS=1 bash tests/e2e/linux_usability_test.sh
 
 Same toggle works for macOS and Windows scripts.
 
+## E2E Project Scenarios
+
+Scenario configs:
+
+- `tests/e2e/scenarios/local_repo/.xlings.json`
+- `tests/e2e/scenarios/global_fallback/.xlings.json`
+- `tests/e2e/scenarios/xlings_res_cn/.xlings.json`
+- `tests/e2e/scenarios/xlings_res_project_override/.xlings.json`
+- `tests/e2e/scenarios/xlings_res_region_map/.xlings.json`
+- `tests/e2e/scenarios/xlings_res_multi_server/.xlings.json`
+
+Scenario scripts:
+
+- `tests/e2e/project_local_repo_test.sh`
+- `tests/e2e/project_global_fallback_test.sh`
+- `tests/e2e/project_xlings_res_test.sh`
+- `tests/e2e/project_xlings_res_override_test.sh`
+- `tests/e2e/project_xlings_res_region_map_test.sh`
+- `tests/e2e/project_xlings_res_multi_server_test.sh`
+
+Aggregate scripts:
+
+- `tests/e2e/project_data_routing_test.sh` runs the local-repo + global-fallback routing checks
+- `tests/e2e/project_e2e_test.sh` runs all fixed project scenarios
+
+Runtime homes:
+
+- `tests/e2e/runtime/`
+
+Each scenario script creates and reuses its own isolated `XLINGS_HOME` under this directory, so E2E runs never touch the real machine-global environment.
+
+What they validate:
+
+- project-local index repo routing into `.xlings/data`
+- global fallback routing into isolated `XLINGS_HOME/data`
+- single-command multi-version installs for the same package
+- `XLINGS_RES` mirror resolution and install execution
+- project-level `XLINGS_RES` string override
+- project-level `XLINGS_RES` region-object override
+- multi-server resource selection that falls back from an unreachable endpoint to the fastest reachable one
+- real shim execution after `xlings use`
+
+### Run
+
+```bash
+bash tests/e2e/project_data_routing_test.sh
+bash tests/e2e/project_e2e_test.sh
+```
+
 ## Install-time shims
 
 CI verifies that after `xlings self install`, `subos/default/bin` contains all required shims (xlings, xvm, xvm-shim, xim, xsubos, xself). Shims are created at install time, not in the package, to reduce archive size.

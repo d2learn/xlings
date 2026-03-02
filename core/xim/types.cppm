@@ -4,6 +4,11 @@ import std;
 
 export namespace xlings::xim {
 
+enum class PackageScope {
+    Global,
+    Project,
+};
+
 // Install phase for UI status tracking
 enum class InstallPhase {
     Pending,
@@ -26,12 +31,18 @@ struct InstallStatus {
 
 // A node in the dependency-resolved install plan
 struct PlanNode {
+    std::string rawName;
     std::string name;
     std::string version;
+    std::string namespaceName;
+    std::string canonicalName;
+    std::string repoName;
     std::filesystem::path pkgFile;
+    std::filesystem::path storeRoot;
     std::vector<std::string> deps;
     bool alreadyInstalled { false };
     bool isSystemPM { false };
+    PackageScope scope { PackageScope::Global };
 
     // Explicit special members to work around GCC 15 module linker bug
     PlanNode() = default;

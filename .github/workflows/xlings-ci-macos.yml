@@ -177,20 +177,9 @@ jobs:
           chmod +x tests/e2e/rpath_verify_test.sh
           D2X_VERSION=0.1.3 bash tests/e2e/rpath_verify_test.sh
 
-      - name: "Test: local project install (./tmp simulation)"
+      - name: "Test: fixed project E2E scenarios"
         run: |
-          echo "=== Create local project dir ==="
-          PROJ_DIR="$GITHUB_WORKSPACE/tmp"
-          mkdir -p "$PROJ_DIR"
-          printf '{"deps":["d2x@0.1.3"]}\n' > "$PROJ_DIR/.xlings.json"
-          cd "$PROJ_DIR"
-          echo "=== Run xlings install in project dir ==="
-          INSTALL_OUT=$(xlings install -y 2>&1) || true
-          echo "$INSTALL_OUT"
-          echo "$INSTALL_OUT" | grep -qi "d2x" || \
-            { echo "FAIL: should process d2x from .xlings.json"; exit 1; }
-          echo "OK: local project install test passed"
-          rm -rf "$PROJ_DIR"
+          bash tests/e2e/project_e2e_test.sh
 
       - name: "Test: cleanup subos"
         run: |

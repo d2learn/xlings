@@ -22,10 +22,9 @@ target("xlings")
     if is_plat("macosx") then
         local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
         local libcxx_dir = llvm_prefix .. "/lib/c++"
-        add_ldflags("-nostdlib++", {force = true})
-        add_ldflags(libcxx_dir .. "/libc++.a", {force = true})
-        add_ldflags(libcxx_dir .. "/libc++experimental.a", {force = true})
-        add_ldflags("-lc++abi", {force = true})
+        add_linkdirs(libcxx_dir, {force = true})
+        add_rpathdirs(libcxx_dir, {force = true})
+        add_syslinks("c++", "c++experimental", "c++abi")
     elseif is_plat("linux") then
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static", {force = true})
@@ -46,7 +45,14 @@ target("xlings_tests")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua", "mcpplibs-xpkg", "gtest")
     set_policy("build.c++.modules", true)
 
-    if is_plat("linux") then
+    if is_plat("macosx") then
+        local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
+        local libcxx_dir = llvm_prefix .. "/lib/c++"
+        add_ldflags("-nostdlib++", {force = true})
+        add_ldflags(libcxx_dir .. "/libc++.a", {force = true})
+        add_ldflags(libcxx_dir .. "/libc++experimental.a", {force = true})
+        add_ldflags("-lc++abi", {force = true})
+    elseif is_plat("linux") then
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static", {force = true})
         end

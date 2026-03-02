@@ -2,7 +2,7 @@ export module xlings.xim.commands;
 
 import std;
 import xlings.xim.types;
-import xlings.xim.index;
+import xlings.xim.catalog;
 import xlings.xim.repo;
 import xlings.xim.resolver;
 import xlings.xim.downloader;
@@ -15,15 +15,13 @@ import xlings.i18n;
 export namespace xlings::xim {
 
 // Shared IndexManager instance (lazy-initialized)
-IndexManager& get_index() {
-    static IndexManager mgr;
+PackageCatalog& get_catalog() {
+    static PackageCatalog mgr;
     static bool initialized = false;
     if (!initialized) {
-        auto repoDir = xim::main_repo_dir();
-        mgr.set_repo_dir(repoDir);
         auto result = mgr.rebuild();
         if (!result) {
-            log::error("failed to build index: {}", result.error());
+            log::error("failed to build catalog: {}", result.error());
             log::info("try running: xlings update");
         }
         initialized = true;
@@ -45,8 +43,8 @@ std::string detect_platform() {
 
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
-    auto& index = get_index();
-    if (!index.is_loaded()) {
+    auto& catalog = get_catalog();
+    if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
     }
@@ -55,7 +53,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     std::vector<std::string> targetVec(targets.begin(), targets.end());
 
     // Resolve dependencies
-    auto planResult = resolve(index, targetVec, platform);
+    auto planResult = resolve(catalog, targetVec, platform);
     if (!planResult) {
         log::error("dependency resolution failed: {}", planResult.error());
         return 1;
@@ -96,7 +94,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     }
 
     // Execute install
-    Installer installer(index);
+    Installer installer(catalog);
     DownloaderConfig dlConfig;
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
@@ -135,21 +133,14 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
 
 // === remove command ===
 int cmd_remove(const std::string& target) {
-    auto& index = get_index();
-    if (!index.is_loaded()) {
+    auto& catalog = get_catalog();
+    if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
     }
 
-    auto resolved = index.resolve(target);
-    auto match = index.match_version(resolved);
-    if (!match) {
-        log::error("package '{}' not found", target);
-        return 1;
-    }
-
-    Installer installer(index);
-    auto result = installer.uninstall(*match);
+    Installer installer(catalog);
+    auto result = installer.uninstall(target);
     if (!result) {
         log::error("uninstall failed: {}", result.error());
         return 1;
@@ -160,13 +151,13 @@ int cmd_remove(const std::string& target) {
 
 // === search command ===
 int cmd_search(const std::string& keyword) {
-    auto& index = get_index();
-    if (!index.is_loaded()) {
+    auto& catalog = get_catalog();
+    if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
     }
 
-    auto results = index.search(keyword);
+    auto results = catalog.search(keyword, detect_platform());
     if (results.empty()) {
         std::println("no packages found matching '{}'", keyword);
         return 0;
@@ -174,10 +165,10 @@ int cmd_search(const std::string& keyword) {
 
     // Display results with descriptions
     std::vector<std::pair<std::string, std::string>> items;
-    for (auto& name : results) {
-        auto* entry = index.find_entry(name);
-        std::string desc = entry ? entry->description : "";
-        items.emplace_back(name, desc);
+    for (auto& match : results) {
+        auto pkg = catalog.load_package(match);
+        std::string desc = pkg ? pkg->description : "";
+        items.emplace_back(match.canonicalName, desc);
     }
 
     xlings::ui::print_search_results(items);
@@ -186,55 +177,53 @@ int cmd_search(const std::string& keyword) {
 
 // === list command ===
 int cmd_list(const std::string& filter) {
-    auto& index = get_index();
-    if (!index.is_loaded()) {
+    auto& catalog = get_catalog();
+    if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
     }
 
-    auto names = filter.empty() ? index.all_names() : index.search(filter);
-
-    if (names.empty()) {
+    auto results = catalog.search(filter.empty() ? "" : filter, detect_platform());
+    if (results.empty()) {
         std::println("no packages found");
         return 0;
     }
 
-    for (auto& name : names) {
-        auto* entry = index.find_entry(name);
-        std::string status = (entry && entry->installed) ? "[installed]" : "";
-        std::string desc = entry ? std::string(entry->description) : std::string{};
+    for (auto& match : results) {
+        auto pkg = catalog.load_package(match);
+        std::string status = match.installed ? "[installed]" : "";
+        std::string desc = pkg ? std::string(pkg->description) : std::string{};
         // Note: avoid width specifiers — GCC 15 modules bug with std::formatter
         if (status.empty())
-            std::println("  {}  {}", name, desc);
+            std::println("  {}  {}", match.canonicalName, desc);
         else
-            std::println("  {}  {}  {}", name, status, desc);
+            std::println("  {}  {}  {}", match.canonicalName, status, desc);
     }
-    std::println("\ntotal: {} packages", names.size());
+    std::println("\ntotal: {} packages", results.size());
     return 0;
 }
 
 // === info command ===
 int cmd_info(const std::string& target) {
-    auto& index = get_index();
-    if (!index.is_loaded()) {
+    auto& catalog = get_catalog();
+    if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
     }
 
-    auto resolved = index.resolve(target);
-    auto match = index.match_version(resolved);
+    auto match = catalog.resolve_target(target, detect_platform());
     if (!match) {
-        log::error("package '{}' not found", target);
+        log::error("{}", match.error());
         return 1;
     }
 
-    auto pkg = index.load_package(*match);
+    auto pkg = catalog.load_package(*match);
     if (!pkg) {
         log::error("failed to load package: {}", pkg.error());
         return 1;
     }
 
-    std::println("name:        {}", pkg->name);
+    std::println("name:        {}", match->canonicalName);
     std::println("description: {}", pkg->description);
     if (!pkg->homepage.empty())
         std::println("homepage:    {}", pkg->homepage);
@@ -270,10 +259,7 @@ int cmd_info(const std::string& target) {
         std::println("");
     }
 
-    auto* entry = index.find_entry(*match);
-    if (entry) {
-        std::println("installed:   {}", entry->installed ? "yes" : "no");
-    }
+    std::println("installed:   {}", match->installed ? "yes" : "no");
 
     return 0;
 }
@@ -287,16 +273,14 @@ int cmd_update(const std::string& target) {
     }
 
     // Rebuild index
-    auto& index = get_index();
-    auto repoDir = xim::main_repo_dir();
-    index.set_repo_dir(repoDir);
-    auto result = index.rebuild();
+    auto& catalog = get_catalog();
+    auto result = catalog.rebuild();
     if (!result) {
-        log::error("failed to rebuild index: {}", result.error());
+        log::error("failed to rebuild catalog: {}", result.error());
         return 1;
     }
 
-    std::println("index updated: {} packages", index.size());
+    std::println("index updated");
 
     if (!target.empty()) {
         // TODO: Upgrade specific package

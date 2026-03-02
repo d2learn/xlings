@@ -10,6 +10,62 @@ import xlings.config;
 
 export namespace xlings::xim {
 
+namespace detail_ {
+
+bool ensure_local_repo_link_(const std::filesystem::path& localDir,
+                             const std::filesystem::path& sourceDir) {
+    namespace fs = std::filesystem;
+
+    std::error_code ec;
+    if (!fs::exists(sourceDir, ec) || !fs::exists(sourceDir / "pkgs", ec)) {
+        log::error("local index repo missing pkgs/: {}", sourceDir.string());
+        return false;
+    }
+
+    if (fs::exists(localDir, ec) || fs::is_symlink(localDir, ec)) {
+        auto canonicalLocal = fs::weakly_canonical(localDir, ec);
+        ec.clear();
+        auto canonicalSource = fs::weakly_canonical(sourceDir, ec);
+        if (!ec && canonicalLocal == canonicalSource) {
+            return true;
+        }
+        ec.clear();
+        fs::remove_all(localDir, ec);
+        if (ec) {
+            log::error("failed to replace local index repo mapping {}: {}",
+                       localDir.string(), ec.message());
+            return false;
+        }
+    }
+
+    fs::create_directories(localDir.parent_path(), ec);
+    if (ec) {
+        log::error("failed to create repo parent directory {}: {}",
+                   localDir.parent_path().string(), ec.message());
+        return false;
+    }
+
+#if defined(_WIN32)
+    if (!platform::create_directory_link(localDir, sourceDir)) {
+        log::error("failed to create directory link: {} -> {}",
+                   localDir.string(), sourceDir.string());
+        return false;
+    }
+#else
+    fs::create_directory_symlink(sourceDir, localDir, ec);
+    if (ec) {
+        log::error("failed to create symlink: {} -> {} ({})",
+                   localDir.string(), sourceDir.string(), ec.message());
+        return false;
+    }
+#endif
+
+    log::info("linked local index repo: {} -> {}", localDir.string(), sourceDir.string());
+    return true;
+}
+
+}  // namespace detail_
+
 // Sync a single git repository (clone or pull)
 // Returns true on success
 bool sync_repo(const std::filesystem::path& localDir,
@@ -64,52 +120,52 @@ bool sync_repo(const std::filesystem::path& localDir,
     return true;
 }
 
-// Sync all index repos from config's index_repos list
-// Always uses global data dir (index is shared, not project-local)
+// Sync all configured repos.
+// Global repos live under XLINGS_HOME/data, project repos under project .xlings/data.
 bool sync_all_repos(bool force = false) {
     namespace fs = std::filesystem;
-    auto dataDir = Config::paths().dataDir;
     auto mirror = Config::mirror();
 
-    // Read index_repos from config
-    auto& repos = Config::index_repos();
+    auto syncRepos = [&](const std::vector<IndexRepo>& repos, bool projectScope) {
+        auto rootDir = projectScope ? Config::project_data_dir() : Config::global_data_dir();
+        if (rootDir.empty()) return true;
+        fs::create_directories(rootDir);
+        for (auto& repo : repos) {
+            auto repoDir = Config::repo_dir_for(repo, projectScope);
+            if (Config::is_local_repo_source(repo, projectScope)) {
+                auto sourceDir = Config::resolve_repo_source(repo, projectScope);
+                if (!detail_::ensure_local_repo_link_(repoDir, sourceDir)) {
+                    return false;
+                }
+                continue;
+            }
 
-    if (repos.empty()) {
-        // Fallback: default repo
-        auto mainRepoDir = dataDir / "xim-pkgindex";
-        std::string mainUrl = "https://github.com/d2learn/xim-pkgindex.git";
-        if (mirror == "CN") {
-            mainUrl = "https://gitee.com/sunrisepeak/xim-pkgindex.git";
+            std::string url = repo.url;
+            if (mirror == "CN" && url.find("github.com") != std::string::npos) {
+                auto pos = url.find("github.com");
+                url.replace(pos, 10, "gitee.com");
+            }
+            if (!sync_repo(repoDir, url, force)) {
+                return false;
+            }
         }
-        fs::create_directories(dataDir);
-        return sync_repo(mainRepoDir, mainUrl, force);
-    }
+        return true;
+    };
 
-    fs::create_directories(dataDir);
-    for (auto& repo : repos) {
-        auto repoDir = dataDir / repo.name;
-        std::string url = repo.url;
-        // Apply CN mirror substitution if url is github
-        if (mirror == "CN" && url.find("github.com") != std::string::npos) {
-            // Replace github.com with gitee.com equivalent
-            auto pos = url.find("github.com");
-            url.replace(pos, 10, "gitee.com");
-        }
-        if (!sync_repo(repoDir, url, force)) {
-            return false;
-        }
+    if (!syncRepos(Config::global_index_repos(), false)) return false;
+    if (Config::has_project_config() && !Config::project_index_repos().empty()) {
+        if (!syncRepos(Config::project_index_repos(), true)) return false;
     }
     return true;
 }
 
 // Get the main index repo directory path (always global)
 std::filesystem::path main_repo_dir() {
-    auto& repos = Config::index_repos();
-    auto dataDir = Config::paths().dataDir;
+    auto& repos = Config::global_index_repos();
     if (!repos.empty()) {
-        return dataDir / repos[0].name;
+        return Config::repo_dir_for(repos[0], false);
     }
-    return dataDir / "xim-pkgindex";
+    return Config::global_data_dir() / "xim-pkgindex";
 }
 
 } // namespace xlings::xim

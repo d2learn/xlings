@@ -120,7 +120,7 @@ void remove_libdir(const std::string& libdir, const fs::path& sysroot_lib) {
 // xlings use <target> <version>
 // Updates the active subos workspace and creates/updates bin/ hardlinks
 int cmd_use(const std::string& target, const std::string& version) {
-    auto& db = Config::versions();
+    auto db = Config::versions();
     auto& p  = Config::paths();
 
     if (!has_target(db, target)) {
@@ -175,6 +175,7 @@ int cmd_use(const std::string& target, const std::string& version) {
         auto vinfo = get_vinfo(db, target);
         std::string shim_name = (vinfo && !vinfo->filename.empty()) ? vinfo->filename : target;
 
+        fs::create_directories(p.binDir);
         auto shim_path = p.binDir / shim_name;
         std::error_code ec;
 
@@ -215,7 +216,7 @@ int cmd_use(const std::string& target, const std::string& version) {
 
 // List versions for a target (used by `xlings use <target>` without version)
 int cmd_list_versions(const std::string& target) {
-    auto& db = Config::versions();
+    auto db = Config::versions();
 
     if (!has_target(db, target)) {
         std::println(stderr, "[xlings] '{}' not found in version database", target);

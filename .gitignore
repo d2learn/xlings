@@ -45,8 +45,14 @@ luac.out
 .vscode
 .DS_Store
 **/__pycache__
+tests/fixtures/xim-pkgindex
 
 # Runtime
 **/.xlings
+tests/e2e/project_home
+tests/e2e/global_home
+tests/e2e/runtime
+tests/e2e/project_workspace
+tests/e2e/scenarios/**/.xlings
 bin/xmake
 bin/mdbook*
