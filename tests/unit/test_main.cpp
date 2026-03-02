@@ -434,9 +434,9 @@ TEST(ConfigTest, ResolveRepoSourceAbsolutePath) {
 
 TEST(ConfigTest, ResolveRepoSourceFileScheme) {
 #ifdef _WIN32
-    xlings::IndexRepo repo { .name = "local", .url = "file:///C:/tmp/xim-pkgindex" };
+    xlings::IndexRepo repo { .name = "local", .url = "file://C:/tmp/xim-pkgindex" };
     auto path = xlings::Config::resolve_repo_source(repo, false);
-    EXPECT_EQ(path, std::filesystem::path("C:/tmp/xim-pkgindex").lexically_normal());
+    EXPECT_EQ(path, std::filesystem::path("C:\\tmp\\xim-pkgindex"));
 #else
     xlings::IndexRepo repo { .name = "local", .url = "file:///tmp/xim-pkgindex" };
     auto path = xlings::Config::resolve_repo_source(repo, false);
