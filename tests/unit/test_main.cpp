@@ -420,16 +420,28 @@ TEST(ConfigTest, MergedVersionsProjectOverridesGlobal) {
 }
 
 TEST(ConfigTest, ResolveRepoSourceAbsolutePath) {
+#ifdef _WIN32
+    xlings::IndexRepo repo { .name = "local", .url = "C:\\tmp\\xim-pkgindex" };
+    auto path = xlings::Config::resolve_repo_source(repo, false);
+    EXPECT_EQ(path, std::filesystem::path("C:\\tmp\\xim-pkgindex"));
+#else
     xlings::IndexRepo repo { .name = "local", .url = "/tmp/xim-pkgindex" };
     auto path = xlings::Config::resolve_repo_source(repo, false);
     EXPECT_EQ(path, std::filesystem::path("/tmp/xim-pkgindex"));
+#endif
     EXPECT_TRUE(xlings::Config::is_local_repo_source(repo, false));
 }
 
 TEST(ConfigTest, ResolveRepoSourceFileScheme) {
+#ifdef _WIN32
+    xlings::IndexRepo repo { .name = "local", .url = "file:///C:/tmp/xim-pkgindex" };
+    auto path = xlings::Config::resolve_repo_source(repo, false);
+    EXPECT_EQ(path, std::filesystem::path("C:/tmp/xim-pkgindex").lexically_normal());
+#else
     xlings::IndexRepo repo { .name = "local", .url = "file:///tmp/xim-pkgindex" };
     auto path = xlings::Config::resolve_repo_source(repo, false);
     EXPECT_EQ(path, std::filesystem::path("/tmp/xim-pkgindex"));
+#endif
     EXPECT_TRUE(xlings::Config::is_local_repo_source(repo, false));
 }
 
