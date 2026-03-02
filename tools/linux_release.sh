@@ -1,33 +1,17 @@
 #!/usr/bin/env bash
-# Build a self-contained xlings package for Linux x86_64.
+# Build a bootstrap xlings package for Linux x86_64.
 #
-# Directory layout (v0.2.0+):
+# Directory layout:
 #   xlings-<ver>-linux-x86_64/
-#   ├── bin/                   # real binaries (xlings)
-#   ├── xim/                   # xim Lua source code
-#   ├── data/                  # global shared data (XLINGS_DATA)
-#   │   ├── xpkgs/             # package store (populated at runtime)
-#   │   ├── runtimedir/        # download cache
-#   │   ├── xim-index-repos/   # git-cloned index repos
-#   │   └── local-indexrepo/   # user local index
-#   ├── subos/
-#   │   ├── current -> default # symlink to active subos
-#   │   └── default/           # default sub-os (XLINGS_SUBOS = sysroot)
-#   │       ├── bin/            # shim hardlinks (xlings, xim, etc.)
-#   │       ├── lib/            # library symlinks (populated at runtime)
-#   │       ├── usr/            # headers (populated at runtime)
-#   │       └── generations/    # profile generations
-#   ├── tools/xmake/bin/xmake  # bundled xmake
-#   ├── bin/patchelf            # bundled patchelf (for elfpatch RPATH)
-#   ├── config/i18n/           # i18n json
-#   ├── xmake.lua              # package-root xim task
-#   └── .xlings.json           # config
+#   ├── .xlings.json
+#   └── bin/
+#       └── xlings
+#
+# Runtime directories are created lazily by `xlings self init`.
 #
 # Output:  build/xlings-<ver>-linux-x86_64.tar.gz
 # Usage:   ./tools/linux_release.sh
 # Env:     SKIP_NETWORK_VERIFY=1   skip network-dependent tests
-#          SKIP_XMAKE_BUNDLE=1     skip downloading bundled xmake
-#          SKIP_PATCHELF_BUNDLE=1  skip downloading bundled patchelf
 #          GIT_CONNECT_TIMEOUT=N   git TCP timeout seconds (default 30)
 
 set -euo pipefail
@@ -93,74 +77,9 @@ info "Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
 
 mkdir -p "$OUT_DIR/bin"
-mkdir -p "$OUT_DIR/subos/default/bin"
-mkdir -p "$OUT_DIR/subos/default/lib"
-mkdir -p "$OUT_DIR/subos/default/usr"
-mkdir -p "$OUT_DIR/subos/default/generations"
-ln -sfn default "$OUT_DIR/subos/current"
-mkdir -p "$OUT_DIR/xim"
-mkdir -p "$OUT_DIR/data/xpkgs"
-mkdir -p "$OUT_DIR/data/runtimedir"
-mkdir -p "$OUT_DIR/data/xim-index-repos"
-mkdir -p "$OUT_DIR/data/local-indexrepo"
 
 cp "$BIN_SRC"         "$OUT_DIR/bin/xlings"
 chmod +x "$OUT_DIR/bin/"*
-
-cp -R core/xim/* "$OUT_DIR/xim/" 2>/dev/null || true
-
-# Bundled xmake (baseline tool in bin/)
-XMAKE_READY=0
-if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
-  XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-  XMAKE_BIN="$OUT_DIR/bin/xmake"
-  info "Downloading bundled xmake..."
-  if curl -fSsL --connect-timeout 15 --max-time 120 -o "$XMAKE_BIN" "$XMAKE_URL"; then
-    chmod +x "$XMAKE_BIN"
-    info "Bundled xmake OK"
-    XMAKE_READY=1
-  else
-    info "curl failed, trying wget..."
-    if command -v wget &>/dev/null && wget -q --timeout=120 -O "$XMAKE_BIN" "$XMAKE_URL"; then
-      chmod +x "$XMAKE_BIN"
-      info "Bundled xmake OK (wget fallback)"
-      XMAKE_READY=1
-    else
-      fail "bundled xmake download failed (curl + wget)"
-    fi
-  fi
-fi
-
-# Bundled patchelf (for elfpatch RPATH patching at package install time)
-PATCHELF_READY=0
-if [[ "${SKIP_PATCHELF_BUNDLE:-}" != "1" ]]; then
-  PATCHELF_VER="0.18.0"
-  PATCHELF_URL="https://github.com/NixOS/patchelf/releases/download/${PATCHELF_VER}/patchelf-${PATCHELF_VER}-x86_64.tar.gz"
-  PATCHELF_TMP="$PROJECT_DIR/build/.patchelf_tmp_$$"
-  info "Downloading bundled patchelf ${PATCHELF_VER}..."
-  mkdir -p "$PATCHELF_TMP"
-  if curl -fSsL --connect-timeout 15 --max-time 60 -o "$PATCHELF_TMP/patchelf.tar.gz" "$PATCHELF_URL"; then
-    tar -xzf "$PATCHELF_TMP/patchelf.tar.gz" -C "$PATCHELF_TMP"
-    cp "$PATCHELF_TMP/bin/patchelf" "$OUT_DIR/bin/patchelf"
-    chmod +x "$OUT_DIR/bin/patchelf"
-    info "Bundled patchelf OK"
-    PATCHELF_READY=1
-  else
-    info "Warning: patchelf download failed — elfpatch will require system patchelf"
-  fi
-  rm -rf "$PATCHELF_TMP"
-fi
-
-# i18n
-mkdir -p "$OUT_DIR/config/i18n"
-cp -R config/i18n/*.json "$OUT_DIR/config/i18n/" 2>/dev/null || true
-
-# shell profiles
-mkdir -p "$OUT_DIR/config/shell"
-cp -R config/shell/* "$OUT_DIR/config/shell/" 2>/dev/null || true
-
-# xmake.lua (package root) — reuse core/xim/xmake.lua which auto-detects layout
-cp core/xim/xmake.lua "$OUT_DIR/xmake.lua"
 
 # .xlings.json
 if command -v jq &>/dev/null && [[ -f config/xlings.json ]]; then
@@ -172,37 +91,18 @@ else
 DOTJSON
 fi
 
-# xim index-repos placeholder (global shared)
-echo '{}' > "$OUT_DIR/data/xim-index-repos/xim-indexrepos.json"
-
-# Shims are created at install time (not in package) to reduce archive size
-
 info "Package assembled: $OUT_DIR"
 
 # ── 4. Verification ─────────────────────────────────────────────
 info "=== Verification ==="
 
-# 4a. Check binaries exist (shims created at install time)
+# 4a. Check bootstrap files exist
 for f in bin/xlings; do
   [[ -x "$OUT_DIR/$f" ]] || fail "$f is missing or not executable"
 done
-if [[ "${SKIP_XMAKE_BUNDLE:-}" != "1" ]]; then
-  [[ -x "$OUT_DIR/bin/xmake" ]] || fail "bin/xmake is missing or not executable"
-fi
-if [[ "${SKIP_PATCHELF_BUNDLE:-}" != "1" && "$PATCHELF_READY" == "1" ]]; then
-  [[ -x "$OUT_DIR/bin/patchelf" ]] || fail "bin/patchelf is missing or not executable"
-fi
 info "OK: all binaries present and executable"
 
-# 4b. Check directory structure (subos/default/bin empty; shims created at install)
-for d in subos/default/bin subos/default/lib subos/default/usr subos/default/generations xim data/xpkgs config/i18n config/shell; do
-  [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing"
-done
-[[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing"
-[[ "$(readlink "$OUT_DIR/subos/current")" == "default" ]] || fail "subos/current does not point to default"
-info "OK: directory structure valid (incl. subos/current symlink)"
-
-# 4c. Check .xlings.json
+# 4b. Check .xlings.json
 [[ -f "$OUT_DIR/.xlings.json" ]] || fail ".xlings.json missing"
 if command -v jq &>/dev/null; then
   AS=$(jq -r '.activeSubos' "$OUT_DIR/.xlings.json" 2>/dev/null)
@@ -210,15 +110,13 @@ if command -v jq &>/dev/null; then
 fi
 info "OK: .xlings.json present and valid"
 
-# 4d. Functional tests (self-contained detection)
-info "Testing self-contained execution..."
+# 4c. Functional tests (bootstrap home detection)
+info "Testing bootstrap home execution..."
 TEST_DATA="$PROJECT_DIR/build/.release_verify_$$"
 mkdir -p "$TEST_DATA"
 
 export XLINGS_HOME="$OUT_DIR"
-export XLINGS_DATA="$OUT_DIR/data"
-export XLINGS_SUBOS="$OUT_DIR/subos/current"
-export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$PATH"
+export PATH="$OUT_DIR/bin:$PATH"
 
 set +e
 HELP_OUT=$("$OUT_DIR/bin/xlings" -h 2>&1)
@@ -234,15 +132,21 @@ info "OK: xlings -h shows subos/self commands"
 
 CONFIG_OUT=$("$OUT_DIR/bin/xlings" config 2>&1) || fail "xlings config failed"
 echo "$CONFIG_OUT" | grep -q "XLINGS_HOME" || fail "config output missing XLINGS_HOME"
-echo "$CONFIG_OUT" | grep -q "XLINGS_SUBOS" || fail "config output missing XLINGS_SUBOS"
 info "OK: xlings config prints correct paths"
 
-SUBOS_OUT=$("$OUT_DIR/bin/xlings" subos list 2>&1) || fail "xlings subos list failed"
-echo "$SUBOS_OUT" | grep -q "default" || fail "subos list missing 'default'"
-info "OK: xlings subos list shows default"
+INIT_OUT=$("$OUT_DIR/bin/xlings" self init 2>&1) || fail "xlings self init failed"
+echo "$INIT_OUT" | grep -q "init ok" || fail "self init output missing success marker"
+for d in data/xpkgs data/runtimedir data/xim-index-repos data/local-indexrepo subos/default/bin subos/default/lib subos/default/usr subos/default/generations config/shell; do
+  [[ -d "$OUT_DIR/$d" ]] || fail "directory $d missing after self init"
+done
+[[ -L "$OUT_DIR/subos/current" ]] || fail "subos/current symlink missing after self init"
+[[ "$(readlink "$OUT_DIR/subos/current")" == "$OUT_DIR/subos/default" || "$(readlink "$OUT_DIR/subos/current")" == "default" ]] || fail "subos/current does not point to default after self init"
+[[ -x "$OUT_DIR/subos/default/bin/xlings" ]] || fail "subos/default/bin/xlings missing after self init"
+info "OK: self init materialized bootstrap home"
 
-GC_OUT=$("$OUT_DIR/bin/xlings" self clean --dry-run 2>&1) || fail "xlings self clean --dry-run failed"
-info "OK: xlings self clean --dry-run works"
+export XLINGS_DATA="$OUT_DIR/data"
+export XLINGS_SUBOS="$OUT_DIR/subos/current"
+export PATH="$OUT_DIR/subos/current/bin:$OUT_DIR/bin:$PATH"
 
 # 4e. Network-dependent tests
 if [[ "${SKIP_NETWORK_VERIFY:-}" == "1" ]]; then
@@ -297,6 +201,7 @@ info "    cd $PKG_NAME"
 info "    ./bin/xlings self install"
 info ""
 info "  Or use without installing:"
+info "    ./bin/xlings self init"
 info "    export PATH=\"\$(pwd)/subos/current/bin:\$(pwd)/bin:\$PATH\""
 info "    xlings config"
 info ""

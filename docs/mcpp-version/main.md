@@ -9,6 +9,8 @@
 补充设计文档:
 
 - `XLINGS_RES` 资源服务器配置与匹配规则: `docs/mcpp-version/xlings-res-config-design.md`
+- `xlings_tests` 在 macOS 上的运行时崩溃分析: `docs/mcpp-version/gtest-macos-runtime-analysis.md`
+- `XLINGS_HOME` bootstrap 包与统一目录模型: `docs/mcpp-version/unified-xlings-home-bootstrap-design.md`
 
 ### 1.1 背景
 

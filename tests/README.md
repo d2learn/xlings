@@ -112,6 +112,23 @@ bash tests/e2e/project_data_routing_test.sh
 bash tests/e2e/project_e2e_test.sh
 ```
 
+## E2E Bootstrap Home
+
+Script: `tests/e2e/bootstrap_home_test.sh`
+
+What it validates:
+
+- a bootstrap package root with only `.xlings.json` and `bin/xlings` is auto-detected as `XLINGS_HOME`
+- `xlings self init` materializes `data/`, `subos/`, and `config/shell/` in place
+- `xlings self install` copies that bootstrap home into an installed `~/.xlings`-style root
+- portable and installed homes share the same top-level structure
+
+### Run
+
+```bash
+bash tests/e2e/bootstrap_home_test.sh
+```
+
 ## Install-time shims
 
 CI verifies that after `xlings self install`, `subos/default/bin` contains all required shims (xlings, xvm, xvm-shim, xim, xsubos, xself). Shims are created at install time, not in the package, to reduce archive size.

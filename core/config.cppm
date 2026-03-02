@@ -375,7 +375,13 @@ private:
             auto exePath   = platform::get_executable_path();
             auto exeParent = exePath.parent_path();
             auto candidate = exeParent.parent_path();
-            if (!exePath.empty() && fs::exists(candidate / "xim")) {
+            auto hasRootConfig = !exePath.empty() && fs::exists(candidate / ".xlings.json");
+#ifdef _WIN32
+            auto hasRootBin = !exePath.empty() && fs::exists(candidate / "bin" / "xlings.exe");
+#else
+            auto hasRootBin = !exePath.empty() && fs::exists(candidate / "bin" / "xlings");
+#endif
+            if (hasRootConfig && hasRootBin) {
                 paths_.homeDir       = candidate;
                 paths_.selfContained = true;
             } else {

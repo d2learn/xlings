@@ -60,8 +60,10 @@ jobs:
           $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
+          if (-not (Test-Path ".xlings.json")) { throw "bootstrap config missing" }
+          if (-not (Test-Path ".\bin\xlings.exe")) { throw "bootstrap binary missing" }
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
@@ -107,8 +109,6 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           $XLINGS_HOME = $pkgDir.FullName
           echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings.exe entry.
-          echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
           echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
 
       - name: "Init subos shims and switch mirrors"
@@ -117,13 +117,11 @@ jobs:
           $configPath = "$env:XLINGS_HOME\.xlings.json"
           if (Test-Path $configPath) {
             $json = Get-Content $configPath -Raw | ConvertFrom-Json
-            if ($json.xim -and $json.xim.mirrors) {
-              $json.xim.'index-repo' = $json.xim.mirrors.'index-repo'.GLOBAL
-              $json.xim.'res-server' = $json.xim.mirrors.'res-server'.GLOBAL
-              $json | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
-            }
+            $json.mirror = "GLOBAL"
+            $json | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
           }
           xlings self init
+          echo "$env:XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
           xlings update
 
       - name: "Test: basic commands"

@@ -10,6 +10,9 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  BOOTSTRAP_XLINGS_VERSION: v0.3.2
+  BOOTSTRAP_LLVM_VERSION: 20.1.7
+  XMAKE_VERSION: v3.0.7
 
 jobs:
   build-linux:
@@ -71,16 +74,71 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system deps
-        run: brew install xmake llvm@20
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: ${{ env.XMAKE_VERSION }}
+
+      - name: Bootstrap legacy xlings
+        run: |
+          PKG_VERSION="${BOOTSTRAP_XLINGS_VERSION#v}"
+          ARCHIVE="xlings-${PKG_VERSION}-macosx-arm64.tar.gz"
+          DOWNLOAD_URL="https://github.com/d2learn/xlings/releases/download/${BOOTSTRAP_XLINGS_VERSION}/${ARCHIVE}"
+          BOOTSTRAP_ROOT="$RUNNER_TEMP/bootstrap-xlings"
+          rm -rf "$BOOTSTRAP_ROOT"
+          mkdir -p "$BOOTSTRAP_ROOT"
+          curl -fsSL -o "$BOOTSTRAP_ROOT/$ARCHIVE" "$DOWNLOAD_URL"
+          tar -xzf "$BOOTSTRAP_ROOT/$ARCHIVE" -C "$BOOTSTRAP_ROOT"
+          BOOTSTRAP_HOME="$(find "$BOOTSTRAP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*' | head -1)"
+          [[ -n "$BOOTSTRAP_HOME" ]] || { echo "bootstrap xlings package not found"; exit 1; }
+          xattr -cr "$BOOTSTRAP_HOME" 2>/dev/null || true
+          echo "BOOTSTRAP_XLINGS_HOME=$BOOTSTRAP_HOME" >> "$GITHUB_ENV"
+
+      - name: Install LLVM toolchain with legacy xlings
+        run: |
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
+          LLVM_PREFIX="$(find "$BOOTSTRAP_XLINGS_HOME" -path "*/llvm/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
+          [[ -n "$LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
+          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
 
       - name: Configure xmake
-        run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+        run: xmake f -c -p macosx -m release --toolchain=llvm --sdk="$LLVM_PREFIX" -y
 
       - name: Build (macos_release)
         run: |
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
+
+      - name: Verify packaged macOS runtime bundle
+        run: |
+          ARCHIVE="$(find build -maxdepth 1 -name 'xlings-*-macosx-arm64.tar.gz' | head -1)"
+          [[ -n "$ARCHIVE" ]] || { echo "release archive not found"; exit 1; }
+          VERIFY_DIR="$RUNNER_TEMP/xlings-release-verify"
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          tar -xzf "$ARCHIVE" -C "$VERIFY_DIR"
+          PKG_ROOT="$(find "$VERIFY_DIR" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*-macosx-arm64' | head -1)"
+          [[ -n "$PKG_ROOT" ]] || { echo "extracted package root not found"; exit 1; }
+
+          test -x "$PKG_ROOT/bin/xlings"
+          test -f "$PKG_ROOT/.xlings.json"
+          test -f "$PKG_ROOT/lib/libc++.1.dylib"
+          test -f "$PKG_ROOT/lib/libc++abi.1.dylib"
+          test -f "$PKG_ROOT/lib/libunwind.1.dylib"
+
+          otool -L "$PKG_ROOT/bin/xlings" | grep -q '@executable_path/../lib/libc++\.1\.dylib'
+          otool -L "$PKG_ROOT/bin/xlings" | grep -q '@executable_path/../lib/libc++abi\.1\.dylib'
+          otool -L "$PKG_ROOT/lib/libc++.1.dylib" | grep -q '@loader_path/libunwind\.1\.dylib'
+          otool -L "$PKG_ROOT/lib/libc++abi.1.dylib" | grep -q '@loader_path/libunwind\.1\.dylib'
+
+          env -u XLINGS_HOME "$PKG_ROOT/bin/xlings" -h
+          env -u XLINGS_HOME "$PKG_ROOT/bin/xlings" self init
+          test -L "$PKG_ROOT/subos/default/bin/xlings"
+          env -u XLINGS_HOME "$PKG_ROOT/subos/current/bin/xlings" -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

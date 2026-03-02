@@ -74,7 +74,11 @@ namespace platform_impl {
         } else if (std::filesystem::exists(link)) {
             std::filesystem::remove_all(link, ec);
         }
-        std::filesystem::create_directory_symlink(target, link, ec);
+        auto linkTarget = target;
+        auto rel = std::filesystem::relative(target, link.parent_path(), ec);
+        if (!ec && !rel.empty()) linkTarget = rel;
+        ec.clear();
+        std::filesystem::create_directory_symlink(linkTarget, link, ec);
         return !static_cast<bool>(ec);
     }
 

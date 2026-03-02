@@ -8,6 +8,9 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  BOOTSTRAP_XLINGS_VERSION: v0.3.2
+  BOOTSTRAP_LLVM_VERSION: 20.1.7
+  XMAKE_VERSION: v3.0.7
 
 jobs:
   build-and-test:
@@ -19,13 +22,46 @@ jobs:
 
       # ── Phase 1: Configure Environment ──────────────────────────
 
-      - name: Install system deps
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: ${{ env.XMAKE_VERSION }}
+
+      - name: Bootstrap legacy xlings
         run: |
-          brew install xmake llvm@20
+          PKG_VERSION="${BOOTSTRAP_XLINGS_VERSION#v}"
+          ARCHIVE="xlings-${PKG_VERSION}-macosx-arm64.tar.gz"
+          DOWNLOAD_URL="https://github.com/d2learn/xlings/releases/download/${BOOTSTRAP_XLINGS_VERSION}/${ARCHIVE}"
+          BOOTSTRAP_ROOT="$RUNNER_TEMP/bootstrap-xlings"
+          rm -rf "$BOOTSTRAP_ROOT"
+          mkdir -p "$BOOTSTRAP_ROOT"
+          curl -fsSL -o "$BOOTSTRAP_ROOT/$ARCHIVE" "$DOWNLOAD_URL"
+          tar -xzf "$BOOTSTRAP_ROOT/$ARCHIVE" -C "$BOOTSTRAP_ROOT"
+          BOOTSTRAP_HOME="$(find "$BOOTSTRAP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*' | head -1)"
+          [[ -n "$BOOTSTRAP_HOME" ]] || { echo "bootstrap xlings package not found"; exit 1; }
+          xattr -cr "$BOOTSTRAP_HOME" 2>/dev/null || true
+          echo "BOOTSTRAP_XLINGS_HOME=$BOOTSTRAP_HOME" >> "$GITHUB_ENV"
+
+      - name: Install LLVM toolchain with legacy xlings
+        run: |
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
+          LLVM_PREFIX="$(find "$BOOTSTRAP_XLINGS_HOME" -path "*/llvm/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
+          [[ -n "$LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
+          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          "$LLVM_PREFIX/bin/clang++" --version
+
+      - name: Prepare fixture index repo
+        run: |
+          rm -rf tests/fixtures/xim-pkgindex
+          git clone --depth 1 https://github.com/d2learn/xim-pkgindex.git tests/fixtures/xim-pkgindex
 
       - name: Configure xmake
         run: |
-          xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20 -y
+          xmake f -c -p macosx -m release --toolchain=llvm --sdk="$LLVM_PREFIX" -y
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 
@@ -40,6 +76,10 @@ jobs:
         run: |
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
+
+      - name: "Test: bootstrap home E2E"
+        run: |
+          bash tests/e2e/bootstrap_home_test.sh
 
       - name: Prepare release artifact
         run: |
@@ -57,8 +97,10 @@ jobs:
           pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-macosx-arm64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           cd "$pkg_dir"
+          [[ -f .xlings.json ]] || { echo "bootstrap config missing"; exit 1; }
+          [[ -x ./bin/xlings ]] || { echo "bootstrap binary missing"; exit 1; }
           ./bin/xlings self install
-          export PATH="$HOME/.xlings/subos/current/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
           echo "=== Verify install ==="
           xlings -h
           xlings config
@@ -98,20 +140,19 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings entry.
-          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
+          echo "PATH=$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: "Init subos shims and switch mirrors"
         run: |
           xattr -cr "$XLINGS_HOME" 2>/dev/null || true
           if command -v jq &>/dev/null; then
-            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
-                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
+            jq '.mirror = "GLOBAL" |
                 .repo = "https://github.com/d2learn/xlings.git"' \
               "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
               mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
           fi
           xlings self init
+          echo "$XLINGS_HOME/subos/current/bin" >> "$GITHUB_PATH"
           xlings update
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
