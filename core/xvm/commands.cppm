@@ -165,15 +165,22 @@ int cmd_use(const std::string& target, const std::string& version) {
     Config::save_workspace();
 
     // Create/update shim hardlink in subos bin/
-    auto xlings_bin = p.homeDir / "xlings";
+#ifdef _WIN32
+    auto xlings_bin = p.homeDir / "bin" / "xlings.exe";
+    constexpr std::string_view shim_ext = ".exe";
+#else
+    auto xlings_bin = p.homeDir / "bin" / "xlings";
+    constexpr std::string_view shim_ext = "";
+#endif
     if (!fs::exists(xlings_bin)) {
-        // Try bin/xlings
-        xlings_bin = p.homeDir / "bin" / "xlings";
+        xlings_bin = p.homeDir / "xlings";
     }
 
     if (fs::exists(xlings_bin)) {
         auto vinfo = get_vinfo(db, target);
         std::string shim_name = (vinfo && !vinfo->filename.empty()) ? vinfo->filename : target;
+        if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
+            shim_name += shim_ext;
 
         fs::create_directories(p.binDir);
         auto shim_path = p.binDir / shim_name;
@@ -197,7 +204,10 @@ int cmd_use(const std::string& target, const std::string& version) {
         // Create shims for bindings
         if (vinfo) {
             for (auto& [binding_name, vermap] : vinfo->bindings) {
-                auto bind_path = p.binDir / binding_name;
+                std::string bind_name{binding_name};
+                if (!shim_ext.empty() && !bind_name.ends_with(shim_ext))
+                    bind_name += shim_ext;
+                auto bind_path = p.binDir / bind_name;
                 ec.clear();
                 if (fs::exists(bind_path, ec)) {
                     fs::remove(bind_path, ec);

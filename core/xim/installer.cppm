@@ -89,12 +89,13 @@ std::string default_res_server_() {
     return "https://github.com/xlings-res";
 }
 
-std::string build_xlings_res_url_(std::string_view pkgName,
-                                  std::string_view version,
-                                  std::string_view platform) {
+std::string build_xlings_res_url_with_server_(std::string_view server,
+                                              std::string_view pkgName,
+                                              std::string_view version,
+                                              std::string_view platform) {
     auto ext = std::string(platform) == "windows" ? "zip" : "tar.gz";
     return std::format("{}/{}/releases/download/{}/{}-{}-{}-{}.{}",
-                       default_res_server_(),
+                       server,
                        pkgName,
                        version,
                        pkgName,
@@ -102,6 +103,28 @@ std::string build_xlings_res_url_(std::string_view pkgName,
                        platform,
                        detect_arch_(),
                        ext);
+}
+
+std::string build_xlings_res_url_(std::string_view pkgName,
+                                  std::string_view version,
+                                  std::string_view platform) {
+    return build_xlings_res_url_with_server_(default_res_server_(), pkgName, version, platform);
+}
+
+// Build fallback URLs from all candidate resource servers (excluding the selected one)
+std::vector<std::string> build_xlings_res_fallback_urls_(std::string_view pkgName,
+                                                         std::string_view version,
+                                                         std::string_view platform) {
+    auto selected = default_res_server_();
+    auto candidates = Config::resource_servers();
+    std::vector<std::string> fallbacks;
+    for (auto& server : candidates) {
+        if (server != selected) {
+            fallbacks.push_back(
+                build_xlings_res_url_with_server_(server, pkgName, version, platform));
+        }
+    }
+    return fallbacks;
 }
 
 bool has_directory_entries_(const std::filesystem::path& dir) {
@@ -604,7 +627,8 @@ public:
             if (verIt == platformEntries.end()) continue;
 
             auto& res = verIt->second;
-            if (res.url == "XLINGS_RES") {
+            bool isXlingsRes = (res.url == "XLINGS_RES");
+            if (isXlingsRes) {
                 res.url = detail_::build_xlings_res_url_(node.name, version, platform);
             }
             if (res.url.empty()) continue;
@@ -614,6 +638,10 @@ public:
             task.url = res.url;
             task.sha256 = res.sha256;
             task.destDir = detail_::download_cache_dir_(node, dataDir);
+            if (isXlingsRes) {
+                task.fallbackUrls = detail_::build_xlings_res_fallback_urls_(
+                    node.name, version, platform);
+            }
             plannedDownloads.insert(task.name);
             dlTasks.push_back(std::move(task));
         }

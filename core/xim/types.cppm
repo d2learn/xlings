@@ -113,6 +113,7 @@ struct DownloadTask {
     std::string url;
     std::string sha256;
     std::filesystem::path destDir;
+    std::vector<std::string> fallbackUrls;  // tried in order when url fails
 };
 
 // Result of a download

@@ -49,14 +49,29 @@ DownloadResult download_one(const DownloadTask& task) {
         }
     }
 
-    // Download with curl
-    log::info("downloading {} from {}", task.name, url);
-    auto cmd = std::format(
-        "curl -fSL --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
-        destFile.string(), url);
-    auto [rc, output] = platform::run_command_capture(cmd);
-    if (rc != 0) {
+    // Build ordered list of URLs to try (primary + fallbacks)
+    std::vector<std::string> urls;
+    urls.push_back(url);
+    for (auto& fb : task.fallbackUrls) urls.push_back(fb);
+
+    // Download with curl, trying each URL in order
+    bool downloaded = false;
+    for (auto& tryUrl : urls) {
+        log::info("downloading {} from {}", task.name, tryUrl);
+        auto cmd = std::format(
+            "curl -fSL --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            destFile.string(), tryUrl);
+        auto [rc, output] = platform::run_command_capture(cmd);
+        if (rc == 0) {
+            downloaded = true;
+            break;
+        }
         result.error = std::format("curl failed (rc={}): {}", rc, output);
+        if (&tryUrl != &urls.back()) {
+            log::warn("download failed for {}, trying next server...", task.name);
+        }
+    }
+    if (!downloaded) {
         return result;
     }
 
