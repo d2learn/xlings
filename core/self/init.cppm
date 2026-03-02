@@ -22,9 +22,12 @@ inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
 // Optional shims (created only when pkg_root/bin/<name> exists)
 inline constexpr std::array<std::string_view, 1> SHIM_NAMES_OPTIONAL = {"xmake"};
 
+export enum class LinkResult { Symlink, Hardlink, Copy, Failed };
+
 export bool is_builtin_shim(std::string_view name);
 export bool is_bootstrap_home_root(const fs::path& root);
 export fs::path xlings_binary_in_home(const fs::path& home_dir);
+export LinkResult create_shim(const fs::path& source, const fs::path& target);
 export void ensure_subos_shims(const fs::path& target_bin_dir,
                                const fs::path& shim_src,
                                const fs::path& pkg_root);
@@ -59,38 +62,57 @@ fs::path xlings_binary_in_home(const fs::path& home_dir) {
     return {};
 }
 
+// Unified shim creation: symlink (Unix) > hardlink > copy
+LinkResult create_shim(const fs::path& source, const fs::path& target) {
+    std::error_code ec;
+
+    if (!fs::exists(source, ec)) return LinkResult::Failed;
+
+    // Remove existing target (file or symlink)
+    if (fs::exists(target, ec) || fs::is_symlink(target, ec)) {
+        ec.clear();
+        fs::remove(target, ec);
+        ec.clear();
+    }
+
+#if !defined(_WIN32)
+    // Unix: prefer relative symlink
+    auto rel = fs::relative(source, target.parent_path(), ec);
+    if (!ec && !rel.empty()) {
+        fs::create_symlink(rel, target, ec);
+        if (!ec) return LinkResult::Symlink;
+    }
+    ec.clear();
+    // Fallback: absolute symlink
+    fs::create_symlink(source, target, ec);
+    if (!ec) return LinkResult::Symlink;
+    ec.clear();
+#endif
+
+    // Hardlink (Unix fallback / Windows primary)
+    fs::create_hard_link(source, target, ec);
+    if (!ec) return LinkResult::Hardlink;
+    ec.clear();
+
+    // Final fallback: copy
+    fs::copy_file(source, target, fs::copy_options::overwrite_existing, ec);
+    if (!ec) return LinkResult::Copy;
+
+    std::println(stderr, "[xlings:self]: failed to create shim {} - {}",
+        target.string(), ec.message());
+    return LinkResult::Failed;
+}
+
 void ensure_subos_shims(const fs::path& target_bin_dir,
                         const fs::path& shim_src,
                         const fs::path& pkg_root) {
     if (!fs::exists(shim_src)) return;
 
     std::string ext = shim_src.extension().string();
-    auto link_or_copy = [&](const fs::path& source, const fs::path& dst) {
-        std::error_code ec;
-#if defined(__APPLE__)
-        auto link_target = source;
-        auto rel = fs::relative(source, dst.parent_path(), ec);
-        if (!ec && !rel.empty()) link_target = rel;
-        ec.clear();
-        if (fs::exists(dst, ec) || fs::is_symlink(dst, ec)) {
-            ec.clear();
-            fs::remove_all(dst, ec);
-            ec.clear();
-        }
-        fs::create_symlink(link_target, dst, ec);
-        if (!ec) return;
-        ec.clear();
-#endif
-        fs::copy_file(source, dst, fs::copy_options::overwrite_existing, ec);
-        if (ec) {
-            std::println(stderr, "[xlings:self]: failed to create shim {} - {}",
-                dst.string(), ec.message());
-        }
-    };
 
     for (auto name : SHIM_NAMES_BASE) {
         auto dst = target_bin_dir / (std::string(name) + ext);
-        link_or_copy(shim_src, dst);
+        create_shim(shim_src, dst);
     }
 
     if (!pkg_root.empty()) {
@@ -99,7 +121,7 @@ void ensure_subos_shims(const fs::path& target_bin_dir,
             auto opt_bin = bin_dir / (std::string(name) + ext);
             if (fs::exists(opt_bin)) {
                 auto dst = target_bin_dir / (std::string(name) + ext);
-                link_or_copy(shim_src, dst);
+                create_shim(shim_src, dst);
             }
         }
     }

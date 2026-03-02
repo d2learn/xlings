@@ -9,6 +9,7 @@ import std;
 import xlings.config;
 import xlings.log;
 import xlings.platform;
+import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
 
@@ -164,7 +165,7 @@ int cmd_use(const std::string& target, const std::string& version) {
     Config::workspace_mut()[target] = resolved;
     Config::save_workspace();
 
-    // Create/update shim hardlink in subos bin/
+    // Create/update shim in subos bin/ using unified create_shim()
 #ifdef _WIN32
     auto xlings_bin = p.homeDir / "bin" / "xlings.exe";
     constexpr std::string_view shim_ext = ".exe";
@@ -183,22 +184,9 @@ int cmd_use(const std::string& target, const std::string& version) {
             shim_name += shim_ext;
 
         fs::create_directories(p.binDir);
-        auto shim_path = p.binDir / shim_name;
-        std::error_code ec;
-
-        // Remove old shim if exists
-        if (fs::exists(shim_path, ec)) {
-            fs::remove(shim_path, ec);
-        }
-
-        // Create hardlink to xlings binary
-        fs::create_hard_link(xlings_bin, shim_path, ec);
-        if (ec) {
-            // Fallback to copy
-            fs::copy_file(xlings_bin, shim_path, fs::copy_options::overwrite_existing, ec);
-            if (ec) {
-                log::warn("[xlings:use] failed to create shim for '{}': {}", shim_name, ec.message());
-            }
+        auto result = xself::create_shim(xlings_bin, p.binDir / shim_name);
+        if (result == xself::LinkResult::Failed) {
+            log::warn("[xlings:use] failed to create shim for '{}'", shim_name);
         }
 
         // Create shims for bindings
@@ -207,15 +195,7 @@ int cmd_use(const std::string& target, const std::string& version) {
                 std::string bind_name{binding_name};
                 if (!shim_ext.empty() && !bind_name.ends_with(shim_ext))
                     bind_name += shim_ext;
-                auto bind_path = p.binDir / bind_name;
-                ec.clear();
-                if (fs::exists(bind_path, ec)) {
-                    fs::remove(bind_path, ec);
-                }
-                fs::create_hard_link(xlings_bin, bind_path, ec);
-                if (ec) {
-                    fs::copy_file(xlings_bin, bind_path, fs::copy_options::overwrite_existing, ec);
-                }
+                xself::create_shim(xlings_bin, p.binDir / bind_name);
             }
         }
     }
