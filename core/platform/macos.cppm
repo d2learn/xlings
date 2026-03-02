@@ -58,9 +58,9 @@ namespace platform_impl {
 
     export void make_files_executable(const std::filesystem::path& dir) {
         if (!std::filesystem::exists(dir)) return;
-        for (auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (entry.is_regular_file())
-                ::chmod(entry.path().c_str(), 0755);
+        for (auto it = std::filesystem::directory_iterator(dir); it != std::default_sentinel; ++it) {
+            if (it->is_regular_file())
+                ::chmod(it->path().c_str(), 0755);
         }
         std::string cmd = "xattr -cr \"" + dir.string() + "\" 2>/dev/null";
         std::system(cmd.c_str());
@@ -74,7 +74,11 @@ namespace platform_impl {
         } else if (std::filesystem::exists(link)) {
             std::filesystem::remove_all(link, ec);
         }
-        std::filesystem::create_directory_symlink(target, link, ec);
+        auto linkTarget = target;
+        auto rel = std::filesystem::relative(target, link.parent_path(), ec);
+        if (!ec && !rel.empty()) linkTarget = rel;
+        ec.clear();
+        std::filesystem::create_directory_symlink(linkTarget, link, ec);
         return !static_cast<bool>(ec);
     }
 

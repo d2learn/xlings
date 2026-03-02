@@ -10,6 +10,9 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  BOOTSTRAP_XLINGS_VERSION: v0.3.2
+  BOOTSTRAP_LLVM_VERSION: 20.1.7
+  XMAKE_VERSION: v3.0.7
 
 jobs:
   build-linux:
@@ -35,13 +38,17 @@ jobs:
           xmake --version
 
       - name: Install Xlings
-        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
+        env:
+          XLINGS_NON_INTERACTIVE: 1
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/.xlings/subos/current/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install musl-gcc 15.1 with Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
           xlings install musl-gcc@15.1.0 -y
-          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          MUSL_SDK=$XLINGS_HOME/data/xpkgs/musl-gcc/15.1.0
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
@@ -49,23 +56,15 @@ jobs:
           export PATH="$MUSL_SDK/bin:$PATH"
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
+          bash tools/setup_musl_runtime.sh "$MUSL_SDK"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Add Rust musl target
-        run: rustup target add x86_64-unknown-linux-musl
+      - name: Prepare fixture index repo
+        run: |
+          bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
 
       - name: Build (linux_release)
         run: |
@@ -84,21 +83,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install system deps
-        run: brew install xmake llvm@20
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
         with:
-          components: rustfmt
+          xmake-version: ${{ env.XMAKE_VERSION }}
 
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
+      - name: Bootstrap legacy xlings
+        run: |
+          PKG_VERSION="${BOOTSTRAP_XLINGS_VERSION#v}"
+          ARCHIVE="xlings-${PKG_VERSION}-macosx-arm64.tar.gz"
+          DOWNLOAD_URL="https://github.com/d2learn/xlings/releases/download/${BOOTSTRAP_XLINGS_VERSION}/${ARCHIVE}"
+          BOOTSTRAP_ROOT="$RUNNER_TEMP/bootstrap-xlings"
+          rm -rf "$BOOTSTRAP_ROOT"
+          mkdir -p "$BOOTSTRAP_ROOT"
+          curl -fsSL -o "$BOOTSTRAP_ROOT/$ARCHIVE" "$DOWNLOAD_URL"
+          tar -xzf "$BOOTSTRAP_ROOT/$ARCHIVE" -C "$BOOTSTRAP_ROOT"
+          BOOTSTRAP_HOME="$(find "$BOOTSTRAP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*' | head -1)"
+          [[ -n "$BOOTSTRAP_HOME" ]] || { echo "bootstrap xlings package not found"; exit 1; }
+          xattr -cr "$BOOTSTRAP_HOME" 2>/dev/null || true
+          echo "BOOTSTRAP_XLINGS_HOME=$BOOTSTRAP_HOME" >> "$GITHUB_ENV"
+
+      - name: Install LLVM toolchain with legacy xlings
+        run: |
+          export XLINGS_HOME="$HOME/.xlings"
+          rm -rf "$XLINGS_HOME"
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
+          ACTUAL_LLVM_PREFIX="$(find "$XLINGS_HOME/data/xpkgs" -path "*/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
+          [[ -n "$ACTUAL_LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          LLVM_ALIAS_ROOT="$XLINGS_HOME/data/xpkgs/local-x-llvm"
+          mkdir -p "$LLVM_ALIAS_ROOT"
+          rm -rf "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          ln -s "$ACTUAL_LLVM_PREFIX" "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          LLVM_PREFIX="$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
+          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "Configured LLVM toolchain path: $LLVM_PREFIX"
 
       - name: Configure xmake
-        run: xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+        run: |
+          # Temporary workaround: configure xmake with the explicit SDK path
+          # from the bootstrap-installed LLVM toolchain on the GitHub runner.
+          xmake f -c -p macosx -m release \
+            --toolchain=llvm \
+            --sdk="$LLVM_PREFIX" \
+            -y
+          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
 
       - name: Build (macos_release)
         run: |
@@ -121,16 +153,6 @@ jobs:
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
 
       - name: Configure xmake
         run: xmake f -p windows -m release

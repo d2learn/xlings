@@ -1,139 +1,102 @@
 # XVM | Xlings Version Manager
 
-一个简单且通用的版本管理工具 - 支持多版本管理、支持工作空间和环境隔离、支持多版本的命令别名
+版本管理功能已融合到 xlings 单二进制中，不再需要独立的 xvm 程序。
 
 ---
 
-## 下载安装
-
-**使用xim进行安装**
-
-```bash
-xim --update index
-xim -i xvm # 或 xlings install xvm
-```
-
-**直接下载**
-
-> 直接下载压缩包&解压出可执行程序
-
-[release地址](https://github.com/d2learn/xlings/releases/tag/xvm-dev)
-
-
-注: 使用时需要把xvm程序放到一个已经加入PATH的目录里
-
 ## 基本用法
 
-**xvm add | 添加程序**
-
-> 支持添加不同版本, 也支持创建命令别名
+### 安装并注册版本
 
 ```bash
-# xvm add [target] [version] --path [bin-path] --alias [command/bin-file]
-xvm add python 2.7.18 --path python2_dir --alias python2
-xvm add python 3.12.3 --path python3_dir --alias python3.12
-xvm add pv 0.0.1 --alias "python --version"
+# 安装包后自动注册到版本数据库
+xlings install gcc@15
+xlings install node
 ```
 
-- `target`: 生效时可以使用的命令
-- `version`: 这个是标识target的版本号, 建议和应用版本保持一致。如果是别名可以自定义
-- `--path`: 程序所在的实际路径(可选)
-- `--alias`: 在"所设置的路径"下实际执行的命令(可选), 默认为target
+安装完成后，版本信息自动写入 `~/.xlings/.xlings.json` 的 `versions` 段。
 
-> 注: 默认第一次添加的版本作为全局工作空间的默认版本
-
-**xvm list | 查询程序的所有版本**
-
-> 支持模糊查询
+### 切换版本
 
 ```bash
-# xvm list [target]
-xvm list python
-xvm list p
+# xlings use <target> <version>
+xlings use gcc 15      # 模糊匹配: 15 → 15.1.0
+xlings use gcc 14.2    # 精确匹配: 14.2 → 14.2.0
+xlings use node 22
 ```
 
-**xvm use | 切换版本**
+`use` 命令会：
+1. 更新当前 subos 的 workspace（`~/.xlings/subos/<active>/.xlings.json`）
+2. 在 subos 的 `bin/` 下创建 shim 硬链接
 
-> 可以切换到对应的版本, 版本号支持模糊匹配
+### 查看版本
 
 ```bash
-# xvm use [target] [version]
-xvm use python 3.12.3
-xvm use python 2   # -> 2.7.18
+# 查看某个工具的所有已注册版本
+xlings use gcc           # 不带版本号时列出所有版本
+xlings info gcc          # 查看包详细信息
 ```
 
-**xvm current | 查询当前版本**
+### Shim 机制
 
-> 支持模糊匹配
+版本切换后，在 subos/bin/ 中创建的 shim 会硬链接到 xlings 二进制。当通过 shim 执行时：
 
 ```bash
-# xvm current [target]
-xvm current p
+gcc --version       # argv[0]=gcc → shim 模式 → 查版本 → exec 真实 gcc
+g++ -o main main.cpp  # argv[0]=g++ → 查 bindings → exec 真实 g++-15
 ```
 
-**xvm remove | 移除之前被添加的程序**
+shim 分发流程：
+1. 检测 `argv[0]` 提取程序名
+2. 读取 effective workspace（项目 > subos > 全局）
+3. 模糊匹配版本号
+4. 展开路径变量 `${XLINGS_HOME}`
+5. 设置环境变量
+6. `execvp` 真实程序
 
-> 这里的移除只是从xvm的版本数据库中删除记录
+## 版本视图 (Subos)
+
+每个 subos 维护独立的版本视图：
 
 ```bash
-# xvm remove [target] [version]
-xvm remove pv 0.0.1
+xlings subos new dev         # 创建 dev 环境
+xlings subos use dev         # 切换到 dev
+xlings use gcc 14            # 仅影响 dev 的版本视图
+xlings subos use default     # 切回默认，gcc 版本不变
 ```
 
-## 工作空间和环境隔离
+## 项目级配置
 
-> 目前xvm支持基于目录的工作空间, 可以和全局工作空间进行隔离(默认有一个全局工作空间)
+在项目目录创建 `.xlings.json` 可覆盖版本：
 
-### 基础命令
-
-**创建工作空间**
-
-```bash
-# xvm workspace [target]
-xvm workspace test
+```json
+{
+  "workspace": {
+    "gcc": "14.2.0"
+  }
+}
 ```
 
-> 注: 工作空间, 默认时激活和继承全局工作空间版本情况的
+在此目录下执行 `gcc` 时，shim 会使用 14.2.0 版本（不影响全局设置）。
 
-**设置当前工作空间激活状态**
+## 配置层级
 
-> 当工作空间未激活时就会使用默认的全局空间, 激活时会覆盖全局空间
-
-```bash
-# xvm workspace [target]
-xvm workspace test --active false
-xvm workspace test --active true
+```
+优先级: 项目配置 > 当前 subos 配置 > 全局配置 > 硬编码默认值
 ```
 
-**设置当前工作空间是否继承全局空间**
+| 文件 | 内容 |
+|------|------|
+| `~/.xlings/.xlings.json` | 全局 versions + lang + mirror + activeSubos |
+| `~/.xlings/subos/<name>/.xlings.json` | workspace（版本视图） |
+| `<project>/.xlings.json` | workspace 覆盖 + 本地 versions |
 
-```bash
-# xvm workspace [target]
-xvm workspace test --inherit false
-xvm workspace test --inherit true
-```
+## 从旧版 xvm 迁移
 
-### 使用场景
-
-> 在指定目录创建工作空间, 使用特定的版本
-
-```bash
-# 假设全局空间中python使用的版本是3
-xvm workspace test # 创建工作空间
-xvm use python 2   # 切换python版本
-xvm current python # 查询当前版本
-python --version   # 验证 - python2
-cd ..
-python --version   # 返回上级目录/版本会自动切换到全局版本python3
-```
-
-## 其他
-
-**临时关闭xvm版本管理功能**
-
-> 通过设置全局workspace的状态, 可以控制xvm的版本管理是否生效
-
-```bash
-xvm workspace global --active false
-xvm workspace global --active true
-```
+| 旧 xvm 命令 | 新命令 |
+|-------------|--------|
+| `xvm add <target> <ver> --path <path>` | 通过 `.xlings.json` versions 段配置 |
+| `xvm use <target> <ver>` | `xlings use <target> <ver>` |
+| `xvm list <target>` | `xlings use <target>` (不带版本号) |
+| `xvm current <target>` | `xlings use <target>` |
+| `xvm remove <target> <ver>` | `xlings remove <target>` |

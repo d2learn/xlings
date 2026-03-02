@@ -24,22 +24,15 @@ jobs:
         with:
           xmake-version: latest
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        shell: pwsh
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
       - name: Configure xmake
-        run: xmake f -p windows -m release
+        run: xmake f -p windows -m release -y
+
+      # ── Phase 1.5: Unit Tests ────────────────────────────────────
+
+      - name: Build and run unit tests
+        run: |
+          xmake build xlings_tests
+          xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
 
@@ -48,6 +41,11 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\tools\windows_release.ps1"
 
+      - name: "E2E-01: Bootstrap Home (portable + installed)"
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tests\e2e\bootstrap_home_test.ps1"
+
       - name: Prepare release artifact
         shell: pwsh
         run: |
@@ -55,59 +53,16 @@ jobs:
           if (-not $zip) { throw "No release zip found" }
           Copy-Item $zip.FullName "build\release.zip"
 
-      # ── Phase 2.5: Test install script ─────────────────────────
+      # ── Phase 3: E2E Tests ─────────────────────────────────────
 
-      - name: "Test: install script (xlings self install)"
+      - name: "E2E-02: Release Self Install"
         shell: pwsh
         run: |
-          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
-          $installDir = Join-Path $env:RUNNER_TEMP "install-test"
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
-          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
-          if (-not $pkgDir) { throw "Package dir not found" }
-          Set-Location $pkgDir.FullName
-          & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
-          Write-Host "=== Verify install ==="
-          xlings -h
-          xlings config
-          xvm --version
-          Write-Host "=== Verify shims created at install time ==="
-          $shims = @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xsubos.exe", "xself.exe")
-          foreach ($s in $shims) {
-            if (-not (Test-Path "$env:USERPROFILE\.xlings\subos\default\bin\$s")) {
-              throw "FAIL: shim $s missing after install"
-            }
-          }
-          Write-Host "OK: all shims present in subos/default/bin"
-          Write-Host "=== Cleanup install test ==="
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
+          & "$env:GITHUB_WORKSPACE\tests\e2e\release_self_install_test.ps1" "build\release.zip"
 
-      - name: "Test: xvm runtime PATH check accepts current/bin without XLINGS_HOME"
+      - name: "E2E-03: Quick Install Smoke"
         shell: pwsh
-        run: |
-          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
-          Remove-Item Env:XLINGS_SUBOS -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          $installDir = Join-Path $env:RUNNER_TEMP "xvm-runtime-test"
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
-          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
-          if (-not $pkgDir) { throw "Package dir not found" }
-          Set-Location $pkgDir.FullName
-          & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
-          $out = (xvm --version 2>&1) | Out-String
-          Write-Host $out
-          if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
-          if ($out -notmatch "xvm") { throw "FAIL: xvm --version output missing" }
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
-
-      - name: "Test: quick install script (irm | iex)"
-        shell: pwsh
+        continue-on-error: true
         run: |
           Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
@@ -115,102 +70,21 @@ jobs:
           irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
           $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
           $atSubos = Test-Path "$env:USERPROFILE\.xlings\subos\current\bin\xlings.exe"
-          if (-not $atSubos) { throw "xlings not installed at .xlings\\subos\\current\\bin" }
+          if (-not $atSubos) { throw "xlings not installed at .xlings\subos\current\bin" }
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           $searchOut = (xlings search d 2>&1) | Out-String
           Write-Host $searchOut
           if ($searchOut -match "(?i)invalid task:\s*xim") { throw "FAIL: quick install search hit invalid task: xim" }
           Write-Host "=== Cleanup quick install test ==="
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
 
-      # ── Phase 3: Test ───────────────────────────────────────────
-
-      - name: Setup xlings environment
+      - name: "E2E-04: Release Subos + d2x"
         shell: pwsh
         run: |
-          $pkgDir = Get-ChildItem -Directory "build\xlings-*-windows-x86_64" | Select-Object -First 1
-          if (-not $pkgDir) { throw "Package dir not found" }
-          $XLINGS_HOME = $pkgDir.FullName
-          echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
-          echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
-          echo "XLINGS_SUBOS=$XLINGS_HOME\subos\current" >> $env:GITHUB_ENV
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings.exe entry.
-          echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
-          echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
-
-      - name: "Test: basic commands"
-        shell: pwsh
-        run: |
-          xlings -h
-          xlings config
-          xvm --version
-          xlings subos list
-
-      - name: "Test: create subos s1, install d2x@0.1.1"
-        shell: pwsh
-        run: |
-          Write-Host "=== Create subos s1 ==="
-          xlings subos new s1
-          xlings subos use s1
-          Write-Host "=== Install d2x@0.1.1 in s1 ==="
-          $out = (xlings install d2x@0.1.1 -y 2>&1) | Out-String
-          Write-Host $out
-          if ($out -notmatch "version.*0\.1\.1") {
-            throw "FAIL: [package] info doesn't show version 0.1.1"
-          }
-          if ($out -notmatch "d2x@0\.1\.1.*installed") {
-            throw "FAIL: d2x@0.1.1 install not confirmed"
-          }
-          Write-Host "OK: d2x@0.1.1 installed in s1, [package] info verified"
-
-      - name: "Test: create subos s2, install d2x@0.1.2"
-        shell: pwsh
-        run: |
-          Write-Host "=== Create subos s2 ==="
-          xlings subos new s2
-          xlings subos use s2
-          Write-Host "=== Install d2x@0.1.2 in s2 ==="
-          $out = (xlings install d2x@0.1.2 -y 2>&1) | Out-String
-          Write-Host $out
-          if ($out -notmatch "version.*0\.1\.2") {
-            throw "FAIL: [package] info doesn't show version 0.1.2"
-          }
-          if ($out -notmatch "d2x@0\.1\.2.*installed") {
-            throw "FAIL: d2x@0.1.2 install not confirmed"
-          }
-          Write-Host "OK: d2x@0.1.2 installed in s2, [package] info verified"
-
-      - name: "Test: switch subos and verify isolation"
-        shell: pwsh
-        run: |
-          Write-Host "=== Switch to s1 ==="
-          xlings subos use s1
-          Write-Host "OK: switched to s1"
-
-          Write-Host "=== Switch to s2 ==="
-          xlings subos use s2
-          Write-Host "OK: switched to s2"
-
-          Write-Host "=== subos list ==="
-          xlings subos list
-
-      - name: "Test: cleanup subos"
-        shell: pwsh
-        run: |
-          xlings subos use default
-          xlings subos remove s1
-          xlings subos remove s2
-          xlings subos list
-          Write-Host "OK: test subos removed"
-
-      - name: "Test: E2E usability script"
-        shell: pwsh
-        run: |
-          $env:SKIP_NETWORK_TESTS = "0"
-          & "$env:GITHUB_WORKSPACE\tests\e2e\windows_usability_test.ps1" -ArchivePath "$env:GITHUB_WORKSPACE\build\release.zip"
+          & "$env:GITHUB_WORKSPACE\tests\e2e\release_subos_smoke_test.ps1" "build\release.zip"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

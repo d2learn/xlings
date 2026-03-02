@@ -34,7 +34,7 @@ std::string utc_now_iso_() {
 int next_gen_number_(const fs::path& gensDir) {
     int maxNum = 0;
     if (!fs::exists(gensDir)) return 1;
-    for (auto& entry : fs::directory_iterator(gensDir)) {
+    for (auto& entry : platform::dir_entries(gensDir)) {
         auto stem = entry.path().stem().string();
         try { maxNum = std::max(maxNum, std::stoi(stem)); }
         catch (...) {}
@@ -58,9 +58,9 @@ void sync_workspace_yaml_(const fs::path& envDir,
 std::uintmax_t dir_size_(const fs::path& dir) {
     std::uintmax_t total = 0;
     std::error_code ec;
-    for (auto& entry : fs::recursive_directory_iterator(dir, ec)) {
-        if (entry.is_regular_file())
-            total += entry.file_size();
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != std::default_sentinel; ++it) {
+        if (it->is_regular_file())
+            total += it->file_size();
     }
     return total;
 }
@@ -118,7 +118,7 @@ export std::vector<Generation> list_generations(const fs::path& envDir) {
     auto gensDir = envDir / "generations";
     if (!fs::exists(gensDir)) return result;
 
-    for (auto& entry : fs::directory_iterator(gensDir)) {
+    for (auto& entry : platform::dir_entries(gensDir)) {
         if (!entry.is_regular_file()) continue;
         try {
             auto content = platform::read_file_to_string(entry.path().string());
@@ -177,11 +177,11 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
 
     auto subosDir = xlingsHome / "subos";
     if (fs::exists(subosDir)) {
-        for (auto& envEntry : fs::directory_iterator(subosDir)) {
+        for (auto& envEntry : platform::dir_entries(subosDir)) {
             if (!envEntry.is_directory()) continue;
             auto gensDir = envEntry.path() / "generations";
             if (!fs::exists(gensDir)) continue;
-            for (auto& genEntry : fs::directory_iterator(gensDir)) {
+            for (auto& genEntry : platform::dir_entries(gensDir)) {
                 try {
                     auto content = platform::read_file_to_string(genEntry.path().string());
                     auto json = nlohmann::json::parse(content);
@@ -201,18 +201,19 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
     std::uintmax_t freedBytes = 0;
     int removedCount = 0;
 
-    for (auto& pkgEntry : fs::directory_iterator(pkgDir)) {
+    for (auto& pkgEntry : platform::dir_entries(pkgDir)) {
         if (!pkgEntry.is_directory()) continue;
         auto pkgName = pkgEntry.path().filename().string();
-        for (auto& verEntry : fs::directory_iterator(pkgEntry)) {
+        for (auto& verEntry : platform::dir_entries(pkgEntry)) {
             if (!verEntry.is_directory()) continue;
             auto ver = verEntry.path().filename().string();
             auto key = pkgName + "@" + ver;
             if (!referenced.count(key)) {
                 auto size = dir_size_(verEntry.path());
                 if (dryRun) {
-                    std::println("  would remove xpkgs/{}/{} ({:.1f} MB)",
-                        pkgName, ver, static_cast<double>(size) / 1e6);
+                    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
+                    auto mb = static_cast<int>(static_cast<double>(size) / 1e5) / 10.0;
+                    std::println("  would remove xpkgs/{}/{} ({} MB)", pkgName, ver, mb);
                 } else {
                     std::error_code ec;
                     fs::remove_all(verEntry.path(), ec);
@@ -225,12 +226,14 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
         }
     }
 
+    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
+    auto totalMb = static_cast<int>(static_cast<double>(freedBytes) / 1e5) / 10.0;
     if (dryRun) {
-        std::println("[xlings:store] gc dry-run: {} packages, {:.1f} MB would be freed",
-            removedCount, static_cast<double>(freedBytes) / 1e6);
+        std::println("[xlings:store] gc dry-run: {} packages, {} MB would be freed",
+            removedCount, totalMb);
     } else {
-        std::println("[xlings:store] gc: {} packages removed, {:.1f} MB freed",
-            removedCount, static_cast<double>(freedBytes) / 1e6);
+        std::println("[xlings:store] gc: {} packages removed, {} MB freed",
+            removedCount, totalMb);
     }
     return 0;
 }

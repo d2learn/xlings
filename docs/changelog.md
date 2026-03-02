@@ -2,6 +2,33 @@
 
 ## 2026
 
+### 2026-03 (v0.4.0)
+
+- **xvm C++ 集成：消除 Rust xvm 依赖**
+  - Lua xvm 模块从 shell-out 调用 Rust `xvm` 二进制改为收集 `_XVM_OPS` 操作表
+  - C++ 侧在 hook 执行后通过 `PackageExecutor::xvm_operations()` 读取并统一处理
+  - 新增 `xvm.setup()` / `xvm.teardown()` 高层 API（一次调用注册程序/库/头文件）
+  - VData 扩展 `includedir` / `libdir` 字段，支持头文件和库的 symlink 追踪
+  - 头文件安装改为 symlink 方式（`install_headers()`），版本切换时自动切换
+  - 卸载流程增强：自动清理 VersionDB 条目和 workspace 引用
+  - 修复 shim.cppm 跨平台 PATH 分隔符问题（使用 `platform::PATH_SEPARATOR`）
+  - 修复 commands.cppm 跨平台 symlink 问题（Windows 使用 junction/hardlink 回退）
+  - 移除 Rust xvm 源码（core/xvm/Cargo.toml, src/, shim/, xvmlib/）
+  - 移除 CI/release 脚本中所有 Rust 构建步骤和 xvm 二进制验证
+  - 新增 7 个单元测试（VData 新字段 + 头文件 symlink 操作），总计 81 个测试
+
+- **xim 核心模块 C++ 重写**
+  - 将 xim 包管理器核心从 Lua/xmake 子进程架构迁移到原生 C++23 模块实现
+  - 消除 `xmake xim -P ...` 子进程调用，install/remove/search/list/info/update 命令全部在 C++ 内完成
+  - 新增 7 个 C++23 模块：`xlings.xim.types`、`xlings.xim.repo`、`xlings.xim.index`、`xlings.xim.resolver`、`xlings.xim.downloader`、`xlings.xim.installer`、`xlings.xim.commands`
+  - 基于 libxpkg (C++ 库) 实现包索引构建、搜索、版本匹配和包加载
+  - 新增 DAG 依赖解析器：DFS 拓扑排序、循环检测、已安装跳过
+  - 新增并行下载器：`std::jthread` 并发控制、SHA256 校验、镜像支持
+  - 安装编排器通过 libxpkg `PackageExecutor` 运行 Lua hook（install/config/uninstall）
+  - CLI 直接调用 `xim::cmd_*` 函数，不再依赖 xmake 运行时
+  - 51 个单元测试覆盖所有模块（类型、索引、解析器、下载器、安装器、命令）
+  - 解决多个 GCC 15.1.0 C++23 模块 bug（ICE、链接符号缺失、运行时格式错误）
+
 ### 2026-02
 
 - **Bug fixes: xim task / xvm path quoting / elfpatch tool detection**

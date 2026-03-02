@@ -6,6 +6,13 @@
 
 ## 一、项目定位与迁移目标
 
+补充设计文档:
+
+- `XLINGS_RES` 资源服务器配置与匹配规则: `docs/mcpp-version/xlings-res-config-design.md`
+- `xlings_tests` 在 macOS 上的运行时崩溃分析: `docs/mcpp-version/gtest-macos-runtime-analysis.md`
+- `XLINGS_HOME` bootstrap 包与统一目录模型: `docs/mcpp-version/unified-xlings-home-bootstrap-design.md`
+- `xim` 已安装复用、subos attach/detach 与 payload 引用回收: `docs/mcpp-version/xim-subos-attach-detach-design.md`
+
 ### 1.1 背景
 
 xlings 原主体入口逻辑由 Lua (xim) 编写，借助 xmake 的 Lua 运行时驱动。C++23 重构版的目标是：
