@@ -35,8 +35,8 @@ echo "$INSTALL_S1" | grep -Eq "d2x@$D2X_VERSION (installed|already installed)" |
   fail "s1 install did not confirm d2x attach/install"
 xlings use d2x "$D2X_VERSION" >/dev/null
 [[ -x "$XLINGS_HOME/subos/s1/bin/d2x" ]] || fail "s1 d2x shim missing"
-INFO_S1="$(xlings info d2x 2>&1)"
-echo "$INFO_S1" | grep -Eiq "installed:[[:space:]]*yes|d2x@[0-9]+\.[0-9]+\.[0-9]+" || fail "s1 d2x info did not report installed"
+S1_D2X_VER="$(env XLINGS_HOME="$XLINGS_HOME" "$XLINGS_HOME/subos/s1/bin/d2x" --version 2>&1)"
+echo "$S1_D2X_VER" | grep -q "$D2X_VERSION" || fail "s1 d2x version check failed"
 
 xlings subos new s2
 [[ -f "$XLINGS_HOME/subos/s2/.xlings.json" ]] || fail "s2 config missing"
@@ -49,8 +49,8 @@ echo "$INSTALL_S2" | grep -Eq "d2x@$D2X_VERSION (installed|already installed)" |
   fail "s2 install did not confirm d2x attach/install"
 xlings use d2x "$D2X_VERSION" >/dev/null
 [[ -x "$XLINGS_HOME/subos/s2/bin/d2x" ]] || fail "s2 d2x shim missing"
-INFO_S2="$(xlings info d2x 2>&1)"
-echo "$INFO_S2" | grep -Eiq "installed:[[:space:]]*yes|d2x@[0-9]+\.[0-9]+\.[0-9]+" || fail "s2 d2x info did not report installed"
+S2_D2X_VER="$(env XLINGS_HOME="$XLINGS_HOME" "$XLINGS_HOME/subos/s2/bin/d2x" --version 2>&1)"
+echo "$S2_D2X_VER" | grep -q "$D2X_VERSION" || fail "s2 d2x version check failed"
 
 xlings subos use s1
 readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || fail "failed to switch back to s1"
