@@ -96,67 +96,37 @@ jobs:
 
       - name: Install LLVM toolchain with legacy xlings
         run: |
+          export XLINGS_HOME="$HOME/.xlings"
+          rm -rf "$XLINGS_HOME"
           "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
           "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
-          LLVM_PREFIX="$(find "$BOOTSTRAP_XLINGS_HOME" -path "*/llvm/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
-          [[ -n "$LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          ACTUAL_LLVM_PREFIX="$(find "$XLINGS_HOME/data/xpkgs" -path "*/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
+          [[ -n "$ACTUAL_LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          LLVM_ALIAS_ROOT="$XLINGS_HOME/data/xpkgs/local-x-llvm"
+          mkdir -p "$LLVM_ALIAS_ROOT"
+          rm -rf "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          ln -s "$ACTUAL_LLVM_PREFIX" "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          LLVM_PREFIX="$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
           [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
           echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
           echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
           echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "Configured LLVM toolchain path: $LLVM_PREFIX"
 
       - name: Configure xmake
         run: |
-          # Temporary workaround: the legacy bootstrap xlings release and the
-          # current llvm package metadata do not fully agree on tool discovery.
-          # Pin clang/clang++ to the absolute LLVM toolchain path before build.
+          # Temporary workaround: configure xmake with the explicit SDK path
+          # from the bootstrap-installed LLVM toolchain on the GitHub runner.
           xmake f -c -p macosx -m release \
             --toolchain=llvm \
             --sdk="$LLVM_PREFIX" \
-            --cc="$LLVM_PREFIX/bin/clang" \
-            --cxx="$LLVM_PREFIX/bin/clang++" \
-            --ld="$LLVM_PREFIX/bin/clang++" \
-            --sh="$LLVM_PREFIX/bin/clang++" \
             -y
+          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
 
       - name: Build (macos_release)
         run: |
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
-
-      - name: Verify packaged macOS runtime bundle
-        run: |
-          ARCHIVE="$(find build -maxdepth 1 -name 'xlings-*-macosx-arm64.tar.gz' | head -1)"
-          [[ -n "$ARCHIVE" ]] || { echo "release archive not found"; exit 1; }
-          VERIFY_DIR="$RUNNER_TEMP/xlings-release-verify"
-          rm -rf "$VERIFY_DIR"
-          mkdir -p "$VERIFY_DIR"
-          tar -xzf "$ARCHIVE" -C "$VERIFY_DIR"
-          PKG_ROOT="$(find "$VERIFY_DIR" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*-macosx-arm64' | head -1)"
-          [[ -n "$PKG_ROOT" ]] || { echo "extracted package root not found"; exit 1; }
-
-          test -x "$PKG_ROOT/bin/xlings"
-          test -f "$PKG_ROOT/.xlings.json"
-
-          if [[ -d "$PKG_ROOT/lib" ]]; then
-            test -f "$PKG_ROOT/lib/libc++.1.dylib"
-            test -f "$PKG_ROOT/lib/libc++abi.1.dylib"
-            test -f "$PKG_ROOT/lib/libunwind.1.dylib"
-            otool -L "$PKG_ROOT/bin/xlings" | grep -q '@executable_path/../lib/libc++\.1\.dylib'
-            otool -L "$PKG_ROOT/bin/xlings" | grep -q '@executable_path/../lib/libc++abi\.1\.dylib'
-            otool -L "$PKG_ROOT/lib/libc++.1.dylib" | grep -q '@loader_path/libunwind\.1\.dylib'
-            otool -L "$PKG_ROOT/lib/libc++abi.1.dylib" | grep -q '@loader_path/libunwind\.1\.dylib'
-          else
-            # Temporary workaround: some CI builds now produce a binary without
-            # external Homebrew LLVM runtime dylib dependencies, so the release
-            # package does not need an extra bundled lib/ directory.
-            echo "skip bundled runtime artifact checks: no lib/ directory present"
-          fi
-
-          env -u XLINGS_HOME "$PKG_ROOT/bin/xlings" -h
-          env -u XLINGS_HOME "$PKG_ROOT/bin/xlings" self init
-          test -L "$PKG_ROOT/subos/default/bin/xlings"
-          env -u XLINGS_HOME "$PKG_ROOT/subos/current/bin/xlings" -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

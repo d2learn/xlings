@@ -47,19 +47,6 @@ The release archive should initially contain the minimum bootstrap files:
   bin/xlings
 ```
 
-On macOS, the package also needs an explicit bundled C++ runtime so the package
-does not depend on the builder's Homebrew LLVM layout:
-
-```text
-<XLINGS_HOME>/
-  .xlings.json
-  bin/xlings
-  lib/
-    libc++.1.dylib
-    libc++abi.1.dylib
-    libunwind.1.dylib
-```
-
 After `xlings self init`, the runtime skeleton is created in place:
 
 ```text
@@ -121,7 +108,7 @@ It must create:
 
 It must also create builtin shims in `subos/default/bin` from `bin/xlings`.
 On macOS these shims should be symlinks so the packaged `bin/xlings` remains
-the only Mach-O binary that needs bundled runtime patching.
+the only Mach-O binary in the bootstrap package.
 
 ## `self install` Semantics
 
@@ -161,7 +148,6 @@ Included in this change:
 - new home detection markers
 - bootstrap home initialization
 - minimal release package layout
-- macOS bundled runtime dylibs under `lib/`
 - `self install` compatibility with the minimal package
 - CI/workflow updates for the new package shape
 
@@ -174,8 +160,8 @@ Explicitly out of scope:
 ## Acceptance Criteria
 
 1. An extracted release directory containing the bootstrap files
-   (`.xlings.json`, `bin/xlings`, and macOS `lib/*.dylib` when needed) can run
-   `./bin/xlings self init` successfully.
+   (`.xlings.json` and `bin/xlings`) can run `./bin/xlings self init`
+   successfully.
 2. After `self init`, `xlings config` reports the extracted directory as
    `XLINGS_HOME`.
 3. `xlings self install` can install that bootstrap package to `~/.xlings`.

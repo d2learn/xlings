@@ -20,11 +20,7 @@ target("xlings")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
-        local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
-        local libcxx_dir = llvm_prefix .. "/lib/c++"
-        add_linkdirs(libcxx_dir, {force = true})
-        add_rpathdirs(libcxx_dir, {force = true})
-        add_syslinks("c++", "c++experimental", "c++abi")
+        set_toolchains("llvm")
     elseif is_plat("linux") then
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static", {force = true})
@@ -46,11 +42,7 @@ target("xlings_tests")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
-        local llvm_prefix = os.getenv("LLVM_PREFIX") or "/opt/homebrew/opt/llvm@20"
-        local libcxx_dir = llvm_prefix .. "/lib/c++"
-        add_linkdirs(libcxx_dir, {force = true})
-        add_rpathdirs(libcxx_dir, {force = true})
-        add_syslinks("c++", "c++experimental", "c++abi")
+        set_toolchains("llvm")
     elseif is_plat("linux") then
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static", {force = true})
