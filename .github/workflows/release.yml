@@ -38,13 +38,17 @@ jobs:
           xmake --version
 
       - name: Install Xlings
-        run: curl -fsSL https://d2learn.org/xlings-install.sh | bash
+        env:
+          XLINGS_NON_INTERACTIVE: 1
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
+          echo "PATH=$HOME/.xlings/subos/current/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: Install musl-gcc 15.1 with Xlings
         run: |
-          export PATH=/home/xlings/.xlings_data/bin:$PATH
           xlings install musl-gcc@15.1.0 -y
-          MUSL_SDK=/home/xlings/.xlings_data/xim/xpkgs/musl-gcc/15.1.0
+          MUSL_SDK=$XLINGS_HOME/data/xpkgs/musl-gcc/15.1.0
           echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
           echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
           echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
@@ -52,10 +56,15 @@ jobs:
           export PATH="$MUSL_SDK/bin:$PATH"
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
+          bash tools/setup_musl_runtime.sh "$MUSL_SDK"
+
+      - name: Prepare fixture index repo
+        run: |
+          bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
 
       - name: Build (linux_release)
         run: |

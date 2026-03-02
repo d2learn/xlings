@@ -44,33 +44,29 @@ info "Building C++ binary..."
 MUSL_SDK_DEFAULT="${XLINGS_HOME:-$HOME/.xlings}/data/xpkgs/musl-gcc/15.1.0"
 MUSL_SDK="${MUSL_SDK:-$MUSL_SDK_DEFAULT}"
 if [[ -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc" ]]; then
-  # Some musl-gcc toolchains are built with a fixed interpreter path
-  # baked into helper binaries (cc1, as, collect2).  Create the loader
-  # symlink at that path so they can run during the build.
-  LOADER_DIR="/home/xlings/.xlings_data/lib"
-  if ! mkdir -p "$LOADER_DIR" 2>/dev/null; then
-    sudo mkdir -p "$LOADER_DIR" && sudo chown "$(id -u):$(id -g)" "$LOADER_DIR"
-  fi
-  ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
-  # Configure musl library search path so musl-linked binaries find libstdc++/libgcc_s
-  MUSL_LD_PATH="/etc/ld-musl-x86_64.path"
-  if [[ ! -f "$MUSL_LD_PATH" ]] || ! grep -q "$MUSL_SDK" "$MUSL_LD_PATH" 2>/dev/null; then
-    echo "$MUSL_SDK/x86_64-linux-musl/lib" | sudo tee "$MUSL_LD_PATH" > /dev/null 2>&1 || true
-  fi
+  # Keep Linux musl runtime setup in one place so CI/release/local are consistent.
+  bash "$PROJECT_DIR/tools/setup_musl_runtime.sh" "$MUSL_SDK" || fail "musl runtime setup failed"
   export CC="${CC:-x86_64-linux-musl-gcc}"
   export CXX="${CXX:-x86_64-linux-musl-g++}"
   export PATH="$MUSL_SDK/bin:$PATH"
-  xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y \
-    || fail "xmake configure with musl-gcc failed"
+  # Linux release requires musl static toolchain to guarantee static binary output.
+  unset XLINGS_NOLINKSTATIC
+  xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y     || fail "xmake configure with musl-gcc failed"
 else
-  info "Warning: musl std module file not found at $MUSL_SDK"
-  info "Warning: fallback to existing xmake config/toolchain"
+  fail "musl-gcc sdk not found at $MUSL_SDK (Linux release requires musl-gcc@15.1.0 for fully static binary)"
 fi
 xmake clean -q 2>/dev/null || true
 xmake build xlings 2>&1 || fail "xmake build failed"
 
 BIN_SRC="build/linux/${ARCH}/release/xlings"
 [[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"
+
+if command -v file &>/dev/null; then
+  file "$BIN_SRC" | grep -qi "statically linked" || fail "binary is not statically linked"
+elif command -v ldd &>/dev/null; then
+  ldd "$BIN_SRC" 2>&1 | grep -Eq "not a dynamic executable|statically linked" || fail "binary is not statically linked"
+fi
+info "OK: binary is fully static"
 
 # ── 2. Assemble package ─────────────────────────────────────────
 info "Assembling $OUT_DIR ..."
