@@ -12,6 +12,7 @@ import xlings.xim.downloader;
 import xlings.log;
 import xlings.platform;
 import xlings.config;
+import xlings.json;
 import xlings.xvm.types;
 import xlings.xvm.db;
 import xlings.xvm.commands;
@@ -231,6 +232,180 @@ public:
         std::filesystem::current_path(oldDir_, ec);
     }
 };
+
+std::filesystem::path current_workspace_config_path_() {
+    if (Config::has_project_config()) {
+        if (Config::project_subos_mode() == ProjectSubosMode::Named) {
+            return Config::project_dir() / ".xlings" / "subos" / Config::project_subos_name() / ".xlings.json";
+        }
+        return Config::project_dir() / ".xlings.json";
+    }
+    return Config::paths().homeDir / "subos" / Config::paths().activeSubos / ".xlings.json";
+}
+
+xvm::Workspace load_workspace_file_(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return {};
+    try {
+        auto content = platform::read_file_to_string(path.string());
+        auto json = nlohmann::json::parse(content, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) return {};
+        if (!json.contains("workspace") || !json["workspace"].is_object()) return {};
+        return xvm::workspace_from_json(json["workspace"]);
+    } catch (...) {
+        return {};
+    }
+}
+
+std::vector<std::filesystem::path> workspace_config_paths_for_scope_(PackageScope scope) {
+    namespace fs = std::filesystem;
+    std::vector<fs::path> paths;
+
+    if (scope == PackageScope::Project && Config::has_project_config()) {
+        auto projectRoot = Config::project_dir();
+        if (!projectRoot.empty()) {
+            paths.push_back(projectRoot / ".xlings.json");
+            auto subosRoot = projectRoot / ".xlings" / "subos";
+            std::error_code ec;
+            if (fs::exists(subosRoot, ec) && fs::is_directory(subosRoot, ec)) {
+                for (auto& entry : platform::dir_entries(subosRoot)) {
+                    if (entry.is_directory()) {
+                        paths.push_back(entry.path() / ".xlings.json");
+                    }
+                }
+            }
+        }
+        return paths;
+    }
+
+    auto subosRoot = Config::paths().homeDir / "subos";
+    std::error_code ec;
+    if (fs::exists(subosRoot, ec) && fs::is_directory(subosRoot, ec)) {
+        for (auto& entry : platform::dir_entries(subosRoot)) {
+            if (entry.is_directory()) {
+                auto name = entry.path().filename().string();
+                if (name != "current") {
+                    paths.push_back(entry.path() / ".xlings.json");
+                }
+            }
+        }
+    }
+    return paths;
+}
+
+bool is_version_referenced_anywhere_(PackageScope scope,
+                                     const std::string& target,
+                                     const std::string& version,
+                                     const std::filesystem::path& excludePath = {}) {
+    std::error_code ec;
+    auto excludeCanonical = excludePath.empty() ? std::filesystem::path{} : std::filesystem::weakly_canonical(excludePath, ec);
+    for (auto& configPath : workspace_config_paths_for_scope_(scope)) {
+        auto canonical = std::filesystem::weakly_canonical(configPath, ec);
+        if (!excludeCanonical.empty() && !ec && canonical == excludeCanonical) {
+            continue;
+        }
+        auto workspace = load_workspace_file_(configPath);
+        auto it = workspace.find(target);
+        if (it != workspace.end() && it->second == version) return true;
+    }
+    return false;
+}
+
+void remove_target_shims_(const std::string& target, const std::string& version) {
+    namespace fs = std::filesystem;
+    auto db = Config::versions();
+    auto* vinfo = xvm::get_vinfo(db, target);
+    auto& binDir = Config::paths().binDir;
+    std::error_code ec;
+
+    auto mainName = (vinfo && !vinfo->filename.empty()) ? vinfo->filename : target;
+    auto mainShim = binDir / mainName;
+    if (fs::exists(mainShim, ec) || fs::is_symlink(mainShim, ec)) {
+        ec.clear();
+        fs::remove(mainShim, ec);
+    }
+
+    if (!vinfo) return;
+    for (auto& [bindingName, vermap] : vinfo->bindings) {
+        auto vit = vermap.find(version);
+        if (vit == vermap.end()) continue;
+        auto bindPath = binDir / bindingName;
+        ec.clear();
+        if (fs::exists(bindPath, ec) || fs::is_symlink(bindPath, ec)) {
+            ec.clear();
+            fs::remove(bindPath, ec);
+        }
+    }
+}
+
+void detach_current_subos_(const std::string& target, const std::string& version) {
+    auto& ws = Config::workspace_mut();
+    auto wit = ws.find(target);
+    if (wit == ws.end() || wit->second != version) return;
+
+    auto db = Config::versions();
+    auto sysroot_include = Config::paths().subosDir / "usr" / "include";
+    auto sysroot_lib = Config::paths().libDir;
+
+    if (auto* vdata = xvm::get_vdata(db, target, version)) {
+        if (!vdata->includedir.empty()) {
+            xvm::remove_headers(vdata->includedir, sysroot_include);
+        }
+        if (!vdata->libdir.empty()) {
+            xvm::remove_libdir(vdata->libdir, sysroot_lib);
+        }
+    }
+
+    remove_target_shims_(target, version);
+    ws.erase(wit);
+    Config::save_workspace();
+}
+
+void process_xvm_operations_(const PlanNode& node,
+                             const std::filesystem::path& dataDir,
+                             mcpplibs::xpkg::PackageExecutor& executor) {
+    auto xvm_ops = executor.xvm_operations();
+    auto sysroot_include = Config::paths().subosDir / "usr" / "include";
+    auto sysroot_lib = Config::paths().libDir;
+
+    for (auto& op : xvm_ops) {
+        if (op.op == "add") {
+            std::string ver = op.version.empty() ? node.version : op.version;
+            std::string p = op.bindir.empty()
+                ? ((node.storeRoot.empty() ? (dataDir / "xpkgs") : node.storeRoot)
+                    / detail_::effective_store_name_(node)
+                    / node.version).string()
+                : op.bindir;
+            std::string type = op.type.empty() ? "program" : op.type;
+            xvm::add_version(Config::versions_mut(),
+                             op.name, ver, p, type, op.filename);
+        } else if (op.op == "headers") {
+            xvm::install_headers(op.includedir, sysroot_include);
+            auto& vdata = Config::versions_mut()[node.name].versions[node.version];
+            vdata.includedir = op.includedir;
+        }
+    }
+    Config::save_versions();
+}
+
+bool run_config_hook_(const PlanNode& node,
+                      const std::filesystem::path& dataDir,
+                      mcpplibs::xpkg::PackageExecutor& executor,
+                      mcpplibs::xpkg::ExecutionContext& ctx,
+                      std::function<void(const InstallStatus&)> onStatus) {
+    if (!executor.has_hook(mcpplibs::xpkg::HookType::Config)) return true;
+    if (onStatus) {
+        onStatus({ node.name, InstallPhase::Configuring, 0.8f, "" });
+    }
+    ScopedCurrentDir_ configCwd(ctx.install_dir);
+    auto hookResult = executor.run_hook(mcpplibs::xpkg::HookType::Config, ctx);
+    if (!hookResult.success) {
+        log::warn("config hook failed for {}: {}", node.name, hookResult.error);
+        return false;
+    }
+    process_xvm_operations_(node, dataDir, executor);
+    return true;
+}
 
 bool register_platform_loader_sandbox_(lua::State* L, const std::string& platform) {
     auto quoted = "'" + platform + "'";
@@ -472,13 +647,6 @@ public:
 
         // Phase 2: Install each package in topological order
         for (auto& node : plan.nodes) {
-            if (node.alreadyInstalled) {
-                if (onStatus) {
-                    onStatus({ node.name, InstallPhase::Done, 1.0f, "already installed" });
-                }
-                continue;
-            }
-
             if (onStatus) {
                 onStatus({ node.name, InstallPhase::Installing, 0.5f, "" });
             }
@@ -544,38 +712,20 @@ public:
                 ctx.run_dir = ctx.install_dir;
             }
 
+            bool payloadInstalled = node.alreadyInstalled;
+
             // Check if already installed via hook
-            if (executor.has_hook(mcpplibs::xpkg::HookType::Installed)) {
+            if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Installed)) {
                 auto hookResult = executor.check_installed(ctx);
                 if (hookResult.success && !hookResult.version.empty()) {
                     log::info("{} already installed (version {})",
                               node.name, hookResult.version);
-                    if (catalog_) {
-                        catalog_->mark_installed(PackageMatch{
-                            .rawName = node.rawName,
-                            .name = node.name,
-                            .version = node.version,
-                            .namespaceName = node.namespaceName,
-                            .canonicalName = node.canonicalName,
-                            .repoName = node.repoName,
-                            .pkgFile = node.pkgFile,
-                            .storeRoot = node.storeRoot,
-                            .scope = node.scope,
-                            .installed = true,
-                        }, true);
-                    } else {
-                        index_->mark_installed(node.name, true);
-                    }
-                    if (onStatus) {
-                        onStatus({ node.name, InstallPhase::Done, 1.0f,
-                                   "already installed" });
-                    }
-                    continue;
+                    payloadInstalled = true;
                 }
             }
 
             // Run install hook
-            if (executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
+            if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
                 log::info("installing {}...", node.name);
                 detail_::ScopedCurrentDir_ installCwd(ctx.run_dir);
                 auto hookResult = executor.run_hook(
@@ -591,7 +741,7 @@ public:
                 }
             }
 
-            if (extractedRoot && !detail_::has_directory_entries_(ctx.install_dir)) {
+            if (!payloadInstalled && extractedRoot && !detail_::has_directory_entries_(ctx.install_dir)) {
                 if (!detail_::stage_extracted_payload_(*extractedRoot, ctx.install_dir)) {
                     log::error("failed to stage extracted payload for {}", node.name);
                     if (onStatus) {
@@ -602,7 +752,7 @@ public:
                 }
             }
 
-            if (!detail_::normalize_file_install_(ctx.install_dir)) {
+            if (!payloadInstalled && !detail_::normalize_file_install_(ctx.install_dir)) {
                 log::error("failed to normalize file install layout for {}", node.name);
                 if (onStatus) {
                     onStatus({ node.name, InstallPhase::Failed, 0.0f,
@@ -611,18 +761,12 @@ public:
                 continue;
             }
 
-            // Run config hook
-            if (executor.has_hook(mcpplibs::xpkg::HookType::Config)) {
+            if (!detail_::run_config_hook_(node, dataDir, executor, ctx, onStatus)) {
                 if (onStatus) {
-                    onStatus({ node.name, InstallPhase::Configuring, 0.8f, "" });
+                    onStatus({ node.name, InstallPhase::Failed, 0.0f,
+                               "config hook failed" });
                 }
-                detail_::ScopedCurrentDir_ configCwd(ctx.install_dir);
-                auto hookResult = executor.run_hook(
-                    mcpplibs::xpkg::HookType::Config, ctx);
-                if (!hookResult.success) {
-                    log::warn("config hook failed for {}: {}",
-                              node.name, hookResult.error);
-                }
+                continue;
             }
 
             if (catalog_) {
@@ -642,34 +786,15 @@ public:
                 index_->mark_installed(node.name, true);
             }
 
-            // Process xvm operations collected by Lua hooks
-            auto xvm_ops = executor.xvm_operations();
-            auto sysroot_include = Config::paths().subosDir / "usr" / "include";
-            auto sysroot_lib = Config::paths().libDir;
-
-            for (auto& op : xvm_ops) {
-                if (op.op == "add") {
-                    std::string ver = op.version.empty() ? node.version : op.version;
-                    std::string p = op.bindir.empty()
-                        ? ((node.storeRoot.empty() ? (dataDir / "xpkgs") : node.storeRoot)
-                            / detail_::effective_store_name_(node)
-                            / node.version).string()
-                        : op.bindir;
-                    std::string type = op.type.empty() ? "program" : op.type;
-                    xvm::add_version(Config::versions_mut(),
-                                     op.name, ver, p, type, op.filename);
-                } else if (op.op == "headers") {
-                    xvm::install_headers(op.includedir, sysroot_include);
-                    auto& vdata = Config::versions_mut()[node.name].versions[node.version];
-                    vdata.includedir = op.includedir;
-                }
-            }
-            Config::save_versions();
-
             if (onStatus) {
-                onStatus({ node.name, InstallPhase::Done, 1.0f, "" });
+                onStatus({ node.name, InstallPhase::Done, 1.0f,
+                           payloadInstalled ? "already installed" : "" });
             }
-            log::info("{}@{} installed successfully", node.name, node.version);
+            if (payloadInstalled) {
+                log::info("{}@{} attached to current subos", node.name, node.version);
+            } else {
+                log::info("{}@{} installed successfully", node.name, node.version);
+            }
         }
 
         return {};
@@ -679,13 +804,26 @@ public:
     std::expected<void, std::string>
     uninstall(const std::string& name) {
         auto platform = detect_platform_();
+        auto currentWorkspacePath = detail_::current_workspace_config_path_();
+
+        auto parse_target = [](std::string target) {
+            auto at = target.find('@');
+            if (at == std::string::npos) return std::pair{target, std::string{}};
+            return std::pair{target.substr(0, at), target.substr(at + 1)};
+        };
+
+        auto [targetName, requestedVersion] = parse_target(name);
+        if (requestedVersion.empty()) {
+            requestedVersion = xvm::get_active_version(Config::effective_workspace(), targetName);
+        }
+        auto resolvedTarget = requestedVersion.empty() ? targetName : targetName + "@" + requestedVersion;
 
         std::filesystem::path pkgFile;
         std::filesystem::path installDir;
         std::optional<PackageMatch> resolvedMatch;
 
         if (catalog_) {
-            auto match = catalog_->resolve_target(name, platform);
+            auto match = catalog_->resolve_target(resolvedTarget, platform);
             if (!match) return std::unexpected(match.error());
             resolvedMatch = *match;
             pkgFile = match->pkgFile;
@@ -699,6 +837,25 @@ public:
             }
             pkgFile = entry->path;
             installDir = Config::paths().dataDir / "xpkgs" / name;
+        }
+
+        auto detachTarget = resolvedMatch ? resolvedMatch->name : targetName;
+        auto detachVersion = resolvedMatch ? resolvedMatch->version : requestedVersion;
+        auto stillReferenced = !detachVersion.empty()
+            && detail_::is_version_referenced_anywhere_(
+                resolvedMatch ? resolvedMatch->scope : PackageScope::Global,
+                detachTarget,
+                detachVersion,
+                currentWorkspacePath);
+
+        if (!detachVersion.empty()) {
+            detail_::detach_current_subos_(detachTarget, detachVersion);
+        }
+
+        if (stillReferenced) {
+            log::info("{}@{} detached from current subos; payload retained",
+                      detachTarget, detachVersion);
+            return {};
         }
 
         auto execResult = mcpplibs::xpkg::create_executor(pkgFile);
@@ -744,24 +901,17 @@ public:
         }
         Config::save_versions();
 
-        // Clean up workspace entries that reference removed packages
-        auto& ws = Config::workspace_mut();
-        auto effectiveVersions = Config::versions();
-        for (auto it = ws.begin(); it != ws.end(); ) {
-            if (!xvm::has_target(effectiveVersions, it->first)) {
-                it = ws.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        Config::save_workspace();
-
         if (catalog_) {
             catalog_->mark_installed(*resolvedMatch, false);
         } else {
             index_->mark_installed(name, false);
         }
-        log::info("{} uninstalled", name);
+        std::error_code ec;
+        std::filesystem::remove_all(installDir, ec);
+        if (ec) {
+            log::warn("failed to remove payload dir {}: {}", installDir.string(), ec.message());
+        }
+        log::info("{} uninstalled", resolvedTarget);
         return {};
     }
 

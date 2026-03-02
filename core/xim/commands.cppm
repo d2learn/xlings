@@ -11,6 +11,8 @@ import xlings.log;
 import xlings.config;
 import xlings.ui;
 import xlings.i18n;
+import xlings.xvm.db;
+import xlings.xvm.commands;
 
 export namespace xlings::xim {
 
@@ -51,6 +53,16 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
 
     auto platform = detect_platform();
     std::vector<std::string> targetVec(targets.begin(), targets.end());
+    std::vector<PackageMatch> requestedMatches;
+
+    for (auto& target : targetVec) {
+        auto match = catalog.resolve_target(target, platform);
+        if (!match) {
+            log::error("{}", match.error());
+            return 1;
+        }
+        requestedMatches.push_back(*match);
+    }
 
     // Resolve dependencies
     auto planResult = resolve(catalog, targetVec, platform);
@@ -67,9 +79,40 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         return 1;
     }
 
+    auto plan_key = [](const PackageMatch& match) {
+        return match.canonicalName + "@" + match.version;
+    };
+
+    std::unordered_map<std::string, bool> requestedAlreadyInstalled;
+    for (auto& match : requestedMatches) {
+        requestedAlreadyInstalled[plan_key(match)] = match.installed;
+    }
+
+    auto activate_requested_targets = [&]() {
+        auto db = Config::versions();
+        for (auto& match : requestedMatches) {
+            auto active = xvm::get_active_version(Config::effective_workspace(), match.name);
+            if (xvm::has_version(db, match.name, match.version) &&
+                active != match.version) {
+                auto useRet = xvm::cmd_use(match.name, match.version);
+                if (useRet != 0) {
+                    log::warn("failed to activate {}@{} in current subos",
+                              match.name, match.version);
+                }
+            }
+            std::println("version: {}", match.version);
+            if (requestedAlreadyInstalled[plan_key(match)]) {
+                std::println("{}@{} already installed", match.name, match.version);
+            } else {
+                std::println("{}@{} installed", match.name, match.version);
+            }
+        }
+    };
+
     auto pending = plan.pending_count();
     if (pending == 0) {
         std::println("all packages already installed");
+        activate_requested_targets();
         return 0;
     }
 
@@ -127,6 +170,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         return 1;
     }
 
+    activate_requested_targets();
     std::println("\n{} package(s) installed successfully", pending);
     return 0;
 }

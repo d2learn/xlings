@@ -82,6 +82,7 @@ Scenario scripts:
 - `tests/e2e/project_xlings_res_override_test.sh`
 - `tests/e2e/project_xlings_res_region_map_test.sh`
 - `tests/e2e/project_xlings_res_multi_server_test.sh`
+- `tests/e2e/subos_payload_refcount_test.sh`
 
 Aggregate scripts:
 
@@ -104,6 +105,7 @@ What they validate:
 - project-level `XLINGS_RES` region-object override
 - multi-server resource selection that falls back from an unreachable endpoint to the fastest reachable one
 - real shim execution after `xlings use`
+- shared payload reuse across multiple subos, with final payload GC only after the last reference is removed
 
 ### Run
 

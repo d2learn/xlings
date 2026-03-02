@@ -22,7 +22,15 @@ inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
 // Optional shims (created only when pkg_root/bin/<name> exists)
 inline constexpr std::array<std::string_view, 1> SHIM_NAMES_OPTIONAL = {"xmake"};
 
-export bool is_builtin_shim(std::string_view name) {
+export bool is_builtin_shim(std::string_view name);
+export bool is_bootstrap_home_root(const fs::path& root);
+export fs::path xlings_binary_in_home(const fs::path& home_dir);
+export void ensure_subos_shims(const fs::path& target_bin_dir,
+                               const fs::path& shim_src,
+                               const fs::path& pkg_root);
+export bool ensure_home_layout(const fs::path& home_dir);
+
+bool is_builtin_shim(std::string_view name) {
     for (auto n : SHIM_NAMES_BASE)
         if (n == name) return true;
     for (auto n : SHIM_NAMES_OPTIONAL)
@@ -30,7 +38,7 @@ export bool is_builtin_shim(std::string_view name) {
     return false;
 }
 
-export inline bool is_bootstrap_home_root(const fs::path& root) {
+bool is_bootstrap_home_root(const fs::path& root) {
     std::error_code ec;
     if (root.empty() || !fs::exists(root / ".xlings.json", ec)) return false;
     if (!fs::exists(root / "bin", ec) || !fs::is_directory(root / "bin", ec)) return false;
@@ -41,7 +49,7 @@ export inline bool is_bootstrap_home_root(const fs::path& root) {
 #endif
 }
 
-export inline fs::path xlings_binary_in_home(const fs::path& home_dir) {
+fs::path xlings_binary_in_home(const fs::path& home_dir) {
 #ifdef _WIN32
     auto bin = home_dir / "bin" / "xlings.exe";
 #else
@@ -51,9 +59,9 @@ export inline fs::path xlings_binary_in_home(const fs::path& home_dir) {
     return {};
 }
 
-export inline void ensure_subos_shims(const fs::path& target_bin_dir,
-                                      const fs::path& shim_src,
-                                      const fs::path& pkg_root) {
+void ensure_subos_shims(const fs::path& target_bin_dir,
+                        const fs::path& shim_src,
+                        const fs::path& pkg_root) {
     if (!fs::exists(shim_src)) return;
 
     std::string ext = shim_src.extension().string();
@@ -137,7 +145,7 @@ static void ensure_home_config_defaults_(const fs::path& home_dir) {
     platform::write_string_to_file(config_path.string(), json.dump(2));
 }
 
-export inline bool ensure_home_layout(const fs::path& home_dir) {
+bool ensure_home_layout(const fs::path& home_dir) {
     std::error_code ec;
     if (home_dir.empty()) return false;
 
