@@ -78,7 +78,7 @@ jobs:
           path: build/xlings-*-linux-x86_64.tar.gz
 
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,7 +155,7 @@ jobs:
           xmake-version: latest
 
       - name: Configure xmake
-        run: xmake f -p windows -m release
+        run: xmake f -p windows -m release -y
 
       - name: Build (windows_release)
         shell: pwsh
