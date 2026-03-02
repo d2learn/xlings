@@ -28,6 +28,7 @@ fail() {
 }
 
 [[ -x "$BIN_SRC" ]] || fail "built xlings binary not found at $BIN_SRC"
+"$ROOT_DIR/tests/e2e/prepare_fixture_index.sh" "$FIXTURE_INDEX_DIR"
 [[ -d "$FIXTURE_INDEX_DIR/pkgs" ]] || fail "fixture index repo missing at $FIXTURE_INDEX_DIR"
 
 rm -rf "$RUNTIME_DIR"
