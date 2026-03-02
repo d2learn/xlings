@@ -47,7 +47,7 @@ export std::vector<SubosInfo> list_all() {
             int toolCount = 0;
             auto binDir   = dir / "bin";
             if (fs::exists(binDir)) {
-                for (auto& e : fs::directory_iterator(binDir)) {
+                for (auto& e : platform::dir_entries(binDir)) {
                     auto stem = e.path().stem().string();
                     if (!xself::is_builtin_shim(stem) && stem != "xvm-alias")
                         ++toolCount;
@@ -99,31 +99,22 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     fs::create_directories(dir / "bin");
     fs::create_directories(dir / "lib");
     fs::create_directories(dir / "usr");
-    fs::create_directories(dir / "xvm");
     fs::create_directories(dir / "generations");
 
-    auto configXvm = p.homeDir / "config" / "xvm";
-    if (!fs::exists(configXvm)) {
-        log::error("[xlings:subos] config/xvm not found - package incomplete");
-        return 1;
-    }
-    for (auto& entry : fs::directory_iterator(configXvm)) {
-        if (entry.is_regular_file()) {
-            std::error_code ec;
-            fs::copy_file(entry.path(), dir / "xvm" / entry.path().filename(),
-                fs::copy_options::overwrite_existing, ec);
-            if (ec) {
-                log::error("[xlings:subos] failed to copy {} - {}",
-                    entry.path().filename().string(), ec.message());
-            }
-        }
+    // Create empty .xlings.json with workspace
+    auto subosConfig = dir / ".xlings.json";
+    if (!fs::exists(subosConfig)) {
+        nlohmann::json j;
+        j["workspace"] = nlohmann::json::object();
+        write_config_json_(subosConfig, j);
     }
 
-    auto shimSrc = p.subosDir / "bin" / "xvm-shim";
-    if (!fs::exists(shimSrc))
-        shimSrc = p.subosDir / "bin" / "xvm-shim.exe";
-    if (fs::exists(shimSrc)) {
-        xself::ensure_subos_shims(dir / "bin", shimSrc, p.homeDir);
+    // Create shim hardlinks from xlings binary
+    auto xlingsBin = p.homeDir / "xlings";
+    if (!fs::exists(xlingsBin))
+        xlingsBin = p.homeDir / "bin" / "xlings";
+    if (fs::exists(xlingsBin)) {
+        xself::ensure_subos_shims(dir / "bin", xlingsBin, p.homeDir);
     }
 
     if (!json.contains("subos")) json["subos"] = nlohmann::json::object();
@@ -202,7 +193,7 @@ export std::optional<SubosInfo> info(const std::string& name) {
     int toolCount = 0;
     auto binDir = dir / "bin";
     if (fs::exists(binDir)) {
-        for (auto& e : fs::directory_iterator(binDir)) {
+        for (auto& e : platform::dir_entries(binDir)) {
             auto stem = e.path().stem().string();
             if (!xself::is_builtin_shim(stem) && stem != "xvm-alias")
                 ++toolCount;

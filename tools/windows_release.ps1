@@ -1,10 +1,15 @@
-# Build a self-contained xlings package for Windows x86_64.
+# Build a bootstrap xlings package for Windows x86_64.
 #
-# Directory layout matches linux_release.sh (see that file for details).
+# Directory layout:
+#   xlings-<ver>-windows-x86_64/
+#   ├── .xlings.json
+#   └── bin/
+#       └── xlings.exe
+#
+# Runtime directories are created lazily by `xlings self init`.
 #
 # Output:  build/xlings-<ver>-windows-x86_64.zip
 # Usage:   pwsh ./tools/windows_release.ps1
-# Env:     SKIP_XMAKE_BUNDLE=1  skip downloading bundled xmake
 
 $ErrorActionPreference = "Stop"
 
@@ -34,70 +39,16 @@ if ($LASTEXITCODE -ne 0) { Fail "xmake build failed" }
 $BIN_SRC = "build\windows\x64\release\xlings.exe"
 if (-not (Test-Path $BIN_SRC)) { Fail "C++ binary not found at $BIN_SRC" }
 
-# -- 2. Build xvm (Rust) -----------------------------------------
-Info "Building xvm (Rust)..."
-Push-Location core\xvm
-cargo build --release
-if ($LASTEXITCODE -ne 0) { Fail "cargo build failed" }
-Pop-Location
-
-$XVM_DIR = "core\xvm\target\release"
-if (-not (Test-Path "$XVM_DIR\xvm.exe")) { Fail "xvm.exe not found" }
-
-# -- 3. Assemble package -----------------------------------------
+# -- 2. Assemble package -----------------------------------------
 Info "Assembling $OUT_DIR ..."
 if (Test-Path $OUT_DIR) { Remove-Item -Recurse -Force $OUT_DIR }
 
 $dirs = @(
-  "$OUT_DIR\bin",
-  "$OUT_DIR\xim",
-  "$OUT_DIR\data\xpkgs",
-  "$OUT_DIR\data\runtimedir",
-  "$OUT_DIR\data\xim-index-repos",
-  "$OUT_DIR\data\local-indexrepo",
-  "$OUT_DIR\subos\default\bin",
-  "$OUT_DIR\subos\default\lib",
-  "$OUT_DIR\subos\default\usr",
-  "$OUT_DIR\subos\default\xvm",
-  "$OUT_DIR\subos\default\generations",
-  "$OUT_DIR\config\i18n",
-  "$OUT_DIR\config\shell",
-  "$OUT_DIR\config\xvm",
-  "$OUT_DIR\tools"
+  "$OUT_DIR\bin"
 )
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
 
-$defaultAbs = (Resolve-Path "$OUT_DIR\subos\default").Path
-New-Item -ItemType Junction -Path "$OUT_DIR\subos\current" -Target $defaultAbs | Out-Null
-
 Copy-Item $BIN_SRC "$OUT_DIR\bin\"
-Copy-Item "$XVM_DIR\xvm.exe" "$OUT_DIR\bin\"
-
-if (-not (Test-Path "$XVM_DIR\xvm-shim.exe")) { Fail "xvm-shim.exe not found (cargo build --release in core/xvm)" }
-Copy-Item "$XVM_DIR\xvm-shim.exe" "$OUT_DIR\bin\"
-
-# xvm config: copy from config/xvm to both config/xvm and subos/default/xvm
-Copy-Item "config\xvm\*" "$OUT_DIR\config\xvm\" -ErrorAction SilentlyContinue
-Copy-Item "config\xvm\*" "$OUT_DIR\subos\default\xvm\" -ErrorAction SilentlyContinue
-
-# Bundled xmake
-if ($env:SKIP_XMAKE_BUNDLE -ne "1") {
-  $XMAKE_URL = "https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.win64.exe"
-  $XMAKE_BIN = "$OUT_DIR\bin\xmake.exe"
-  Info "Downloading bundled xmake..."
-  try {
-    Invoke-WebRequest -Uri $XMAKE_URL -OutFile $XMAKE_BIN -UseBasicParsing -TimeoutSec 120
-    Info "Bundled xmake OK"
-  } catch {
-    Fail "bundled xmake download failed: $_"
-  }
-}
-
-Copy-Item -Recurse "core\xim\*" "$OUT_DIR\xim\" -ErrorAction SilentlyContinue
-Copy-Item "config\i18n\*.json" "$OUT_DIR\config\i18n\" -ErrorAction SilentlyContinue
-Copy-Item "config\shell\*" "$OUT_DIR\config\shell\" -ErrorAction SilentlyContinue
-
-'{}' | Set-Content "$OUT_DIR\data\xim-index-repos\xim-indexrepos.json" -Encoding UTF8
 
 $configSrc = "$PROJECT_DIR\config\xlings.json"
 if (Test-Path $configSrc) {
@@ -112,46 +63,47 @@ if (Test-Path $configSrc) {
 "@ | Set-Content "$OUT_DIR\.xlings.json" -Encoding UTF8
 }
 
-# xmake.lua (package root) — reuse core/xim/xmake.lua which auto-detects layout
-Copy-Item "core\xim\xmake.lua" "$OUT_DIR\xmake.lua"
-
-# Shims are created at install time (not in package) to reduce archive size
-
 Info "Package assembled: $OUT_DIR"
 
 # -- 4. Verification ---------------------------------------------
 Info "=== Verification ==="
 
-$requiredBins = @("bin\xlings.exe", "bin\xvm.exe")
+$requiredBins = @("bin\xlings.exe")
 foreach ($f in $requiredBins) {
   if (-not (Test-Path "$OUT_DIR\$f")) { Fail "$f is missing" }
 }
 Info "OK: all binaries present"
 
-$requiredDirs = @(
-  "subos\default\bin", "subos\default\lib", "subos\default\xvm",
-  "subos\default\generations", "xim", "data\xpkgs", "config\i18n", "config\shell", "config\xvm"
-)
-foreach ($d in $requiredDirs) {
-  if (-not (Test-Path "$OUT_DIR\$d")) { Fail "directory $d missing" }
-}
-if (-not (Test-Path "$OUT_DIR\subos\current")) { Fail "subos\current junction missing" }
-Info "OK: directory structure valid (incl. subos\current junction)"
-
 if (-not (Test-Path "$OUT_DIR\.xlings.json")) { Fail ".xlings.json missing" }
 Info "OK: .xlings.json present"
 
 $env:XLINGS_HOME = $OUT_DIR
-$env:XLINGS_DATA = "$OUT_DIR\data"
-$env:XLINGS_SUBOS = "$OUT_DIR\subos\current"
-$env:PATH = "$OUT_DIR\subos\current\bin;$OUT_DIR\bin;$env:PATH"
+$env:PATH = "$OUT_DIR\bin;$env:PATH"
 
 $helpOut = & "$OUT_DIR\bin\xlings.exe" -h 2>&1 | Out-String
 if ($helpOut -notmatch "subos") { Fail "xlings -h missing 'subos' command" }
 Info "OK: xlings -h shows subos/self commands"
 
-$xvmOut = & "$OUT_DIR\bin\xvm.exe" --version 2>&1 | Out-String
-Info "OK: xvm --version = $($xvmOut.Trim())"
+$initOut = & "$OUT_DIR\bin\xlings.exe" self init 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { Fail "xlings self init failed" }
+if ($initOut -notmatch "init ok") { Fail "self init output missing success marker" }
+$requiredRuntimeDirs = @(
+  "data\xpkgs",
+  "data\runtimedir",
+  "data\xim-index-repos",
+  "data\local-indexrepo",
+  "subos\default\bin",
+  "subos\default\lib",
+  "subos\default\usr",
+  "subos\default\generations",
+  "config\shell"
+)
+foreach ($d in $requiredRuntimeDirs) {
+  if (-not (Test-Path "$OUT_DIR\$d")) { Fail "directory $d missing after self init" }
+}
+if (-not (Test-Path "$OUT_DIR\subos\current")) { Fail "subos\current junction missing after self init" }
+if (-not (Test-Path "$OUT_DIR\subos\default\bin\xlings.exe")) { Fail "subos/default/bin/xlings.exe missing after self init" }
+Info "OK: self init materialized bootstrap home"
 
 # -- 5. Create archive -------------------------------------------
 Info ""

@@ -24,22 +24,15 @@ jobs:
         with:
           xmake-version: latest
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        shell: pwsh
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
       - name: Configure xmake
-        run: xmake f -p windows -m release
+        run: xmake f -p windows -m release -y
+
+      # ── Phase 1.5: Unit Tests ────────────────────────────────────
+
+      - name: Build and run unit tests
+        run: |
+          xmake build xlings_tests
+          xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
 
@@ -67,14 +60,16 @@ jobs:
           $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
           if (-not $pkgDir) { throw "Package dir not found" }
           Set-Location $pkgDir.FullName
+          if (-not (Test-Path ".xlings.json")) { throw "bootstrap config missing" }
+          if (-not (Test-Path ".\bin\xlings.exe")) { throw "bootstrap binary missing" }
           & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$($pkgDir.FullName)\subos\current\bin;$($pkgDir.FullName)\bin;$env:Path"
+          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:USERPROFILE\.xlings\bin;$env:Path"
           Write-Host "=== Verify install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           Write-Host "=== Verify shims created at install time ==="
-          $shims = @("xlings.exe", "xvm.exe", "xvm-shim.exe", "xim.exe", "xsubos.exe", "xself.exe")
+          $shims = @("xlings.exe", "xim.exe", "xsubos.exe", "xself.exe")
           foreach ($s in $shims) {
             if (-not (Test-Path "$env:USERPROFILE\.xlings\subos\default\bin\$s")) {
               throw "FAIL: shim $s missing after install"
@@ -82,27 +77,6 @@ jobs:
           }
           Write-Host "OK: all shims present in subos/default/bin"
           Write-Host "=== Cleanup install test ==="
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
-
-      - name: "Test: xvm runtime PATH check accepts current/bin without XLINGS_HOME"
-        shell: pwsh
-        run: |
-          Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
-          Remove-Item Env:XLINGS_SUBOS -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
-          $installDir = Join-Path $env:RUNNER_TEMP "xvm-runtime-test"
-          New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-          Expand-Archive -Path "build\release.zip" -DestinationPath $installDir -Force
-          $pkgDir = Get-ChildItem -Directory "$installDir\xlings-*-windows-x86_64" | Select-Object -First 1
-          if (-not $pkgDir) { throw "Package dir not found" }
-          Set-Location $pkgDir.FullName
-          & .\bin\xlings.exe self install
-          $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
-          $out = (xvm --version 2>&1) | Out-String
-          Write-Host $out
-          if ($out -match "Runtime Tips") { throw "FAIL: xvm should not print Runtime Tips when current/bin is in PATH" }
-          if ($out -notmatch "xvm") { throw "FAIL: xvm --version output missing" }
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
 
@@ -119,7 +93,7 @@ jobs:
           Write-Host "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           $searchOut = (xlings search d 2>&1) | Out-String
           Write-Host $searchOut
           if ($searchOut -match "(?i)invalid task:\s*xim") { throw "FAIL: quick install search hit invalid task: xim" }
@@ -135,18 +109,27 @@ jobs:
           if (-not $pkgDir) { throw "Package dir not found" }
           $XLINGS_HOME = $pkgDir.FullName
           echo "XLINGS_HOME=$XLINGS_HOME" >> $env:GITHUB_ENV
-          echo "XLINGS_DATA=$XLINGS_HOME\data" >> $env:GITHUB_ENV
-          echo "XLINGS_SUBOS=$XLINGS_HOME\subos\current" >> $env:GITHUB_ENV
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings.exe entry.
-          echo "$XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
           echo "$XLINGS_HOME\bin" >> $env:GITHUB_PATH
+
+      - name: "Init subos shims and switch mirrors"
+        shell: pwsh
+        run: |
+          $configPath = "$env:XLINGS_HOME\.xlings.json"
+          if (Test-Path $configPath) {
+            $json = Get-Content $configPath -Raw | ConvertFrom-Json
+            $json.mirror = "GLOBAL"
+            $json | ConvertTo-Json -Depth 10 | Set-Content $configPath -Encoding UTF8
+          }
+          xlings self init
+          echo "$env:XLINGS_HOME\subos\current\bin" >> $env:GITHUB_PATH
+          xlings update
 
       - name: "Test: basic commands"
         shell: pwsh
         run: |
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.1"
@@ -197,6 +180,23 @@ jobs:
           Write-Host "=== subos list ==="
           xlings subos list
 
+      - name: "Test: local project install (tmp simulation)"
+        shell: pwsh
+        run: |
+          Write-Host "=== Create local project dir ==="
+          $projDir = Join-Path $env:GITHUB_WORKSPACE "tmp"
+          New-Item -ItemType Directory -Force -Path $projDir | Out-Null
+          '{"deps":["d2x@0.1.3"]}' | Set-Content "$projDir\.xlings.json" -Encoding UTF8
+          Set-Location $projDir
+          Write-Host "=== Run xlings install in project dir ==="
+          $out = (xlings install -y 2>&1) | Out-String
+          Write-Host $out
+          if ($out -notmatch "(?i)d2x") {
+            throw "FAIL: should process d2x from .xlings.json"
+          }
+          Write-Host "OK: local project install test passed"
+          Remove-Item -Recurse -Force $projDir -ErrorAction SilentlyContinue
+
       - name: "Test: cleanup subos"
         shell: pwsh
         run: |
@@ -205,12 +205,6 @@ jobs:
           xlings subos remove s2
           xlings subos list
           Write-Host "OK: test subos removed"
-
-      - name: "Test: E2E usability script"
-        shell: pwsh
-        run: |
-          $env:SKIP_NETWORK_TESTS = "0"
-          & "$env:GITHUB_WORKSPACE\tests\e2e\windows_usability_test.ps1" -ArchivePath "$env:GITHUB_WORKSPACE\build\release.zip"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

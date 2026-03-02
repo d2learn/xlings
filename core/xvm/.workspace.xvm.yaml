@@ -1,6 +1,0 @@
----
-xvm-wmetadata:
-  name: test
-  active: false
-  inherit: true
-versions: {}

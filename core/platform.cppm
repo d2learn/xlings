@@ -94,5 +94,15 @@ namespace platform {
         std::fclose(fp);
     }
 
+    // Wrap directory_iterator for range-for compatibility across compilers.
+    // Clang/libc++ 20 only provides operator==(default_sentinel_t) on directory_iterator,
+    // which breaks range-for loops that compare two directory_iterator objects.
+    export [[nodiscard]] auto dir_entries(const std::filesystem::path& p) {
+        return std::ranges::subrange(
+            std::filesystem::directory_iterator(p),
+            std::default_sentinel
+        );
+    }
+
 } // namespace platform
 } // namespace xlings

@@ -25,9 +25,17 @@ local function _readelf(filepath, args)
 end
 
 local function _pick_gcc_archive()
+    local env_archive = os.getenv("GCC_XPKG_ARCHIVE")
+    if env_archive and os.isfile(env_archive) then
+        return env_archive
+    end
+
+    local home = os.getenv("HOME") or ""
     local candidates = {
-        "/home/speak/gcc-15.1.0-linux-x86_64.tar.gz",
-        "/home/speak/gcc-15.1.0-linux.tar.gz",
+        path.join(os.projectdir(), "build", "fixtures", "gcc-15.1.0-linux-x86_64.tar.gz"),
+        path.join(os.projectdir(), "build", "fixtures", "gcc-15.1.0-linux.tar.gz"),
+        path.join(home, "gcc-15.1.0-linux-x86_64.tar.gz"),
+        path.join(home, "gcc-15.1.0-linux.tar.gz"),
     }
     for _, p in ipairs(candidates) do
         if os.isfile(p) then
@@ -42,13 +50,40 @@ local function _write(pathname, content)
     io.writefile(pathname, content)
 end
 
+local function _xlings_data_root()
+    return path.join(os.projectdir(), "build", "gcc-xpkg-elfpatch-test", "xlings-data")
+end
+
+local function _gcc_pkg_file()
+    local env_repo = os.getenv("XIM_PKGINDEX_DIR")
+    local candidates = {}
+    if env_repo and #env_repo > 0 then
+        table.insert(candidates, path.join(env_repo, "pkgs", "g", "gcc.lua"))
+    end
+
+    table.insert(candidates, path.join(os.projectdir(), "tests", "fixtures", "xim-pkgindex", "pkgs", "g", "gcc.lua"))
+    table.insert(candidates, path.join(os.projectdir(), "..", "xim-pkgindex", "pkgs", "g", "gcc.lua"))
+    table.insert(candidates, path.join(os.projectdir(), "..", "d2learn", "xim-pkgindex", "pkgs", "g", "gcc.lua"))
+    table.insert(candidates, path.join(os.projectdir(), "..", "..", "xim-pkgindex", "pkgs", "g", "gcc.lua"))
+    table.insert(candidates, path.join(os.projectdir(), "..", "..", "d2learn", "xim-pkgindex", "pkgs", "g", "gcc.lua"))
+
+    for _, p in ipairs(candidates) do
+        if os.isfile(p) then
+            return p
+        end
+    end
+    return nil
+end
+
 local function _prepare_stub_modules(sandbox, install_dir, archive)
     local loader = _loader_path()
+    local xlings_data = _xlings_data_root()
 
     _write(path.join(sandbox, "xim", "libxpkg", "pkginfo.lua"), string.format([[
 local __install_dir = %q
 local __install_file = %q
 local __version = "15.1.0"
+local __xlings_data = %q
 
 function install_file()
     return __install_file
@@ -59,13 +94,13 @@ function install_dir(name, version)
         return __install_dir
     end
     -- explicit dep directories used by gcc.lua manual rpath list
-    return "/home/speak/.xlings/data/xpkgs/" .. name .. "/" .. tostring(version or "")
+    return path.join(__xlings_data, "xpkgs", name, tostring(version or ""))
 end
 
 function version()
     return __version
 end
-]], install_dir, archive))
+]], install_dir, archive, xlings_data))
 
     _write(path.join(sandbox, "xim", "libxpkg", "log.lua"), [[
 function info(...) end
@@ -156,7 +191,7 @@ function xpkg_main()
     end
 
     local archive = _pick_gcc_archive()
-    _assert(archive ~= nil, "gcc prebuilt archive not found in /home/speak")
+    _assert(archive ~= nil, "gcc prebuilt archive not found; set GCC_XPKG_ARCHIVE or put fixture under build/fixtures")
 
     local test_root = path.join(os.projectdir(), "build", "gcc-xpkg-elfpatch-test")
     local install_dir = path.join(test_root, "gcc", "15.1.0")
@@ -165,7 +200,9 @@ function xpkg_main()
     os.mkdir(test_root)
 
     _prepare_stub_modules(sandbox, install_dir, archive)
-    os.cp("/home/speak/workspace/github/d2learn/xim-pkgindex/pkgs/g/gcc.lua", path.join(sandbox, "gcc.lua"), {force = true, symlink = false})
+    local gcc_pkg_file = _gcc_pkg_file()
+    _assert(gcc_pkg_file ~= nil, "gcc.lua not found; set XIM_PKGINDEX_DIR or keep xim-pkgindex adjacent to this repo")
+    os.cp(gcc_pkg_file, path.join(sandbox, "gcc.lua"), {force = true, symlink = false})
 
     local gcc_pkg = import("gcc", {rootdir = sandbox, anonymous = true})
     _assert(gcc_pkg.install(), "gcc xpkg install hook failed")
@@ -187,4 +224,3 @@ function xpkg_main()
 
     cprint("[gcc-xpkg-elfpatch-test] ${green}PASS${clear}")
 end
-

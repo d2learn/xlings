@@ -4,59 +4,75 @@
 
 ---
 
+## 架构
+
+v0.4.0 起，xim 核心由 C++23 原生实现，不再依赖 xmake Lua 子进程：
+
+```
+xlings CLI → xim::cmd_install/remove/search/...
+                  ↓
+             IndexManager (libxpkg 构建索引)
+                  ↓
+             Resolver (DAG 依赖解析)
+                  ↓
+             Downloader (并行下载 + SHA256)
+                  ↓
+             Installer (libxpkg executor 运行 Lua hook)
+```
+
+**模块：**
+
+| 文件 | 模块 | 职责 |
+|------|------|------|
+| `types.cppm` | `xlings.xim.types` | PlanNode, InstallPlan, DownloadTask 等 |
+| `repo.cppm` | `xlings.xim.repo` | Git 仓库同步 |
+| `index.cppm` | `xlings.xim.index` | 索引管理 (libxpkg) |
+| `resolver.cppm` | `xlings.xim.resolver` | DAG 依赖解析 |
+| `downloader.cppm` | `xlings.xim.downloader` | 并行下载 |
+| `installer.cppm` | `xlings.xim.installer` | 安装编排 |
+| `commands.cppm` | `xlings.xim.commands` | CLI 命令实现 |
+
 ## 基础用法
 
-**编程环境安装配置**
-
-> 一键安装配置对应的开发环境(python/java/rust/...)
+**安装软件**
 
 ```bash
-xim c
-xim cpp
-xim python
+xlings install gcc
+xlings install gcc@15 nodejs pnpm
 ```
 
-**软件安装**
-
-> 一键安装工具软件(vscode/vs/devcpp/nvm...)
+**卸载软件**
 
 ```bash
-xim vscode
+xlings remove gcc
 ```
 
-**卸载软件和移除配置**
+**搜索软件**
 
 ```bash
-xim -r vscode
+xlings search gcc
 ```
 
-**搜索支持的软件或配置**
-
-> xim模块支持模糊搜索, 如查询包含`vs`字符串的软件以及所有可以安装的版本
+**查看包信息**
 
 ```bash
-xim -s vs
+xlings info gcc
 ```
 
-**查看已安装的软件**
+**列出所有包**
 
 ```bash
-xim -l
+xlings list
+xlings list gcc    # 带过滤
+```
+
+**更新包索引**
+
+```bash
+xlings update
 ```
 
 ## 包索引
 
-**更新索引**
-
-```bash
-xim --update index
-```
-
-**如何添加软件安装/环境配置文件到XIM的包索引仓库?**
-
-> 通过添加一个XPackage包文件, 所有人就都能通过xim安装对应软件和配置功能
-
 - 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
-- 添加XPackage文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
-
-> **注:** 使用`xim -h`命令, 可以获取XIM模块所有的命令行参数的使用和帮助信息
+- 添加 XPackage 文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)

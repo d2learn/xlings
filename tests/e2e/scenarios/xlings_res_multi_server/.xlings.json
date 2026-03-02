@@ -1,0 +1,16 @@
+{
+  "index_repos": [
+    {
+      "name": "projectrepo",
+      "url": "../../../fixtures/xim-pkgindex"
+    }
+  ],
+  "mirror": "CN",
+  "XLINGS_RES": [
+    "https://127.0.0.1:9/xlings-res",
+    "https://gitcode.com/xlings-res"
+  ],
+  "workspace": {
+    "projectrepo:mdbook": "0.4.43"
+  }
+}

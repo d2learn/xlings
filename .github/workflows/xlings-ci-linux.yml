@@ -54,26 +54,31 @@ jobs:
           export PATH="$MUSL_SDK/bin:$PATH"
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
-
-      - name: Add Rust musl target (for xvm release-build.sh)
-        run: rustup target add x86_64-unknown-linux-musl
+          # Create musl loader symlink so toolchain binaries (as, cc1, collect2) can execute.
+          # These were built with a hardcoded interpreter path that must exist on the host.
+          LOADER_DIR="/home/xlings/.xlings_data/lib"
+          sudo mkdir -p "$LOADER_DIR"
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" "$LOADER_DIR/ld-musl-x86_64.so.1"
+          # Also create symlink at /lib/ for binaries BUILT by musl-gcc (default interpreter path)
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libc.so" /lib/ld-musl-x86_64.so.1
+          # Configure musl's library search path so musl-linked binaries can find
+          # libstdc++.so.6 and libgcc_s.so.1 (without affecting glibc's ld.so).
+          echo "$MUSL_SDK/x86_64-linux-musl/lib" | sudo tee /etc/ld-musl-x86_64.path > /dev/null
+          # Also symlink the C++ runtime libs into /lib/ (musl default search path)
+          # in case the musl loader was built with a custom sysconfdir.
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libstdc++.so.6" /lib/libstdc++.so.6
+          sudo ln -sfn "$MUSL_SDK/x86_64-linux-musl/lib/libgcc_s.so.1" /lib/libgcc_s.so.1
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX"
+          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
+
+      # ── Phase 1.5: Unit Tests ────────────────────────────────────
+
+      - name: Build and run unit tests
+        run: |
+          xmake build xlings_tests
+          xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
 
@@ -81,6 +86,10 @@ jobs:
         run: |
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
+
+      - name: "Test: bootstrap home E2E"
+        run: |
+          bash tests/e2e/bootstrap_home_test.sh
 
       - name: Uninstall old Xlings
         run: |
@@ -102,14 +111,15 @@ jobs:
           pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-linux-x86_64 2>/dev/null | head -1)
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           cd "$pkg_dir"
+          [[ -f .xlings.json ]] || { echo "bootstrap config missing"; exit 1; }
+          [[ -x ./bin/xlings ]] || { echo "bootstrap binary missing"; exit 1; }
           ./bin/xlings self install
-          export PATH="$HOME/.xlings/subos/current/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
+          export PATH="$HOME/.xlings/subos/current/bin:$HOME/.xlings/bin:$PATH"
           echo "=== Verify install ==="
           xlings -h
           xlings config
-          xvm --version
           echo "=== Verify shims created at install time ==="
-          for shim in xlings xvm xvm-shim xim xsubos xself; do
+          for shim in xlings xim xsubos xself; do
             [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
           done
           echo "OK: all shims present in subos/default/bin"
@@ -117,6 +127,7 @@ jobs:
           rm -rf "$HOME/.xlings" "$INSTALL_DIR"
 
       - name: "Test: quick install script (curl | bash)"
+        continue-on-error: true  # may fail due to GitHub rate limits
         env:
           XLINGS_NON_INTERACTIVE: 1
         run: |
@@ -129,7 +140,7 @@ jobs:
           echo "=== Verify quick install ==="
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           echo "=== Cleanup quick install test ==="
           rm -rf "$HOME/.xlings"
 
@@ -142,21 +153,19 @@ jobs:
           [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
           XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
           echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
-          echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
-          echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings entry.
-          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
+          echo "PATH=$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
 
       - name: "Init subos shims and switch mirrors"
         run: |
           if command -v jq &>/dev/null; then
-            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
-                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
+            jq '.mirror = "GLOBAL" |
                 .repo = "https://github.com/d2learn/xlings.git"' \
               "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
               mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
           fi
           xlings self init
+          echo "$XLINGS_HOME/subos/current/bin" >> "$GITHUB_PATH"
+          xlings update
           ls -la "$XLINGS_HOME/subos/current"
           readlink "$XLINGS_HOME/subos/current"
 
@@ -164,7 +173,7 @@ jobs:
         run: |
           xlings -h
           xlings config
-          xvm --version
+          xlings --version
           xlings subos list
 
       - name: "Test: create subos s1, install d2x@0.1.1"
@@ -231,34 +240,6 @@ jobs:
           chmod +x tests/e2e/rpath_verify_test.sh
           D2X_VERSION=0.1.1 bash tests/e2e/rpath_verify_test.sh
 
-      - name: "Test: .xlings.json project deps (T18)"
-        run: |
-          echo "=== T18: no .xlings.json → tip (exit 0) ==="
-          cd /tmp
-          ERR_OUT=$(xlings install 2>&1)
-          echo "$ERR_OUT"
-          echo "$ERR_OUT" | grep -qi ".xlings.json" || \
-            { echo "FAIL: should mention .xlings.json"; exit 1; }
-
-          echo "=== T18: valid .xlings.json ==="
-          PROJ_DIR=$(mktemp -d)
-          printf '{"deps":["d2x@0.1.1"]}\n' > "$PROJ_DIR/.xlings.json"
-          cd "$PROJ_DIR"
-          DEP_OUT=$(xlings install 2>&1) || true
-          echo "$DEP_OUT"
-          echo "$DEP_OUT" | grep -qi "d2x" || \
-            { echo "FAIL: should process d2x from .xlings.json"; exit 1; }
-
-          echo "=== T18: invalid deps format → error ==="
-          printf '{"deps":{"d2x":"0.1.1"}}\n' > "$PROJ_DIR/.xlings.json"
-          cd "$PROJ_DIR"
-          INV_OUT=$(xlings install 2>&1) || true
-          echo "$INV_OUT"
-          echo "$INV_OUT" | grep -qi "invalid" || \
-            { echo "FAIL: should report invalid deps format"; exit 1; }
-          rm -rf "$PROJ_DIR"
-          echo "OK: .xlings.json project deps tests passed"
-
       - name: "Test: index search & spec validation (T20/T21)"
         run: |
           SEARCH_OUT=$(xlings search d2x 2>&1)
@@ -267,6 +248,11 @@ jobs:
             { echo "FAIL: search should find d2x"; exit 1; }
           echo "OK: index search and spec validation working"
 
+      - name: "Test: fixed project E2E scenarios"
+        run: |
+          bash tests/e2e/project_e2e_test.sh
+          rm -rf "$PROJ_DIR"
+
       - name: "Test: cleanup subos"
         run: |
           xlings subos use default
@@ -274,21 +260,6 @@ jobs:
           xlings subos remove s2
           xlings subos list
           echo "OK: test subos removed"
-
-      - name: "Test: libpath RPATH-only policy (T23)"
-        run: |
-          chmod +x tests/e2e/libpath_order_test.sh
-          bash tests/e2e/libpath_order_test.sh
-
-      - name: "Test: bugfix regression (Bug 1/2/3)"
-        run: |
-          chmod +x tests/e2e/bugfix_regression_test.sh
-          bash tests/e2e/bugfix_regression_test.sh
-
-      - name: "Test: E2E usability script"
-        run: |
-          chmod +x tests/e2e/linux_usability_test.sh
-          SKIP_NETWORK_TESTS=0 bash tests/e2e/linux_usability_test.sh build/release.tar.gz
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

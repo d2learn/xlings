@@ -5,6 +5,8 @@ module;
 export module xlings.xself;
 
 import std;
+import :init;
+import :install;
 
 export import :install;
 export import :init;
@@ -19,38 +21,15 @@ namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
+template<typename... Args>
+static void print_line(std::format_string<Args...> fmt, Args&&... args) {
+    std::cout << std::format(fmt, std::forward<Args>(args)...) << '\n';
+}
+
 static int cmd_init() {
     auto& p = Config::paths();
-    auto dirs = {p.homeDir, p.dataDir, p.subosDir, p.binDir, p.libDir,
-                 p.subosDir / "usr", p.subosDir / "xvm", p.subosDir / "generations"};
-    for (const auto& d : dirs) {
-        if (d.empty()) continue;
-        if (!fs::exists(d)) {
-            std::error_code ec;
-            fs::create_directories(d, ec);
-            if (ec) {
-                std::println(stderr, "[xlings:self]: failed to create {} - {}", d.string(), ec.message());
-                return 1;
-            }
-            std::println("[xlings:self]: created {}", d.string());
-        }
-    }
-    auto currentLink = p.homeDir / "subos" / "current";
-    if (!fs::exists(currentLink)) {
-        std::error_code ec;
-        fs::create_directory_symlink(p.subosDir, currentLink, ec);
-        if (!ec) std::println("[xlings:self]: created subos/current -> {}", p.subosDir.filename().string());
-    }
-
-    auto shimSrc = p.homeDir / "bin" / "xvm-shim";
-    if (!fs::exists(shimSrc)) shimSrc = p.homeDir / "bin" / "xvm-shim.exe";
-    if (fs::exists(shimSrc)) {
-        ensure_subos_shims(p.binDir, shimSrc, p.homeDir);
-    } else {
-        std::println("[xlings:self]: bin/xvm-shim not found, skip shim creation");
-    }
-
-    std::println("[xlings:self]: init ok");
+    if (!ensure_home_layout(p.homeDir)) return 1;
+    print_line("[xlings:self]: init ok");
     return 0;
 }
 
@@ -58,10 +37,10 @@ static int cmd_update() {
     auto& p = Config::paths();
     auto git_dir = p.homeDir / ".git";
     if (!fs::exists(git_dir) || !fs::is_directory(git_dir)) {
-        std::println("[xlings:self]: {} is not a git repo, skip update", p.homeDir.string());
+        print_line("[xlings:self]: {} is not a git repo, skip update", p.homeDir.string());
         return 0;
     }
-    std::println("[xlings:self]: update from git ...");
+    print_line("[xlings:self]: update from git ...");
     std::string cmd = "git -C \"" + p.homeDir.string() + "\" pull";
     int ret = platform::exec(cmd);
     return ret != 0 ? 1 : 0;
@@ -78,21 +57,22 @@ static int cmd_clean(bool dryRun = false) {
     auto cachedir = p.homeDir / ".xlings";
     if (fs::exists(cachedir) && fs::is_directory(cachedir)) {
         if (dryRun) {
-            std::println("[xlings:self] would remove cache: {}", cachedir.string());
+            print_line("[xlings:self] would remove cache: {}", cachedir.string());
         } else {
             std::error_code ec;
             fs::remove_all(cachedir, ec);
             if (ec) {
-                std::println(stderr, "[xlings:self] failed to remove {} - {}", cachedir.string(), ec.message());
+                std::fprintf(stderr, "[xlings:self] failed to remove %s - %s\n",
+                             cachedir.string().c_str(), ec.message().c_str());
                 return 1;
             }
-            std::println("[xlings:self] cleaned cache: {}", cachedir.string());
+            print_line("[xlings:self] cleaned cache: {}", cachedir.string());
         }
     }
 
     profile::gc(p.homeDir, dryRun);
 
-    if (!dryRun) std::println("[xlings:self] clean ok");
+    if (!dryRun) print_line("[xlings:self] clean ok");
     return 0;
 }
 
@@ -102,7 +82,7 @@ static int cmd_migrate() {
     auto defaultDir = subosDir / "default";
 
     if (fs::exists(defaultDir / "bin")) {
-        std::println("[xlings:self] already migrated (subos/default/bin exists)");
+        print_line("[xlings:self] already migrated (subos/default/bin exists)");
         return 0;
     }
 
@@ -120,12 +100,13 @@ static int cmd_migrate() {
             if (ec) {
                 fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
                 if (ec) {
-                    std::println(stderr, "[xlings:self] failed to move {}: {}", name, ec.message());
+                    std::fprintf(stderr, "[xlings:self] failed to move %s: %s\n",
+                                 name.c_str(), ec.message().c_str());
                     return;
                 }
                 fs::remove_all(src, ec);
             }
-            std::println("[xlings:self] migrated data/{} -> subos/default/{}", name, name);
+            print_line("[xlings:self] migrated data/{} -> subos/default/{}", name, name);
             moved = true;
         }
     };
@@ -158,15 +139,15 @@ static int cmd_migrate() {
     fs::create_directory_symlink(defaultDir, currentLink, lec);
 
     if (moved) {
-        std::println("[xlings:self] migration complete");
+        print_line("[xlings:self] migration complete");
     } else {
-        std::println("[xlings:self] no legacy data found; initialized subos/default");
+        print_line("[xlings:self] no legacy data found; initialized subos/default");
     }
     return 0;
 }
 
 static int cmd_help() {
-    std::println(R"(
+    std::cout << R"(
 xlings self [action]
   install install xlings from extracted release package
   init    create home/data/subos dirs
@@ -175,7 +156,7 @@ xlings self [action]
   clean   remove cache + gc orphaned packages (--dry-run)
   migrate migrate old layout to subos/default
   help    this message
-)");
+)" << '\n';
     return 0;
 }
 

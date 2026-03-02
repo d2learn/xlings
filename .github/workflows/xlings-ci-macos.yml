@@ -8,6 +8,9 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  BOOTSTRAP_XLINGS_VERSION: v0.3.2
+  BOOTSTRAP_LLVM_VERSION: 20.1.7
+  XMAKE_VERSION: v3.0.7
 
 jobs:
   build-and-test:
@@ -19,26 +22,67 @@ jobs:
 
       # ── Phase 1: Configure Environment ──────────────────────────
 
-      - name: Install system deps
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: ${{ env.XMAKE_VERSION }}
+
+      - name: Bootstrap legacy xlings
         run: |
-          brew install xmake llvm@20
+          PKG_VERSION="${BOOTSTRAP_XLINGS_VERSION#v}"
+          ARCHIVE="xlings-${PKG_VERSION}-macosx-arm64.tar.gz"
+          DOWNLOAD_URL="https://github.com/d2learn/xlings/releases/download/${BOOTSTRAP_XLINGS_VERSION}/${ARCHIVE}"
+          BOOTSTRAP_ROOT="$RUNNER_TEMP/bootstrap-xlings"
+          rm -rf "$BOOTSTRAP_ROOT"
+          mkdir -p "$BOOTSTRAP_ROOT"
+          curl -fsSL -o "$BOOTSTRAP_ROOT/$ARCHIVE" "$DOWNLOAD_URL"
+          tar -xzf "$BOOTSTRAP_ROOT/$ARCHIVE" -C "$BOOTSTRAP_ROOT"
+          BOOTSTRAP_HOME="$(find "$BOOTSTRAP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*' | head -1)"
+          [[ -n "$BOOTSTRAP_HOME" ]] || { echo "bootstrap xlings package not found"; exit 1; }
+          xattr -cr "$BOOTSTRAP_HOME" 2>/dev/null || true
+          echo "BOOTSTRAP_XLINGS_HOME=$BOOTSTRAP_HOME" >> "$GITHUB_ENV"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
+      - name: Install LLVM toolchain with legacy xlings
+        run: |
+          export XLINGS_HOME="$HOME/.xlings"
+          rm -rf "$XLINGS_HOME"
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
+          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
+          ACTUAL_LLVM_PREFIX="$(find "$XLINGS_HOME/data/xpkgs" -path "*/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
+          [[ -n "$ACTUAL_LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
+          LLVM_ALIAS_ROOT="$XLINGS_HOME/data/xpkgs/local-x-llvm"
+          mkdir -p "$LLVM_ALIAS_ROOT"
+          rm -rf "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          ln -s "$ACTUAL_LLVM_PREFIX" "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          LLVM_PREFIX="$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
+          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
+          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "Configured LLVM toolchain path: $LLVM_PREFIX"
+          "$LLVM_PREFIX/bin/clang++" --version
 
-      - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/xvm
-
-      - name: Test Rust unit tests (xvm)
-        run: cargo test --manifest-path core/xvm/Cargo.toml --all-targets
+      - name: Prepare fixture index repo
+        run: |
+          rm -rf tests/fixtures/xim-pkgindex
+          git clone --depth 1 https://github.com/d2learn/xim-pkgindex.git tests/fixtures/xim-pkgindex
 
       - name: Configure xmake
         run: |
-          xmake f -p macosx -m release --toolchain=llvm --sdk=/opt/homebrew/opt/llvm@20
+          # Temporary workaround: configure xmake with the explicit SDK path
+          # from the bootstrap-installed LLVM toolchain on the GitHub runner.
+          xmake f -c -p macosx -m release \
+            --toolchain=llvm \
+            --sdk="$LLVM_PREFIX" \
+            -y
+          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
+
+      # ── Phase 1.5: Unit Tests ────────────────────────────────────
+
+      - name: Build and run unit tests
+        run: |
+          xmake build xlings_tests
+          xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
 
@@ -47,164 +91,34 @@ jobs:
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 
+      - name: "E2E-01: Bootstrap Home (portable + installed)"
+        run: |
+          bash tests/e2e/bootstrap_home_test.sh
+
       - name: Prepare release artifact
         run: |
           tarball=$(ls build/xlings-*-macosx-arm64.tar.gz 2>/dev/null | head -1)
           [[ -z "$tarball" ]] && { echo "No release tarball found"; exit 1; }
           cp "$tarball" build/release.tar.gz
 
-      # ── Phase 2.5: Test install script ─────────────────────────
-
-      - name: "Test: install script (xlings self install)"
+      - name: "E2E-02: Release Self Install"
         run: |
-          unset XLINGS_HOME
-          INSTALL_DIR=$(mktemp -d)
-          tar -xzf build/release.tar.gz -C "$INSTALL_DIR"
-          pkg_dir=$(ls -d "$INSTALL_DIR"/xlings-*-macosx-arm64 2>/dev/null | head -1)
-          [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
-          cd "$pkg_dir"
-          ./bin/xlings self install
-          export PATH="$HOME/.xlings/subos/current/bin:$(pwd)/subos/current/bin:$(pwd)/bin:$PATH"
-          echo "=== Verify install ==="
-          xlings -h
-          xlings config
-          xvm --version
-          echo "=== Verify shims created at install time ==="
-          for shim in xlings xvm xvm-shim xim xsubos xself; do
-            [[ -x "$HOME/.xlings/subos/default/bin/$shim" ]] || { echo "FAIL: shim $shim missing after install"; exit 1; }
-          done
-          echo "OK: all shims present in subos/default/bin"
-          echo "=== Cleanup install test ==="
-          rm -rf "$HOME/.xlings" "$INSTALL_DIR"
+          bash tests/e2e/release_self_install_test.sh build/release.tar.gz
 
-      - name: "Test: quick install script (curl | bash)"
+      - name: "E2E-03: Quick Install Smoke"
+        continue-on-error: true  # may fail due to GitHub rate limits
         env:
           XLINGS_NON_INTERACTIVE: 1
         run: |
-          unset XLINGS_HOME
-          rm -rf "$HOME/.xlings"
-          echo "=== Running quick install script ==="
-          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
-          export PATH="$HOME/.xlings/subos/current/bin:$PATH"
-          [[ -x "$HOME/.xlings/subos/current/bin/xlings" ]] || { echo "xlings not installed at ~/.xlings/subos/current/bin"; exit 1; }
-          echo "=== Verify quick install ==="
-          xlings -h
-          xlings config
-          xvm --version
-          echo "=== Cleanup quick install test ==="
-          rm -rf "$HOME/.xlings"
+          bash tests/e2e/release_quick_install_test.sh
 
-      # ── Phase 3: Test ───────────────────────────────────────────
-
-      - name: Setup xlings environment
+      - name: "E2E-04: Release Subos + d2x Reuse + RPATH"
         run: |
-          tar -xzf build/release.tar.gz -C build
-          pkg_dir=$(ls -d build/xlings-*-macosx-arm64 2>/dev/null | head -1)
-          [[ -z "$pkg_dir" ]] && { echo "Package dir not found"; exit 1; }
-          XLINGS_HOME="$GITHUB_WORKSPACE/$pkg_dir"
-          echo "XLINGS_HOME=$XLINGS_HOME" >> "$GITHUB_ENV"
-          echo "XLINGS_DATA=$XLINGS_HOME/data" >> "$GITHUB_ENV"
-          echo "XLINGS_SUBOS=$XLINGS_HOME/subos/current" >> "$GITHUB_ENV"
-          # Package-mode CI (not self-installed to ~/.xlings): keep bin for direct xlings entry.
-          echo "PATH=$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$PATH" >> "$GITHUB_ENV"
+          bash tests/e2e/release_subos_smoke_test.sh build/release.tar.gz
 
-      - name: "Init subos shims and switch mirrors"
+      - name: "E2E-05: Fixed Project Scenarios"
         run: |
-          xattr -cr "$XLINGS_HOME" 2>/dev/null || true
-          if command -v jq &>/dev/null; then
-            jq '.xim["index-repo"] = .xim.mirrors["index-repo"].GLOBAL |
-                .xim["res-server"] = .xim.mirrors["res-server"].GLOBAL |
-                .repo = "https://github.com/d2learn/xlings.git"' \
-              "$XLINGS_HOME/.xlings.json" > "$XLINGS_HOME/.xlings.json.tmp" && \
-              mv "$XLINGS_HOME/.xlings.json.tmp" "$XLINGS_HOME/.xlings.json"
-          fi
-          xlings self init
-          ls -la "$XLINGS_HOME/subos/current"
-          readlink "$XLINGS_HOME/subos/current"
-
-      - name: "Test: basic commands"
-        run: |
-          xlings -h
-          xlings config
-          xvm --version
-          xlings subos list
-
-      - name: "Test: create subos s1, install d2x@0.1.3"
-        run: |
-          echo "=== Create subos s1 ==="
-          xlings subos new s1
-          xlings subos use s1
-          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
-            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
-          echo "=== Install d2x@0.1.3 in s1 ==="
-          INSTALL_OUT=$(xlings install d2x@0.1.3 -y 2>&1)
-          echo "$INSTALL_OUT"
-          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.3" || \
-            { echo "FAIL: [package] info doesn't show version 0.1.3"; exit 1; }
-          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.3.*installed" || \
-            { echo "FAIL: d2x@0.1.3 install not confirmed"; exit 1; }
-          echo "OK: d2x@0.1.3 installed in s1, [package] info verified"
-
-      - name: "Test: create subos s2, install d2x@0.1.3"
-        run: |
-          echo "=== Create subos s2 ==="
-          xlings subos new s2
-          xlings subos use s2
-          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
-            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
-          echo "=== Install d2x@0.1.3 in s2 ==="
-          INSTALL_OUT=$(xlings install d2x@0.1.3 -y 2>&1)
-          echo "$INSTALL_OUT"
-          echo "$INSTALL_OUT" | grep -q "version.*0\.1\.3" || \
-            { echo "FAIL: [package] info doesn't show version 0.1.3"; exit 1; }
-          echo "$INSTALL_OUT" | grep -q "d2x@0\.1\.3.*installed" || \
-            { echo "FAIL: d2x@0.1.3 install not confirmed"; exit 1; }
-          echo "OK: d2x@0.1.3 installed in s2, [package] info verified"
-
-      - name: "Test: switch subos and verify isolation"
-        run: |
-          echo "=== Switch to s1 ==="
-          xlings subos use s1
-          readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || \
-            { echo "FAIL: subos/current not pointing to s1"; exit 1; }
-          echo "OK: switched to s1"
-
-          echo "=== Switch to s2 ==="
-          xlings subos use s2
-          readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || \
-            { echo "FAIL: subos/current not pointing to s2"; exit 1; }
-          echo "OK: switched to s2"
-
-          echo "=== subos list ==="
-          xlings subos list
-
-      - name: "Test: libpath RPATH-only policy (T23)"
-        run: |
-          chmod +x tests/e2e/libpath_order_test.sh
-          bash tests/e2e/libpath_order_test.sh
-
-      - name: "Test: RPATH binary verification (T23)"
-        run: |
-          chmod +x tests/e2e/rpath_verify_test.sh
-          D2X_VERSION=0.1.3 bash tests/e2e/rpath_verify_test.sh
-
-      - name: "Test: cleanup subos"
-        run: |
-          xlings subos use default
-          xlings subos remove s1
-          xlings subos remove s2
-          xlings subos list
-          echo "OK: test subos removed"
-
-      - name: "Test: bugfix regression (Bug 1/2/3)"
-        run: |
-          chmod +x tests/e2e/bugfix_regression_test.sh
-          bash tests/e2e/bugfix_regression_test.sh
-
-      - name: "Test: E2E usability script"
-        run: |
-          chmod +x tests/e2e/macos_usability_test.sh
-          SKIP_NETWORK_TESTS=0 bash tests/e2e/macos_usability_test.sh build/release.tar.gz
+          bash tests/e2e/project_e2e_test.sh
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

@@ -1,0 +1,11 @@
+{
+  "index_repos": [
+    {
+      "name": "projectrepo",
+      "url": "../../../fixtures/xim-pkgindex"
+    }
+  ],
+  "workspace": {
+    "projectrepo:node": "22.17.1"
+  }
+}
