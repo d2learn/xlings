@@ -22,6 +22,7 @@ require_release_archive() {
 }
 
 require_fixture_index() {
+  "$ROOT_DIR/tests/e2e/prepare_fixture_index.sh" "$FIXTURE_INDEX_DIR"
   [[ -d "$FIXTURE_INDEX_DIR/pkgs" ]] || fail "fixture index repo missing at $FIXTURE_INDEX_DIR"
 }
 

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <iomanip>
 
 import std;
 import xlings.i18n;
