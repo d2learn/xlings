@@ -20,6 +20,7 @@ import xlings.xvm.commands;
 import xlings.config;
 import xlings.platform;
 import xlings.json;
+import xlings.xself;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -1403,6 +1404,130 @@ TEST_F(XvmHeaderSymlinkTest, RemoveHeadersNonexistentDir) {
     // Should not crash with nonexistent source dir
     xlings::xvm::remove_headers("/tmp/nonexistent_dir_xyz_999", sysrootInclude);
     xlings::xvm::remove_headers("", sysrootInclude);
+}
+
+// ============================================================
+// create_shim / is_builtin_shim tests
+// ============================================================
+
+class ShimCreateTest : public ::testing::Test {
+protected:
+    std::filesystem::path testDir_;
+
+    void SetUp() override {
+        namespace fs = std::filesystem;
+        testDir_ = fs::temp_directory_path() / "xlings_shim_create_test";
+        fs::remove_all(testDir_);
+        fs::create_directories(testDir_ / "src");
+        fs::create_directories(testDir_ / "dst");
+        // Create a small source file to act as the "binary"
+        xlings::platform::write_string_to_file(
+            (testDir_ / "src" / "xlings").string(), "fake-binary-content");
+    }
+
+    void TearDown() override {
+        std::filesystem::remove_all(testDir_);
+    }
+};
+
+TEST_F(ShimCreateTest, CreatesShimOnUnix) {
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto dst = testDir_ / "dst" / "gcc";
+    auto result = xlings::xself::create_shim(src, dst);
+#if !defined(_WIN32)
+    EXPECT_EQ(result, xlings::xself::LinkResult::Symlink);
+    EXPECT_TRUE(fs::is_symlink(dst));
+#else
+    // On Windows: hardlink or copy
+    EXPECT_TRUE(result == xlings::xself::LinkResult::Hardlink ||
+                result == xlings::xself::LinkResult::Copy);
+    EXPECT_TRUE(fs::exists(dst));
+#endif
+}
+
+TEST_F(ShimCreateTest, SymlinkIsRelative) {
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto dst = testDir_ / "dst" / "gcc";
+    auto result = xlings::xself::create_shim(src, dst);
+#if !defined(_WIN32)
+    ASSERT_EQ(result, xlings::xself::LinkResult::Symlink);
+    auto link_target = fs::read_symlink(dst);
+    EXPECT_TRUE(link_target.is_relative())
+        << "symlink should be relative, got: " << link_target;
+#endif
+}
+
+TEST_F(ShimCreateTest, OverwritesExisting) {
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto dst = testDir_ / "dst" / "gcc";
+    // Create an existing file at dst
+    xlings::platform::write_string_to_file(dst.string(), "old-content");
+    ASSERT_TRUE(fs::exists(dst));
+
+    auto result = xlings::xself::create_shim(src, dst);
+    EXPECT_NE(result, xlings::xself::LinkResult::Failed);
+#if !defined(_WIN32)
+    EXPECT_TRUE(fs::is_symlink(dst));
+#else
+    EXPECT_TRUE(fs::exists(dst));
+#endif
+}
+
+TEST_F(ShimCreateTest, OverwritesExistingSymlink) {
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto dst = testDir_ / "dst" / "gcc";
+#if !defined(_WIN32)
+    // Create a dangling symlink at dst
+    fs::create_symlink("/nonexistent/path", dst);
+    ASSERT_TRUE(fs::is_symlink(dst));
+
+    auto result = xlings::xself::create_shim(src, dst);
+    EXPECT_EQ(result, xlings::xself::LinkResult::Symlink);
+    // Should now point to the real source
+    EXPECT_TRUE(fs::exists(dst));
+#endif
+}
+
+TEST_F(ShimCreateTest, SourceNotExistReturnsFailed) {
+    auto dst = testDir_ / "dst" / "gcc";
+    auto result = xlings::xself::create_shim(testDir_ / "nonexistent", dst);
+    EXPECT_EQ(result, xlings::xself::LinkResult::Failed);
+    EXPECT_FALSE(std::filesystem::exists(dst));
+}
+
+TEST_F(ShimCreateTest, IsBuiltinShimCoversAll) {
+    // Base shims
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xlings"));
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xim"));
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xinstall"));
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xsubos"));
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xself"));
+    // Optional shims
+    EXPECT_TRUE(xlings::xself::is_builtin_shim("xmake"));
+    // Non-builtin
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("gcc"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("node"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim(""));
+}
+
+TEST_F(ShimCreateTest, EnsureSubosShimsCreatesAll) {
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto binDir = testDir_ / "dst";
+
+    xlings::xself::ensure_subos_shims(binDir, src, fs::path{});
+
+    for (auto name : {"xlings", "xim", "xinstall", "xsubos", "xself"}) {
+        auto shim = binDir / name;
+        EXPECT_TRUE(fs::exists(shim)) << "missing shim: " << name;
+#if !defined(_WIN32)
+        EXPECT_TRUE(fs::is_symlink(shim)) << "shim should be symlink: " << name;
+#endif
+    }
 }
 
 // ============================================================
