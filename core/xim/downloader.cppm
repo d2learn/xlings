@@ -59,14 +59,14 @@ DownloadResult download_one(const DownloadTask& task) {
     for (auto& tryUrl : urls) {
         log::info("downloading {} from {}", task.name, tryUrl);
         auto cmd = std::format(
-            "curl -fSL --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            "curl -fL# --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
             destFile.string(), tryUrl);
-        auto [rc, output] = platform::run_command_capture(cmd);
+        auto rc = platform::exec(cmd);
         if (rc == 0) {
             downloaded = true;
             break;
         }
-        result.error = std::format("curl failed (rc={}): {}", rc, output);
+        result.error = std::format("curl failed (rc={})", rc);
         if (&tryUrl != &urls.back()) {
             log::warn("download failed for {}, trying next server...", task.name);
         }

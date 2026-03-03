@@ -47,8 +47,13 @@ std::string detect_platform() {
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
-        log::error("package index not available");
-        return 1;
+        log::info("package index not available, updating...");
+        sync_all_repos(true);
+        auto rebuildResult = catalog.rebuild();
+        if (!rebuildResult || !catalog.is_loaded()) {
+            log::error("package index not available");
+            return 1;
+        }
     }
 
     auto platform = detect_platform();
