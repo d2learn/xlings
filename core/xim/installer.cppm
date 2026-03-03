@@ -49,18 +49,11 @@ std::filesystem::path data_root_for_(const std::filesystem::path& targetRoot) {
     return targetRoot;
 }
 
-std::filesystem::path download_cache_dir_(const PlanNode& node,
-                                          const std::filesystem::path& fallbackDataDir) {
+std::filesystem::path runtime_dir_(const PlanNode& node,
+                                   const std::filesystem::path& fallbackDataDir) {
     auto targetRoot = node.storeRoot.empty() ? (fallbackDataDir / "xpkgs") : node.storeRoot;
     auto dataRoot = data_root_for_(targetRoot);
-    return dataRoot / "runtimedir" / "downloads" / effective_store_name_(node) / node.version;
-}
-
-std::filesystem::path extract_work_dir_(const PlanNode& node,
-                                        const std::filesystem::path& fallbackDataDir) {
-    auto targetRoot = node.storeRoot.empty() ? (fallbackDataDir / "xpkgs") : node.storeRoot;
-    auto dataRoot = data_root_for_(targetRoot);
-    return dataRoot / "runtimedir" / "extract" / effective_store_name_(node) / node.version;
+    return dataRoot / "runtimedir" / effective_store_name_(node) / node.version;
 }
 
 bool is_archive_(const std::filesystem::path& path) {
@@ -701,7 +694,7 @@ public:
             task.name = detail_::plan_key_(node);
             task.url = res.url;
             task.sha256 = res.sha256;
-            task.destDir = detail_::download_cache_dir_(node, dataDir);
+            task.destDir = detail_::runtime_dir_(node, dataDir);
             if (isXlingsRes) {
                 task.fallbackUrls = detail_::build_xlings_res_fallback_urls_(
                     node.name, version, platform);
@@ -786,10 +779,9 @@ public:
                     if (onStatus) {
                         onStatus({ node.name, InstallPhase::Extracting, 0.35f, "" });
                     }
-                    auto extractDir = detail_::extract_work_dir_(node, dataDir);
-                    std::error_code ec;
-                    std::filesystem::remove_all(extractDir, ec);
-                    auto extracted = extract_archive(dlIt->second.localFile, extractDir);
+                    // Extract into the same runtime dir as the download
+                    auto runtimeDir = ctx.run_dir;
+                    auto extracted = extract_archive(dlIt->second.localFile, runtimeDir);
                     if (!extracted) {
                         log::error("extract failed for {}: {}", node.name, extracted.error());
                         if (onStatus) {
@@ -798,11 +790,16 @@ public:
                         continue;
                     }
                     extractedRoot = *extracted;
-                    ctx.run_dir = *extracted;
                 }
             } else {
                 ctx.install_file = node.pkgFile;
                 ctx.run_dir = ctx.install_dir;
+            }
+
+            // Ensure install_dir parent exists so hooks can mv/cp into it
+            {
+                std::error_code ec;
+                std::filesystem::create_directories(ctx.install_dir.parent_path(), ec);
             }
 
             bool payloadInstalled = node.alreadyInstalled;

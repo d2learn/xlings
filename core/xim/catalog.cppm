@@ -169,13 +169,14 @@ class PackageCatalog {
                 .defaultNamespace = repo.name,
             });
         }
-        for (auto& repo : Config::global_index_repos()) {
+        auto globalRepos = Config::global_index_repos();
+        for (std::size_t i = 0; i < globalRepos.size(); ++i) {
             specs.push_back({
-                .name = repo.name,
-                .url = repo.url,
-                .dir = Config::repo_dir_for(repo, false),
+                .name = globalRepos[i].name,
+                .url = globalRepos[i].url,
+                .dir = Config::repo_dir_for(globalRepos[i], false),
                 .scope = PackageScope::Global,
-                .defaultNamespace = repo.name,
+                .defaultNamespace = (i == 0) ? "" : globalRepos[i].name,
             });
         }
         return specs;
