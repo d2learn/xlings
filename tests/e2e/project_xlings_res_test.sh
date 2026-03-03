@@ -32,8 +32,9 @@ assert_contains "$INSTALL_OUT" "$EXPECTED_RES_SERVER/mdbook/releases/download/0.
 
 MDBOOK_ARCHIVE="$(mdbook_archive_name 0.4.43)"
 XPKG_DIR="$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-mdbook/0.4.43"
-[[ -f "$XPKG_DIR/$MDBOOK_ARCHIVE" ]] \
-  || fail "mdbook XLINGS_RES archive missing from project-local xpkgs"
+RUNTIME_DIR="$SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-mdbook/0.4.43"
+[[ -f "$RUNTIME_DIR/$MDBOOK_ARCHIVE" ]] \
+  || fail "mdbook XLINGS_RES archive missing from project-local runtimedir"
 
 [[ -x "$XPKG_DIR/mdbook" ]] \
   || fail "mdbook payload missing from project-local xpkgs"
