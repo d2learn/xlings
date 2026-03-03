@@ -176,7 +176,7 @@ class PackageCatalog {
                 .url = globalRepos[i].url,
                 .dir = Config::repo_dir_for(globalRepos[i], false),
                 .scope = PackageScope::Global,
-                .defaultNamespace = (i == 0) ? "" : globalRepos[i].name,
+                .defaultNamespace = globalRepos[i].name,
             });
         }
         return specs;
