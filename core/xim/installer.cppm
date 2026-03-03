@@ -695,7 +695,6 @@ public:
             task.url = res.url;
             task.sha256 = res.sha256;
             task.destDir = detail_::runtime_dir_(node, dataDir);
-            log::info("[debug] storeRoot={} destDir={}", node.storeRoot.string(), task.destDir.string());
             if (isXlingsRes) {
                 task.fallbackUrls = detail_::build_xlings_res_fallback_urls_(
                     node.name, version, platform);
@@ -765,7 +764,6 @@ public:
 
             auto planKey = detail_::plan_key_(node);
             auto dlIt = downloadResults.find(planKey);
-            log::info("[debug] planKey={} install_dir={} dlFound={}", planKey, ctx.install_dir.string(), dlIt != downloadResults.end());
             std::optional<std::filesystem::path> extractedRoot;
             if (plannedDownloads.contains(planKey) && dlIt == downloadResults.end()) {
                 log::error("download artifact missing for {}", node.name);
