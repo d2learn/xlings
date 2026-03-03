@@ -61,7 +61,7 @@ write_home_config() {
   "mirror": "$mirror",
   "index_repos": [
     {
-      "name": "official",
+      "name": "xim",
       "url": "$FIXTURE_INDEX_DIR"
     }
   ]

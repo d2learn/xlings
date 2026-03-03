@@ -61,7 +61,7 @@ private:
     mutable std::mutex resourceServerMutex_;
     mutable std::unordered_map<std::string, std::string> selectedResourceServerCache_;
 
-    static constexpr std::string_view DEFAULT_INDEX_REPO_NAME = "official";
+    static constexpr std::string_view DEFAULT_INDEX_REPO_NAME = "xim";
     static constexpr std::string_view DEFAULT_INDEX_REPO_DIR = "xim-pkgindex";
 
     static std::vector<IndexRepo> default_global_index_repos_(const std::string& mirror) {

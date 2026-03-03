@@ -63,7 +63,7 @@ write_fixture_release_config() {
   "activeSubos": "default",
   "subos": { "default": { "dir": "" } },
   "index_repos": [
-    { "name": "official", "url": "$FIXTURE_INDEX_DIR" }
+    { "name": "xim", "url": "$FIXTURE_INDEX_DIR" }
   ]
 }
 EOF

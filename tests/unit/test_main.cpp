@@ -319,9 +319,9 @@ TEST(XimTypesTest, DownloadTaskInit) {
 }
 
 TEST(XimCatalogTest, CanonicalPackageNameAndStoreName) {
-    EXPECT_EQ(xlings::xim::canonical_package_name("official", "gcc"), "official:gcc");
+    EXPECT_EQ(xlings::xim::canonical_package_name("xim", "gcc"), "xim:gcc");
     EXPECT_EQ(xlings::xim::canonical_package_name("", "gcc"), "gcc");
-    EXPECT_EQ(xlings::xim::package_store_name("official", "gcc"), "official-x-gcc");
+    EXPECT_EQ(xlings::xim::package_store_name("xim", "gcc"), "xim-x-gcc");
     EXPECT_EQ(xlings::xim::package_store_name("", "gcc"), "gcc");
 }
 
@@ -330,9 +330,9 @@ TEST(XimCatalogTest, FormatAmbiguousCandidates) {
         {
             .name = "gcc",
             .version = "15.1.0",
-            .namespaceName = "official",
-            .canonicalName = "official:gcc",
-            .repoName = "official",
+            .namespaceName = "xim",
+            .canonicalName = "xim:gcc",
+            .repoName = "xim",
             .scope = xlings::xim::PackageScope::Global,
         },
         {
@@ -347,11 +347,11 @@ TEST(XimCatalogTest, FormatAmbiguousCandidates) {
 
     auto msg = xlings::xim::format_ambiguous_candidates("gcc", matches);
     EXPECT_NE(msg.find("package 'gcc' is ambiguous"), std::string::npos);
-    EXPECT_NE(msg.find("1. official:gcc@15.1.0"), std::string::npos);
+    EXPECT_NE(msg.find("1. xim:gcc@15.1.0"), std::string::npos);
     EXPECT_NE(msg.find("2. project:gcc@15.1.0"), std::string::npos);
-    EXPECT_NE(msg.find("from global repo 'official'"), std::string::npos);
+    EXPECT_NE(msg.find("from global repo 'xim'"), std::string::npos);
     EXPECT_NE(msg.find("from project repo 'project'"), std::string::npos);
-    EXPECT_NE(msg.find("xlings install official:gcc@15.1.0"), std::string::npos);
+    EXPECT_NE(msg.find("xlings install xim:gcc@15.1.0"), std::string::npos);
 }
 
 TEST(ConfigTest, WorkspaceInstallTargets) {
@@ -449,7 +449,7 @@ TEST(ConfigTest, ResolveRepoSourceFileScheme) {
 
 TEST(ConfigTest, ResolveRepoSourceRemoteUrlReturnsEmpty) {
     xlings::IndexRepo repo {
-        .name = "official",
+        .name = "xim",
         .url = "https://github.com/d2learn/xim-pkgindex.git"
     };
     EXPECT_TRUE(xlings::Config::resolve_repo_source(repo, false).empty());

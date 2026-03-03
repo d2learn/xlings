@@ -13,13 +13,15 @@ void add_version(VersionDB& db,
                  const std::string& version,
                  const std::string& path,
                  const std::string& type = "program",
-                 const std::string& filename = "") {
+                 const std::string& filename = "",
+                 const std::string& alias = "") {
     auto& info = db[target];
     if (info.type.empty()) info.type = type;
     if (info.filename.empty() && !filename.empty()) info.filename = filename;
 
     VData vdata;
     vdata.path = path;
+    if (!alias.empty()) vdata.alias.push_back(alias);
     info.versions[version] = std::move(vdata);
 }
 

@@ -35,9 +35,9 @@ INSTALL_OUT="$(
 echo "$INSTALL_OUT"
 
 NODE_ARCHIVE="$(node_archive_name 22.17.1)"
-[[ -f "$HOME_DIR/data/xpkgs/official-x-node/22.17.1/bin/node" ]] \
+[[ -f "$HOME_DIR/data/xpkgs/xim-x-node/22.17.1/bin/node" ]] \
   || fail "global fallback install did not land in isolated global xpkgs"
-[[ -f "$HOME_DIR/data/runtimedir/downloads/official-x-node/22.17.1/$NODE_ARCHIVE" ]] \
+[[ -f "$HOME_DIR/data/runtimedir/downloads/xim-x-node/22.17.1/$NODE_ARCHIVE" ]] \
   || fail "global fallback download cache missing from isolated global home"
 
 if [[ -d "$SCENARIO_DIR/.xlings/data" ]]; then
@@ -46,7 +46,7 @@ fi
 
 INFO_OUT="$(
   cd "$SCENARIO_DIR" &&
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" info official:node
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" info xim:node
 )"
 echo "$INFO_OUT"
 assert_contains "$INFO_OUT" "installed:   yes" \
