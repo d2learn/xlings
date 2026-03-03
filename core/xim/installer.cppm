@@ -796,10 +796,10 @@ public:
                 ctx.run_dir = ctx.install_dir;
             }
 
-            // Ensure install_dir parent exists so hooks can mv/cp into it
+            // Ensure install_dir exists so hooks can mv/cp into it
             {
                 std::error_code ec;
-                std::filesystem::create_directories(ctx.install_dir.parent_path(), ec);
+                std::filesystem::create_directories(ctx.install_dir, ec);
             }
 
             bool payloadInstalled = node.alreadyInstalled;
