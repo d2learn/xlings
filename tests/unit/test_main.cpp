@@ -1506,9 +1506,8 @@ TEST_F(ShimCreateTest, IsBuiltinShimCoversAll) {
     EXPECT_TRUE(xlings::xself::is_builtin_shim("xinstall"));
     EXPECT_TRUE(xlings::xself::is_builtin_shim("xsubos"));
     EXPECT_TRUE(xlings::xself::is_builtin_shim("xself"));
-    // Optional shims
-    EXPECT_TRUE(xlings::xself::is_builtin_shim("xmake"));
-    // Non-builtin
+    // Non-builtin (xmake removed from optional shims)
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xmake"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim("gcc"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim("node"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim(""));
