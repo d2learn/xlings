@@ -31,16 +31,16 @@ assert_contains "$INSTALL_OUT" "$EXPECTED_RES_SERVER/mdbook/releases/download/0.
   "XLINGS_RES mirror rewrite did not use the expected resource server"
 
 MDBOOK_ARCHIVE="$(mdbook_archive_name 0.4.43)"
+log "DEBUG: checking archive at $SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-mdbook/0.4.43/$MDBOOK_ARCHIVE"
+log "DEBUG: project .xlings/data tree:"
+find "$SCENARIO_DIR/.xlings/data" -maxdepth 4 -type f 2>/dev/null | head -30 || true
+log "DEBUG: home data tree:"
+find "$HOME_DIR/data" -maxdepth 4 -type f 2>/dev/null | head -30 || true
 [[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-mdbook/0.4.43/$MDBOOK_ARCHIVE" ]] \
   || fail "mdbook XLINGS_RES archive missing from project-local runtimedir"
 
-if [[ "$(platform_name)" == "macosx" ]]; then
-  [[ -x "$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-mdbook/0.4.43/mdbook" ]] \
-    || fail "mdbook payload missing from project-local xpkgs"
-else
-  [[ -x "$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-mdbook/0.4.43/mdbook" ]] \
-    || fail "mdbook payload missing from project-local xpkgs"
-fi
+[[ -x "$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-mdbook/0.4.43/mdbook" ]] \
+  || fail "mdbook payload missing from project-local xpkgs"
 
 INFO_OUT="$(
   cd "$SCENARIO_DIR" &&
