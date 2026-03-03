@@ -13,6 +13,7 @@ import xlings.log;
 import xlings.platform;
 import xlings.config;
 import xlings.json;
+import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
 import xlings.xvm.commands;
@@ -390,6 +391,18 @@ void process_xvm_operations_(const PlanNode& node,
     auto xvm_ops = executor.xvm_operations();
     auto sysroot_include = Config::paths().subosDir / "usr" / "include";
     auto sysroot_lib = Config::paths().libDir;
+    auto& paths = Config::paths();
+
+    // Locate xlings binary for shim creation
+#ifdef _WIN32
+    auto xlings_bin = paths.homeDir / "bin" / "xlings.exe";
+    constexpr std::string_view shim_ext = ".exe";
+#else
+    auto xlings_bin = paths.homeDir / "bin" / "xlings";
+    constexpr std::string_view shim_ext = "";
+#endif
+    if (!std::filesystem::exists(xlings_bin))
+        xlings_bin = paths.homeDir / "xlings";
 
     for (auto& op : xvm_ops) {
         if (op.op == "add") {
@@ -401,14 +414,65 @@ void process_xvm_operations_(const PlanNode& node,
                 : op.bindir;
             std::string type = op.type.empty() ? "program" : op.type;
             xvm::add_version(Config::versions_mut(),
-                             op.name, ver, p, type, op.filename);
+                             op.name, ver, p, type, op.filename, op.alias);
+
+            // Activate and create shim for each added program
+            if (type == "program") {
+                Config::workspace_mut()[op.name] = ver;
+                if (std::filesystem::exists(xlings_bin)) {
+                    std::string shim_name = op.name;
+                    if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
+                        shim_name += shim_ext;
+                    std::filesystem::create_directories(paths.binDir);
+                    xself::create_shim(xlings_bin, paths.binDir / shim_name);
+                }
+            } else if (type == "lib" && !op.bindir.empty()) {
+                // Install lib symlink to subos lib dir
+                std::string fname = op.filename.empty() ? op.name : op.filename;
+                auto src = std::filesystem::path(op.bindir) / fname;
+                std::filesystem::create_directories(sysroot_lib);
+                auto dst = sysroot_lib / fname;
+                std::error_code ec;
+                if (std::filesystem::exists(dst, ec) || std::filesystem::is_symlink(dst, ec))
+                    std::filesystem::remove(dst, ec);
+                if (std::filesystem::exists(src, ec))
+                    std::filesystem::create_symlink(src, dst, ec);
+            }
         } else if (op.op == "headers") {
             xvm::install_headers(op.includedir, sysroot_include);
             auto& vdata = Config::versions_mut()[node.name].versions[node.version];
             vdata.includedir = op.includedir;
+        } else if (op.op == "remove") {
+            auto& db = Config::versions_mut();
+            auto it = db.find(op.name);
+            bool isLib = (it != db.end() && it->second.type == "lib");
+
+            if (isLib) {
+                // Remove lib symlink from subos lib dir
+                auto dst = sysroot_lib / op.name;
+                std::error_code ec;
+                if (std::filesystem::is_symlink(dst, ec))
+                    std::filesystem::remove(dst, ec);
+            } else {
+                // Remove shim for uninstalled program
+                std::string shim_name = op.name;
+                if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
+                    shim_name += shim_ext;
+                auto shim_path = paths.binDir / shim_name;
+                if (std::filesystem::exists(shim_path)) {
+                    std::filesystem::remove(shim_path);
+                }
+            }
+            Config::workspace_mut().erase(op.name);
+            if (op.version.empty()) {
+                db.erase(op.name);
+            } else {
+                xvm::remove_version(db, op.name, op.version);
+            }
         }
     }
     Config::save_versions();
+    Config::save_workspace();
 }
 
 bool run_config_hook_(const PlanNode& node,
@@ -703,6 +767,7 @@ public:
             ctx.bin_dir = Config::paths().binDir;
             ctx.xpkg_dir = node.pkgFile.parent_path();
             ctx.subos_sysrootdir = Config::paths().subosDir.string();
+            ctx.deps_list = node.deps;
 
             auto planKey = detail_::plan_key_(node);
             auto dlIt = downloadResults.find(planKey);
@@ -787,6 +852,16 @@ public:
                                "failed to normalize file install layout" });
                 }
                 continue;
+            }
+
+            // Apply elfpatch auto-patching if the install hook enabled it
+            if (!payloadInstalled) {
+                auto epResult = executor.apply_elfpatch_auto();
+                if (epResult.success && !epResult.output.empty()) {
+                    log::info("{}: elfpatch auto: {}", node.name, epResult.output);
+                } else if (!epResult.success) {
+                    log::warn("{}: elfpatch auto failed: {}", node.name, epResult.error);
+                }
             }
 
             if (!detail_::run_config_hook_(node, dataDir, executor, ctx, onStatus)) {
@@ -918,6 +993,21 @@ public:
 
         for (auto& op : xvm_ops) {
             if (op.op == "remove") {
+                // Remove shim
+#ifdef _WIN32
+                constexpr std::string_view shim_ext = ".exe";
+#else
+                constexpr std::string_view shim_ext = "";
+#endif
+                std::string shim_name = op.name;
+                if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
+                    shim_name += shim_ext;
+                auto shim_path = Config::paths().binDir / shim_name;
+                if (std::filesystem::exists(shim_path)) {
+                    std::filesystem::remove(shim_path);
+                }
+                Config::workspace_mut().erase(op.name);
+
                 if (op.version.empty()) {
                     Config::versions_mut().erase(op.name);
                 } else {
@@ -928,6 +1018,7 @@ public:
             }
         }
         Config::save_versions();
+        Config::save_workspace();
 
         if (catalog_) {
             catalog_->mark_installed(*resolvedMatch, false);

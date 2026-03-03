@@ -52,7 +52,7 @@ function Write-FixtureReleaseConfig($pkgDir) {
         activeSubos = 'default'
         subos       = @{ default = @{ dir = '' } }
         index_repos = @(
-            @{ name = 'official'; url = $FIXTURE_INDEX_DIR }
+            @{ name = 'xim'; url = $FIXTURE_INDEX_DIR }
         )
     }
     $config | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $pkgDir '.xlings.json') -Encoding UTF8

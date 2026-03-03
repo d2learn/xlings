@@ -38,19 +38,28 @@ std::string extract_program_name(const char* argv0) {
 // Resolve the real executable path for a shim target
 std::filesystem::path resolve_executable(const std::string& program_name,
                                          const std::string& path,
-                                         const std::string& xlings_home) {
+                                         const std::string& xlings_home,
+                                         const std::vector<std::string>& aliases = {}) {
     namespace fs = std::filesystem;
 
     auto expanded = expand_path(path, xlings_home);
     auto base = fs::path(expanded);
 
-    // Try direct: path/program_name
-    auto candidate1 = base / program_name;
-    if (fs::exists(candidate1)) return candidate1;
+    // Build list of names to try: program_name first, then aliases
+    std::vector<std::string> names = { program_name };
+    for (auto& a : aliases) {
+        if (!a.empty() && a != program_name) names.push_back(a);
+    }
 
-    // Try: path/bin/program_name
-    auto candidate2 = base / "bin" / program_name;
-    if (fs::exists(candidate2)) return candidate2;
+    for (auto& name : names) {
+        // Try direct: path/name
+        auto candidate1 = base / name;
+        if (fs::exists(candidate1)) return candidate1;
+
+        // Try: path/bin/name
+        auto candidate2 = base / "bin" / name;
+        if (fs::exists(candidate2)) return candidate2;
+    }
 
     return {};
 }
@@ -153,8 +162,8 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         }
     }
 
-    // Resolve the executable path
-    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
+    // Resolve the executable path (try program name, then aliases)
+    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home, vdata->alias);
     if (exe_path.empty()) {
         std::println(stderr, "xlings: executable '{}' not found", exec_name);
         std::println(stderr, "  path: {}", expand_path(vdata->path, xlings_home));
