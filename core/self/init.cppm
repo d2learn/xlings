@@ -20,7 +20,7 @@ inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
 };
 
 // Optional shims (created only when pkg_root/bin/<name> exists)
-inline constexpr std::array<std::string_view, 1> SHIM_NAMES_OPTIONAL = {"xmake"};
+inline constexpr std::array<std::string_view, 0> SHIM_NAMES_OPTIONAL = {};
 
 export enum class LinkResult { Symlink, Hardlink, Copy, Failed };
 
