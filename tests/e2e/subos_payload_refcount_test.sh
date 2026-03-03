@@ -37,7 +37,7 @@ assert_contains "$INSTALL_S1" "node@22.17.1 installed" \
   "s1 install did not confirm node installation"
 
 PAYLOAD_DIR="$HOME_DIR/data/xpkgs/xim-x-node/22.17.1"
-DOWNLOAD_FILE="$HOME_DIR/data/runtimedir/downloads/xim-x-node/22.17.1/$(node_archive_name 22.17.1)"
+DOWNLOAD_FILE="$HOME_DIR/data/runtimedir/xim-x-node/22.17.1/$(node_archive_name 22.17.1)"
 [[ -x "$PAYLOAD_DIR/bin/node" ]] || fail "node payload missing after s1 install"
 [[ -f "$DOWNLOAD_FILE" ]] || fail "download cache missing after s1 install"
 [[ -x "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim missing after install"

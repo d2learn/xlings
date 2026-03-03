@@ -40,9 +40,9 @@ assert_contains "$INSTALL_OUT" "packages to install (2):" \
 
 NODE_ARCHIVE_22="$(node_archive_name 22.17.1)"
 NODE_ARCHIVE_20="$(node_archive_name 20.19.0)"
-[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/downloads/projectrepo-x-node/22.17.1/$NODE_ARCHIVE_22" ]] \
+[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-node/22.17.1/$NODE_ARCHIVE_22" ]] \
   || fail "node 22.17.1 download cache missing from project-local runtimedir"
-[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/downloads/projectrepo-x-node/20.19.0/$NODE_ARCHIVE_20" ]] \
+[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-node/20.19.0/$NODE_ARCHIVE_20" ]] \
   || fail "node 20.19.0 download cache missing from project-local runtimedir"
 
 [[ -x "$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-node/22.17.1/bin/node" ]] \

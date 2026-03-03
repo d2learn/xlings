@@ -31,7 +31,7 @@ assert_contains "$INSTALL_OUT" "$EXPECTED_RES_SERVER/mdbook/releases/download/0.
   "XLINGS_RES mirror rewrite did not use the expected resource server"
 
 MDBOOK_ARCHIVE="$(mdbook_archive_name 0.4.43)"
-[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/downloads/projectrepo-x-mdbook/0.4.43/$MDBOOK_ARCHIVE" ]] \
+[[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/projectrepo-x-mdbook/0.4.43/$MDBOOK_ARCHIVE" ]] \
   || fail "mdbook XLINGS_RES archive missing from project-local runtimedir"
 
 if [[ "$(platform_name)" == "macosx" ]]; then
