@@ -100,6 +100,16 @@ void setup_envs(const VData& vdata,
 
 // Main shim dispatch: called when argv[0] is a tool name (not xlings/xim)
 int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
+    // Recursion guard: detect infinite shim re-invocation
+    constexpr int MAX_SHIM_DEPTH = 8;
+    auto depth_str = std::getenv("XLINGS_SHIM_DEPTH");
+    int depth = depth_str ? std::atoi(depth_str) : 0;
+    if (depth >= MAX_SHIM_DEPTH) {
+        std::println(stderr, "xlings: shim recursion detected for '{}' (depth={})", program_name, depth);
+        std::println(stderr, "  hint: the real '{}' binary may not be installed", program_name);
+        return 1;
+    }
+
     auto& cfg = Config::paths();
     auto xlings_home = cfg.homeDir.string();
 
@@ -182,6 +192,9 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         new_argv.push_back(argv[i]);
     }
     new_argv.push_back(nullptr);
+
+    // Increment shim depth before exec so child processes see it
+    platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
 
 #if defined(__linux__) || defined(__APPLE__)
     execvp(exe_path.c_str(), const_cast<char* const*>(new_argv.data()));
