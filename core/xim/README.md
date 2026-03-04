@@ -79,7 +79,7 @@ xlings update
 
 ### sub 索引仓库 mirror 选择位置
 
-- 入口：`/home/runner/work/xlings/xlings/core/xim/repo.cppm` 的 `sync_all_repos()`
+- 入口：`core/xim/repo.cppm` 的 `sync_all_repos()`
   - 读取当前 mirror：`auto mirror = Config::mirror();`
   - 发现 sub 索引仓库：`detail_::discover_sub_repos_(repoDir, mirror)`
 - 具体选择逻辑：同文件 `discover_sub_repos_()`
