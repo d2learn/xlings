@@ -5,6 +5,7 @@ import mcpplibs.xpkg;
 
 import xlings.config;
 import xlings.xim.index;
+import xlings.xim.repo;
 import xlings.xim.types;
 
 namespace xpkg = mcpplibs::xpkg;
@@ -17,6 +18,7 @@ struct RepoIndexSpec {
     std::filesystem::path dir;
     PackageScope scope { PackageScope::Global };
     std::string defaultNamespace;
+    bool requireExplicitNamespace { false };
 };
 
 struct PackageMatch {
@@ -171,14 +173,45 @@ class PackageCatalog {
         }
         auto globalRepos = Config::global_index_repos();
         for (std::size_t i = 0; i < globalRepos.size(); ++i) {
+            auto repoDir = Config::repo_dir_for(globalRepos[i], false);
             specs.push_back({
                 .name = globalRepos[i].name,
                 .url = globalRepos[i].url,
-                .dir = Config::repo_dir_for(globalRepos[i], false),
+                .dir = repoDir,
                 .scope = PackageScope::Global,
                 .defaultNamespace = globalRepos[i].name,
             });
+
+            // Discover sub-index repos from xim-indexrepos.lua
+            auto subRepos = discover_sub_repos(repoDir, Config::mirror());
+            for (auto& sub : subRepos) {
+                auto subDir = Config::global_data_dir() / "sub-indexrepos" / sub.name;
+                if (std::filesystem::exists(subDir / "pkgs")) {
+                    specs.push_back({
+                        .name = sub.name,
+                        .url = sub.url,
+                        .dir = subDir,
+                        .scope = PackageScope::Global,
+                        .defaultNamespace = sub.name,
+                        .requireExplicitNamespace = true,
+                    });
+                }
+            }
         }
+
+        // Local xpkg repo (from add-xpkg command)
+        auto localRepoDir = Config::global_data_dir() / "xim-pkgindex-local";
+        if (std::filesystem::exists(localRepoDir / "pkgs")) {
+            specs.push_back({
+                .name = "local",
+                .url = "",
+                .dir = localRepoDir,
+                .scope = PackageScope::Global,
+                .defaultNamespace = "local",
+                .requireExplicitNamespace = true,
+            });
+        }
+
         return specs;
     }
 
@@ -206,7 +239,13 @@ class PackageCatalog {
 
     static PackageMatch build_match_(RepoState& state,
                                      const detail_::ParsedTarget_& parsed,
-                                     const std::string& platform) {
+                                     const std::string& platform,
+                                     bool forSearch = false) {
+        // For install: non-primary repos require explicit namespace prefix
+        if (!forSearch && state.spec.requireExplicitNamespace && !parsed.explicitNamespace) {
+            return {};
+        }
+
         auto resolved = state.index.resolve(parsed.name);
         if (resolved.empty()) {
             resolved = parsed.name;
@@ -313,7 +352,7 @@ public:
         auto append = [&](std::vector<RepoState>& repos) {
             for (auto& repo : repos) {
                 for (auto& raw : repo.index.search(query)) {
-                    auto match = build_match_(repo, detail_::parse_target_(raw), platform);
+                    auto match = build_match_(repo, detail_::parse_target_(raw), platform, true);
                     if (match.name.empty()) continue;
                     auto key = match.canonicalName + "@" + match.version + ":" + match.repoName;
                     if (seen.insert(key).second) {

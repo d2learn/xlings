@@ -2,6 +2,8 @@ export module xlings.xim.commands;
 
 import std;
 import xlings.xim.types;
+import mcpplibs.xpkg;
+import mcpplibs.xpkg.loader;
 import xlings.xim.catalog;
 import xlings.xim.repo;
 import xlings.xim.resolver;
@@ -11,8 +13,11 @@ import xlings.log;
 import xlings.config;
 import xlings.ui;
 import xlings.i18n;
+import xlings.platform;
 import xlings.xvm.db;
 import xlings.xvm.commands;
+
+namespace xpkg = mcpplibs::xpkg;
 
 export namespace xlings::xim {
 
@@ -63,8 +68,38 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     for (auto& target : targetVec) {
         auto match = catalog.resolve_target(target, platform);
         if (!match) {
-            log::error("{}", match.error());
-            return 1;
+            // Try fuzzy search for suggestions
+            auto fuzzy = catalog.search(target, platform);
+            if (fuzzy.empty()) {
+                log::error("{}", match.error());
+                return 1;
+            }
+            if (fuzzy.size() > 5) fuzzy.resize(5);
+
+            if (fuzzy.size() == 1) {
+                // Single fuzzy match — use it directly
+                match = fuzzy.front();
+            } else if (yes) {
+                // -y mode: auto-select first match
+                match = fuzzy.front();
+            } else {
+                // Interactive selection
+                std::println("did you mean one of these?");
+                for (std::size_t i = 0; i < fuzzy.size(); ++i) {
+                    std::println("  {}. {}@{}", i + 1,
+                                 fuzzy[i].canonicalName, fuzzy[i].version);
+                }
+                std::print("select [1-{}] or 0 to cancel: ", fuzzy.size());
+                std::string input;
+                std::getline(std::cin, input);
+                int choice = 0;
+                try { choice = std::stoi(input); } catch (...) {}
+                if (choice < 1 || choice > static_cast<int>(fuzzy.size())) {
+                    std::println("cancelled");
+                    return 0;
+                }
+                match = fuzzy[static_cast<std::size_t>(choice - 1)];
+            }
         }
         requestedMatches.push_back(*match);
     }
@@ -310,6 +345,52 @@ int cmd_info(const std::string& target) {
 
     std::println("installed:   {}", match->installed ? "yes" : "no");
 
+    return 0;
+}
+
+// === add-xpkg command ===
+int cmd_add_xpkg(const std::string& fileOrUrl) {
+    namespace fs = std::filesystem;
+    auto localRepoDir = Config::global_data_dir() / "xim-pkgindex-local";
+    auto pkgsDir = localRepoDir / "pkgs";
+    fs::create_directories(pkgsDir);
+    fs::path luaFile;
+
+    if (fileOrUrl.starts_with("http://") || fileOrUrl.starts_with("https://")) {
+        auto filename = fileOrUrl.substr(fileOrUrl.rfind('/') + 1);
+        if (auto q = filename.find('?'); q != std::string::npos)
+            filename = filename.substr(0, q);
+        luaFile = pkgsDir / filename;
+        if (fs::exists(luaFile)) fs::remove(luaFile);
+        auto cmd = std::format("curl -fLs --retry 3 -o \"{}\" \"{}\"",
+                               luaFile.string(), fileOrUrl);
+        if (platform::exec(cmd) != 0) {
+            log::error("download failed: {}", fileOrUrl);
+            return 1;
+        }
+    } else {
+        fs::path src(fileOrUrl);
+        if (!src.is_absolute()) src = fs::current_path() / src;
+        if (!fs::exists(src)) {
+            log::error("file not found: {}", src.string());
+            return 1;
+        }
+        luaFile = pkgsDir / src.filename();
+        fs::copy_file(src, luaFile, fs::copy_options::overwrite_existing);
+    }
+
+    // Validate xpkg file
+    auto pkg = xpkg::load_package(luaFile);
+    if (!pkg) {
+        log::error("invalid xpkg: {}", pkg.error());
+        fs::remove(luaFile);
+        return 1;
+    }
+
+    std::println("add xpkg - {}", luaFile.string());
+    // Rebuild index
+    auto& catalog = get_catalog();
+    catalog.rebuild();
     return 0;
 }
 
