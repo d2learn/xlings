@@ -409,6 +409,14 @@ void process_xvm_operations_(const PlanNode& node,
             xvm::add_version(Config::versions_mut(),
                              op.name, ver, p, type, op.filename, op.alias);
 
+            // Write envs from XvmOp into VData
+            if (!op.envs.empty()) {
+                auto& vdata = Config::versions_mut()[op.name].versions[ver];
+                for (auto& [key, val] : op.envs) {
+                    vdata.envs[key] = val;
+                }
+            }
+
             // Activate and create shim for each added program
             if (type == "program") {
                 Config::workspace_mut()[op.name] = ver;
@@ -435,6 +443,8 @@ void process_xvm_operations_(const PlanNode& node,
             xvm::install_headers(op.includedir, sysroot_include);
             auto& vdata = Config::versions_mut()[node.name].versions[node.version];
             vdata.includedir = op.includedir;
+        } else if (op.op == "remove_headers") {
+            xvm::remove_headers(op.includedir, sysroot_include);
         } else if (op.op == "remove") {
             auto& db = Config::versions_mut();
             auto it = db.find(op.name);
