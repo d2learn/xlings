@@ -137,7 +137,8 @@ std::vector<IndexRepo> discover_sub_repos_(const std::filesystem::path& repoDir,
     return repos;
 }
 
-std::string sync_repo_url_(const std::string& url, const std::string& /*mirror*/) {
+std::string sync_repo_url_(const std::string& url, const std::string& mirror [[maybe_unused]]) {
+    // Repo URLs are already resolved by mirror in config/xim-indexrepos.lua.
     return url;
 }
 
