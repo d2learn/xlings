@@ -200,6 +200,8 @@ class PackageCatalog {
         }
 
         // Local xpkg repo (from add-xpkg command)
+        // requireExplicitNamespace = false: local packages should be directly
+        // installable without "local:" prefix for add-xpkg usability
         auto localRepoDir = Config::global_data_dir() / "xim-pkgindex-local";
         if (std::filesystem::exists(localRepoDir / "pkgs")) {
             specs.push_back({
@@ -208,7 +210,6 @@ class PackageCatalog {
                 .dir = localRepoDir,
                 .scope = PackageScope::Global,
                 .defaultNamespace = "local",
-                .requireExplicitNamespace = true,
             });
         }
 
