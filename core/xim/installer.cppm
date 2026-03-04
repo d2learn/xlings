@@ -409,6 +409,14 @@ void process_xvm_operations_(const PlanNode& node,
             xvm::add_version(Config::versions_mut(),
                              op.name, ver, p, type, op.filename, op.alias);
 
+            // Write envs from XvmOp into VData
+            if (!op.envs.empty()) {
+                auto& vdata = Config::versions_mut()[op.name].versions[ver];
+                for (auto& [key, val] : op.envs) {
+                    vdata.envs[key] = val;
+                }
+            }
+
             // Activate and create shim for each added program
             if (type == "program") {
                 Config::workspace_mut()[op.name] = ver;
@@ -435,6 +443,8 @@ void process_xvm_operations_(const PlanNode& node,
             xvm::install_headers(op.includedir, sysroot_include);
             auto& vdata = Config::versions_mut()[node.name].versions[node.version];
             vdata.includedir = op.includedir;
+        } else if (op.op == "remove_headers") {
+            xvm::remove_headers(op.includedir, sysroot_include);
         } else if (op.op == "remove") {
             auto& db = Config::versions_mut();
             auto it = db.find(op.name);
@@ -695,6 +705,7 @@ public:
             task.url = res.url;
             task.sha256 = res.sha256;
             task.destDir = detail_::runtime_dir_(node, dataDir);
+
             if (isXlingsRes) {
                 task.fallbackUrls = detail_::build_xlings_res_fallback_urls_(
                     node.name, version, platform);
@@ -764,6 +775,7 @@ public:
 
             auto planKey = detail_::plan_key_(node);
             auto dlIt = downloadResults.find(planKey);
+
             std::optional<std::filesystem::path> extractedRoot;
             if (plannedDownloads.contains(planKey) && dlIt == downloadResults.end()) {
                 log::error("download artifact missing for {}", node.name);
