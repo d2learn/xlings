@@ -1515,6 +1515,12 @@ TEST(XimSubReposTest, DiscoverSubReposNoFile) {
     fs::remove_all(testDir);
 }
 
+TEST(XimSubReposTest, SyncRepoUrlKeepsGithubOnCNMirror) {
+    auto url = xlings::xim::sync_repo_url(
+        "https://github.com/d2learn/xim-pkgindex-awesome.git", "CN");
+    EXPECT_EQ(url, "https://github.com/d2learn/xim-pkgindex-awesome.git");
+}
+
 // ============================================================
 // xim add-xpkg / local repo tests
 // ============================================================

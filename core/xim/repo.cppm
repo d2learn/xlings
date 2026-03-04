@@ -137,12 +137,20 @@ std::vector<IndexRepo> discover_sub_repos_(const std::filesystem::path& repoDir,
     return repos;
 }
 
+std::string sync_repo_url_(const std::string& url, const std::string& /*mirror*/) {
+    return url;
+}
+
 }  // namespace detail_
 
 // Exported wrapper for discover_sub_repos (used by catalog)
 std::vector<IndexRepo> discover_sub_repos(const std::filesystem::path& repoDir,
                                            const std::string& mirror) {
     return detail_::discover_sub_repos_(repoDir, mirror);
+}
+
+std::string sync_repo_url(const std::string& url, const std::string& mirror) {
+    return detail_::sync_repo_url_(url, mirror);
 }
 
 // Sync a single git repository (clone or pull)
@@ -219,11 +227,7 @@ bool sync_all_repos(bool force = false) {
                 continue;
             }
 
-            std::string url = repo.url;
-            if (mirror == "CN" && url.find("github.com") != std::string::npos) {
-                auto pos = url.find("github.com");
-                url.replace(pos, 10, "gitee.com");
-            }
+            auto url = detail_::sync_repo_url_(repo.url, mirror);
             if (!sync_repo(repoDir, url, force)) {
                 return false;
             }
@@ -239,11 +243,7 @@ bool sync_all_repos(bool force = false) {
         auto subRepos = detail_::discover_sub_repos_(repoDir, mirror);
         for (auto& sub : subRepos) {
             auto subDir = Config::global_data_dir() / "sub-indexrepos" / sub.name;
-            std::string url = sub.url;
-            if (mirror == "CN" && url.find("github.com") != std::string::npos) {
-                auto pos = url.find("github.com");
-                url.replace(pos, 10, "gitee.com");
-            }
+            auto url = detail_::sync_repo_url_(sub.url, mirror);
             if (!sync_repo(subDir, url, force)) {
                 log::warn("failed to sync sub-index repo: {}", sub.name);
                 // Non-fatal: continue with other repos
