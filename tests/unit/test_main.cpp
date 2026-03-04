@@ -762,6 +762,9 @@ TEST(XimCommandsTest, ListWithFilter) {
 TEST(XimCommandsTest, InfoKnownPackage) {
     auto& catalog = xlings::xim::get_catalog();
     if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
+    auto platform = xlings::xim::detect_platform();
+    // gcc fixture only has linux entries; skip on other platforms
+    if (platform != "linux") GTEST_SKIP() << "gcc fixture not available on " << platform;
     auto rc = xlings::xim::cmd_info("gcc");
     EXPECT_EQ(rc, 0);
 }
