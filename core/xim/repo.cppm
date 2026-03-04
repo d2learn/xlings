@@ -109,6 +109,8 @@ std::vector<IndexRepo> discover_sub_repos_(const std::filesystem::path& repoDir,
             // Inside a block - look for closing } or ["KEY"] = "url"
             if (trimmed.starts_with("}")) {
                 // End of block
+                // Mirror selection for sub-index repos happens here:
+                // prefer URL of current mirror key (e.g. CN), fallback to GLOBAL.
                 auto url = mirrorUrl.empty() ? globalUrl : mirrorUrl;
                 if (!url.empty()) {
                     repos.push_back({currentName, url});
