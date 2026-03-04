@@ -174,6 +174,46 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
 
     // Resolve the executable path (try program name, then aliases)
     auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home, vdata->alias);
+
+    if (exe_path.empty() && !vdata->alias.empty()) {
+        // Env alias fallback: prepend bindir to PATH, run alias via system
+        auto expanded_path = expand_path(vdata->path, xlings_home);
+        auto bin_path = (std::filesystem::path(expanded_path) / "bin").string();
+        auto existing_path = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
+        auto cfg_bin = Config::paths().binDir.string();
+
+        std::string new_path;
+        if (std::filesystem::exists(bin_path))
+            new_path = bin_path;
+        if (!expanded_path.empty() && std::filesystem::exists(expanded_path)) {
+            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
+            new_path += expanded_path;
+        }
+        if (!cfg_bin.empty()) {
+            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
+            new_path += cfg_bin;
+        }
+        if (!existing_path.empty()) {
+            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
+            new_path += existing_path;
+        }
+        platform::set_env_variable("PATH", new_path);
+
+        // Setup custom envs
+        setup_envs(*vdata, "", xlings_home);
+
+        platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
+
+        // Build command: alias + original args, run via platform::exec
+        std::string cmd = vdata->alias[0];
+        for (int i = 1; i < argc; ++i) {
+            cmd += " \"";
+            cmd += argv[i];
+            cmd += "\"";
+        }
+        return platform::exec(cmd);
+    }
+
     if (exe_path.empty()) {
         std::println(stderr, "xlings: executable '{}' not found", exec_name);
         std::println(stderr, "  path: {}", expand_path(vdata->path, xlings_home));
