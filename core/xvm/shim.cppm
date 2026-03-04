@@ -183,11 +183,11 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         auto cfg_bin = Config::paths().binDir.string();
 
         std::string new_path;
-        if (std::filesystem::exists(bin_path))
-            new_path = bin_path;
-        if (!expanded_path.empty() && std::filesystem::exists(expanded_path)) {
+        if (!expanded_path.empty() && std::filesystem::exists(expanded_path))
+            new_path = expanded_path;
+        if (std::filesystem::exists(bin_path)) {
             if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
-            new_path += expanded_path;
+            new_path += bin_path;
         }
         if (!cfg_bin.empty()) {
             if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
