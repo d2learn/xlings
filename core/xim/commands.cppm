@@ -353,21 +353,23 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
     namespace fs = std::filesystem;
     auto localRepoDir = Config::global_data_dir() / "xim-pkgindex-local";
     auto pkgsDir = localRepoDir / "pkgs";
-    fs::create_directories(pkgsDir);
     fs::path luaFile;
 
     if (fileOrUrl.starts_with("http://") || fileOrUrl.starts_with("https://")) {
         auto filename = fileOrUrl.substr(fileOrUrl.rfind('/') + 1);
         if (auto q = filename.find('?'); q != std::string::npos)
             filename = filename.substr(0, q);
-        luaFile = pkgsDir / filename;
-        if (fs::exists(luaFile)) fs::remove(luaFile);
+        // Download to temp location first, then move to letter subdir
+        auto tmpFile = pkgsDir / filename;
+        fs::create_directories(pkgsDir);
+        if (fs::exists(tmpFile)) fs::remove(tmpFile);
         auto cmd = std::format("curl -fLs --retry 3 -o \"{}\" \"{}\"",
-                               luaFile.string(), fileOrUrl);
+                               tmpFile.string(), fileOrUrl);
         if (platform::exec(cmd) != 0) {
             log::error("download failed: {}", fileOrUrl);
             return 1;
         }
+        luaFile = tmpFile;
     } else {
         fs::path src(fileOrUrl);
         if (!src.is_absolute()) src = fs::current_path() / src;
@@ -376,6 +378,7 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
             return 1;
         }
         luaFile = pkgsDir / src.filename();
+        fs::create_directories(pkgsDir);
         fs::copy_file(src, luaFile, fs::copy_options::overwrite_existing);
     }
 
@@ -387,9 +390,23 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
         return 1;
     }
 
+    // Move to letter subdirectory (build_index expects pkgs/<letter>/<name>.lua)
+    auto name = pkg->name;
+    if (name.empty()) name = luaFile.stem().string();
+    std::string letter(1, std::tolower(static_cast<unsigned char>(name[0])));
+    auto letterDir = pkgsDir / letter;
+    fs::create_directories(letterDir);
+    auto destFile = letterDir / luaFile.filename();
+    if (destFile != luaFile) {
+        fs::rename(luaFile, destFile);
+        luaFile = destFile;
+    }
+
     std::println("add xpkg - {}", luaFile.string());
-    // Rebuild index
+    // Rebuild index so the new package is immediately available
     auto& catalog = get_catalog();
+    // get_catalog() already triggers a rebuild on first call,
+    // but the local repo was just modified so we need a fresh rebuild
     catalog.rebuild();
     return 0;
 }

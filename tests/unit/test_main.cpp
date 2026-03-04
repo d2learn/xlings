@@ -13,6 +13,7 @@ import xlings.xim.resolver;
 import xlings.xim.downloader;
 import xlings.xim.installer;
 import xlings.xim.commands;
+import xlings.xim.repo;
 import xlings.xvm.types;
 import xlings.xvm.db;
 import xlings.xvm.shim;
@@ -743,25 +744,34 @@ TEST(XimCommandsTest, DetectPlatform) {
 }
 
 TEST(XimCommandsTest, SearchNonexistentReturnsZero) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    // cmd_search uses get_catalog() which loads from Config (global ~/.xlings/data),
+    // not from test fixtures. Skip if catalog cannot load.
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 0);  // returns 0 with "no packages found" message
 }
 
 TEST(XimCommandsTest, ListWithFilter) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_list("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoKnownPackage) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
+    auto platform = xlings::xim::detect_platform();
+    // gcc fixture only has linux entries; skip on other platforms
+    if (platform != "linux") GTEST_SKIP() << "gcc fixture not available on " << platform;
     auto rc = xlings::xim::cmd_info("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoUnknownPackage) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 1);
 }
@@ -1436,6 +1446,152 @@ TEST_F(XvmHeaderSymlinkTest, RemoveHeadersNonexistentDir) {
     // Should not crash with nonexistent source dir
     xlings::xvm::remove_headers("/tmp/nonexistent_dir_xyz_999", sysrootInclude);
     xlings::xvm::remove_headers("", sysrootInclude);
+}
+
+// ============================================================
+// xim sub-index repos tests
+// ============================================================
+
+TEST(XimSubReposTest, DiscoverSubReposFromLuaFile) {
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_subrepo_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir);
+
+    // Write a mock xim-indexrepos.lua
+    std::string lua = R"(xim_indexrepos = {
+    ["awesome"] = {
+        ["GLOBAL"] = "https://github.com/d2learn/xim-pkgindex-awesome.git",
+        ["CN"] = "https://gitee.com/d2learn/xim-pkgindex-awesome.git",
+    },
+    ["scode"] = {
+        ["GLOBAL"] = "https://github.com/d2learn/xim-pkgindex-scode.git",
+    }
+}
+)";
+    xlings::platform::write_string_to_file(
+        (testDir / "xim-indexrepos.lua").string(), lua);
+
+    // Test GLOBAL mirror
+    auto repos = xlings::xim::discover_sub_repos(testDir, "GLOBAL");
+    ASSERT_EQ(repos.size(), 2u);
+    // Order depends on iteration, so check by name
+    bool foundAwesome = false, foundScode = false;
+    for (auto& r : repos) {
+        if (r.name == "awesome") {
+            foundAwesome = true;
+            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-awesome.git");
+        } else if (r.name == "scode") {
+            foundScode = true;
+            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-scode.git");
+        }
+    }
+    EXPECT_TRUE(foundAwesome);
+    EXPECT_TRUE(foundScode);
+
+    // Test CN mirror — awesome should use CN URL, scode falls back to GLOBAL
+    auto reposCN = xlings::xim::discover_sub_repos(testDir, "CN");
+    ASSERT_EQ(reposCN.size(), 2u);
+    for (auto& r : reposCN) {
+        if (r.name == "awesome") {
+            EXPECT_EQ(r.url, "https://gitee.com/d2learn/xim-pkgindex-awesome.git");
+        } else if (r.name == "scode") {
+            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-scode.git");
+        }
+    }
+
+    fs::remove_all(testDir);
+}
+
+TEST(XimSubReposTest, DiscoverSubReposNoFile) {
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_subrepo_empty";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir);
+
+    auto repos = xlings::xim::discover_sub_repos(testDir, "GLOBAL");
+    EXPECT_TRUE(repos.empty());
+
+    fs::remove_all(testDir);
+}
+
+// ============================================================
+// xim add-xpkg / local repo tests
+// ============================================================
+
+TEST(XimAddXpkgTest, LocalRepoLetterSubdir) {
+    // Verify that add-xpkg places files under pkgs/<letter>/ subdirectory
+    // by testing the IndexManager can find packages in that structure
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_addxpkg_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir / "pkgs" / "t");
+
+    // Create a minimal valid xpkg lua file (libxpkg table format)
+    std::string lua = R"(package = {
+    spec = "1",
+    name = "test-pkg",
+    description = "A test package",
+    type = "package",
+    status = "dev",
+    xpm = {
+        linux = {
+            ["1.0.0"] = {
+                url = "https://example.com/test-1.0.0.tar.gz",
+                sha256 = "abc123",
+            },
+        },
+    },
+}
+)";
+    xlings::platform::write_string_to_file(
+        (testDir / "pkgs" / "t" / "test-pkg.lua").string(), lua);
+
+    // Build index — should find the package
+    xlings::xim::IndexManager mgr(testDir);
+    auto result = mgr.rebuild();
+    ASSERT_TRUE(result.has_value()) << result.error();
+    EXPECT_GE(mgr.size(), 1u);
+
+    // Verify entry exists
+    auto* entry = mgr.find_entry("test-pkg");
+    EXPECT_NE(entry, nullptr);
+
+    fs::remove_all(testDir);
+}
+
+TEST(XimAddXpkgTest, FlatPkgsDirNotIndexed) {
+    // Files placed flat in pkgs/ (not in letter subdir) should NOT be found
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_addxpkg_flat_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir / "pkgs");
+
+    std::string lua = R"(package = {
+    spec = "1",
+    name = "flat-pkg",
+    description = "A flat test package",
+    type = "package",
+    status = "dev",
+    xpm = {
+        linux = {
+            ["1.0.0"] = {
+                url = "https://example.com/flat-1.0.0.tar.gz",
+                sha256 = "abc123",
+            },
+        },
+    },
+}
+)";
+    xlings::platform::write_string_to_file(
+        (testDir / "pkgs" / "flat-pkg.lua").string(), lua);
+
+    xlings::xim::IndexManager mgr(testDir);
+    auto result = mgr.rebuild();
+    ASSERT_TRUE(result.has_value()) << result.error();
+    EXPECT_EQ(mgr.size(), 0u);  // flat file not picked up
+
+    fs::remove_all(testDir);
 }
 
 // ============================================================
