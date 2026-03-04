@@ -64,7 +64,86 @@ bool ensure_local_repo_link_(const std::filesystem::path& localDir,
     return true;
 }
 
+// Parse xim-indexrepos.lua to discover sub-index repositories.
+// Format: xim_indexrepos["name"] = { ["GLOBAL"] = "url", ["CN"] = "url" }
+std::vector<IndexRepo> discover_sub_repos_(const std::filesystem::path& repoDir,
+                                            const std::string& mirror) {
+    namespace fs = std::filesystem;
+    auto luaFile = repoDir / "xim-indexrepos.lua";
+    if (!fs::exists(luaFile)) return {};
+
+    std::string content;
+    try {
+        content = platform::read_file_to_string(luaFile.string());
+    } catch (...) {
+        return {};
+    }
+
+    std::vector<IndexRepo> repos;
+    // Simple line-based parser to avoid std::regex in modules
+    // State machine: look for ["name"] = { blocks, then ["KEY"] = "url" inside
+    std::istringstream iss(content);
+    std::string line;
+    std::string currentName;
+    std::string globalUrl, mirrorUrl;
+    bool inBlock = false;
+
+    while (std::getline(iss, line)) {
+        // Trim leading whitespace
+        auto pos = line.find_first_not_of(" \t");
+        if (pos == std::string::npos) continue;
+        auto trimmed = line.substr(pos);
+
+        if (!inBlock) {
+            // Look for ["name"] = {
+            if (trimmed.starts_with("[\"")) {
+                auto endQuote = trimmed.find("\"]", 2);
+                if (endQuote != std::string::npos && trimmed.find("= {") != std::string::npos) {
+                    currentName = trimmed.substr(2, endQuote - 2);
+                    inBlock = true;
+                    globalUrl.clear();
+                    mirrorUrl.clear();
+                }
+            }
+        } else {
+            // Inside a block - look for closing } or ["KEY"] = "url"
+            if (trimmed.starts_with("}")) {
+                // End of block
+                auto url = mirrorUrl.empty() ? globalUrl : mirrorUrl;
+                if (!url.empty()) {
+                    repos.push_back({currentName, url});
+                }
+                inBlock = false;
+            } else if (trimmed.starts_with("[\"")) {
+                auto endQuote = trimmed.find("\"]", 2);
+                if (endQuote != std::string::npos) {
+                    auto key = trimmed.substr(2, endQuote - 2);
+                    // Find the URL value: = "url"
+                    auto eqPos = trimmed.find("= \"", endQuote);
+                    if (eqPos != std::string::npos) {
+                        auto urlStart = eqPos + 3;
+                        auto urlEnd = trimmed.find('"', urlStart);
+                        if (urlEnd != std::string::npos) {
+                            auto val = trimmed.substr(urlStart, urlEnd - urlStart);
+                            if (key == "GLOBAL") globalUrl = val;
+                            if (key == mirror) mirrorUrl = val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return repos;
+}
+
 }  // namespace detail_
+
+// Exported wrapper for discover_sub_repos (used by catalog)
+std::vector<IndexRepo> discover_sub_repos(const std::filesystem::path& repoDir,
+                                           const std::string& mirror) {
+    return detail_::discover_sub_repos_(repoDir, mirror);
+}
 
 // Sync a single git repository (clone or pull)
 // Returns true on success
@@ -153,6 +232,25 @@ bool sync_all_repos(bool force = false) {
     };
 
     if (!syncRepos(Config::global_index_repos(), false)) return false;
+
+    // Discover and sync sub-index repos from each global repo's xim-indexrepos.lua
+    for (auto& repo : Config::global_index_repos()) {
+        auto repoDir = Config::repo_dir_for(repo, false);
+        auto subRepos = detail_::discover_sub_repos_(repoDir, mirror);
+        for (auto& sub : subRepos) {
+            auto subDir = Config::global_data_dir() / "sub-indexrepos" / sub.name;
+            std::string url = sub.url;
+            if (mirror == "CN" && url.find("github.com") != std::string::npos) {
+                auto pos = url.find("github.com");
+                url.replace(pos, 10, "gitee.com");
+            }
+            if (!sync_repo(subDir, url, force)) {
+                log::warn("failed to sync sub-index repo: {}", sub.name);
+                // Non-fatal: continue with other repos
+            }
+        }
+    }
+
     if (Config::has_project_config() && !Config::project_index_repos().empty()) {
         if (!syncRepos(Config::project_index_repos(), true)) return false;
     }

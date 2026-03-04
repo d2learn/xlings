@@ -95,6 +95,7 @@ export int run(int argc, char* argv[]) {
             std::println("    {}  {}", pad("search", 12), "Search for packages");
             std::println("    {}  {}", pad("list", 12), "List installed packages");
             std::println("    {}  {}", pad("info", 12), "Show package information");
+            std::println("    {}  {}", pad("add-xpkg", 12), "Add xpkg file to package index");
             std::println("    {}  {}", pad("use", 12), "Switch tool version");
             std::println("    {}  {}", pad("config", 12), "Show xlings configuration");
             std::println("    {}  {}", pad("subos", 12), "Manage sub-OS environments");
@@ -105,6 +106,10 @@ export int run(int argc, char* argv[]) {
         if (cmd == "--version") {
             std::println("xlings {}", Info::VERSION);
             return 0;
+        }
+
+        if (cmd == "--add-xpkg" && argc >= 3) {
+            return xim::cmd_add_xpkg(std::string(argv[2]));
         }
 
         if (cmd == "subos") return subos::run(argc, argv);
@@ -211,6 +216,15 @@ export int run(int argc, char* argv[]) {
             .action([](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 return xim::cmd_info(std::string(args.positional(0)));
+            })
+
+        // add-xpkg
+        .subcommand("add-xpkg")
+            .description("Add xpkg file to package index")
+            .arg("file").required().help("Path or URL to .lua xpkg file")
+            .action([](const cmdline::ParsedArgs& args) -> int {
+                apply_global_opts_(args);
+                return xim::cmd_add_xpkg(std::string(args.positional(0)));
             })
 
         // use

@@ -59,7 +59,7 @@ DownloadResult download_one(const DownloadTask& task) {
     for (auto& tryUrl : urls) {
         log::info("downloading {} from {}", task.name, tryUrl);
         auto cmd = std::format(
-            "curl -fL# --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            "curl -fLs --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
             destFile.string(), tryUrl);
         auto rc = platform::exec(cmd);
         if (rc == 0) {
