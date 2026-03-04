@@ -744,25 +744,31 @@ TEST(XimCommandsTest, DetectPlatform) {
 }
 
 TEST(XimCommandsTest, SearchNonexistentReturnsZero) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    // cmd_search uses get_catalog() which loads from Config (global ~/.xlings/data),
+    // not from test fixtures. Skip if catalog cannot load.
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 0);  // returns 0 with "no packages found" message
 }
 
 TEST(XimCommandsTest, ListWithFilter) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_list("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoKnownPackage) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_info("gcc");
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoUnknownPackage) {
-    if (!find_pkgindex_repo()) GTEST_SKIP() << "xim-pkgindex repo not available";
+    auto& catalog = xlings::xim::get_catalog();
+    if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
     auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999");
     EXPECT_EQ(rc, 1);
 }
