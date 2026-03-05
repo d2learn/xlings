@@ -799,15 +799,19 @@ public:
                 }
                 continue;
             }
+            // run_dir is the user's working directory (where xlings was invoked),
+            // not the download/runtime directory. Hooks use it for resolving
+            // relative paths and determining project install locations.
+            ctx.run_dir = std::filesystem::current_path();
+
             if (dlIt != downloadResults.end()) {
                 ctx.install_file = dlIt->second.localFile;
-                ctx.run_dir = dlIt->second.localFile.parent_path();
                 if (detail_::is_archive_(dlIt->second.localFile)) {
                     if (onStatus) {
                         onStatus({ node.name, InstallPhase::Extracting, 0.35f, "" });
                     }
                     // Extract into the same runtime dir as the download
-                    auto runtimeDir = ctx.run_dir;
+                    auto runtimeDir = dlIt->second.localFile.parent_path();
                     auto extracted = extract_archive(dlIt->second.localFile, runtimeDir);
                     if (!extracted) {
                         log::error("extract failed for {}: {}", node.name, extracted.error());
@@ -820,7 +824,6 @@ public:
                 }
             } else {
                 ctx.install_file = node.pkgFile;
-                ctx.run_dir = ctx.install_dir;
             }
 
             // Ensure install_dir exists so hooks can mv/cp into it
@@ -844,7 +847,13 @@ public:
             // Run install hook
             if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
                 log::info("installing {}...", node.name);
-                detail_::ScopedCurrentDir_ installCwd(ctx.run_dir);
+                // Set cwd to the download/runtime directory so hooks can
+                // find downloaded files via relative paths.  ctx.run_dir
+                // (user's original cwd) is exposed via system.rundir().
+                auto hookCwd = (dlIt != downloadResults.end())
+                    ? dlIt->second.localFile.parent_path()
+                    : ctx.install_dir;
+                detail_::ScopedCurrentDir_ installCwd(hookCwd);
                 auto hookResult = executor.run_hook(
                     mcpplibs::xpkg::HookType::Install, ctx);
                 if (!hookResult.success) {
