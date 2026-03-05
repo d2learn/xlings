@@ -430,9 +430,9 @@ int cmd_update(const std::string& target) {
         return 1;
     }
 
-    // Rebuild index
+    // Force rebuild index (writes fresh cache)
     auto& catalog = get_catalog();
-    auto result = catalog.rebuild();
+    auto result = catalog.rebuild(true);
     if (!result) {
         log::error("failed to rebuild catalog: {}", result.error());
         return 1;

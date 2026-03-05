@@ -358,4 +358,34 @@ bool sync_all_repos(bool force = false) {
     return true;
 }
 
+// Read the git HEAD hash for a repo directory.
+// Returns empty string for non-git repos or on any error.
+std::string get_repo_head_hash(const std::filesystem::path& repoDir) {
+    namespace fs = std::filesystem;
+    auto headFile = repoDir / ".git" / "HEAD";
+    if (!fs::exists(headFile)) return {};
+
+    try {
+        auto content = platform::read_file_to_string(headFile.string());
+        // Trim trailing whitespace/newlines
+        while (!content.empty() && (content.back() == '\n' || content.back() == '\r' || content.back() == ' '))
+            content.pop_back();
+
+        // Direct hash (detached HEAD)
+        if (!content.starts_with("ref: ")) return content;
+
+        // Symbolic ref: read the referenced file
+        auto ref = content.substr(5);
+        auto refFile = repoDir / ".git" / ref;
+        if (!fs::exists(refFile)) return {};
+
+        auto hash = platform::read_file_to_string(refFile.string());
+        while (!hash.empty() && (hash.back() == '\n' || hash.back() == '\r' || hash.back() == ' '))
+            hash.pop_back();
+        return hash;
+    } catch (...) {
+        return {};
+    }
+}
+
 } // namespace xlings::xim
