@@ -112,6 +112,21 @@ export int run(int argc, char* argv[]) {
             return xim::cmd_add_xpkg(std::string(argv[2]));
         }
 
+        // Legacy aliases: xim -i/-r used by libxpkg pkgmanager module
+        if (cmd == "-i" || cmd == "-r") {
+            std::vector<std::string> targets;
+            bool yes = false;
+            for (int i = 2; i < argc; ++i) {
+                std::string arg{argv[i]};
+                if (arg == "-y" || arg == "--yes") { yes = true; continue; }
+                if (arg == "--disable-info") continue;
+                targets.push_back(std::move(arg));
+            }
+            if (cmd == "-i") return xim::cmd_install(targets, yes, false);
+            if (cmd == "-r" && !targets.empty()) return xim::cmd_remove(targets[0]);
+            return 1;
+        }
+
         if (cmd == "subos") return subos::run(argc, argv);
         if (cmd == "self") return xself::run(argc, argv);
         if (cmd == "script") {
