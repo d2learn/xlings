@@ -320,13 +320,16 @@ export int cmd_install() {
 
     std::error_code ec;
 
-    // 1. Remove non-user dirs; preserve data/subos unless user chose overwrite
+    // 1. Remove non-user dirs; preserve data/subos and .xlings.json unless user chose overwrite
     if (fs::exists(targetHome)) {
         for (auto& entry : platform::dir_entries(targetHome)) {
             auto name = entry.path().filename().string();
             if (name == "data" || name == "subos") {
                 if (!overwriteDataSubos) continue;
             }
+            // Preserve .xlings.json — it contains the xvm versions DB and user config.
+            // We merge the new version into it after copying (step 2).
+            if (name == ".xlings.json" && !overwriteDataSubos) continue;
             fs::remove_all(entry.path(), ec);
             ec.clear();
         }
@@ -344,6 +347,10 @@ export int cmd_install() {
                 continue;  // 已有 subos 则完全保留，不合并（多 subos 且 bin 等无需覆盖）
             }
         }
+        // Skip .xlings.json when preserved — we update version below
+        if (name == ".xlings.json" && !overwriteDataSubos && fs::exists(targetHome / name)) {
+            continue;
+        }
         auto target = targetHome / name;
         if (entry.is_directory()) {
             fs::copy(entry.path(), target,
@@ -355,6 +362,21 @@ export int cmd_install() {
             std::println(stderr, "[xlings:self] copy failed: {} -> {} ({})",
                          entry.path().string(), target.string(), ec.message());
             ec.clear();
+        }
+    }
+
+    // 2b. Update version in preserved .xlings.json
+    {
+        auto configPath = targetHome / ".xlings.json";
+        if (fs::exists(configPath) && !pkgVersion.empty()) {
+            try {
+                auto content = platform::read_file_to_string(configPath.string());
+                auto json = nlohmann::json::parse(content, nullptr, false);
+                if (!json.is_discarded() && json.is_object()) {
+                    json["version"] = "v" + pkgVersion;
+                    platform::write_string_to_file(configPath.string(), json.dump(2));
+                }
+            } catch (...) {}
         }
     }
 
