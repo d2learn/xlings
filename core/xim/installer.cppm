@@ -53,7 +53,7 @@ std::filesystem::path runtime_dir_(const PlanNode& node,
                                    const std::filesystem::path& fallbackDataDir) {
     auto targetRoot = node.storeRoot.empty() ? (fallbackDataDir / "xpkgs") : node.storeRoot;
     auto dataRoot = data_root_for_(targetRoot);
-    return dataRoot / "runtimedir" / effective_store_name_(node) / node.version;
+    return dataRoot / "runtimedir";
 }
 
 bool is_archive_(const std::filesystem::path& path) {
@@ -397,6 +397,18 @@ void process_xvm_operations_(const PlanNode& node,
     if (!std::filesystem::exists(xlings_bin))
         xlings_bin = paths.homeDir / "xlings";
 
+    // Determine namespace for version keys: primary repo gets bare versions,
+    // other repos get "ns:version" to allow coexistence.
+    std::string version_ns;
+    {
+        auto& globalRepos = Config::global_index_repos();
+        bool isPrimary = !globalRepos.empty()
+            && node.namespaceName == globalRepos[0].name;
+        if (!isPrimary && !node.namespaceName.empty()) {
+            version_ns = node.namespaceName;
+        }
+    }
+
     for (auto& op : xvm_ops) {
         if (op.op == "add") {
             std::string ver = op.version.empty() ? node.version : op.version;
@@ -407,11 +419,13 @@ void process_xvm_operations_(const PlanNode& node,
                 : op.bindir;
             std::string type = op.type.empty() ? "program" : op.type;
             xvm::add_version(Config::versions_mut(),
-                             op.name, ver, p, type, op.filename, op.alias);
+                             op.name, ver, p, type, op.filename, op.alias,
+                             version_ns);
 
             // Write envs from XvmOp into VData
+            auto ver_key = xvm::make_ns_version(version_ns, ver);
             if (!op.envs.empty()) {
-                auto& vdata = Config::versions_mut()[op.name].versions[ver];
+                auto& vdata = Config::versions_mut()[op.name].versions[ver_key];
                 for (auto& [key, val] : op.envs) {
                     vdata.envs[key] = val;
                 }
@@ -419,7 +433,7 @@ void process_xvm_operations_(const PlanNode& node,
 
             // Activate and create shim for each added program
             if (type == "program") {
-                Config::workspace_mut()[op.name] = ver;
+                Config::workspace_mut()[op.name] = ver_key;
                 if (std::filesystem::exists(xlings_bin)) {
                     std::string shim_name = op.name;
                     if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
@@ -441,7 +455,8 @@ void process_xvm_operations_(const PlanNode& node,
             }
         } else if (op.op == "headers") {
             xvm::install_headers(op.includedir, sysroot_include);
-            auto& vdata = Config::versions_mut()[node.name].versions[node.version];
+            auto hdr_ver_key = xvm::make_ns_version(version_ns, node.version);
+            auto& vdata = Config::versions_mut()[node.name].versions[hdr_ver_key];
             vdata.includedir = op.includedir;
         } else if (op.op == "remove_headers") {
             xvm::remove_headers(op.includedir, sysroot_include);

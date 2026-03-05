@@ -8,6 +8,70 @@ import xlings.config;
 
 export namespace xlings::xim {
 
+// Check if a URL is a git repository URL
+bool is_git_url(const std::string& url) {
+    return url.ends_with(".git");
+}
+
+// Clone a git repository
+DownloadResult git_clone_one(const DownloadTask& task) {
+    namespace fs = std::filesystem;
+
+    DownloadResult result;
+    result.name = task.name;
+
+    // Ensure dest directory exists
+    std::error_code ec;
+    fs::create_directories(task.destDir, ec);
+    if (ec) {
+        result.error = std::format("failed to create directory {}: {}",
+                                   task.destDir.string(), ec.message());
+        return result;
+    }
+
+    // Derive directory name from URL: "https://github.com/user/repo.git" -> "repo"
+    std::string url = task.url;
+    std::string repoName;
+    auto lastSlash = url.rfind('/');
+    if (lastSlash != std::string::npos) {
+        repoName = url.substr(lastSlash + 1);
+        if (repoName.ends_with(".git")) {
+            repoName = repoName.substr(0, repoName.size() - 4);
+        }
+    }
+    if (repoName.empty()) repoName = task.name;
+
+    auto destDir = task.destDir / repoName;
+    result.localFile = destDir;
+
+    // If already cloned, pull latest
+    if (fs::exists(destDir / ".git")) {
+        log::info("already cloned {}, pulling latest...", task.name);
+        auto cmd = std::format("git -C \"{}\" pull --ff-only", destDir.string());
+        auto rc = platform::exec(cmd);
+        if (rc == 0) {
+            result.success = true;
+            return result;
+        }
+        // Pull failed, remove and re-clone
+        log::warn("pull failed for {}, re-cloning...", task.name);
+        fs::remove_all(destDir, ec);
+    }
+
+    log::info("cloning {} from {}", task.name, url);
+    auto cmd = std::format(
+        "git clone --depth 1 --recursive \"{}\" \"{}\"",
+        url, destDir.string());
+    auto rc = platform::exec(cmd);
+    if (rc != 0) {
+        result.error = std::format("git clone failed (rc={})", rc);
+        return result;
+    }
+
+    result.success = true;
+    return result;
+}
+
 // Download a single file using curl
 DownloadResult download_one(const DownloadTask& task) {
     namespace fs = std::filesystem;
@@ -22,6 +86,11 @@ DownloadResult download_one(const DownloadTask& task) {
         result.error = std::format("failed to create directory {}: {}",
                                    task.destDir.string(), ec.message());
         return result;
+    }
+
+    // Git clone for .git URLs
+    if (is_git_url(task.url)) {
+        return git_clone_one(task);
     }
 
     // Extract filename from URL

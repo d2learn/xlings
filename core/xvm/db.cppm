@@ -7,38 +7,82 @@ import xlings.json;
 
 export namespace xlings::xvm {
 
-// Add or update a version entry in the database
+// Parse "ns:ver" into (namespace, version). Plain "ver" → ("", "ver").
+std::pair<std::string, std::string> parse_ns_version(const std::string& s) {
+    auto pos = s.find(':');
+    if (pos == std::string::npos) return {"", s};
+    return {s.substr(0, pos), s.substr(pos + 1)};
+}
+
+// Build "ns:ver" from namespace and version. Empty namespace → plain "ver".
+std::string make_ns_version(const std::string& ns, const std::string& ver) {
+    if (ns.empty()) return ver;
+    return ns + ":" + ver;
+}
+
+// Strip namespace prefix, returning bare version.
+std::string strip_namespace(const std::string& s) {
+    return parse_ns_version(s).second;
+}
+
+// Get namespace prefix (empty if none).
+std::string get_namespace(const std::string& s) {
+    return parse_ns_version(s).first;
+}
+
+// Add or update a version entry in the database.
+// If ns is non-empty, the version key becomes "ns:version".
 void add_version(VersionDB& db,
                  const std::string& target,
                  const std::string& version,
                  const std::string& path,
                  const std::string& type = "program",
                  const std::string& filename = "",
-                 const std::string& alias = "") {
+                 const std::string& alias = "",
+                 const std::string& ns = "") {
     auto& info = db[target];
     if (info.type.empty()) info.type = type;
     if (info.filename.empty() && !filename.empty()) info.filename = filename;
 
+    auto ver_key = make_ns_version(ns, version);
     VData vdata;
     vdata.path = path;
     if (!alias.empty()) vdata.alias.push_back(alias);
-    info.versions[version] = std::move(vdata);
+    info.versions[ver_key] = std::move(vdata);
 }
 
-// Remove a version from the database
+// Remove a version from the database.
+// Matches exact key first, then tries "ns:version" patterns for bare version input.
 void remove_version(VersionDB& db,
                     const std::string& target,
                     const std::string& version) {
     auto it = db.find(target);
     if (it == db.end()) return;
-    it->second.versions.erase(version);
-    if (it->second.versions.empty()) {
-        db.erase(it);
+    auto& vers = it->second.versions;
+
+    // Exact match
+    if (vers.erase(version)) {
+        if (vers.empty()) db.erase(it);
+        return;
+    }
+
+    // If bare version given, try removing any "ns:version" that matches
+    if (version.find(':') == std::string::npos) {
+        for (auto vit = vers.begin(); vit != vers.end(); ++vit) {
+            if (strip_namespace(vit->first) == version) {
+                vers.erase(vit);
+                if (vers.empty()) db.erase(it);
+                return;
+            }
+        }
     }
 }
 
-// Fuzzy version match: "15" -> "15.1.0", "14.2" -> "14.2.0"
-// Returns the best matching full version string, or empty if not found.
+// Fuzzy version match: "15" -> "15.1.0", "ns:14.2" -> "ns:14.2.0"
+// Matching priority:
+//   1. Exact match
+//   2. If namespace specified: prefix-match only within that namespace
+//   3. If no namespace: prefer bare (unqualified) versions, then fallback to any namespace
 std::string match_version(const VersionDB& db,
                           const std::string& target,
                           const std::string& prefix) {
@@ -50,7 +94,8 @@ std::string match_version(const VersionDB& db,
     // Exact match first
     if (versions.contains(prefix)) return prefix;
 
-    // Prefix match: split input by '.', match leading components
+    auto [input_ns, input_ver] = parse_ns_version(prefix);
+
     auto split = [](const std::string& s) -> std::vector<std::string> {
         std::vector<std::string> parts;
         std::istringstream iss(s);
@@ -61,39 +106,66 @@ std::string match_version(const VersionDB& db,
         return parts;
     };
 
-    auto input_parts = split(prefix);
-    std::vector<std::string> candidates;
-
-    for (auto& [ver, _] : versions) {
-        auto ver_parts = split(ver);
-        if (ver_parts.size() < input_parts.size()) continue;
-
-        bool match = true;
-        for (std::size_t i = 0; i < input_parts.size(); ++i) {
-            if (input_parts[i] != ver_parts[i]) {
-                match = false;
-                break;
+    auto sort_desc = [&](std::vector<std::string>& candidates) {
+        std::ranges::sort(candidates, [&](const std::string& a, const std::string& b) {
+            auto pa = split(strip_namespace(a));
+            auto pb = split(strip_namespace(b));
+            for (std::size_t i = 0; i < std::min(pa.size(), pb.size()); ++i) {
+                int na = 0, nb = 0;
+                std::from_chars(pa[i].data(), pa[i].data() + pa[i].size(), na);
+                std::from_chars(pb[i].data(), pb[i].data() + pb[i].size(), nb);
+                if (na != nb) return na > nb;
             }
+            return pa.size() > pb.size();
+        });
+    };
+
+    auto input_parts = split(input_ver);
+
+    auto prefix_matches = [&](const std::string& bare_ver) -> bool {
+        auto ver_parts = split(bare_ver);
+        if (ver_parts.size() < input_parts.size()) return false;
+        for (std::size_t i = 0; i < input_parts.size(); ++i) {
+            if (input_parts[i] != ver_parts[i]) return false;
         }
-        if (match) candidates.push_back(ver);
+        return true;
+    };
+
+    // If namespace specified, only match within that namespace
+    if (!input_ns.empty()) {
+        std::vector<std::string> candidates;
+        for (auto& [ver, _] : versions) {
+            auto [ver_ns, bare_ver] = parse_ns_version(ver);
+            if (ver_ns == input_ns && prefix_matches(bare_ver))
+                candidates.push_back(ver);
+        }
+        if (candidates.empty()) return {};
+        sort_desc(candidates);
+        return candidates[0];
     }
 
-    if (candidates.empty()) return {};
-
-    // Sort descending by version components, return highest
-    std::ranges::sort(candidates, [&](const std::string& a, const std::string& b) {
-        auto pa = split(a);
-        auto pb = split(b);
-        for (std::size_t i = 0; i < std::min(pa.size(), pb.size()); ++i) {
-            int na = 0, nb = 0;
-            std::from_chars(pa[i].data(), pa[i].data() + pa[i].size(), na);
-            std::from_chars(pb[i].data(), pb[i].data() + pb[i].size(), nb);
-            if (na != nb) return na > nb;
+    // No namespace: prefer bare (unqualified) versions first
+    std::vector<std::string> bare_candidates;
+    std::vector<std::string> ns_candidates;
+    for (auto& [ver, _] : versions) {
+        auto [ver_ns, bare_ver] = parse_ns_version(ver);
+        if (prefix_matches(bare_ver)) {
+            if (ver_ns.empty())
+                bare_candidates.push_back(ver);
+            else
+                ns_candidates.push_back(ver);
         }
-        return pa.size() > pb.size();
-    });
+    }
 
-    return candidates[0];
+    if (!bare_candidates.empty()) {
+        sort_desc(bare_candidates);
+        return bare_candidates[0];
+    }
+    if (!ns_candidates.empty()) {
+        sort_desc(ns_candidates);
+        return ns_candidates[0];
+    }
+    return {};
 }
 
 // Get the active version for a target from a workspace
