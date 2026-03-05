@@ -112,6 +112,14 @@ jobs:
         run: |
           bash tests/e2e/project_e2e_test.sh
 
+      - name: "E2E-06: Sub-Index Search + pkgindex-build"
+        run: |
+          bash tests/e2e/sub_index_search_test.sh
+
+      - name: "E2E-07: Sub-Index Install (namespace + bare name)"
+        run: |
+          bash tests/e2e/sub_index_install_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
