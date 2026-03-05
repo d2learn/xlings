@@ -327,13 +327,14 @@ class PackageCatalog {
     }
 
 public:
-    std::expected<void, std::string> rebuild() {
+    std::expected<void, std::string> rebuild(bool forceRebuild = false) {
         projectRepos_.clear();
         globalRepos_.clear();
 
         for (auto& spec : repo_specs_()) {
             auto state = make_state_(spec);
-            auto result = state.index.rebuild();
+            auto hash = get_repo_head_hash(spec.dir);
+            auto result = state.index.load_or_rebuild(hash, forceRebuild);
             if (!result) {
                 return std::unexpected(result.error());
             }

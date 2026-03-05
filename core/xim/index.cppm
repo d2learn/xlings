@@ -4,11 +4,118 @@ import std;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.loader;
 import mcpplibs.xpkg.index;
+import xlings.json;
 import xlings.log;
 import xlings.config;
+import xlings.platform;
 
 // All libxpkg functions live in mcpplibs::xpkg namespace regardless of module name
 namespace xpkg = mcpplibs::xpkg;
+
+namespace xlings::xim::cache_detail_ {
+
+constexpr int CACHE_FORMAT_VERSION = 1;
+
+int type_to_int(xpkg::PackageType t) {
+    return static_cast<int>(t);
+}
+
+xpkg::PackageType int_to_type(int v) {
+    switch (v) {
+        case 1: return xpkg::PackageType::Script;
+        case 2: return xpkg::PackageType::Template;
+        case 3: return xpkg::PackageType::Config;
+        default: return xpkg::PackageType::Package;
+    }
+}
+
+bool save_index_cache(const xpkg::PackageIndex& index,
+                      const std::filesystem::path& cacheFile,
+                      const std::string& repoHeadHash) {
+    try {
+        nlohmann::json entries = nlohmann::json::object();
+        for (auto& [key, entry] : index.entries) {
+            entries[key] = {
+                {"name", entry.name},
+                {"version", entry.version},
+                {"path", entry.path.string()},
+                {"type", type_to_int(entry.type)},
+                {"description", entry.description},
+                {"ref", entry.ref}
+            };
+        }
+
+        nlohmann::json mutexGroups = nlohmann::json::object();
+        for (auto& [gkey, members] : index.mutex_groups) {
+            mutexGroups[gkey] = members;
+        }
+
+        nlohmann::json root = {
+            {"version", CACHE_FORMAT_VERSION},
+            {"repo_head_hash", repoHeadHash},
+            {"entries", std::move(entries)},
+            {"mutex_groups", std::move(mutexGroups)}
+        };
+
+        std::filesystem::create_directories(cacheFile.parent_path());
+        platform::write_string_to_file(cacheFile.string(), root.dump());
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+struct CacheResult {
+    std::string repoHeadHash;
+    bool valid { false };
+};
+
+CacheResult load_index_cache(const std::filesystem::path& cacheFile,
+                             xpkg::PackageIndex& index) {
+    CacheResult result;
+    if (!std::filesystem::exists(cacheFile)) return result;
+
+    try {
+        auto content = platform::read_file_to_string(cacheFile.string());
+        auto root = nlohmann::json::parse(content, nullptr, false);
+        if (root.is_discarded() || !root.is_object()) return result;
+
+        if (root.value("version", 0) != CACHE_FORMAT_VERSION) return result;
+
+        result.repoHeadHash = root.value("repo_head_hash", "");
+
+        if (root.contains("entries") && root["entries"].is_object()) {
+            for (auto it = root["entries"].begin(); it != root["entries"].end(); ++it) {
+                auto& val = it.value();
+                xpkg::IndexEntry entry;
+                entry.name        = val.value("name", "");
+                entry.version     = val.value("version", "");
+                entry.path        = std::filesystem::path(val.value("path", ""));
+                entry.type        = int_to_type(val.value("type", 0));
+                entry.description = val.value("description", "");
+                entry.ref         = val.value("ref", "");
+                index.entries[it.key()] = std::move(entry);
+            }
+        }
+
+        if (root.contains("mutex_groups") && root["mutex_groups"].is_object()) {
+            for (auto it = root["mutex_groups"].begin(); it != root["mutex_groups"].end(); ++it) {
+                std::vector<std::string> members;
+                for (auto& m : it.value()) {
+                    members.push_back(m.get<std::string>());
+                }
+                index.mutex_groups[it.key()] = std::move(members);
+            }
+        }
+
+        result.valid = true;
+    } catch (...) {
+        // Corrupt cache — caller will rebuild
+    }
+    return result;
+}
+
+}  // namespace xlings::xim::cache_detail_
 
 export namespace xlings::xim {
 
@@ -52,6 +159,40 @@ public:
         loaded_ = true;
 
         log::info("index built: {} entries", index_.entries.size());
+        return {};
+    }
+
+    // Load from cache if valid, else rebuild and save cache.
+    std::expected<void, std::string> load_or_rebuild(
+            const std::string& repoHeadHash,
+            bool forceRebuild = false) {
+        if (repoDir_.empty()) {
+            return std::unexpected("repo directory not set");
+        }
+
+        auto cacheFile = repoDir_ / ".xlings-index-cache.json";
+
+        // Try loading from cache (unless forced or no git hash)
+        if (!forceRebuild && !repoHeadHash.empty()) {
+            xpkg::PackageIndex cached;
+            auto cacheResult = cache_detail_::load_index_cache(cacheFile, cached);
+            if (cacheResult.valid && cacheResult.repoHeadHash == repoHeadHash) {
+                index_ = std::move(cached);
+                loaded_ = true;
+                log::info("index loaded from cache: {} entries", index_.entries.size());
+                return {};
+            }
+        }
+
+        // Cache miss or forced: full rebuild
+        auto result = rebuild();
+        if (!result) return result;
+
+        // Save cache (best effort)
+        if (!cache_detail_::save_index_cache(index_, cacheFile, repoHeadHash)) {
+            log::warn("failed to save index cache for {}", repoDir_.string());
+        }
+
         return {};
     }
 
