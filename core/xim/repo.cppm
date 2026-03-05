@@ -4,6 +4,7 @@ module;
 export module xlings.xim.repo;
 
 import std;
+import xlings.json;
 import xlings.log;
 import xlings.platform;
 import xlings.config;
@@ -210,6 +211,88 @@ bool sync_repo(const std::filesystem::path& localDir,
     return true;
 }
 
+// Extract repo directory name from URL (matches Lua _to_repodir behavior)
+// e.g. "https://github.com/d2learn/xim-pkgindex-d2x.git" -> "xim-pkgindex-d2x"
+std::string url_to_dirname(const std::string& url) {
+    auto name = std::filesystem::path(url).stem().string();
+    if (name.empty()) {
+        // fallback: strip trailing .git and take last path component
+        auto tmp = url;
+        if (tmp.ends_with(".git")) tmp.resize(tmp.size() - 4);
+        auto pos = tmp.find_last_of('/');
+        name = pos != std::string::npos ? tmp.substr(pos + 1) : tmp;
+    }
+    return name;
+}
+
+// Load sub-repos from the JSON file (written by sync or Lua RepoManager)
+std::vector<IndexRepo> load_sub_repos_json(const std::filesystem::path& jsonFile) {
+    namespace fs = std::filesystem;
+    if (!fs::exists(jsonFile)) return {};
+
+    try {
+        auto content = platform::read_file_to_string(jsonFile.string());
+        auto json = nlohmann::json::parse(content, nullptr, false);
+        if (json.is_discarded() || !json.is_object()) return {};
+
+        std::vector<IndexRepo> repos;
+        for (auto it = json.begin(); it != json.end(); ++it) {
+            if (!it.value().is_string()) continue;
+            auto url = it.value().get<std::string>();
+            if (!url.empty()) {
+                repos.push_back({it.key(), url});
+            }
+        }
+        return repos;
+    } catch (...) {
+        return {};
+    }
+}
+
+// Save sub-repos to JSON file
+void save_sub_repos_json(const std::filesystem::path& jsonFile,
+                         const std::vector<IndexRepo>& repos) {
+    nlohmann::json json = nlohmann::json::object();
+    for (auto& repo : repos) {
+        json[repo.name] = repo.url;
+    }
+    try {
+        std::filesystem::create_directories(jsonFile.parent_path());
+        platform::write_string_to_file(jsonFile.string(), json.dump(2));
+    } catch (...) {
+        log::warn("failed to save sub-repos JSON: {}", jsonFile.string());
+    }
+}
+
+// Get the sub-repos index directory
+std::filesystem::path sub_repos_dir() {
+    return Config::global_data_dir() / "xim-index-repos";
+}
+
+// Get the sub-repos JSON file path
+std::filesystem::path sub_repos_json_path() {
+    return sub_repos_dir() / "xim-indexrepos.json";
+}
+
+// Get directory for a sub-repo
+std::filesystem::path sub_repo_dir_for(const IndexRepo& repo) {
+    return sub_repos_dir() / url_to_dirname(repo.url);
+}
+
+// Return all discovered global sub-repos (for use by PackageCatalog)
+std::vector<IndexRepo> discovered_global_sub_repos() {
+    return load_sub_repos_json(sub_repos_json_path());
+}
+
+// Get the main index repo directory path (always global)
+std::filesystem::path main_repo_dir() {
+    auto& repos = Config::global_index_repos();
+    if (!repos.empty()) {
+        return Config::repo_dir_for(repos[0], false);
+    }
+    return Config::global_data_dir() / "xim-pkgindex";
+}
+
 // Sync all configured repos.
 // Global repos live under XLINGS_HOME/data, project repos under project .xlings/data.
 bool sync_all_repos(bool force = false) {
@@ -240,33 +323,39 @@ bool sync_all_repos(bool force = false) {
 
     if (!syncRepos(Config::global_index_repos(), false)) return false;
 
-    // Discover and sync sub-index repos from each global repo's xim-indexrepos.lua
-    for (auto& repo : Config::global_index_repos()) {
-        auto repoDir = Config::repo_dir_for(repo, false);
-        auto subRepos = detail_::discover_sub_repos_(repoDir, mirror);
-        for (auto& sub : subRepos) {
-            auto subDir = Config::global_data_dir() / "sub-indexrepos" / sub.name;
-            auto url = detail_::sync_repo_url_(sub.url, mirror);
-            if (!sync_repo(subDir, url, force)) {
-                log::warn("failed to sync sub-index repo: {}", sub.name);
-                // Non-fatal: continue with other repos
-            }
+    // Discover and sync sub-index repos from the main repo's xim-indexrepos.lua
+    auto mainDir = main_repo_dir();
+    auto luaSubRepos = detail_::discover_sub_repos_(mainDir, mirror.empty() ? "GLOBAL" : mirror);
+    auto jsonSubRepos = load_sub_repos_json(sub_repos_json_path());
+
+    // Merge: Lua-discovered repos + locally-added JSON repos (JSON overrides)
+    std::unordered_map<std::string, IndexRepo> merged;
+    for (auto& repo : luaSubRepos) merged[repo.name] = repo;
+    for (auto& repo : jsonSubRepos) merged[repo.name] = repo;
+
+    std::vector<IndexRepo> allSubRepos;
+    std::vector<IndexRepo> syncedSubRepos;
+    for (auto& [name, repo] : merged) allSubRepos.push_back(repo);
+
+    auto subReposRoot = sub_repos_dir();
+    fs::create_directories(subReposRoot);
+
+    for (auto& repo : allSubRepos) {
+        auto repoDir = sub_repo_dir_for(repo);
+        // URLs are already mirror-selected from xim-indexrepos.lua, no further replacement needed
+        if (sync_repo(repoDir, repo.url, force)) {
+            syncedSubRepos.push_back(repo);
+        } else {
+            log::warn("failed to sync sub-index repo: {} ({})", repo.name, repo.url);
         }
     }
+
+    save_sub_repos_json(sub_repos_json_path(), syncedSubRepos);
 
     if (Config::has_project_config() && !Config::project_index_repos().empty()) {
         if (!syncRepos(Config::project_index_repos(), true)) return false;
     }
     return true;
-}
-
-// Get the main index repo directory path (always global)
-std::filesystem::path main_repo_dir() {
-    auto& repos = Config::global_index_repos();
-    if (!repos.empty()) {
-        return Config::repo_dir_for(repos[0], false);
-    }
-    return Config::global_data_dir() / "xim-pkgindex";
 }
 
 } // namespace xlings::xim
