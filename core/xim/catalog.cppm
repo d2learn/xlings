@@ -181,21 +181,20 @@ class PackageCatalog {
                 .scope = PackageScope::Global,
                 .defaultNamespace = globalRepos[i].name,
             });
+        }
 
-            // Discover sub-index repos from xim-indexrepos.lua
-            auto subRepos = discover_sub_repos(repoDir, Config::mirror());
-            for (auto& sub : subRepos) {
-                auto subDir = Config::global_data_dir() / "sub-indexrepos" / sub.name;
-                if (std::filesystem::exists(subDir / "pkgs")) {
-                    specs.push_back({
-                        .name = sub.name,
-                        .url = sub.url,
-                        .dir = subDir,
-                        .scope = PackageScope::Global,
-                        .defaultNamespace = sub.name,
-                        .requireExplicitNamespace = true,
-                    });
-                }
+        // Include discovered sub-index repos (from xim-indexrepos.lua / xim-indexrepos.json)
+        for (auto& repo : discovered_global_sub_repos()) {
+            auto subDir = sub_repo_dir_for(repo);
+            if (std::filesystem::exists(subDir / "pkgs")) {
+                specs.push_back({
+                    .name = repo.name,
+                    .url = repo.url,
+                    .dir = subDir,
+                    .scope = PackageScope::Global,
+                    .defaultNamespace = repo.name,
+                    .requireExplicitNamespace = true,
+                });
             }
         }
 
@@ -264,7 +263,8 @@ class PackageCatalog {
         if (!pkg) return {};
 
         auto version = detail_::select_version_(*pkg, platform, parsed.version);
-        if (version.empty()) return {};
+        // For search: allow metadata-only packages (no xpm versions)
+        if (version.empty() && !forSearch) return {};
 
         auto ns = pkg->namespace_.empty() ? state.spec.defaultNamespace : pkg->namespace_;
         if (parsed.explicitNamespace && parsed.namespaceName != ns) return {};
@@ -285,11 +285,13 @@ class PackageCatalog {
         match.storeRoot = (state.spec.scope == PackageScope::Project
             ? Config::project_data_dir()
             : Config::global_data_dir()) / "xpkgs";
-        auto installDir = match.storeRoot / package_store_name(match.namespaceName, match.name) / match.version;
-        std::error_code ec;
-        match.installed = std::filesystem::exists(installDir, ec)
-            && std::filesystem::is_directory(installDir, ec)
-            && !std::filesystem::is_empty(installDir, ec);
+        if (!version.empty()) {
+            auto installDir = match.storeRoot / package_store_name(match.namespaceName, match.name) / match.version;
+            std::error_code ec;
+            match.installed = std::filesystem::exists(installDir, ec)
+                && std::filesystem::is_directory(installDir, ec)
+                && !std::filesystem::is_empty(installDir, ec);
+        }
         return match;
     }
 
