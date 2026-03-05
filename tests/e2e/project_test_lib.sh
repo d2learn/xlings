@@ -5,6 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 FIXTURE_INDEX_DIR="$ROOT_DIR/tests/fixtures/xim-pkgindex"
 
+# Ensure git identity is configured (CI runners may not have one)
+git config user.name >/dev/null 2>&1 || git config --global user.name "xlings-ci"
+git config user.email >/dev/null 2>&1 || git config --global user.email "ci@xlings.test"
+
 log()  { echo "[project-e2e] $*"; }
 fail() { echo "[project-e2e] FAIL: $*" >&2; exit 1; }
 
