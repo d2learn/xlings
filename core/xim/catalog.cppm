@@ -18,6 +18,7 @@ struct RepoIndexSpec {
     std::filesystem::path dir;
     PackageScope scope { PackageScope::Global };
     std::string defaultNamespace;
+    bool subIndex { false };  // sub-index repos: lower priority for bare-name resolution
 };
 
 struct PackageMatch {
@@ -196,6 +197,7 @@ class PackageCatalog {
                     .dir = subDir,
                     .scope = PackageScope::Global,
                     .defaultNamespace = repo.name,
+                    .subIndex = true,
                 });
             }
         }
@@ -293,18 +295,35 @@ class PackageCatalog {
     std::vector<PackageMatch> collect_matches_(const std::string& target,
                                                const std::string& platform) {
         auto parsed = detail_::parse_target_(target);
-        std::vector<PackageMatch> matches;
+        std::vector<PackageMatch> primaryMatches;
+        std::vector<PackageMatch> subMatches;
 
-        for (auto& repo : projectRepos_) {
-            auto match = build_match_(repo, parsed, platform);
-            if (!match.name.empty()) matches.push_back(std::move(match));
-        }
-        for (auto& repo : globalRepos_) {
-            auto match = build_match_(repo, parsed, platform);
-            if (!match.name.empty()) matches.push_back(std::move(match));
+        auto collect = [&](std::vector<RepoState>& repos) {
+            for (auto& repo : repos) {
+                auto match = build_match_(repo, parsed, platform);
+                if (match.name.empty()) continue;
+                if (repo.spec.subIndex) {
+                    subMatches.push_back(std::move(match));
+                } else {
+                    primaryMatches.push_back(std::move(match));
+                }
+            }
+        };
+        collect(projectRepos_);
+        collect(globalRepos_);
+
+        // For bare names (no explicit namespace): prefer primary repos.
+        // Only fall through to sub-repos when no primary match exists.
+        // Explicit namespace (e.g. d2x:d2mcpp) always uses all matches.
+        if (!parsed.explicitNamespace && !primaryMatches.empty()) {
+            return dedupe_matches_(std::move(primaryMatches));
         }
 
-        return dedupe_matches_(std::move(matches));
+        // Merge: either explicit namespace or no primary match
+        for (auto& m : subMatches) {
+            primaryMatches.push_back(std::move(m));
+        }
+        return dedupe_matches_(std::move(primaryMatches));
     }
 
 public:
