@@ -90,6 +90,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                                  fuzzy[i].canonicalName, fuzzy[i].version);
                 }
                 std::print("select [1-{}] or 0 to cancel: ", fuzzy.size());
+                std::cout.flush();
                 std::string input;
                 std::getline(std::cin, input);
                 int choice = 0;
@@ -99,6 +100,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                     return 0;
                 }
                 match = fuzzy[static_cast<std::size_t>(choice - 1)];
+            }
+            // Update target so dependency resolution uses the resolved name
+            target = match->canonicalName;
+            if (!match->version.empty()) {
+                target += "@" + match->version;
             }
         }
         requestedMatches.push_back(*match);
