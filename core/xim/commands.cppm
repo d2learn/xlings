@@ -279,22 +279,24 @@ int cmd_list(const std::string& filter) {
     }
 
     auto results = catalog.search(filter.empty() ? "" : filter, detect_platform());
-    if (results.empty()) {
-        std::println("no packages found");
+
+    // Filter to only installed packages
+    std::vector<PackageMatch> installed;
+    for (auto& match : results) {
+        if (match.installed) installed.push_back(std::move(match));
+    }
+
+    if (installed.empty()) {
+        std::println("no installed packages found");
         return 0;
     }
 
-    for (auto& match : results) {
+    for (auto& match : installed) {
         auto pkg = catalog.load_package(match);
-        std::string status = match.installed ? "[installed]" : "";
         std::string desc = pkg ? std::string(pkg->description) : std::string{};
-        // Note: avoid width specifiers — GCC 15 modules bug with std::formatter
-        if (status.empty())
-            std::println("  {}  {}", match.canonicalName, desc);
-        else
-            std::println("  {}  {}  {}", match.canonicalName, status, desc);
+        std::println("  {}@{}  {}", match.canonicalName, match.version, desc);
     }
-    std::println("\ntotal: {} packages", results.size());
+    std::println("\ntotal: {} installed", installed.size());
     return 0;
 }
 
