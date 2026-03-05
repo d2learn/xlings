@@ -68,6 +68,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     for (auto& target : targetVec) {
         auto match = catalog.resolve_target(target, platform);
         if (!match) {
+            // Ambiguous matches: show error directly, don't fall through to fuzzy
+            if (match.error().contains("ambiguous")) {
+                log::error("{}", match.error());
+                return 1;
+            }
             // Try fuzzy search for suggestions
             auto fuzzy = catalog.search(target, platform);
             if (fuzzy.empty()) {
