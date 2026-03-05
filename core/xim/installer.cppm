@@ -53,7 +53,7 @@ std::filesystem::path runtime_dir_(const PlanNode& node,
                                    const std::filesystem::path& fallbackDataDir) {
     auto targetRoot = node.storeRoot.empty() ? (fallbackDataDir / "xpkgs") : node.storeRoot;
     auto dataRoot = data_root_for_(targetRoot);
-    return dataRoot / "runtimedir" / effective_store_name_(node) / node.version;
+    return dataRoot / "runtimedir";
 }
 
 bool is_archive_(const std::filesystem::path& path) {
