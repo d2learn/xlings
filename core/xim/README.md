@@ -76,3 +76,12 @@ xlings update
 
 - 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
 - 添加 XPackage 文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
+
+### sub 索引仓库 mirror 选择位置
+
+- 入口：`core/xim/repo.cppm` 的 `sync_all_repos()`
+  - 读取当前 mirror：`auto mirror = Config::mirror();`
+  - 发现 sub 索引仓库：`detail_::discover_sub_repos_(repoDir, mirror)`
+- 具体选择逻辑：同文件 `discover_sub_repos_()`
+  - 解析 `xim-indexrepos.lua` 中 `["GLOBAL"]` 和 `["CN"]` 等键
+  - 优先使用当前 mirror 对应 URL；若缺失则回退到 `GLOBAL`
