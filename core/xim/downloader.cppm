@@ -72,8 +72,12 @@ DownloadResult git_clone_one(const DownloadTask& task) {
     return result;
 }
 
-// Download a single file using curl
-DownloadResult download_one(const DownloadTask& task) {
+// Download a single file using curl.
+// showProgress: true  -> use curl -# (ASCII progress bar, only safe when one download at a time)
+//               false -> use curl -s (silent, used for concurrent downloads)
+// TODO: replace curl subprocess with libcurl for proper per-task progress callbacks
+//       regardless of concurrency level
+DownloadResult download_one(const DownloadTask& task, bool showProgress = false) {
     namespace fs = std::filesystem;
 
     DownloadResult result;
@@ -127,9 +131,10 @@ DownloadResult download_one(const DownloadTask& task) {
     bool downloaded = false;
     for (auto& tryUrl : urls) {
         log::info("downloading {} from {}", task.name, tryUrl);
+        const char* progressFlag = showProgress ? "-#" : "-s";
         auto cmd = std::format(
-            "curl -fLs --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
-            destFile.string(), tryUrl);
+            "curl -fL {} --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            progressFlag, destFile.string(), tryUrl);
         auto rc = platform::exec(cmd);
         if (rc == 0) {
             downloaded = true;
@@ -176,6 +181,15 @@ download_all(std::span<const DownloadTask> tasks,
     std::vector<std::jthread> threads;
     threads.reserve(tasks.size());
 
+    // Show curl ASCII progress bar only when a single package is being downloaded.
+    // With multiple concurrent downloads the progress bars would interleave on the
+    // terminal and become unreadable, so we keep them silent in that case.
+    // TODO: switch to libcurl for proper multi-task progress reporting.
+    const bool showProgress = (tasks.size() == 1);
+    if (!showProgress) {
+        log::info("downloading {} packages concurrently, please wait...", tasks.size());
+    }
+
     for (std::size_t i = 0; i < tasks.size(); ++i) {
         threads.emplace_back([&, i]() {
             // Wait for concurrency slot
@@ -189,7 +203,7 @@ download_all(std::span<const DownloadTask> tasks,
                 onProgress(tasks[i].name, 0.0f);
             }
 
-            auto result = download_one(tasks[i]);
+            auto result = download_one(tasks[i], showProgress);
 
             if (onProgress) {
                 onProgress(tasks[i].name, result.success ? 1.0f : -1.0f);
@@ -226,15 +240,36 @@ extract_archive(const std::filesystem::path& archive,
                           archive.string(), destDir.string());
     } else if (ext == ".zip") {
 #ifdef _WIN32
-        // TODO: 统一优化跨平台解压方案，消除对外部 unzip 命令的依赖
-        auto [probe_rc, _] = platform::run_command_capture("where unzip");
-        if (probe_rc == 0) {
-            cmd = std::format("unzip -o \"{}\" -d \"{}\"",
-                              archive.string(), destDir.string());
+        // Probe available tools in priority order:
+        //   1. Windows built-in bsdtar (C:\Windows\System32\tar.exe, present since Win10 1803).
+        //      Use the absolute path — not "where tar" — to avoid picking up GNU tar from
+        //      MSYS2/Git-for-Windows which does NOT support ZIP (only bsdtar/libarchive does).
+        //      Check existence with fs::exists, no shell round-trip needed.
+        //   2. unzip (available with Git for Windows / MSYS2 toolchains)
+        //   3. PowerShell Expand-Archive (fallback; uses & { } script-block to avoid
+        //      cmd.exe double-quote stripping that causes "cmdlet not found" errors)
+        // C:\Windows\System32\tar.exe has no spaces, so no quoting needed around
+        // the executable. _popen runs commands via "cmd.exe /c <cmd>", and cmd.exe
+        // has a special rule: when the command starts with '"', it strips the first
+        // and last '"' from the entire line. Quoting the exe path would corrupt the
+        // archive/dest paths, producing "invalid name" errors at runtime.
+        const fs::path winTar = "C:\\Windows\\System32\\tar.exe";
+        if (fs::exists(winTar)) {
+            cmd = std::format("{} -xf \"{}\" -C \"{}\"",
+                              winTar.string(), archive.string(), destDir.string());
         } else {
-            cmd = std::format(
-                "powershell -NoProfile -Command \"Expand-Archive -Path '{}' -DestinationPath '{}' -Force\"",
-                archive.string(), destDir.string());
+            auto [unzip_rc, _u] = platform::run_command_capture("where unzip");
+            if (unzip_rc == 0) {
+                cmd = std::format("unzip -o \"{}\" -d \"{}\"",
+                                  archive.string(), destDir.string());
+            } else {
+                // Avoid "& { }" script-block: '&' is cmd.exe's command separator
+                // and can be misinterpreted even inside a quoted string in some
+                // cmd.exe versions. Call Expand-Archive directly without & { }.
+                cmd = std::format(
+                    "powershell -NoProfile -Command \"Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force\"",
+                    archive.string(), destDir.string());
+            }
         }
 #else
         cmd = std::format("unzip -o \"{}\" -d \"{}\"",

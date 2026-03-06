@@ -608,25 +608,25 @@ TEST_F(XimResolverTest, ResolveSinglePackage) {
 TEST_F(XimResolverTest, ResolveWithDeps) {
     std::vector<std::string> targets = { "pnpm" };
     auto result = xlings::xim::resolve(mgr_, targets, "linux");
-    // pnpm depends on nodejs
+    // pnpm depends on node (package name is "node", not "nodejs")
     if (result.has_value() && !result->has_errors()) {
-        bool hasNodejs = false;
+        bool hasNode = false;
         for (auto& node : result->nodes) {
-            if (node.name.find("nodejs") != std::string::npos) {
-                hasNodejs = true;
+            if (node.name.find("node") != std::string::npos) {
+                hasNode = true;
                 break;
             }
         }
-        EXPECT_TRUE(hasNodejs) << "pnpm should pull in nodejs as dependency";
+        EXPECT_TRUE(hasNode) << "pnpm should pull in node as dependency";
         // Deps should come before dependents in topo order
-        int nodejsIdx = -1, pnpmIdx = -1;
+        int nodeIdx = -1, pnpmIdx = -1;
         for (int i = 0; i < static_cast<int>(result->nodes.size()); ++i) {
-            if (result->nodes[i].name.find("nodejs") != std::string::npos) nodejsIdx = i;
+            if (result->nodes[i].name.find("node") != std::string::npos) nodeIdx = i;
             if (result->nodes[i].name.find("pnpm") != std::string::npos) pnpmIdx = i;
         }
-        if (nodejsIdx >= 0 && pnpmIdx >= 0) {
-            EXPECT_LT(nodejsIdx, pnpmIdx)
-                << "nodejs should come before pnpm in topo order";
+        if (nodeIdx >= 0 && pnpmIdx >= 0) {
+            EXPECT_LT(nodeIdx, pnpmIdx)
+                << "node should come before pnpm in topo order";
         }
     }
 }
@@ -1102,9 +1102,9 @@ TEST(XvmShimTest, ExtractProgramName) {
     EXPECT_EQ(xlings::xvm::extract_program_name("/path/to/xlings"), "xlings");
 }
 
-TEST(XvmShimTest, ResolveExecutableEnvAliasFallback) {
-    // When program doesn't exist as a file, resolve_executable returns empty
-    // This triggers the env alias fallback in shim_dispatch
+TEST(XvmShimTest, ResolveExecutableFindsProgram) {
+    // resolve_executable only looks up program_name as a file.
+    // Alias handling is done separately in shim_dispatch via platform::exec.
     namespace fs = std::filesystem;
     auto testDir = fs::temp_directory_path() / "xlings_env_alias_test";
     fs::remove_all(testDir);
@@ -1114,22 +1114,14 @@ TEST(XvmShimTest, ResolveExecutableEnvAliasFallback) {
     auto gcc_path = testDir / "bin" / "gcc";
     xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
 
-    // resolve_executable for "cc" with alias "gcc" should fail (alias contains args)
-    // because "gcc --sysroot=..." is not a valid filename
-    auto result1 = xlings::xvm::resolve_executable(
-        "cc", testDir.string(), "", {"gcc --sysroot=/path"});
+    // "cc" does not exist as a file → empty
+    auto result1 = xlings::xvm::resolve_executable("cc", testDir.string(), "");
     EXPECT_TRUE(result1.empty());
 
-    // resolve_executable for "cc" with simple alias "gcc" should find bin/gcc
-    auto result2 = xlings::xvm::resolve_executable(
-        "cc", testDir.string(), "", {"gcc"});
+    // "gcc" exists under bin/ → found
+    auto result2 = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
     EXPECT_FALSE(result2.empty());
     EXPECT_EQ(result2, testDir / "bin" / "gcc");
-
-    // resolve_executable for "gcc" directly should find bin/gcc
-    auto result3 = xlings::xvm::resolve_executable(
-        "gcc", testDir.string(), "", {});
-    EXPECT_FALSE(result3.empty());
 
     fs::remove_all(testDir);
 }
