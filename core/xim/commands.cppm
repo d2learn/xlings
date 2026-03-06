@@ -3,6 +3,7 @@ export module xlings.xim.commands;
 import std;
 import xlings.xim.types;
 import mcpplibs.xpkg;
+import mcpplibs.xpkg.executor;
 import mcpplibs.xpkg.loader;
 import xlings.xim.catalog;
 import xlings.xim.repo;
