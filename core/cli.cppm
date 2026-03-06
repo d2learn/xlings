@@ -12,6 +12,7 @@ import xlings.platform;
 import xlings.subos;
 import xlings.xself;
 import xlings.xim.commands;
+import xlings.xvm.types;
 import xlings.xvm.db;
 import xlings.xvm.commands;
 
