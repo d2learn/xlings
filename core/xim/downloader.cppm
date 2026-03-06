@@ -133,7 +133,7 @@ DownloadResult download_one(const DownloadTask& task, bool showProgress = false)
         log::info("downloading {} from {}", task.name, tryUrl);
         const char* progressFlag = showProgress ? "-#" : "-s";
         auto cmd = std::format(
-            "curl -fL{} --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            "curl -fL {} --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
             progressFlag, destFile.string(), tryUrl);
         auto rc = platform::exec(cmd);
         if (rc == 0) {
