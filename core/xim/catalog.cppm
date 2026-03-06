@@ -189,13 +189,28 @@ class PackageCatalog {
 
         // Include discovered sub-index repos (from xim-indexrepos.lua / xim-indexrepos.json)
         for (auto& repo : discovered_global_sub_repos()) {
-            auto subDir = sub_repo_dir_for(repo);
+            auto subDir = sub_repo_dir_for(repo, false);
             if (std::filesystem::exists(subDir / "pkgs")) {
                 specs.push_back({
                     .name = repo.name,
                     .url = repo.url,
                     .dir = subDir,
                     .scope = PackageScope::Global,
+                    .defaultNamespace = repo.name,
+                    .subIndex = true,
+                });
+            }
+        }
+
+        // Include discovered project-local sub-index repos
+        for (auto& repo : discovered_project_sub_repos()) {
+            auto subDir = sub_repo_dir_for(repo, true);
+            if (std::filesystem::exists(subDir / "pkgs")) {
+                specs.push_back({
+                    .name = repo.name,
+                    .url = repo.url,
+                    .dir = subDir,
+                    .scope = PackageScope::Project,
                     .defaultNamespace = repo.name,
                     .subIndex = true,
                 });
