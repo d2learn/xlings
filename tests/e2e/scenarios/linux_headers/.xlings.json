@@ -3,7 +3,7 @@
   "index_repos": [
     {
       "name": "xim",
-      "url": "../../../fixtures/xim-pkgindex"
+      "url": "https://github.com/d2learn/xim-pkgindex.git"
     }
   ]
 }
