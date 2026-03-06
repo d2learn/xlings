@@ -644,23 +644,22 @@ load_platform_entries_(const std::filesystem::path& pkgFile, const std::string& 
 
 }  // namespace detail_
 
+using InstallRequestHandler = std::function<void(const std::vector<mcpplibs::xpkg::InstallRequest>&)>;
+
 class Installer {
     IndexManager* index_ { nullptr };
     PackageCatalog* catalog_ { nullptr };
-    std::vector<mcpplibs::xpkg::InstallRequest> pendingInstallRequests_;
 
 public:
     explicit Installer(IndexManager& index) : index_(&index) {}
     explicit Installer(PackageCatalog& catalog) : catalog_(&catalog) {}
 
-    [[nodiscard]] const std::vector<mcpplibs::xpkg::InstallRequest>&
-    pending_install_requests() const { return pendingInstallRequests_; }
-
     // Execute an install plan
     std::expected<void, std::string>
     execute(const InstallPlan& plan,
             const DownloaderConfig& dlConfig,
-            std::function<void(const InstallStatus&)> onStatus) {
+            std::function<void(const InstallStatus&)> onStatus,
+            InstallRequestHandler onInstallRequests = nullptr) {
 
         if (plan.has_errors()) {
             return std::unexpected(
@@ -904,12 +903,15 @@ public:
                 }
             }
 
-            // Collect deferred pkgmanager.install()/remove() requests
+            // Process deferred pkgmanager.install()/remove() requests synchronously
+            // before config hook, so config can access sub-dependencies
             {
                 auto reqs = executor.install_requests();
-                for (auto& req : reqs) {
-                    log::info("[{}] deferred {}: {}", node.name, req.op, req.target);
-                    pendingInstallRequests_.push_back(std::move(req));
+                if (!reqs.empty() && onInstallRequests) {
+                    for (auto& req : reqs) {
+                        log::info("[{}] deferred {}: {}", node.name, req.op, req.target);
+                    }
+                    onInstallRequests(reqs);
                 }
             }
 

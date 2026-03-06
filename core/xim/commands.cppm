@@ -174,7 +174,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     std::println("packages to install ({}):", pending);
     for (auto& node : plan.nodes) {
         if (!node.alreadyInstalled) {
-            std::println("  {} {}", node.name,
+            std::println("  {} {}", node.canonicalName,
                          node.version.empty() ? "" : "@" + node.version);
         }
     }
@@ -217,23 +217,25 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                 default:
                     break;
             }
+        },
+        // Process deferred pkgmanager.install()/remove() requests synchronously
+        // between install and config hooks so config can access sub-dependencies
+        [](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
+            for (auto& req : reqs) {
+                if (req.op == "install") {
+                    log::info("installing sub-dependency: {}", req.target);
+                    std::vector<std::string> subTargets = { req.target };
+                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false);
+                } else if (req.op == "remove") {
+                    log::info("removing sub-dependency: {}", req.target);
+                    cmd_remove(req.target);
+                }
+            }
         });
 
     if (!result) {
         log::error("install failed: {}", result.error());
         return 1;
-    }
-
-    // Process deferred pkgmanager.install()/remove() requests from hooks
-    for (auto& req : installer.pending_install_requests()) {
-        if (req.op == "install") {
-            log::info("installing sub-dependency: {}", req.target);
-            std::vector<std::string> subTargets = { req.target };
-            cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false);
-        } else if (req.op == "remove") {
-            log::info("removing sub-dependency: {}", req.target);
-            cmd_remove(req.target);
-        }
     }
 
     activate_requested_targets();
