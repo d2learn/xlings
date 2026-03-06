@@ -77,6 +77,12 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                 log::error("{}", match.error());
                 return 1;
             }
+            // Explicit namespace (e.g. scode:linux-headers) — don't fuzzy-match
+            // across other namespaces, which can cause infinite recursion
+            if (target.find(':') != std::string::npos) {
+                log::error("{}", match.error());
+                return 1;
+            }
             // Try fuzzy search for suggestions
             auto fuzzy = catalog.search(target, platform);
             if (fuzzy.empty()) {
@@ -157,9 +163,9 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
             }
             std::println("version: {}", match.version);
             if (requestedAlreadyInstalled[plan_key(match)]) {
-                std::println("{}@{} already installed", match.name, match.version);
+                std::println("{}@{} already installed", match.canonicalName, match.version);
             } else {
-                std::println("{}@{} installed", match.name, match.version);
+                std::println("{}@{} installed", match.canonicalName, match.version);
             }
         }
     };
