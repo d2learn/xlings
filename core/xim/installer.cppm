@@ -857,9 +857,14 @@ public:
                 // Set cwd to the download/runtime directory so hooks can
                 // find downloaded files via relative paths.  ctx.run_dir
                 // (user's original cwd) is exposed via system.rundir().
+                // When there is no download artifact we fall back to the
+                // runtime dir rather than install_dir: hooks commonly start
+                // with os.tryrm(install_dir) to get a clean slate, which
+                // would delete the CWD and cause subsequent getcwd() calls
+                // to fail.
                 auto hookCwd = (dlIt != downloadResults.end())
                     ? dlIt->second.localFile.parent_path()
-                    : ctx.install_dir;
+                    : detail_::runtime_dir_(node, dataDir); // fallback to runtime dir
                 detail_::ScopedCurrentDir_ installCwd(hookCwd);
                 auto hookResult = executor.run_hook(
                     mcpplibs::xpkg::HookType::Install, ctx);
