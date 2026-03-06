@@ -261,8 +261,10 @@ private:
     }
 
     [[nodiscard]] std::filesystem::path project_subos_dir_() const {
-        if (projectDir_.empty() || projectSubosName_.empty()) return {};
-        return projectDir_ / ".xlings" / "subos" / projectSubosName_;
+        if (projectDir_.empty()) return {};
+        if (!projectSubosName_.empty()) return projectDir_ / ".xlings" / "subos" / projectSubosName_;
+        if (projectSubosMode_ == ProjectSubosMode::Anonymous) return projectDir_ / ".xlings" / "subos" / "_";
+        return {};
     }
 
     [[nodiscard]] static std::vector<std::string>
@@ -359,6 +361,9 @@ private:
         paths_.subosDir = paths_.homeDir / "subos" / globalActiveSubos_;
         if (projectSubosMode_ == ProjectSubosMode::Named && !projectSubosName_.empty()) {
             paths_.activeSubos = projectSubosName_;
+            paths_.subosDir = project_subos_dir_();
+        } else if (projectSubosMode_ == ProjectSubosMode::Anonymous) {
+            paths_.activeSubos = "_";
             paths_.subosDir = project_subos_dir_();
         }
         paths_.binDir = paths_.subosDir / "bin";
@@ -688,7 +693,9 @@ public:
         namespace fs = std::filesystem;
         auto& self = instance_();
         fs::path subosConfigPath;
-        if (self.hasProjectConfig_ && self.projectSubosMode_ == ProjectSubosMode::Named) {
+        if (self.hasProjectConfig_ &&
+            (self.projectSubosMode_ == ProjectSubosMode::Named ||
+             self.projectSubosMode_ == ProjectSubosMode::Anonymous)) {
             auto projSubosDir = self.project_subos_dir_();
             fs::create_directories(projSubosDir);
             fs::create_directories(projSubosDir / "bin");
