@@ -7,7 +7,7 @@ add_repositories("mcpplibs-index https://github.com/mcpplibs/mcpplibs-index.git"
 add_requires("cmdline 0.0.2")
 add_requires("ftxui 6.1.9")
 add_requires("mcpplibs-capi-lua")
-add_requires("mcpplibs-xpkg 0.0.14")
+add_requires("mcpplibs-xpkg 0.0.15")
 add_requires("gtest 1.15.2")
 
 -- C++23 main binary
