@@ -7,6 +7,6 @@
     }
   ],
   "workspace": {
-    "linux-headers": "5.11.1"
+    "xim:linux-headers": "5.11.1"
   }
 }
