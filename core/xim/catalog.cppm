@@ -366,6 +366,24 @@ public:
 
     bool is_loaded() const { return loaded_; }
 
+    // When project and global have the same package, keep only project-scoped match
+    static std::vector<PackageMatch> prefer_project_scope_(std::vector<PackageMatch> matches) {
+        std::unordered_set<std::string> projectKeys;
+        for (auto& m : matches) {
+            if (m.scope == PackageScope::Project) {
+                projectKeys.insert(m.canonicalName + "@" + m.version);
+            }
+        }
+        if (projectKeys.empty()) return matches;
+        std::vector<PackageMatch> filtered;
+        for (auto& m : matches) {
+            auto key = m.canonicalName + "@" + m.version;
+            if (m.scope == PackageScope::Global && projectKeys.contains(key)) continue;
+            filtered.push_back(std::move(m));
+        }
+        return filtered;
+    }
+
     std::expected<PackageMatch, std::string>
     resolve_target(const std::string& target, const std::string& platform) {
         auto matches = collect_matches_(target, platform);
@@ -373,6 +391,8 @@ public:
             return std::unexpected(std::format("package '{}' not found", target));
         }
         if (matches.size() > 1) {
+            matches = prefer_project_scope_(std::move(matches));
+            if (matches.size() == 1) return matches.front();
             return std::unexpected(format_ambiguous_candidates(target, matches));
         }
         return matches.front();
