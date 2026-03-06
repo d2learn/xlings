@@ -261,8 +261,10 @@ private:
     }
 
     [[nodiscard]] std::filesystem::path project_subos_dir_() const {
-        if (projectDir_.empty() || projectSubosName_.empty()) return {};
-        return projectDir_ / ".xlings" / "subos" / projectSubosName_;
+        if (projectDir_.empty()) return {};
+        if (!projectSubosName_.empty()) return projectDir_ / ".xlings" / "subos" / projectSubosName_;
+        if (projectSubosMode_ == ProjectSubosMode::Anonymous) return projectDir_ / ".xlings" / "subos" / "_";
+        return {};
     }
 
     [[nodiscard]] static std::vector<std::string>
@@ -360,6 +362,9 @@ private:
         if (projectSubosMode_ == ProjectSubosMode::Named && !projectSubosName_.empty()) {
             paths_.activeSubos = projectSubosName_;
             paths_.subosDir = project_subos_dir_();
+        } else if (projectSubosMode_ == ProjectSubosMode::Anonymous) {
+            paths_.activeSubos = "_";
+            paths_.subosDir = project_subos_dir_();
         }
         paths_.binDir = paths_.subosDir / "bin";
         paths_.libDir = paths_.subosDir / "lib";
@@ -430,12 +435,13 @@ private:
     void load_project_config_() {
         namespace fs = std::filesystem;
         std::error_code ec;
-        auto cwd = fs::current_path(ec);
+
+        fs::path startDir = fs::current_path(ec);
         if (ec) return;
 
         auto homeNorm = fs::weakly_canonical(paths_.homeDir, ec);
 
-        fs::path cur = cwd;
+        fs::path cur = startDir;
         while (!cur.empty()) {
             auto cfg = cur / ".xlings.json";
             if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {
@@ -467,6 +473,8 @@ private:
                                     load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
                             } else {
                                 projectSubosMode_ = ProjectSubosMode::Anonymous;
+                                projectSubosWorkspace_ =
+                                    load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
                             }
                         }
                     } catch (...) {}
@@ -509,6 +517,7 @@ public:
         if (mode == ProjectSubosMode::Anonymous) {
             auto ws = globalWorkspace;
             merge_workspace_into_(ws, projectWorkspace);
+            merge_workspace_into_(ws, projectSubosWorkspace);
             return ws;
         }
 
@@ -632,13 +641,15 @@ public:
     [[nodiscard]] static const xvm::Workspace& workspace() {
         auto& self = instance_();
         if (!self.hasProjectConfig_) return self.globalWorkspace_;
-        if (self.projectSubosMode_ == ProjectSubosMode::Named) return self.projectSubosWorkspace_;
+        if (self.projectSubosMode_ == ProjectSubosMode::Named ||
+            self.projectSubosMode_ == ProjectSubosMode::Anonymous) return self.projectSubosWorkspace_;
         return self.projectWorkspace_;
     }
     [[nodiscard]] static xvm::Workspace& workspace_mut() {
         auto& self = instance_();
         if (!self.hasProjectConfig_) return self.globalWorkspace_;
-        if (self.projectSubosMode_ == ProjectSubosMode::Named) return self.projectSubosWorkspace_;
+        if (self.projectSubosMode_ == ProjectSubosMode::Named ||
+            self.projectSubosMode_ == ProjectSubosMode::Anonymous) return self.projectSubosWorkspace_;
         return self.projectWorkspace_;
     }
     [[nodiscard]] static bool has_project_config() { return instance_().hasProjectConfig_; }
@@ -688,7 +699,9 @@ public:
         namespace fs = std::filesystem;
         auto& self = instance_();
         fs::path subosConfigPath;
-        if (self.hasProjectConfig_ && self.projectSubosMode_ == ProjectSubosMode::Named) {
+        if (self.hasProjectConfig_ &&
+            (self.projectSubosMode_ == ProjectSubosMode::Named ||
+             self.projectSubosMode_ == ProjectSubosMode::Anonymous)) {
             auto projSubosDir = self.project_subos_dir_();
             fs::create_directories(projSubosDir);
             fs::create_directories(projSubosDir / "bin");
@@ -712,7 +725,8 @@ public:
         }
 
         auto& workspace = self.hasProjectConfig_
-            ? (self.projectSubosMode_ == ProjectSubosMode::Named ? self.projectSubosWorkspace_ : self.projectWorkspace_)
+            ? ((self.projectSubosMode_ == ProjectSubosMode::Named ||
+                self.projectSubosMode_ == ProjectSubosMode::Anonymous) ? self.projectSubosWorkspace_ : self.projectWorkspace_)
             : self.globalWorkspace_;
         json["workspace"] = xvm::workspace_to_json(workspace);
         platform::write_string_to_file(subosConfigPath.string(), json.dump(2));

@@ -53,7 +53,7 @@ assert_contains "$INFO_OUT" "installed:   yes" \
 )
 MDBOOK_VER="$(
   cd "$SCENARIO_DIR" &&
-  env XLINGS_HOME="$HOME_DIR" "$HOME_DIR/subos/default/bin/mdbook" --version
+  env XLINGS_HOME="$HOME_DIR" "$SCENARIO_DIR/.xlings/subos/_/bin/mdbook" --version
 )"
 assert_contains "$MDBOOK_VER" "mdbook v0.4.43" \
   "mdbook shim did not execute the installed XLINGS_RES payload"

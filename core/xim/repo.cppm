@@ -264,24 +264,35 @@ void save_sub_repos_json(const std::filesystem::path& jsonFile,
     }
 }
 
-// Get the sub-repos index directory
-std::filesystem::path sub_repos_dir() {
-    return Config::global_data_dir() / "xim-index-repos";
+// Get the sub-repos index directory (global or project-local)
+std::filesystem::path sub_repos_dir(bool projectScope = false) {
+    auto base = projectScope ? Config::project_data_dir() : Config::global_data_dir();
+    if (base.empty()) return {};
+    return base / "xim-index-repos";
 }
 
 // Get the sub-repos JSON file path
-std::filesystem::path sub_repos_json_path() {
-    return sub_repos_dir() / "xim-indexrepos.json";
+std::filesystem::path sub_repos_json_path(bool projectScope = false) {
+    auto dir = sub_repos_dir(projectScope);
+    if (dir.empty()) return {};
+    return dir / "xim-indexrepos.json";
 }
 
 // Get directory for a sub-repo
-std::filesystem::path sub_repo_dir_for(const IndexRepo& repo) {
-    return sub_repos_dir() / url_to_dirname(repo.url);
+std::filesystem::path sub_repo_dir_for(const IndexRepo& repo, bool projectScope = false) {
+    return sub_repos_dir(projectScope) / url_to_dirname(repo.url);
 }
 
 // Return all discovered global sub-repos (for use by PackageCatalog)
 std::vector<IndexRepo> discovered_global_sub_repos() {
-    return load_sub_repos_json(sub_repos_json_path());
+    return load_sub_repos_json(sub_repos_json_path(false));
+}
+
+// Return all discovered project-local sub-repos
+std::vector<IndexRepo> discovered_project_sub_repos() {
+    auto path = sub_repos_json_path(true);
+    if (path.empty()) return {};
+    return load_sub_repos_json(path);
 }
 
 // Get the main index repo directory path (always global)
@@ -354,6 +365,32 @@ bool sync_all_repos(bool force = false) {
 
     if (Config::has_project_config() && !Config::project_index_repos().empty()) {
         if (!syncRepos(Config::project_index_repos(), true)) return false;
+
+        // Discover and sync sub-index repos from project index repos
+        auto mirrorKey = mirror.empty() ? "GLOBAL" : mirror;
+        auto& projRepos = Config::project_index_repos();
+        std::unordered_map<std::string, IndexRepo> projMerged;
+        for (auto& repo : projRepos) {
+            auto repoDir = Config::repo_dir_for(repo, true);
+            for (auto& sub : detail_::discover_sub_repos_(repoDir, mirrorKey)) {
+                projMerged[sub.name] = sub;
+            }
+        }
+        auto projJsonSubs = load_sub_repos_json(sub_repos_json_path(true));
+        for (auto& repo : projJsonSubs) projMerged[repo.name] = repo;
+
+        std::vector<IndexRepo> projSyncedSubs;
+        auto projSubRoot = sub_repos_dir(true);
+        fs::create_directories(projSubRoot);
+        for (auto& [name, repo] : projMerged) {
+            auto repoDir = sub_repo_dir_for(repo, true);
+            if (sync_repo(repoDir, repo.url, force)) {
+                projSyncedSubs.push_back(repo);
+            } else {
+                log::warn("failed to sync project sub-index repo: {} ({})", repo.name, repo.url);
+            }
+        }
+        save_sub_repos_json(sub_repos_json_path(true), projSyncedSubs);
     }
     return true;
 }

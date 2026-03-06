@@ -189,13 +189,28 @@ class PackageCatalog {
 
         // Include discovered sub-index repos (from xim-indexrepos.lua / xim-indexrepos.json)
         for (auto& repo : discovered_global_sub_repos()) {
-            auto subDir = sub_repo_dir_for(repo);
+            auto subDir = sub_repo_dir_for(repo, false);
             if (std::filesystem::exists(subDir / "pkgs")) {
                 specs.push_back({
                     .name = repo.name,
                     .url = repo.url,
                     .dir = subDir,
                     .scope = PackageScope::Global,
+                    .defaultNamespace = repo.name,
+                    .subIndex = true,
+                });
+            }
+        }
+
+        // Include discovered project-local sub-index repos
+        for (auto& repo : discovered_project_sub_repos()) {
+            auto subDir = sub_repo_dir_for(repo, true);
+            if (std::filesystem::exists(subDir / "pkgs")) {
+                specs.push_back({
+                    .name = repo.name,
+                    .url = repo.url,
+                    .dir = subDir,
+                    .scope = PackageScope::Project,
                     .defaultNamespace = repo.name,
                     .subIndex = true,
                 });
@@ -351,6 +366,24 @@ public:
 
     bool is_loaded() const { return loaded_; }
 
+    // When project and global have the same package, keep only project-scoped match
+    static std::vector<PackageMatch> prefer_project_scope_(std::vector<PackageMatch> matches) {
+        std::unordered_set<std::string> projectKeys;
+        for (auto& m : matches) {
+            if (m.scope == PackageScope::Project) {
+                projectKeys.insert(m.canonicalName + "@" + m.version);
+            }
+        }
+        if (projectKeys.empty()) return matches;
+        std::vector<PackageMatch> filtered;
+        for (auto& m : matches) {
+            auto key = m.canonicalName + "@" + m.version;
+            if (m.scope == PackageScope::Global && projectKeys.contains(key)) continue;
+            filtered.push_back(std::move(m));
+        }
+        return filtered;
+    }
+
     std::expected<PackageMatch, std::string>
     resolve_target(const std::string& target, const std::string& platform) {
         auto matches = collect_matches_(target, platform);
@@ -358,6 +391,8 @@ public:
             return std::unexpected(std::format("package '{}' not found", target));
         }
         if (matches.size() > 1) {
+            matches = prefer_project_scope_(std::move(matches));
+            if (matches.size() == 1) return matches.front();
             return std::unexpected(format_ambiguous_candidates(target, matches));
         }
         return matches.front();

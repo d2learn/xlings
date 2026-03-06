@@ -3,6 +3,7 @@ export module xlings.xim.commands;
 import std;
 import xlings.xim.types;
 import mcpplibs.xpkg;
+import mcpplibs.xpkg.executor;
 import mcpplibs.xpkg.loader;
 import xlings.xim.catalog;
 import xlings.xim.repo;
@@ -48,6 +49,9 @@ std::string detect_platform() {
     #endif
 }
 
+// Forward declaration for deferred install request processing
+int cmd_remove(const std::string& target);
+
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     auto& catalog = get_catalog();
@@ -70,6 +74,12 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         if (!match) {
             // Ambiguous matches: show error directly, don't fall through to fuzzy
             if (match.error().contains("ambiguous")) {
+                log::error("{}", match.error());
+                return 1;
+            }
+            // Explicit namespace (e.g. scode:linux-headers) — don't fuzzy-match
+            // across other namespaces, which can cause infinite recursion
+            if (target.find(':') != std::string::npos) {
                 log::error("{}", match.error());
                 return 1;
             }
@@ -153,9 +163,9 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
             }
             std::println("version: {}", match.version);
             if (requestedAlreadyInstalled[plan_key(match)]) {
-                std::println("{}@{} already installed", match.name, match.version);
+                std::println("{}@{} already installed", match.canonicalName, match.version);
             } else {
-                std::println("{}@{} installed", match.name, match.version);
+                std::println("{}@{} installed", match.canonicalName, match.version);
             }
         }
     };
@@ -171,7 +181,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     std::println("packages to install ({}):", pending);
     for (auto& node : plan.nodes) {
         if (!node.alreadyInstalled) {
-            std::println("  {} {}", node.name,
+            std::println("  {} {}", node.canonicalName,
                          node.version.empty() ? "" : "@" + node.version);
         }
     }
@@ -213,6 +223,20 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                     break;
                 default:
                     break;
+            }
+        },
+        // Process deferred pkgmanager.install()/remove() requests synchronously
+        // between install and config hooks so config can access sub-dependencies
+        [](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
+            for (auto& req : reqs) {
+                if (req.op == "install") {
+                    log::info("installing sub-dependency: {}", req.target);
+                    std::vector<std::string> subTargets = { req.target };
+                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false);
+                } else if (req.op == "remove") {
+                    log::info("removing sub-dependency: {}", req.target);
+                    cmd_remove(req.target);
+                }
             }
         });
 

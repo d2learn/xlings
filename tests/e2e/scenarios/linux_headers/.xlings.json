@@ -1,0 +1,12 @@
+{
+  "mirror": "GLOBAL",
+  "index_repos": [
+    {
+      "name": "xim",
+      "url": "https://github.com/d2learn/xim-pkgindex.git"
+    }
+  ],
+  "workspace": {
+    "linux-headers": "5.11.1"
+  }
+}

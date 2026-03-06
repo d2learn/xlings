@@ -255,6 +255,9 @@ std::filesystem::path current_workspace_config_path_() {
         if (Config::project_subos_mode() == ProjectSubosMode::Named) {
             return Config::project_dir() / ".xlings" / "subos" / Config::project_subos_name() / ".xlings.json";
         }
+        if (Config::project_subos_mode() == ProjectSubosMode::Anonymous) {
+            return Config::project_dir() / ".xlings" / "subos" / "_" / ".xlings.json";
+        }
         return Config::project_dir() / ".xlings.json";
     }
     return Config::paths().homeDir / "subos" / Config::paths().activeSubos / ".xlings.json";
@@ -641,6 +644,8 @@ load_platform_entries_(const std::filesystem::path& pkgFile, const std::string& 
 
 }  // namespace detail_
 
+using InstallRequestHandler = std::function<void(const std::vector<mcpplibs::xpkg::InstallRequest>&)>;
+
 class Installer {
     IndexManager* index_ { nullptr };
     PackageCatalog* catalog_ { nullptr };
@@ -653,7 +658,8 @@ public:
     std::expected<void, std::string>
     execute(const InstallPlan& plan,
             const DownloaderConfig& dlConfig,
-            std::function<void(const InstallStatus&)> onStatus) {
+            std::function<void(const InstallStatus&)> onStatus,
+            InstallRequestHandler onInstallRequests = nullptr) {
 
         if (plan.has_errors()) {
             return std::unexpected(
@@ -785,6 +791,7 @@ public:
             ctx.install_dir = targetRoot / detail_::effective_store_name_(node) / node.version;
             ctx.bin_dir = Config::paths().binDir;
             ctx.xpkg_dir = node.pkgFile.parent_path();
+            ctx.project_data_dir = Config::project_data_dir();
             ctx.subos_sysrootdir = Config::paths().subosDir.string();
             ctx.deps_list = node.deps;
 
@@ -894,6 +901,18 @@ public:
                     log::info("{}: elfpatch auto: {}", node.name, epResult.output);
                 } else if (!epResult.success) {
                     log::warn("{}: elfpatch auto failed: {}", node.name, epResult.error);
+                }
+            }
+
+            // Process deferred pkgmanager.install()/remove() requests synchronously
+            // before config hook, so config can access sub-dependencies
+            {
+                auto reqs = executor.install_requests();
+                if (!reqs.empty() && onInstallRequests) {
+                    for (auto& req : reqs) {
+                        log::info("[{}] deferred {}: {}", node.name, req.op, req.target);
+                    }
+                    onInstallRequests(reqs);
                 }
             }
 
