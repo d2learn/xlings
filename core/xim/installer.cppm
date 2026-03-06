@@ -647,10 +647,14 @@ load_platform_entries_(const std::filesystem::path& pkgFile, const std::string& 
 class Installer {
     IndexManager* index_ { nullptr };
     PackageCatalog* catalog_ { nullptr };
+    std::vector<mcpplibs::xpkg::InstallRequest> pendingInstallRequests_;
 
 public:
     explicit Installer(IndexManager& index) : index_(&index) {}
     explicit Installer(PackageCatalog& catalog) : catalog_(&catalog) {}
+
+    [[nodiscard]] const std::vector<mcpplibs::xpkg::InstallRequest>&
+    pending_install_requests() const { return pendingInstallRequests_; }
 
     // Execute an install plan
     std::expected<void, std::string>
@@ -897,6 +901,15 @@ public:
                     log::info("{}: elfpatch auto: {}", node.name, epResult.output);
                 } else if (!epResult.success) {
                     log::warn("{}: elfpatch auto failed: {}", node.name, epResult.error);
+                }
+            }
+
+            // Collect deferred pkgmanager.install()/remove() requests
+            {
+                auto reqs = executor.install_requests();
+                for (auto& req : reqs) {
+                    log::info("[{}] deferred {}: {}", node.name, req.op, req.target);
+                    pendingInstallRequests_.push_back(std::move(req));
                 }
             }
 

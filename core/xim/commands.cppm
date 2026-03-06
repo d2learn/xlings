@@ -48,6 +48,9 @@ std::string detect_platform() {
     #endif
 }
 
+// Forward declaration for deferred install request processing
+int cmd_remove(const std::string& target);
+
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     auto& catalog = get_catalog();
@@ -219,6 +222,18 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     if (!result) {
         log::error("install failed: {}", result.error());
         return 1;
+    }
+
+    // Process deferred pkgmanager.install()/remove() requests from hooks
+    for (auto& req : installer.pending_install_requests()) {
+        if (req.op == "install") {
+            log::info("installing sub-dependency: {}", req.target);
+            std::vector<std::string> subTargets = { req.target };
+            cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false);
+        } else if (req.op == "remove") {
+            log::info("removing sub-dependency: {}", req.target);
+            cmd_remove(req.target);
+        }
     }
 
     activate_requested_targets();
