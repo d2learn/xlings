@@ -19,8 +19,7 @@ trap cleanup EXIT
 # ── 1. Set up home and sync index (scode sub-index discovered automatically) ──
 write_home_config "$HOME_DIR" "GLOBAL"
 
-(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" update)
-(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" install -y 2>&1) | tee /dev/stderr
+(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" install -y)
 
 # ── 2. Verify anonymous subos sysroot has the headers ──
 ANON_SUBOS="$SCENARIO_DIR/.xlings/subos/_"
