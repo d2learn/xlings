@@ -1,0 +1,9 @@
+{
+  "mirror": "GLOBAL",
+  "index_repos": [
+    {
+      "name": "xim",
+      "url": "../../../fixtures/xim-pkgindex"
+    }
+  ]
+}
