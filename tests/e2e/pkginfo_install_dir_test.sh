@@ -13,6 +13,7 @@ cleanup() { restore_scenario "$SCENARIO_DIR" "$HOME_DIR" "$CONFIG_BACKUP"; }
 trap cleanup EXIT
 write_home_config "$HOME_DIR" "GLOBAL"
 
+(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" update)
 (cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" install -y 2>&1) | tee /dev/stderr
 
 # Anonymous subos should be created at project/.xlings/subos/_/
