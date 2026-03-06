@@ -472,6 +472,8 @@ private:
                                     load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
                             } else {
                                 projectSubosMode_ = ProjectSubosMode::Anonymous;
+                                projectSubosWorkspace_ =
+                                    load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
                             }
                         }
                     } catch (...) {}
@@ -514,6 +516,7 @@ public:
         if (mode == ProjectSubosMode::Anonymous) {
             auto ws = globalWorkspace;
             merge_workspace_into_(ws, projectWorkspace);
+            merge_workspace_into_(ws, projectSubosWorkspace);
             return ws;
         }
 
@@ -637,13 +640,15 @@ public:
     [[nodiscard]] static const xvm::Workspace& workspace() {
         auto& self = instance_();
         if (!self.hasProjectConfig_) return self.globalWorkspace_;
-        if (self.projectSubosMode_ == ProjectSubosMode::Named) return self.projectSubosWorkspace_;
+        if (self.projectSubosMode_ == ProjectSubosMode::Named ||
+            self.projectSubosMode_ == ProjectSubosMode::Anonymous) return self.projectSubosWorkspace_;
         return self.projectWorkspace_;
     }
     [[nodiscard]] static xvm::Workspace& workspace_mut() {
         auto& self = instance_();
         if (!self.hasProjectConfig_) return self.globalWorkspace_;
-        if (self.projectSubosMode_ == ProjectSubosMode::Named) return self.projectSubosWorkspace_;
+        if (self.projectSubosMode_ == ProjectSubosMode::Named ||
+            self.projectSubosMode_ == ProjectSubosMode::Anonymous) return self.projectSubosWorkspace_;
         return self.projectWorkspace_;
     }
     [[nodiscard]] static bool has_project_config() { return instance_().hasProjectConfig_; }
@@ -719,7 +724,8 @@ public:
         }
 
         auto& workspace = self.hasProjectConfig_
-            ? (self.projectSubosMode_ == ProjectSubosMode::Named ? self.projectSubosWorkspace_ : self.projectWorkspace_)
+            ? ((self.projectSubosMode_ == ProjectSubosMode::Named ||
+                self.projectSubosMode_ == ProjectSubosMode::Anonymous) ? self.projectSubosWorkspace_ : self.projectWorkspace_)
             : self.globalWorkspace_;
         json["workspace"] = xvm::workspace_to_json(workspace);
         platform::write_string_to_file(subosConfigPath.string(), json.dump(2));
