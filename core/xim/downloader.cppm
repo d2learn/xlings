@@ -72,8 +72,12 @@ DownloadResult git_clone_one(const DownloadTask& task) {
     return result;
 }
 
-// Download a single file using curl
-DownloadResult download_one(const DownloadTask& task) {
+// Download a single file using curl.
+// showProgress: true  -> use curl -# (ASCII progress bar, only safe when one download at a time)
+//               false -> use curl -s (silent, used for concurrent downloads)
+// TODO: replace curl subprocess with libcurl for proper per-task progress callbacks
+//       regardless of concurrency level
+DownloadResult download_one(const DownloadTask& task, bool showProgress = false) {
     namespace fs = std::filesystem;
 
     DownloadResult result;
@@ -127,9 +131,10 @@ DownloadResult download_one(const DownloadTask& task) {
     bool downloaded = false;
     for (auto& tryUrl : urls) {
         log::info("downloading {} from {}", task.name, tryUrl);
+        const char* progressFlag = showProgress ? "-#" : "-s";
         auto cmd = std::format(
-            "curl -fLs --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
-            destFile.string(), tryUrl);
+            "curl -fL{} --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
+            progressFlag, destFile.string(), tryUrl);
         auto rc = platform::exec(cmd);
         if (rc == 0) {
             downloaded = true;
@@ -176,6 +181,15 @@ download_all(std::span<const DownloadTask> tasks,
     std::vector<std::jthread> threads;
     threads.reserve(tasks.size());
 
+    // Show curl ASCII progress bar only when a single package is being downloaded.
+    // With multiple concurrent downloads the progress bars would interleave on the
+    // terminal and become unreadable, so we keep them silent in that case.
+    // TODO: switch to libcurl for proper multi-task progress reporting.
+    const bool showProgress = (tasks.size() == 1);
+    if (!showProgress) {
+        log::info("downloading {} packages concurrently, please wait...", tasks.size());
+    }
+
     for (std::size_t i = 0; i < tasks.size(); ++i) {
         threads.emplace_back([&, i]() {
             // Wait for concurrency slot
@@ -189,7 +203,7 @@ download_all(std::span<const DownloadTask> tasks,
                 onProgress(tasks[i].name, 0.0f);
             }
 
-            auto result = download_one(tasks[i]);
+            auto result = download_one(tasks[i], showProgress);
 
             if (onProgress) {
                 onProgress(tasks[i].name, result.success ? 1.0f : -1.0f);
