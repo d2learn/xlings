@@ -1102,9 +1102,9 @@ TEST(XvmShimTest, ExtractProgramName) {
     EXPECT_EQ(xlings::xvm::extract_program_name("/path/to/xlings"), "xlings");
 }
 
-TEST(XvmShimTest, ResolveExecutableEnvAliasFallback) {
-    // When program doesn't exist as a file, resolve_executable returns empty
-    // This triggers the env alias fallback in shim_dispatch
+TEST(XvmShimTest, ResolveExecutableFindsProgram) {
+    // resolve_executable only looks up program_name as a file.
+    // Alias handling is done separately in shim_dispatch via platform::exec.
     namespace fs = std::filesystem;
     auto testDir = fs::temp_directory_path() / "xlings_env_alias_test";
     fs::remove_all(testDir);
@@ -1114,22 +1114,14 @@ TEST(XvmShimTest, ResolveExecutableEnvAliasFallback) {
     auto gcc_path = testDir / "bin" / "gcc";
     xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
 
-    // resolve_executable for "cc" with alias "gcc" should fail (alias contains args)
-    // because "gcc --sysroot=..." is not a valid filename
-    auto result1 = xlings::xvm::resolve_executable(
-        "cc", testDir.string(), "", {"gcc --sysroot=/path"});
+    // "cc" does not exist as a file → empty
+    auto result1 = xlings::xvm::resolve_executable("cc", testDir.string(), "");
     EXPECT_TRUE(result1.empty());
 
-    // resolve_executable for "cc" with simple alias "gcc" should find bin/gcc
-    auto result2 = xlings::xvm::resolve_executable(
-        "cc", testDir.string(), "", {"gcc"});
+    // "gcc" exists under bin/ → found
+    auto result2 = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
     EXPECT_FALSE(result2.empty());
     EXPECT_EQ(result2, testDir / "bin" / "gcc");
-
-    // resolve_executable for "gcc" directly should find bin/gcc
-    auto result3 = xlings::xvm::resolve_executable(
-        "gcc", testDir.string(), "", {});
-    EXPECT_FALSE(result3.empty());
 
     fs::remove_all(testDir);
 }

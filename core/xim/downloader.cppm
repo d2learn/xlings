@@ -240,15 +240,28 @@ extract_archive(const std::filesystem::path& archive,
                           archive.string(), destDir.string());
     } else if (ext == ".zip") {
 #ifdef _WIN32
-        // TODO: 统一优化跨平台解压方案，消除对外部 unzip 命令的依赖
-        auto [probe_rc, _] = platform::run_command_capture("where unzip");
-        if (probe_rc == 0) {
-            cmd = std::format("unzip -o \"{}\" -d \"{}\"",
-                              archive.string(), destDir.string());
+        // Probe available tools in priority order:
+        //   1. Windows built-in bsdtar (C:\Windows\System32\tar.exe, present since Win10 1803).
+        //      Use the absolute path — not "where tar" — to avoid picking up GNU tar from
+        //      MSYS2/Git-for-Windows which does NOT support ZIP (only bsdtar/libarchive does).
+        //      Check existence with fs::exists, no shell round-trip needed.
+        //   2. unzip (available with Git for Windows / MSYS2 toolchains)
+        //   3. PowerShell Expand-Archive (fallback; uses & { } script-block to avoid
+        //      cmd.exe double-quote stripping that causes "cmdlet not found" errors)
+        const fs::path winTar = "C:\\Windows\\System32\\tar.exe";
+        if (fs::exists(winTar)) {
+            cmd = std::format("\"{}\" -xf \"{}\" -C \"{}\"",
+                              winTar.string(), archive.string(), destDir.string());
         } else {
-            cmd = std::format(
-                "powershell -NoProfile -Command \"Expand-Archive -Path '{}' -DestinationPath '{}' -Force\"",
-                archive.string(), destDir.string());
+            auto [unzip_rc, _u] = platform::run_command_capture("where unzip");
+            if (unzip_rc == 0) {
+                cmd = std::format("unzip -o \"{}\" -d \"{}\"",
+                                  archive.string(), destDir.string());
+            } else {
+                cmd = std::format(
+                    "powershell -NoProfile -Command \"& {{Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force}}\"",
+                    archive.string(), destDir.string());
+            }
         }
 #else
         cmd = std::format("unzip -o \"{}\" -d \"{}\"",
