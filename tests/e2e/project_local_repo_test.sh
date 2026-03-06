@@ -64,7 +64,7 @@ assert_contains "$INFO_OUT" "installed:   yes" \
 )
 NODE_VER_20="$(
   cd "$SCENARIO_DIR" &&
-  env XLINGS_HOME="$HOME_DIR" "$HOME_DIR/subos/default/bin/node" --version
+  env XLINGS_HOME="$HOME_DIR" "$SCENARIO_DIR/.xlings/subos/_/bin/node" --version
 )"
 [[ "$NODE_VER_20" == "v20.19.0" ]] || fail "node shim did not switch to 20.19.0"
 
@@ -74,7 +74,7 @@ NODE_VER_20="$(
 )
 NODE_VER_22="$(
   cd "$SCENARIO_DIR" &&
-  env XLINGS_HOME="$HOME_DIR" "$HOME_DIR/subos/default/bin/node" --version
+  env XLINGS_HOME="$HOME_DIR" "$SCENARIO_DIR/.xlings/subos/_/bin/node" --version
 )"
 [[ "$NODE_VER_22" == "v22.17.1" ]] || fail "node shim did not switch back to 22.17.1"
 
