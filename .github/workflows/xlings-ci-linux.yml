@@ -124,6 +124,10 @@ jobs:
         run: |
           bash tests/e2e/index_cache_test.sh
 
+      - name: "E2E-09: Legacy config.xlings Compatibility"
+        run: |
+          bash tests/e2e/legacy_config_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

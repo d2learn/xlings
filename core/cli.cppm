@@ -19,16 +19,16 @@ namespace lua = mcpplibs::capi::lua;
 
 namespace xlings::cli {
 
-// Parse legacy config.xlings (Lua format) and extract install targets from the xim table.
-// Returns empty vector if file doesn't exist or has no xim table.
-std::vector<std::string> parse_legacy_config_(const std::filesystem::path& configFile) {
+// Parse legacy config.xlings (Lua format) and extract workspace from the xim table.
+// Returns empty workspace if file doesn't exist or has no xim/xlings_deps.
+xvm::Workspace parse_legacy_config_(const std::filesystem::path& configFile) {
     namespace fs = std::filesystem;
-    std::vector<std::string> targets;
+    xvm::Workspace workspace;
 
-    if (!fs::exists(configFile)) return targets;
+    if (!fs::exists(configFile)) return workspace;
 
     auto* L = lua::L_newstate();
-    if (!L) return targets;
+    if (!L) return workspace;
     lua::L_openlibs(L);
 
     // Provide a no-op is_host() so Lua files with conditionals don't error
@@ -37,7 +37,7 @@ std::vector<std::string> parse_legacy_config_(const std::filesystem::path& confi
     if (lua::L_dofile(L, configFile.string().c_str()) != lua::OK) {
         log::warn("failed to parse legacy config: {}", lua::tostring(L, -1));
         lua::close(L);
-        return targets;
+        return workspace;
     }
 
     // Read xim table: { pkg_name = "version", ... }
@@ -53,11 +53,7 @@ std::vector<std::string> parse_legacy_config_(const std::filesystem::path& confi
                     if (lua::type(L, -1) == lua::TSTRING) {
                         version = lua::tostring(L, -1);
                     }
-                    if (version.empty()) {
-                        targets.push_back(key);
-                    } else {
-                        targets.push_back(key + "@" + version);
-                    }
+                    workspace[key] = version;
                 }
             }
             lua::pop(L, 1); // pop value, keep key for next iteration
@@ -66,19 +62,17 @@ std::vector<std::string> parse_legacy_config_(const std::filesystem::path& confi
     lua::pop(L, 1); // pop xim
 
     // Fallback: older format uses xlings_deps = "cpp, vscode, mdbook"
-    if (targets.empty()) {
+    if (workspace.empty()) {
         lua::getglobal(L, "xlings_deps");
         if (lua::type(L, -1) == lua::TSTRING) {
             std::string deps = lua::tostring(L, -1);
-            // Split by comma
             std::istringstream ss(deps);
             std::string token;
             while (std::getline(ss, token, ',')) {
-                // Trim whitespace
                 auto start = token.find_first_not_of(" \t");
                 auto end = token.find_last_not_of(" \t");
                 if (start != std::string::npos) {
-                    targets.push_back(token.substr(start, end - start + 1));
+                    workspace[token.substr(start, end - start + 1)] = "";
                 }
             }
         }
@@ -86,7 +80,19 @@ std::vector<std::string> parse_legacy_config_(const std::filesystem::path& confi
     }
 
     lua::close(L);
-    return targets;
+    return workspace;
+}
+
+// Generate .xlings.json from a workspace map
+void generate_xlings_json_(const std::filesystem::path& dir, const xvm::Workspace& workspace) {
+    nlohmann::json ws;
+    for (auto& [name, version] : workspace) {
+        ws[name] = version;
+    }
+    nlohmann::json root;
+    root["workspace"] = ws;
+    auto outPath = dir / ".xlings.json";
+    platform::write_string_to_file(outPath.string(), root.dump(2));
 }
 
 // Install packages from project .xlings.json workspace
@@ -131,9 +137,13 @@ int install_from_project_config_() {
         // Fallback: try legacy config.xlings (Lua format)
         auto legacyCfg = cur / "config.xlings";
         if (fs::exists(legacyCfg, ec) && fs::is_regular_file(legacyCfg, ec)) {
-            auto targets = parse_legacy_config_(legacyCfg);
-            if (!targets.empty()) {
-                log::info("using legacy config: {}", legacyCfg.string());
+            auto workspace = parse_legacy_config_(legacyCfg);
+            if (!workspace.empty()) {
+                std::println("detected legacy config: {}", legacyCfg.string());
+                std::println("generating .xlings.json from config.xlings ...");
+                generate_xlings_json_(cur, workspace);
+                std::println("generated: {}", (cur / ".xlings.json").string());
+                auto targets = Config::workspace_install_targets(workspace);
                 return xim::cmd_install(targets, true, false);
             }
         }
