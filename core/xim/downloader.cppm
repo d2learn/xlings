@@ -248,9 +248,14 @@ extract_archive(const std::filesystem::path& archive,
         //   2. unzip (available with Git for Windows / MSYS2 toolchains)
         //   3. PowerShell Expand-Archive (fallback; uses & { } script-block to avoid
         //      cmd.exe double-quote stripping that causes "cmdlet not found" errors)
+        // C:\Windows\System32\tar.exe has no spaces, so no quoting needed around
+        // the executable. _popen runs commands via "cmd.exe /c <cmd>", and cmd.exe
+        // has a special rule: when the command starts with '"', it strips the first
+        // and last '"' from the entire line. Quoting the exe path would corrupt the
+        // archive/dest paths, producing "invalid name" errors at runtime.
         const fs::path winTar = "C:\\Windows\\System32\\tar.exe";
         if (fs::exists(winTar)) {
-            cmd = std::format("\"{}\" -xf \"{}\" -C \"{}\"",
+            cmd = std::format("{} -xf \"{}\" -C \"{}\"",
                               winTar.string(), archive.string(), destDir.string());
         } else {
             auto [unzip_rc, _u] = platform::run_command_capture("where unzip");
@@ -258,8 +263,11 @@ extract_archive(const std::filesystem::path& archive,
                 cmd = std::format("unzip -o \"{}\" -d \"{}\"",
                                   archive.string(), destDir.string());
             } else {
+                // Avoid "& { }" script-block: '&' is cmd.exe's command separator
+                // and can be misinterpreted even inside a quoted string in some
+                // cmd.exe versions. Call Expand-Archive directly without & { }.
                 cmd = std::format(
-                    "powershell -NoProfile -Command \"& {{Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force}}\"",
+                    "powershell -NoProfile -Command \"Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force\"",
                     archive.string(), destDir.string());
             }
         }
