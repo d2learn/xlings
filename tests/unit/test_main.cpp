@@ -608,25 +608,25 @@ TEST_F(XimResolverTest, ResolveSinglePackage) {
 TEST_F(XimResolverTest, ResolveWithDeps) {
     std::vector<std::string> targets = { "pnpm" };
     auto result = xlings::xim::resolve(mgr_, targets, "linux");
-    // pnpm depends on nodejs
+    // pnpm depends on node (package name is "node", not "nodejs")
     if (result.has_value() && !result->has_errors()) {
-        bool hasNodejs = false;
+        bool hasNode = false;
         for (auto& node : result->nodes) {
-            if (node.name.find("nodejs") != std::string::npos) {
-                hasNodejs = true;
+            if (node.name.find("node") != std::string::npos) {
+                hasNode = true;
                 break;
             }
         }
-        EXPECT_TRUE(hasNodejs) << "pnpm should pull in nodejs as dependency";
+        EXPECT_TRUE(hasNode) << "pnpm should pull in node as dependency";
         // Deps should come before dependents in topo order
-        int nodejsIdx = -1, pnpmIdx = -1;
+        int nodeIdx = -1, pnpmIdx = -1;
         for (int i = 0; i < static_cast<int>(result->nodes.size()); ++i) {
-            if (result->nodes[i].name.find("nodejs") != std::string::npos) nodejsIdx = i;
+            if (result->nodes[i].name.find("node") != std::string::npos) nodeIdx = i;
             if (result->nodes[i].name.find("pnpm") != std::string::npos) pnpmIdx = i;
         }
-        if (nodejsIdx >= 0 && pnpmIdx >= 0) {
-            EXPECT_LT(nodejsIdx, pnpmIdx)
-                << "nodejs should come before pnpm in topo order";
+        if (nodeIdx >= 0 && pnpmIdx >= 0) {
+            EXPECT_LT(nodeIdx, pnpmIdx)
+                << "node should come before pnpm in topo order";
         }
     }
 }
