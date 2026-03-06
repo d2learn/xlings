@@ -435,12 +435,24 @@ private:
     void load_project_config_() {
         namespace fs = std::filesystem;
         std::error_code ec;
-        auto cwd = fs::current_path(ec);
-        if (ec) return;
+
+        // Check env var first (set by parent xlings process for subprocess hooks)
+        auto envProjectDir = utils::get_env_or_default("XLINGS_PROJECT_DIR");
+        fs::path startDir;
+        if (!envProjectDir.empty()) {
+            auto envPath = fs::path(envProjectDir);
+            if (fs::exists(envPath / ".xlings.json", ec)) {
+                startDir = envPath;
+            }
+        }
+        if (startDir.empty()) {
+            startDir = fs::current_path(ec);
+            if (ec) return;
+        }
 
         auto homeNorm = fs::weakly_canonical(paths_.homeDir, ec);
 
-        fs::path cur = cwd;
+        fs::path cur = startDir;
         while (!cur.empty()) {
             auto cfg = cur / ".xlings.json";
             if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {

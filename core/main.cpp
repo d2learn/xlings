@@ -12,6 +12,10 @@ import xlings.xvm.shim;
 int main(int argc, char* argv[]) {
     auto& p = xlings::Config::paths();
     xlings::platform::set_env_variable("XLINGS_HOME", p.homeDir.string());
+    if (xlings::Config::has_project_config()) {
+        xlings::platform::set_env_variable("XLINGS_PROJECT_DIR",
+            xlings::Config::project_dir().string());
+    }
 
     // Multicall: check argv[0] to determine mode
     auto program_name = xlings::xvm::extract_program_name(argv[0]);
