@@ -791,6 +791,7 @@ public:
             ctx.install_dir = targetRoot / detail_::effective_store_name_(node) / node.version;
             ctx.bin_dir = Config::paths().binDir;
             ctx.xpkg_dir = node.pkgFile.parent_path();
+            ctx.project_data_dir = Config::project_data_dir();
             ctx.subos_sysrootdir = Config::paths().subosDir.string();
             ctx.deps_list = node.deps;
 
