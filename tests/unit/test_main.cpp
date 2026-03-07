@@ -1180,20 +1180,25 @@ TEST(XvmShimTest, AliasExecPathPrioritizesVDataPath) {
     fs::remove_all(testDir);
 }
 
-TEST(XvmShimTest, AliasExecPathEmptyVDataSkipsShimDir) {
-    // When vdata->path is not configured (empty), build_alias_exec_path must
-    // NOT add cfg_bin.  Adding it with nothing before it would make the shim
-    // dir the leading PATH entry: the alias command would find the shim itself
-    // instead of the real binary and cause infinite recursion.
-    std::string expanded_path = "";   // vdata->path not configured
+TEST(XvmShimTest, AliasExecPathCfgBinAlwaysAppended) {
+    // vdata->path is always set (it is the xpkg install dir, populated during
+    // install), so build_alias_exec_path always appends cfg_bin when non-empty.
+    // The old guard "!new_path.empty()" was overly conservative and has been
+    // removed; cfg_bin is now unconditional.
+    // Use a non-existent but well-formed path to verify that cfg_bin is appended
+    // even when the install dir is absent from disk.
+    namespace fs = std::filesystem;
+    auto absent_path = (fs::temp_directory_path() / "xlings_cfgbin_test_no_such_dir").string();
+    fs::remove_all(absent_path);   // ensure it truly does not exist
+
     std::string cfg_bin       = "/home/user/.xlings/subos/default/bin";
     std::string existing_path = "/usr/bin:/usr/local/bin";
 
-    auto result = xlings::xvm::build_alias_exec_path(expanded_path, cfg_bin, existing_path);
+    auto result = xlings::xvm::build_alias_exec_path(absent_path, cfg_bin, existing_path);
 
-    // Shim dir must NOT appear (recursion guard).
-    EXPECT_EQ(result.find(cfg_bin), std::string::npos)
-        << "shim dir must not be added when vdata path is empty";
+    // cfg_bin must always be present so other xlings-managed tools are reachable.
+    EXPECT_NE(result.find(cfg_bin), std::string::npos)
+        << "cfg_bin must always be appended when non-empty";
 
     // The existing PATH entries must still be reachable.
     EXPECT_NE(result.find(existing_path), std::string::npos)

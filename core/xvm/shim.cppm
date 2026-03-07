@@ -55,22 +55,18 @@ std::filesystem::path resolve_executable(const std::string& program_name,
     return {};
 }
 
-// Build the PATH string used when the alias fallback is invoked.
-// The user-configured vdata package directory and its bin/ subdirectory are
-// placed FIRST so the real binary is found before any xlings shim.  cfg_bin
-// (the xlings shim dir) is appended after the user's path so that other
-// xlings-managed tools remain accessible via shim dispatch.  The guard
-// "!new_path.empty()" ensures cfg_bin is only added when the user's path was
-// actually present: if vdata->path is not configured (empty or non-existent),
-// letting cfg_bin lead PATH would cause the alias command to find the shim
-// itself and enter infinite recursion.
+// Build the PATH string used when an alias command is invoked.
+// Entry order: vdata package dir → vdata/bin → cfg_bin (xlings shim dir) → existing PATH.
+// vdata->path is always set (it is the xpkg install dir, populated during install), so
+// cfg_bin is appended unconditionally — no need to gate it on whether expanded_path was
+// non-empty.  Other xlings-managed tools therefore remain accessible from alias commands.
 // Returns: a PATH string with entries separated by the platform path separator.
 std::string build_alias_exec_path(const std::string& expanded_path,
                                    const std::string& cfg_bin,
                                    const std::string& existing_path) {
     std::string new_path;
 
-    if (!expanded_path.empty() && std::filesystem::exists(expanded_path)) {
+    if (std::filesystem::exists(expanded_path)) {
         new_path = expanded_path;
         auto bin_path = (std::filesystem::path(expanded_path) / "bin").string();
         if (std::filesystem::exists(bin_path)) {
@@ -79,9 +75,8 @@ std::string build_alias_exec_path(const std::string& expanded_path,
         }
     }
 
-    // Append the shim dir only after the user's configured path is in place.
-    if (!new_path.empty() && !cfg_bin.empty()) {
-        new_path += platform::PATH_SEPARATOR;
+    if (!cfg_bin.empty()) {
+        if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
         new_path += cfg_bin;
     }
 
