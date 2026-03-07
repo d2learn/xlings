@@ -256,9 +256,9 @@ std::filesystem::path current_workspace_config_path_() {
             return Config::project_dir() / ".xlings" / "subos" / Config::project_subos_name() / ".xlings.json";
         }
         if (Config::project_subos_mode() == ProjectSubosMode::Anonymous) {
-            return Config::project_dir() / ".xlings" / "subos" / "_" / ".xlings.json";
+            return Config::project_state_path();
         }
-        return Config::project_dir() / ".xlings.json";
+        return Config::project_state_path();
     }
     return Config::paths().homeDir / "subos" / Config::paths().activeSubos / ".xlings.json";
 }
@@ -284,7 +284,9 @@ std::vector<std::filesystem::path> workspace_config_paths_for_scope_(PackageScop
     if (scope == PackageScope::Project && Config::has_project_config()) {
         auto projectRoot = Config::project_dir();
         if (!projectRoot.empty()) {
-            paths.push_back(projectRoot / ".xlings.json");
+            paths.push_back(Config::project_manifest_path());
+            auto projectStatePath = Config::project_state_path();
+            if (!projectStatePath.empty()) paths.push_back(projectStatePath);
             auto subosRoot = projectRoot / ".xlings" / "subos";
             std::error_code ec;
             if (fs::exists(subosRoot, ec) && fs::is_directory(subosRoot, ec)) {

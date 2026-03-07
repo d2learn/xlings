@@ -260,6 +260,20 @@ private:
         return projectDir_.empty() ? std::filesystem::path{} : projectDir_ / ".xlings" / "data";
     }
 
+    [[nodiscard]] std::filesystem::path project_home_dir_() const {
+        return projectDir_.empty() ? std::filesystem::path{} : projectDir_ / ".xlings";
+    }
+
+    [[nodiscard]] std::filesystem::path project_state_path_() const {
+        auto homeDir = project_home_dir_();
+        if (homeDir.empty()) return {};
+        return homeDir / ".xlings.json";
+    }
+
+    [[nodiscard]] std::filesystem::path project_manifest_path_() const {
+        return projectDir_.empty() ? std::filesystem::path{} : projectDir_ / ".xlings.json";
+    }
+
     [[nodiscard]] std::filesystem::path project_subos_dir_() const {
         if (projectDir_.empty()) return {};
         if (!projectSubosName_.empty()) return projectDir_ / ".xlings" / "subos" / projectSubosName_;
@@ -463,18 +477,42 @@ private:
                             }
                             load_index_repos_from_json_(json, projectIndexRepos_);
                             load_resource_servers_from_json_(json, projectResourceServers_);
-                            if (json.contains("versions") && json["versions"].is_object()) {
+                            projectSubosName_ = load_project_subos_name_(json);
+
+                            auto projectStatePath = project_state_path_();
+                            nlohmann::json projectStateJson;
+                            bool hasProjectStateJson = false;
+                            if (!projectStatePath.empty() && fs::exists(projectStatePath)) {
+                                try {
+                                    auto stateContent = platform::read_file_to_string(projectStatePath.string());
+                                    projectStateJson = nlohmann::json::parse(stateContent, nullptr, false);
+                                    hasProjectStateJson = !projectStateJson.is_discarded() && projectStateJson.is_object();
+                                } catch (...) {
+                                    hasProjectStateJson = false;
+                                }
+                            }
+
+                            if (hasProjectStateJson && projectStateJson.contains("versions") &&
+                                projectStateJson["versions"].is_object()) {
+                                projectVersions_ = xvm::versions_from_json(projectStateJson["versions"]);
+                            } else if (json.contains("versions") && json["versions"].is_object()) {
                                 projectVersions_ = xvm::versions_from_json(json["versions"]);
                             }
-                            projectSubosName_ = load_project_subos_name_(json);
+
                             if (!projectSubosName_.empty()) {
                                 projectSubosMode_ = ProjectSubosMode::Named;
                                 projectSubosWorkspace_ =
                                     load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
                             } else {
                                 projectSubosMode_ = ProjectSubosMode::Anonymous;
-                                projectSubosWorkspace_ =
-                                    load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
+                                if (hasProjectStateJson && projectStateJson.contains("workspace") &&
+                                    projectStateJson["workspace"].is_object()) {
+                                    projectSubosWorkspace_ =
+                                        xvm::workspace_from_json(projectStateJson["workspace"]);
+                                } else {
+                                    projectSubosWorkspace_ =
+                                        load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
+                                }
                             }
                         }
                     } catch (...) {}
@@ -552,6 +590,18 @@ public:
 
     [[nodiscard]] static std::filesystem::path project_data_dir() {
         return instance_().project_data_dir_();
+    }
+
+    [[nodiscard]] static std::filesystem::path project_home_dir() {
+        return instance_().project_home_dir_();
+    }
+
+    [[nodiscard]] static std::filesystem::path project_state_path() {
+        return instance_().project_state_path_();
+    }
+
+    [[nodiscard]] static std::filesystem::path project_manifest_path() {
+        return instance_().project_manifest_path_();
     }
 
     [[nodiscard]] static std::filesystem::path effective_data_dir() {
@@ -677,8 +727,13 @@ public:
         namespace fs = std::filesystem;
         auto& self = instance_();
         auto configPath = (self.hasProjectConfig_ && !self.projectDir_.empty())
-            ? self.projectDir_ / ".xlings.json"
+            ? self.project_state_path_()
             : self.paths_.homeDir / ".xlings.json";
+
+        if (self.hasProjectConfig_) {
+            auto projectHomeDir = self.project_home_dir_();
+            if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
+        }
 
         nlohmann::json json;
         if (fs::exists(configPath)) {
@@ -700,8 +755,7 @@ public:
         auto& self = instance_();
         fs::path subosConfigPath;
         if (self.hasProjectConfig_ &&
-            (self.projectSubosMode_ == ProjectSubosMode::Named ||
-             self.projectSubosMode_ == ProjectSubosMode::Anonymous)) {
+            self.projectSubosMode_ == ProjectSubosMode::Named) {
             auto projSubosDir = self.project_subos_dir_();
             fs::create_directories(projSubosDir);
             fs::create_directories(projSubosDir / "bin");
@@ -709,8 +763,21 @@ public:
             fs::create_directories(projSubosDir / "usr");
             fs::create_directories(projSubosDir / "generations");
             subosConfigPath = projSubosDir / ".xlings.json";
+        } else if (self.hasProjectConfig_ &&
+                   self.projectSubosMode_ == ProjectSubosMode::Anonymous) {
+            auto projSubosDir = self.project_subos_dir_();
+            auto projectHomeDir = self.project_home_dir_();
+            if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
+            fs::create_directories(projSubosDir);
+            fs::create_directories(projSubosDir / "bin");
+            fs::create_directories(projSubosDir / "lib");
+            fs::create_directories(projSubosDir / "usr");
+            fs::create_directories(projSubosDir / "generations");
+            subosConfigPath = self.project_state_path_();
         } else if (self.hasProjectConfig_ && !self.projectDir_.empty()) {
-            subosConfigPath = self.projectDir_ / ".xlings.json";
+            auto projectHomeDir = self.project_home_dir_();
+            if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
+            subosConfigPath = self.project_state_path_();
         } else {
             subosConfigPath = self.paths_.homeDir / "subos" / self.globalActiveSubos_ / ".xlings.json";
         }
