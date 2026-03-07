@@ -14,8 +14,21 @@ cleanup() {
 trap cleanup EXIT
 write_home_config "$HOME_DIR" "GLOBAL"
 
-EXPECTED_NODE_VERSION="20.19.0"
-EXPECTED_NODE_OUTPUT="v20.19.0"
+case "$(uname -s)" in
+  Linux)
+    EXPECTED_NODE_VERSION="20.19.0"
+    ;;
+  Darwin)
+    EXPECTED_NODE_VERSION="22.17.1"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    EXPECTED_NODE_VERSION="22.17.1"
+    ;;
+  *)
+    EXPECTED_NODE_VERSION="22.17.1"
+    ;;
+esac
+EXPECTED_NODE_OUTPUT="v${EXPECTED_NODE_VERSION}"
 
 INSTALL_OUT="$({
   cd "$SCENARIO_DIR"
