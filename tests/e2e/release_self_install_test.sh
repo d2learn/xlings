@@ -36,4 +36,8 @@ CONFIG_OUT="$(
 echo "$CONFIG_OUT" | grep -q "XLINGS_HOME:     $INSTALLED_HOME" || \
   fail "installed home config output mismatch"
 
+# Verify elfpatch (patchelf) was installed as runtime dependency
+[[ -x "$INSTALLED_HOME/subos/current/bin/patchelf" ]] || \
+  fail "patchelf binary not found after self install"
+
 log "PASS: release self install scenario"

@@ -415,6 +415,22 @@ export int cmd_install() {
             std::println(stderr, "[xlings:self] warning: verification failed");
     }
 
+#if defined(__linux__)
+    if (fs::exists(verifyBin)) {
+        platform::set_env_variable("XLINGS_HOME", targetHome.string());
+        auto binDir = (targetHome / "subos" / "current" / "bin").string();
+        auto existingPath = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
+        platform::set_env_variable("PATH", binDir + platform::PATH_SEPARATOR + existingPath);
+
+        std::println("[xlings:self] installing elfpatch (runtime dependency) ...");
+        auto rc = platform::exec("xlings install xim:elfpatch@0.18.0 -y");
+        if (rc != 0) {
+            std::println(stderr, "[xlings:self] warning: elfpatch install failed (rc={})", rc);
+            std::println(stderr, "  hint: run manually: xlings install xim:elfpatch@0.18.0 -y");
+        }
+    }
+#endif
+
     std::println("\n[xlings:self] install: {} ({}) - ok", targetHome.string(), pkgVersion);
     std::println("");
     std::println("  run 'xlings -h' to get started");
