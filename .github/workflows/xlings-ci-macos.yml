@@ -91,6 +91,10 @@ jobs:
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 
+      - name: Prepare fixture index repo
+        run: |
+          bash tests/e2e/prepare_fixture_index.sh
+
       - name: "E2E-01: Bootstrap Home (portable + installed)"
         run: |
           bash tests/e2e/bootstrap_home_test.sh
@@ -119,6 +123,10 @@ jobs:
       - name: "E2E-05: Fixed Project Scenarios"
         run: |
           bash tests/e2e/project_e2e_test.sh
+
+      - name: "E2E-06: Script-type package install/export/uninstall"
+        run: |
+          bash tests/e2e/script_type_install_test.sh
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4
