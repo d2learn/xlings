@@ -22,9 +22,10 @@ target("xlings")
 
     if is_plat("macosx") then
         set_toolchains("llvm")
-        add_cflags("-mmacosx-version-min=11.0")
-        add_cxxflags("-mmacosx-version-min=11.0")
-        add_ldflags("-mmacosx-version-min=11.0")
+        -- 静态链接 LLVM 自带的 libc++，避免依赖系统 libc++.dylib 中缺失的 C++23 符号
+        -- (std::println 等 C++23 特性需要 macOS 15+ 的 libc++，静态链接后可在 macOS 11+ 运行)
+        add_ldflags("-nostdlib++", {force = true})
+        add_links("c++", "c++abi")
     elseif is_plat("linux") then
         if not os.getenv("XLINGS_NOLINKSTATIC") then
             add_ldflags("-static", {force = true})

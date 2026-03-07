@@ -68,7 +68,7 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: macos-14   # Apple M1 arm64
+    runs-on: macos-15   # Apple M1 arm64
 
     steps:
       - name: Checkout
@@ -92,7 +92,7 @@ jobs:
           # macOS runner 自带 Xcode Command Line Tools
           clang --version
           # C++23 Modules 需要 Clang 18+ 或 Apple Clang 16+
-          # macos-14 (Sonoma) 配有 Apple Clang 16+
+          # macos-15 (Sonoma) 配有 Apple Clang 16+
           clang++ -std=c++23 -x c++ /dev/null -o /dev/null 2>/dev/null || \
             (echo "ERROR: Clang does not support C++23" && exit 1)
 

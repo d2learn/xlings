@@ -8,13 +8,14 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
   BOOTSTRAP_XLINGS_VERSION: v0.3.2
   BOOTSTRAP_LLVM_VERSION: 20.1.7
   XMAKE_VERSION: v3.0.7
 
 jobs:
   build-and-test:
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: Checkout
@@ -74,6 +75,7 @@ jobs:
           xmake f -c -p macosx -m release \
             --toolchain=llvm \
             --sdk="$LLVM_PREFIX" \
+            --target_minver=11.0 \
             -y
           echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
 
