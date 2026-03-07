@@ -201,18 +201,19 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         }
     }
 
-    // Always try to resolve exec_name directly in the package directory first.
-    // When the binary is found, it is exec'd with execvp (no PATH lookup needed).
-    // This is also faster and more deterministic than the alias fallback.
-    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
-
-    if (exe_path.empty() && !vdata->alias.empty()) {
-        // exec_name not found directly in the package directory.
-        // Fall back to running the alias command through PATH.
-        // build_alias_exec_path places the user's vdata path first, appends the
-        // xlings shim dir (so other managed tools stay accessible), and then the
-        // original PATH.  The shim dir is omitted when vdata path is empty to
-        // prevent it from leading PATH and causing infinite shim recursion.
+    // Alias takes unconditional priority: when alias is set, always run it via PATH.
+    // Attempting to resolve the binary first would silently bypass the alias when a
+    // same-named file happens to exist in the package directory, producing wrong
+    // behaviour (e.g. gcc has alias "x86_64-linux-musl-gcc" but "gcc" also exists
+    // in the install dir as a wrapper — the user configured the alias intentionally).
+    if (!vdata->alias.empty()) {
+        // build_alias_exec_path places the user's vdata path (xpkg install dir) and
+        // its bin/ subdirectory FIRST so the real target binary is found before any
+        // xlings shim.  cfg_bin (the shim dir) is appended after the user's path so
+        // that other xlings-managed tools (e.g. xlings itself for script aliases) are
+        // still reachable.  The guard inside build_alias_exec_path ensures cfg_bin is
+        // not added when the install dir does not exist, preventing it from leading
+        // PATH and causing infinite shim recursion.
         auto expanded_path = expand_path(vdata->path, xlings_home);
         auto existing_path = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
         auto cfg_bin = Config::paths().binDir.string();
@@ -220,12 +221,12 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         platform::set_env_variable("PATH",
             build_alias_exec_path(expanded_path, cfg_bin, existing_path));
 
-        // Setup custom envs
+        // Apply any extra envs declared in vdata
         setup_envs(*vdata, "", xlings_home);
 
         platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
 
-        // Build command: alias + original args, run via platform::exec
+        // Build command: alias[0] + original args
         std::string cmd = vdata->alias[0];
         for (int i = 1; i < argc; ++i) {
             cmd += " \"";
@@ -235,6 +236,9 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         return platform::exec(cmd);
     }
 
+    // No alias: resolve the binary directly inside the package directory and
+    // exec it with execvp (skips PATH entirely, fast and deterministic).
+    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
     if (exe_path.empty()) {
         std::println(stderr, "xlings: executable '{}' not found", exec_name);
         std::println(stderr, "  path: {}", expand_path(vdata->path, xlings_home));

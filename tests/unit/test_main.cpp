@@ -1103,10 +1103,10 @@ TEST(XvmShimTest, ExtractProgramName) {
 }
 
 TEST(XvmShimTest, ResolveExecutableFindsProgram) {
-    // resolve_executable looks up program_name as a file in the package path.
-    // When the binary is found, shim_dispatch uses execvp directly (no PATH
-    // lookup).  When it returns empty, shim_dispatch falls back to the alias
-    // command via build_alias_exec_path + platform::exec.
+    // resolve_executable is only called by shim_dispatch when NO alias is set.
+    // When alias is set, shim_dispatch takes the alias path unconditionally.
+    // When there is no alias, shim_dispatch calls resolve_executable and, if a
+    // binary is found, exec's it with execvp (no PATH lookup needed).
     namespace fs = std::filesystem;
     auto testDir = fs::temp_directory_path() / "xlings_env_alias_test";
     fs::remove_all(testDir);
@@ -1116,11 +1116,11 @@ TEST(XvmShimTest, ResolveExecutableFindsProgram) {
     auto gcc_path = testDir / "bin" / "gcc";
     xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
 
-    // "cc" does not exist as a file → empty (alias fallback would be used)
+    // "cc" does not exist as a file → empty (shim_dispatch would error if no alias)
     auto result1 = xlings::xvm::resolve_executable("cc", testDir.string(), "");
     EXPECT_TRUE(result1.empty());
 
-    // "gcc" exists under bin/ → found (direct exec, no alias fallback)
+    // "gcc" exists under bin/ → found (shim_dispatch would exec directly via execvp)
     auto result2 = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
     EXPECT_FALSE(result2.empty());
     EXPECT_EQ(result2, testDir / "bin" / "gcc");
