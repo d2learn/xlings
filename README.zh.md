@@ -75,7 +75,7 @@ irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other
 **`类型1: 安装软件/工具`**
 
 ```bash
-xlings install vscode
+xlings install code
 xlings install devcpp
 xlings install gcc@15
 ```
