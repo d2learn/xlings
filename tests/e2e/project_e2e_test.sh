@@ -2,6 +2,7 @@
 set -euo pipefail
 
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_home_test.sh"
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_workspace_platform_test.sh"
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_local_repo_test.sh"
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_global_fallback_test.sh"
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_xlings_res_test.sh"

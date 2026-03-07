@@ -362,9 +362,47 @@ VersionDB versions_from_json(const nlohmann::json& j) {
 Workspace workspace_from_json(const nlohmann::json& j) {
     Workspace ws;
     if (!j.is_object()) return ws;
+
+    auto current_platform_key = []() -> std::string_view {
+#if defined(_WIN32)
+        return "windows";
+#elif defined(__APPLE__)
+        return "macosx";
+#elif defined(__linux__)
+        return "linux";
+#else
+        return "";
+#endif
+    };
+
+    auto resolve_workspace_version = [&](const nlohmann::json& value) -> std::optional<std::string> {
+        if (value.is_string()) {
+            return value.get<std::string>();
+        }
+        if (!value.is_object()) {
+            return std::nullopt;
+        }
+
+        auto platformKey = current_platform_key();
+        if (!platformKey.empty()) {
+            auto platformIt = value.find(std::string(platformKey));
+            if (platformIt != value.end() && platformIt->is_string()) {
+                return platformIt->get<std::string>();
+            }
+        }
+
+        if (auto defaultIt = value.find("default");
+            defaultIt != value.end() && defaultIt->is_string()) {
+            return defaultIt->get<std::string>();
+        }
+
+        return std::nullopt;
+    };
+
     for (auto it = j.begin(); it != j.end(); ++it) {
-        if (it.value().is_string())
-            ws[it.key()] = it.value().get<std::string>();
+        if (auto resolved = resolve_workspace_version(it.value())) {
+            ws[it.key()] = *resolved;
+        }
     }
     return ws;
 }
