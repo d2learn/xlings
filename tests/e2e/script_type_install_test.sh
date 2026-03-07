@@ -12,6 +12,9 @@ cleanup() { rm -rf "$HOME_DIR"; }
 trap cleanup EXIT
 cleanup  # start fresh
 
+# Clear stale index cache (it stores absolute paths from prior E2E runs)
+rm -f "$FIXTURE_INDEX_DIR/.xlings-index-cache.json"
+
 # ── 1. Set up XLINGS_HOME ──
 write_home_config "$HOME_DIR" "GLOBAL"
 
