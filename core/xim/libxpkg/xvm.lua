@@ -1,1 +1,0 @@
-inherit("xim.base.xvm")
