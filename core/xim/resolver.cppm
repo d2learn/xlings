@@ -2,7 +2,7 @@ export module xlings.xim.resolver;
 
 import std;
 import mcpplibs.xpkg;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 import xlings.xim.index;
 import xlings.xim.catalog;
 import xlings.log;
@@ -121,6 +121,7 @@ resolve(IndexManager& index,
         node.alreadyInstalled = entry->installed;
 
         if (pkg) {
+            node.pkgType = static_cast<int>(pkg->type);
             // Determine best version from xpm matrix
             if (!versionHint.empty()) {
                 node.version = versionHint;
@@ -277,6 +278,7 @@ resolve(PackageCatalog& catalog,
 
         auto pkg = catalog.load_package(match);
         if (pkg) {
+            node.pkgType = static_cast<int>(pkg->type);
             auto depsIt = pkg->xpm.deps.find(platform);
             if (depsIt != pkg->xpm.deps.end()) {
                 node.deps = depsIt->second;

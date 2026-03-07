@@ -8,6 +8,7 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
   BOOTSTRAP_XLINGS_VERSION: v0.3.2
   BOOTSTRAP_LLVM_VERSION: 20.1.7
   XMAKE_VERSION: v3.0.7
@@ -74,6 +75,7 @@ jobs:
           xmake f -c -p macosx -m release \
             --toolchain=llvm \
             --sdk="$LLVM_PREFIX" \
+            --target_minver=11.0 \
             -y
           echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
 
@@ -90,6 +92,10 @@ jobs:
         run: |
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
+
+      - name: Prepare fixture index repo
+        run: |
+          bash tests/e2e/prepare_fixture_index.sh
 
       - name: "E2E-01: Bootstrap Home (portable + installed)"
         run: |
@@ -119,6 +125,10 @@ jobs:
       - name: "E2E-05: Fixed Project Scenarios"
         run: |
           bash tests/e2e/project_e2e_test.sh
+
+      - name: "E2E-06: Script-type package install/export/uninstall"
+        run: |
+          bash tests/e2e/script_type_install_test.sh
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

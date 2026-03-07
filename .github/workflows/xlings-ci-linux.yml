@@ -132,6 +132,10 @@ jobs:
         run: |
           bash tests/e2e/pkginfo_install_dir_test.sh
 
+      - name: "E2E-11: Script-type package install/export/uninstall"
+        run: |
+          bash tests/e2e/script_type_install_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

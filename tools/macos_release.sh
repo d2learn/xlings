@@ -44,7 +44,7 @@ if [[ -n "$LLVM_PREFIX_DEFAULT" && -x "$LLVM_PREFIX_DEFAULT/bin/clang++" ]]; the
   export LLVM_PREFIX="$LLVM_PREFIX_DEFAULT"
   export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
   export PATH="$LLVM_PREFIX/bin:$PATH"
-  xmake f -c -p macosx -m release --toolchain=llvm --sdk="$LLVM_PREFIX" -y \
+  xmake f -c -p macosx -m release --toolchain=llvm --sdk="$LLVM_PREFIX" --target_minver=11.0 -y \
     || fail "xmake configure with llvm failed"
 fi
 xmake clean -q 2>/dev/null || true
@@ -60,6 +60,17 @@ if otool -L "$BIN_SRC" | grep -q "llvm"; then
 else
     info "OK: binary has no LLVM runtime dependency"
 fi
+
+info "Verifying deployment target..."
+if otool -l "$BIN_SRC" | grep -q "minos 15"; then
+    otool -l "$BIN_SRC" | grep -A3 LC_BUILD_VERSION
+    fail "binary deployment target is macOS 15+, expected 11.0"
+fi
+if otool -L "$BIN_SRC" | grep -q "libc++"; then
+    otool -L "$BIN_SRC"
+    fail "binary dynamically links libc++, should be statically linked"
+fi
+info "OK: deployment target and libc++ linking verified"
 
 # ── 2. Assemble package ─────────────────────────────────────────
 info "Assembling $OUT_DIR ..."

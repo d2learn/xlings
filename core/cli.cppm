@@ -4,6 +4,7 @@ import std;
 
 import mcpplibs.cmdline;
 import mcpplibs.capi.lua;
+import mcpplibs.xpkg.executor;
 import xlings.config;
 import xlings.json;
 import xlings.log;
@@ -220,21 +221,27 @@ export int run(int argc, char* argv[]) {
                 return 1;
             }
             namespace fs = std::filesystem;
-            auto homeDir = Config::paths().homeDir;
-            fs::path projectDir = homeDir;
-            auto exePath = platform::get_executable_path();
-            if (!exePath.empty()) {
-                auto candidate = exePath.parent_path().parent_path();
-                if (fs::exists(candidate / "xim") && fs::exists(candidate / "xmake.lua"))
-                    projectDir = candidate;
+            fs::path scriptFile = argv[2];
+            auto execResult = mcpplibs::xpkg::create_executor(scriptFile);
+            if (!execResult) {
+                log::error("failed to load script: {}", execResult.error());
+                return 1;
             }
-            std::string scriptCmd = "xmake xscript -P \"" + projectDir.string() + "\" --";
-            for (int i = 2; i < argc; ++i) {
-                scriptCmd += " \"";
-                scriptCmd += argv[i];
-                scriptCmd += "\"";
+            mcpplibs::xpkg::ExecutionContext ctx;
+            ctx.platform = std::string(platform::OS_NAME);
+            ctx.bin_dir = Config::paths().binDir;
+            ctx.subos_sysrootdir = Config::paths().subosDir.string();
+            ctx.run_dir = fs::current_path();
+            ctx.xpkg_dir = Config::paths().dataDir / "xpkgs";
+            for (int i = 3; i < argc; ++i) {
+                ctx.args.emplace_back(argv[i]);
             }
-            return platform::exec(scriptCmd);
+            auto result = execResult->run_script(ctx);
+            if (!result.success) {
+                log::error("script error: {}", result.error);
+                return 1;
+            }
+            return 0;
         }
     }
 

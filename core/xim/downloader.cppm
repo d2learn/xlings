@@ -1,7 +1,7 @@
 export module xlings.xim.downloader;
 
 import std;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 import xlings.log;
 import xlings.platform;
 import xlings.config;

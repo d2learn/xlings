@@ -6,7 +6,7 @@ import xlings.i18n;
 import xlings.log;
 import xlings.utils;
 import xlings.ui;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 import xlings.xim.index;
 import xlings.xim.catalog;
 import xlings.xim.resolver;

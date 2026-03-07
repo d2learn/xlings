@@ -19,6 +19,7 @@ namespace platform {
     static std::string gRundir = std::filesystem::current_path().string();
 
     export using platform_impl::PATH_SEPARATOR;
+    export using platform_impl::OS_NAME;
     export using platform_impl::clear_console;
     export using platform_impl::get_home_dir;
     export using platform_impl::get_executable_path;

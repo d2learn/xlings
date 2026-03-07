@@ -16,6 +16,7 @@ namespace xlings {
 namespace platform_impl {
 
     export constexpr char PATH_SEPARATOR = ';';
+    export constexpr std::string_view OS_NAME = "windows";
 
     export std::filesystem::path get_executable_path() {
         wchar_t buf[MAX_PATH];

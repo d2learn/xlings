@@ -1,6 +1,6 @@
 export module xlings.xim;
 
-export import xlings.xim.types;
+export import xlings.xim.libxpkg.types.type;
 export import xlings.xim.repo;
 export import xlings.xim.index;
 export import xlings.xim.catalog;
