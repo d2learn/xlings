@@ -38,6 +38,15 @@ echo "$INSTALL_OUT"
 assert_contains "$INSTALL_OUT" "packages to install (2):" \
   "single-command multi-version install plan did not contain both node versions"
 
+[[ -f "$SCENARIO_DIR/.xlings/.xlings.json" ]] \
+  || fail "project runtime state file was not created"
+grep -q '"versions"' "$SCENARIO_DIR/.xlings/.xlings.json" \
+  || fail "project runtime state file missing versions"
+grep -q '22.17.1' "$SCENARIO_DIR/.xlings/.xlings.json" \
+  || fail "project runtime state file missing installed version"
+cmp -s "$CONFIG_BACKUP" "$SCENARIO_DIR/.xlings.json" \
+  || fail "project manifest .xlings.json should remain unchanged after install"
+
 NODE_ARCHIVE_22="$(node_archive_name 22.17.1)"
 NODE_ARCHIVE_20="$(node_archive_name 20.19.0)"
 [[ -f "$SCENARIO_DIR/.xlings/data/runtimedir/$NODE_ARCHIVE_22" ]] \
@@ -62,6 +71,8 @@ assert_contains "$INFO_OUT" "installed:   yes" \
   cd "$SCENARIO_DIR" &&
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" use node 20.19.0 >/dev/null
 )
+grep -q '"workspace"' "$SCENARIO_DIR/.xlings/.xlings.json" \
+  || fail "project runtime state file missing workspace after use"
 NODE_VER_20="$(
   cd "$SCENARIO_DIR" &&
   env XLINGS_HOME="$HOME_DIR" "$SCENARIO_DIR/.xlings/subos/_/bin/node" --version
