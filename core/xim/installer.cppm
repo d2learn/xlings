@@ -4,7 +4,7 @@ import std;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.executor;
 import mcpplibs.capi.lua;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 import xlings.xim.index;
 import xlings.xim.catalog;
 import xlings.xim.resolver;
@@ -17,6 +17,7 @@ import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
 import xlings.xvm.commands;
+import xlings.xim.libxpkg.types.script;
 
 export namespace xlings::xim {
 
@@ -879,6 +880,15 @@ public:
                     }
                     continue;
                 }
+            } else if (!payloadInstalled && node.pkgType == 1 /* Script */) {
+                log::info("installing script {}...", node.name);
+                if (!script::default_install(node, ctx)) {
+                    if (onStatus) {
+                        onStatus({ node.name, InstallPhase::Failed, 0.0f,
+                                   "default script install failed" });
+                    }
+                    continue;
+                }
             }
 
             if (!payloadInstalled && extractedRoot && !detail_::has_directory_entries_(ctx.install_dir)) {
@@ -923,7 +933,15 @@ public:
                 }
             }
 
-            if (!detail_::run_config_hook_(node, dataDir, executor, ctx, onStatus)) {
+            if (!executor.has_hook(mcpplibs::xpkg::HookType::Config) && node.pkgType == 1 /* Script */) {
+                if (!script::default_config(node, dataDir)) {
+                    if (onStatus) {
+                        onStatus({ node.name, InstallPhase::Failed, 0.0f,
+                                   "default script config failed" });
+                    }
+                    continue;
+                }
+            } else if (!detail_::run_config_hook_(node, dataDir, executor, ctx, onStatus)) {
                 if (onStatus) {
                     onStatus({ node.name, InstallPhase::Failed, 0.0f,
                                "config hook failed" });
@@ -1043,6 +1061,20 @@ public:
             if (!result.success) {
                 return std::unexpected(
                     std::format("uninstall hook failed: {}", result.error));
+            }
+        } else {
+            // Check if this is a script-type package and run default uninstall
+            bool isScriptType = false;
+            if (catalog_ && resolvedMatch) {
+                auto pkg = catalog_->load_package(*resolvedMatch);
+                if (pkg) isScriptType = (pkg->type == mcpplibs::xpkg::PackageType::Script);
+            } else if (index_) {
+                auto* entry = index_->find_entry(targetName);
+                if (entry) isScriptType = (entry->type == mcpplibs::xpkg::PackageType::Script);
+            }
+            if (isScriptType) {
+                std::string ver = resolvedMatch ? resolvedMatch->version : std::string{};
+                script::default_uninstall(ctx.pkg_name, ver);
             }
         }
 

@@ -17,6 +17,7 @@ namespace xlings {
 namespace platform_impl {
 
     export constexpr char PATH_SEPARATOR = ':';
+    export constexpr std::string_view OS_NAME = "linux";
 
     export std::filesystem::path get_executable_path() {
         char buf[4096];

@@ -1,7 +1,7 @@
 export module xlings.xim.commands;
 
 import std;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.executor;
 import mcpplibs.xpkg.loader;

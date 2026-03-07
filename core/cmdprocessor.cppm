@@ -8,6 +8,7 @@ import xlings.config;
 import xlings.subos;
 import xlings.platform;
 import xlings.xself;
+import mcpplibs.xpkg.executor;
 
 namespace xlings::cmdprocessor {
 
@@ -309,14 +310,28 @@ export CommandProcessor create_processor() {
                     std::println("Usage: xlings script <script-file> [args...]");
                     return 1;
                 }
-                auto projectDir = find_xim_project_dir();
-                std::string cmd = "xmake xscript -P \"" + projectDir.string() + "\" --";
-                for (int i = 2; i < argc; ++i) {
-                    cmd += " \"";
-                    cmd += argv[i];
-                    cmd += "\"";
+                namespace fs = std::filesystem;
+                fs::path scriptFile = argv[2];
+                auto execResult = mcpplibs::xpkg::create_executor(scriptFile);
+                if (!execResult) {
+                    log::error("failed to load script: {}", execResult.error());
+                    return 1;
                 }
-                return platform::exec(cmd);
+                mcpplibs::xpkg::ExecutionContext ctx;
+                ctx.platform = std::string(platform::OS_NAME);
+                ctx.bin_dir = Config::paths().binDir;
+                ctx.subos_sysrootdir = Config::paths().subosDir.string();
+                ctx.run_dir = fs::current_path();
+                ctx.xpkg_dir = scriptFile.parent_path();
+                for (int i = 3; i < argc; ++i) {
+                    ctx.args.emplace_back(argv[i]);
+                }
+                auto result = execResult->run_script(ctx);
+                if (!result.success) {
+                    log::error("script error: {}", result.error);
+                    return 1;
+                }
+                return 0;
             },
             "xlings script <script-file> [args...]")
         .add("self", "self management (init/update/config/clean/migrate)",

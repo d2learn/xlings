@@ -6,7 +6,7 @@ import mcpplibs.xpkg;
 import xlings.config;
 import xlings.xim.index;
 import xlings.xim.repo;
-import xlings.xim.types;
+import xlings.xim.libxpkg.types.type;
 
 namespace xpkg = mcpplibs::xpkg;
 

@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# E2E test: script-type package install/shim-creation/uninstall
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_test_lib.sh"
+
+require_fixture_index
+
+HOME_DIR="$(runtime_home_dir script_type_install_home)"
+
+cleanup() { rm -rf "$HOME_DIR"; }
+trap cleanup EXIT
+cleanup  # start fresh
+
+# ── 1. Set up XLINGS_HOME ──
+write_home_config "$HOME_DIR" "GLOBAL"
+
+# ── 2. Initialize home (creates subos, bin directories, etc.) ──
+run_xlings "$HOME_DIR" "$ROOT_DIR" self init
+
+# ── 3. Install script-type package xpkg-helper ──
+log "Installing xpkg-helper (script type, no custom hook)..."
+INSTALL_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" install xpkg-helper -y 2>&1)" || true
+echo "$INSTALL_OUT"
+
+# ── 4. Verify .lua file was copied to install_dir ──
+# The namespace prefix (xim-x-) is added by the catalog store-name logic
+INSTALL_DIR="$HOME_DIR/data/xpkgs/xim-x-xpkg-helper/0.0.1"
+[[ -f "$INSTALL_DIR/xpkg-helper.lua" ]] \
+  || fail "xpkg-helper.lua not copied to $INSTALL_DIR"
+
+# ── 5. Verify shim was created ──
+SHIM_PATH="$HOME_DIR/subos/default/bin/xpkg-helper"
+[[ -e "$SHIM_PATH" ]] \
+  || fail "xpkg-helper shim not created at $SHIM_PATH"
+
+# ── 6. Verify xvm registered (via .xlings.json versions/workspace) ──
+grep -q "xpkg-helper" "$HOME_DIR/.xlings.json" \
+  || fail "xpkg-helper not registered in .xlings.json"
+
+# ── 7. Verify alias contains "xlings script" ──
+grep -q "xlings script" "$HOME_DIR/.xlings.json" \
+  || fail "'xlings script' alias not found in .xlings.json"
+
+# ── 8. Verify xlings script can execute the script directly ──
+log "Testing xlings script direct execution..."
+SCRIPT_PATH="$INSTALL_DIR/xpkg-helper.lua"
+SCRIPT_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" script "$SCRIPT_PATH" 2>&1)" || true
+echo "$SCRIPT_OUT"
+echo "$SCRIPT_OUT" | grep -q "XPackage Helper Tools" \
+  || fail "xlings script did not execute xpkg_main correctly"
+
+# ── 9. Uninstall xpkg-helper ──
+log "Uninstalling xpkg-helper..."
+REMOVE_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" remove xpkg-helper -y 2>&1)" || true
+echo "$REMOVE_OUT"
+
+# ── 10. Verify shim was removed ──
+[[ ! -e "$SHIM_PATH" ]] \
+  || fail "shim not removed after uninstall"
+
+# ── 11. Verify install_dir was cleaned up ──
+[[ ! -d "$INSTALL_DIR" ]] \
+  || fail "install_dir not removed after uninstall"
+
+log "PASS: script-type package install/shim/uninstall flow"
