@@ -22,22 +22,16 @@ target("xlings")
 
     if is_plat("macosx") then
         set_toolchains("llvm")
-        -- 静态链接 LLVM 自带的 libc++，避免依赖系统 libc++.dylib 中缺失的 C++23 符号
-        -- (std::println 等 C++23 特性需要 macOS 15+ 的 libc++，静态链接后可在 macOS 11+ 运行)
-        add_ldflags("-nostdlib++", {force = true})
         local llvm_prefix = os.getenv("LLVM_PREFIX")
-        if llvm_prefix then
+        if llvm_prefix then -- if LLVM_PREFIX is set, we assume it's a recent version of LLVM that provides its own libc++ with C++23 support
+            -- 静态链接 LLVM 自带的 libc++，避免依赖系统 libc++.dylib 中缺失的 C++23 符号
+            -- (std::println 等 C++23 特性需要 macOS 15+ 的 libc++，静态链接后可在 macOS 11+ 运行)
+            add_ldflags("-nostdlib++", {force = true})
             add_ldflags(llvm_prefix .. "/lib/libc++.a", {force = true})
             add_ldflags(llvm_prefix .. "/lib/libc++abi.a", {force = true})
         end
     elseif is_plat("linux") then
-        if not os.getenv("XLINGS_NOLINKSTATIC") then
-            add_ldflags("-static", {force = true})
-        end
-        local gcc_sdk = os.getenv("GCC_SDK")
-        if gcc_sdk and #gcc_sdk > 0 then
-            add_linkdirs(gcc_sdk .. "/lib64", {force = true})
-        end
+        add_ldflags("-static", {force = true})
     end
 
 -- Unit tests
@@ -54,12 +48,14 @@ target("xlings_tests")
 
     if is_plat("macosx") then
         set_toolchains("llvm")
+        local llvm_prefix = os.getenv("LLVM_PREFIX")
+        if llvm_prefix then -- if LLVM_PREFIX is set, we assume it's a recent version of LLVM that provides its own libc++ with C++23 support
+            -- 静态链接 LLVM 自带的 libc++，避免依赖系统 libc++.dylib 中缺失的 C++23 符号
+            -- (std::println 等 C++23 特性需要 macOS 15+ 的 libc++，静态链接后可在 macOS 11+ 运行)
+            add_ldflags("-nostdlib++", {force = true})
+            add_ldflags(llvm_prefix .. "/lib/libc++.a", {force = true})
+            add_ldflags(llvm_prefix .. "/lib/libc++abi.a", {force = true})
+        end
     elseif is_plat("linux") then
-        if not os.getenv("XLINGS_NOLINKSTATIC") then
-            add_ldflags("-static", {force = true})
-        end
-        local gcc_sdk = os.getenv("GCC_SDK")
-        if gcc_sdk and #gcc_sdk > 0 then
-            add_linkdirs(gcc_sdk .. "/lib64", {force = true})
-        end
+        add_ldflags("-static", {force = true})
     end
