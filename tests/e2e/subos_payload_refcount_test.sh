@@ -5,6 +5,21 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_test_lib.sh"
 
 require_fixture_index
 
+run_and_capture() {
+  local output_file
+  local status
+  output_file="$(mktemp)"
+  set +e
+  "$@" 2>&1 | tee "$output_file"
+  status=${PIPESTATUS[0]}
+  set -e
+  cat "$output_file"
+  rm -f "$output_file"
+  if [[ $status -ne 0 ]]; then
+    return $status
+  fi
+}
+
 HOME_DIR="$(runtime_home_dir subos_refcount_home)"
 rm -rf "$HOME_DIR"
 write_home_config "$HOME_DIR" "GLOBAL"
@@ -27,10 +42,7 @@ for subos_name in s1 s2; do
 done
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
-INSTALL_S1="$(
-  run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y 2>&1
-)"
-echo "$INSTALL_S1"
+INSTALL_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y)"
 assert_contains "$INSTALL_S1" "version: 22.17.1" \
   "s1 install did not print resolved version"
 assert_contains "$INSTALL_S1" "node@22.17.1 installed" \
@@ -43,10 +55,7 @@ DOWNLOAD_FILE="$HOME_DIR/data/runtimedir/$(node_archive_name 22.17.1)"
 [[ -x "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim missing after install"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
-INSTALL_S2="$(
-  run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y 2>&1
-)"
-echo "$INSTALL_S2"
+INSTALL_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y)"
 assert_contains "$INSTALL_S2" "all packages already installed" \
   "s2 install should reuse existing payload"
 assert_contains "$INSTALL_S2" "node@22.17.1 already installed" \
@@ -59,18 +68,12 @@ NODE_VER_S2="$(
 [[ "$NODE_VER_S2" == "v22.17.1" ]] || fail "s2 node shim did not resolve to v22.17.1"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
-REMOVE_S1="$(
-  run_xlings "$HOME_DIR" "$ROOT_DIR" remove node 2>&1
-)"
-echo "$REMOVE_S1"
+REMOVE_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node)"
 [[ -x "$PAYLOAD_DIR/bin/node" ]] || fail "payload removed even though s2 still referenced it"
 [[ ! -e "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim still present after detach"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
-REMOVE_S2="$(
-  run_xlings "$HOME_DIR" "$ROOT_DIR" remove node 2>&1
-)"
-echo "$REMOVE_S2"
+REMOVE_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node)"
 [[ ! -e "$PAYLOAD_DIR" ]] || fail "payload still present after last subos reference was removed"
 [[ ! -e "$HOME_DIR/subos/s2/bin/node" ]] || fail "s2 shim still present after final remove"
 

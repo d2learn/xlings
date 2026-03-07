@@ -171,23 +171,24 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     };
 
     auto pending = plan.pending_count();
-    if (pending == 0) {
+    auto allAlreadyInstalled = (pending == 0);
+    if (allAlreadyInstalled) {
         std::println("all packages already installed");
-        activate_requested_targets();
-        return 0;
     }
 
     // Show plan
-    std::println("packages to install ({}):", pending);
-    for (auto& node : plan.nodes) {
-        if (!node.alreadyInstalled) {
-            std::println("  {} {}", node.canonicalName,
-                         node.version.empty() ? "" : "@" + node.version);
+    if (!allAlreadyInstalled) {
+        std::println("packages to install ({}):", pending);
+        for (auto& node : plan.nodes) {
+            if (!node.alreadyInstalled) {
+                std::println("  {} {}", node.canonicalName,
+                             node.version.empty() ? "" : "@" + node.version);
+            }
         }
     }
 
     // Confirm
-    if (!yes) {
+    if (!allAlreadyInstalled && !yes) {
         std::print("\nproceed? [Y/n] ");
         std::string input;
         std::getline(std::cin, input);
@@ -246,7 +247,9 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     }
 
     activate_requested_targets();
-    std::println("\n{} package(s) installed successfully", pending);
+    if (!allAlreadyInstalled) {
+        std::println("\n{} package(s) installed successfully", pending);
+    }
     return 0;
 }
 

@@ -23,6 +23,12 @@
 [Contributing]: https://xlings.d2learn.org/en/documents/community/contribute/add-xpkg.html
 [Forum]: https://forum.d2learn.org/category/9/xlings
 
+
+> [!CAUTION]
+> xlings is currently migrating from Lua to MC++ with a modular architecture. Some packages may be unstable during this transition. If you run into any problems, please report them via [Issues] or the [Forum].
+
+[Issues]: https://github.com/d2learn/xlings/issues
+
 ## Quick Start
 
 ### Install (Github)
@@ -89,11 +95,60 @@ xlings install d2x:mcpp-standard
 
 👉 [more details...](https://xlings.d2learn.org/en/documents/quick-start/install-and-version.html)
 
+### SubOS - Environment Isolation Mode
 
-> [!CAUTION]
-> xlings is currently migrating from Lua to MC++ with a modular architecture. Some packages may be unstable during this transition. If you run into any problems, please report them via [Issues] or the [Forum].
+> xlings supports creating isolated workspaces through the `subos` command.
 
-[Issues]: https://github.com/d2learn/xlings/issues
+**Global isolated environment**
+
+> Create an isolated environment and install Node.js into it.
+
+```bash
+# 0. Create a subos environment
+xlings subos new my-subos
+
+# 1. List all subos environments
+xlings subos list
+
+# 2. Switch to my-subos
+xlings subos use my-subos
+
+# 3. Install node inside the isolated environment
+#    (without affecting the system / host environment / other subos)
+xlings install node@24 -y
+node --version
+
+# 4. Remove the isolated environment
+xlings subos remove my-subos
+```
+
+**Project isolated environment**
+
+> xlings also supports project-scoped isolated environments through a `.xlings.json`
+> file, and can install the configured project environment with one command.
+> Below is a real configuration from the [d2x](https://github.com/d2learn/d2x) project:
+
+```json
+{
+  "workspace": {
+    "xmake": "3.0.7",
+    "gcc": { "linux": "15.1.0" },
+    "openssl": { "linux": "3.1.5" },
+    "llvm": { "macos": "20" }
+  }
+}
+```
+
+Install and configure the project environment with one command:
+
+> Run the following command in the project directory:
+
+```bash
+xlings install
+```
+
+**Note:** the SubOS mechanism uses a `[ version view + reference counting ]`
+strategy to avoid repeatedly downloading the same package payloads.
 
 ## Community
 

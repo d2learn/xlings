@@ -953,7 +953,7 @@ public:
                            payloadInstalled ? "already installed" : "" });
             }
             if (payloadInstalled) {
-                log::info("{}@{} attached to current subos", node.name, node.version);
+                log::info("{}@{} mapping to current subos", node.name, node.version);
             } else {
                 log::info("{}@{} installed successfully", node.name, node.version);
             }

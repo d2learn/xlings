@@ -23,6 +23,12 @@
 [贡献]: https://xlings.d2learn.org/documents/community/contribute/add-xpkg.html
 [论坛]: https://forum.d2learn.org/category/9/xlings
 
+
+> [!CAUTION]
+> xlings 正在从 Lua 迁移到 MC++ 并进行模块化重构，部分包在迁移期间可能存在不稳定的情况。如遇问题，请通过 [Issues] 或 [论坛] 反馈。
+
+[Issues]: https://github.com/d2learn/xlings/issues
+
 ## 快速开始
 
 ### 安装 (Github)
@@ -89,10 +95,56 @@ xlings install d2x:mcpp-standard
 
 👉 [更多细节...](https://xlings.d2learn.org/documents/quick-start/install-and-version.html)
 
-> [!CAUTION]
-> xlings 正在从 Lua 迁移到 MC++ 并进行模块化重构，部分包在迁移期间可能存在不稳定的情况。如遇问题，请通过 [Issues] 或 [论坛] 反馈。
+### SubOS - 环境隔离模式
 
-[Issues]: https://github.com/d2learn/xlings/issues
+> xlings支持通过subos命令, 创建隔离的工作空间 
+
+**全局隔离环境**
+
+> 创建一个隔离的环境, 并安装node
+
+```
+# 0.创建一个 subos 环境
+xlings subos new my-subos
+
+# 1.查看所有的 subos 环境
+xlings subos list
+
+# 2.切换环境到 my-subos
+xlings subos use my-subos
+
+# 3.在隔离环境中安装 node (不影响系统/host环境/其他subos)
+xlings install node@24 -y
+node --version
+
+# 4.删除隔离空间
+xlings subos remove my-subos
+```
+
+**项目隔离环境**
+
+> xlings 支持通过`.xlings.json`配置文件, 配置项目的隔离环境, 并能一键安装配置项目的环境. 下面是真实 [d2x](https://github.com/d2learn/d2x) 项目的配置文件:
+
+```
+{
+  "workspace": {
+    "xmake": "3.0.7",
+    "gcc": { "linux": "15.1.0" },
+    "openssl": { "linux": "3.1.5" },
+    "llvm": { "macos": "20" }
+  }
+}
+```
+
+一键安装&配置项目环境
+
+> 在项目目录运行下面的一键安装命令
+
+```
+xlings install
+```
+
+**注:** subos机制, 使用的是 `[ 版本视图 + 引用计数机制 ]` 避免了大量包文件的重复下载
 
 ## 社区
 
