@@ -322,7 +322,7 @@ export CommandProcessor create_processor() {
                 ctx.bin_dir = Config::paths().binDir;
                 ctx.subos_sysrootdir = Config::paths().subosDir.string();
                 ctx.run_dir = fs::current_path();
-                ctx.xpkg_dir = scriptFile.parent_path();
+                ctx.xpkg_dir = Config::paths().dataDir / "xpkgs";
                 for (int i = 3; i < argc; ++i) {
                     ctx.args.emplace_back(argv[i]);
                 }

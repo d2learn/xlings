@@ -50,16 +50,31 @@ echo "$SCRIPT_OUT"
 echo "$SCRIPT_OUT" | grep -q "XPackage Helper Tools" \
   || fail "xlings script did not execute xpkg_main correctly"
 
-# ── 9. Uninstall xpkg-helper ──
+# ── 9. Verify xpkg-helper can export itself via xlings script ──
+log "Testing xpkg-helper export (xpkg-helper xpkg-helper)..."
+EXPORT_DIR="$HOME_DIR/export_test"
+mkdir -p "$EXPORT_DIR"
+EXPORT_OUT="$(cd "$EXPORT_DIR" && run_xlings "$HOME_DIR" "$ROOT_DIR" script "$SCRIPT_PATH" xpkg-helper 2>&1)" || true
+echo "$EXPORT_OUT"
+# xpkg-helper exports to $PWD/xim-x-xpkg-helper@0.0.1/
+EXPORTED="$EXPORT_DIR/xim-x-xpkg-helper@0.0.1"
+[[ -d "$EXPORTED" ]] \
+  || fail "xpkg-helper export dir not created at $EXPORTED"
+[[ -f "$EXPORTED/xpkg-helper.lua" ]] \
+  || fail "xpkg-helper.lua not found in exported dir"
+log "Export verified: $EXPORTED"
+rm -rf "$EXPORT_DIR"
+
+# ── 10. Uninstall xpkg-helper ──
 log "Uninstalling xpkg-helper..."
 REMOVE_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" remove xpkg-helper -y 2>&1)" || true
 echo "$REMOVE_OUT"
 
-# ── 10. Verify shim was removed ──
+# ── 11. Verify shim was removed ──
 [[ ! -e "$SHIM_PATH" ]] \
   || fail "shim not removed after uninstall"
 
-# ── 11. Verify install_dir was cleaned up ──
+# ── 12. Verify install_dir was cleaned up ──
 [[ ! -d "$INSTALL_DIR" ]] \
   || fail "install_dir not removed after uninstall"
 
