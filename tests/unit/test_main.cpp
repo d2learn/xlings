@@ -1103,8 +1103,10 @@ TEST(XvmShimTest, ExtractProgramName) {
 }
 
 TEST(XvmShimTest, ResolveExecutableFindsProgram) {
-    // resolve_executable only looks up program_name as a file.
-    // Alias handling is done separately in shim_dispatch via platform::exec.
+    // resolve_executable looks up program_name as a file in the package path.
+    // When the binary is found, shim_dispatch uses execvp directly (no PATH
+    // lookup).  When it returns empty, shim_dispatch falls back to the alias
+    // command via build_alias_exec_path + platform::exec.
     namespace fs = std::filesystem;
     auto testDir = fs::temp_directory_path() / "xlings_env_alias_test";
     fs::remove_all(testDir);
@@ -1114,16 +1116,88 @@ TEST(XvmShimTest, ResolveExecutableFindsProgram) {
     auto gcc_path = testDir / "bin" / "gcc";
     xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
 
-    // "cc" does not exist as a file → empty
+    // "cc" does not exist as a file → empty (alias fallback would be used)
     auto result1 = xlings::xvm::resolve_executable("cc", testDir.string(), "");
     EXPECT_TRUE(result1.empty());
 
-    // "gcc" exists under bin/ → found
+    // "gcc" exists under bin/ → found (direct exec, no alias fallback)
     auto result2 = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
     EXPECT_FALSE(result2.empty());
     EXPECT_EQ(result2, testDir / "bin" / "gcc");
 
     fs::remove_all(testDir);
+}
+
+TEST(XvmShimTest, AliasExecPathPrioritizesVDataPath) {
+    // When vdata->path is configured, build_alias_exec_path must place it FIRST
+    // in the returned PATH string.  The xlings shim dir (cfg_bin) must appear
+    // AFTER the user's configured path so the real binary is always found before
+    // any shim, preventing infinite shim recursion.
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_alias_exec_path_test";
+    fs::remove_all(testDir);
+
+    // Create the package directory with a bin/ subdirectory so exists() passes.
+    auto vdataDir = testDir / "pkg";
+    fs::create_directories(vdataDir / "bin");
+
+    std::string expanded_path = vdataDir.string();
+    std::string cfg_bin       = (testDir / "shim_bin").string(); // need not exist
+    std::string existing_path = "/usr/bin";
+
+    auto result = xlings::xvm::build_alias_exec_path(expanded_path, cfg_bin, existing_path);
+
+    // User's vdata path must be the very first entry.
+    EXPECT_EQ(result.find(expanded_path), 0u)
+        << "vdata path must be the leading PATH entry";
+
+    // vdata/bin must also appear.
+    std::string bin_path = (vdataDir / "bin").string();
+    EXPECT_NE(result.find(bin_path), std::string::npos)
+        << "vdata/bin must be present in alias PATH";
+
+    // cfg_bin must be present and come AFTER vdata path and vdata/bin.
+    auto vdata_pos  = result.find(expanded_path);
+    auto bin_pos    = result.find(bin_path);
+    auto shim_pos   = result.find(cfg_bin);
+    EXPECT_NE(shim_pos, std::string::npos)
+        << "shim dir must be present in alias PATH";
+    EXPECT_GT(shim_pos, vdata_pos)
+        << "shim dir must appear after vdata path, not before";
+    EXPECT_GT(shim_pos, bin_pos)
+        << "shim dir must appear after vdata/bin, not before";
+
+    // cfg_bin must NOT be the leading entry.
+    EXPECT_NE(result.find(cfg_bin), 0u)
+        << "shim dir must not be the first PATH entry";
+
+    // The original existing_path must be last.
+    auto existing_pos = result.find(existing_path);
+    EXPECT_NE(existing_pos, std::string::npos);
+    EXPECT_GT(existing_pos, shim_pos)
+        << "original PATH entries must come after the shim dir";
+
+    fs::remove_all(testDir);
+}
+
+TEST(XvmShimTest, AliasExecPathEmptyVDataSkipsShimDir) {
+    // When vdata->path is not configured (empty), build_alias_exec_path must
+    // NOT add cfg_bin.  Adding it with nothing before it would make the shim
+    // dir the leading PATH entry: the alias command would find the shim itself
+    // instead of the real binary and cause infinite recursion.
+    std::string expanded_path = "";   // vdata->path not configured
+    std::string cfg_bin       = "/home/user/.xlings/subos/default/bin";
+    std::string existing_path = "/usr/bin:/usr/local/bin";
+
+    auto result = xlings::xvm::build_alias_exec_path(expanded_path, cfg_bin, existing_path);
+
+    // Shim dir must NOT appear (recursion guard).
+    EXPECT_EQ(result.find(cfg_bin), std::string::npos)
+        << "shim dir must not be added when vdata path is empty";
+
+    // The existing PATH entries must still be reachable.
+    EXPECT_NE(result.find(existing_path), std::string::npos)
+        << "original PATH entries must still be present";
 }
 
 TEST(XvmShimTest, IsXlingsBinary) {

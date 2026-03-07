@@ -55,6 +55,44 @@ std::filesystem::path resolve_executable(const std::string& program_name,
     return {};
 }
 
+// Build the PATH string used when the alias fallback is invoked.
+// The user-configured vdata package directory and its bin/ subdirectory are
+// placed FIRST so the real binary is found before any xlings shim.  cfg_bin
+// (the xlings shim dir) is appended after the user's path so that other
+// xlings-managed tools remain accessible via shim dispatch.  The guard
+// "!new_path.empty()" ensures cfg_bin is only added when the user's path was
+// actually present: if vdata->path is not configured (empty or non-existent),
+// letting cfg_bin lead PATH would cause the alias command to find the shim
+// itself and enter infinite recursion.
+// Returns: a PATH string with entries separated by the platform path separator.
+std::string build_alias_exec_path(const std::string& expanded_path,
+                                   const std::string& cfg_bin,
+                                   const std::string& existing_path) {
+    std::string new_path;
+
+    if (!expanded_path.empty() && std::filesystem::exists(expanded_path)) {
+        new_path = expanded_path;
+        auto bin_path = (std::filesystem::path(expanded_path) / "bin").string();
+        if (std::filesystem::exists(bin_path)) {
+            new_path += platform::PATH_SEPARATOR;
+            new_path += bin_path;
+        }
+    }
+
+    // Append the shim dir only after the user's configured path is in place.
+    if (!new_path.empty() && !cfg_bin.empty()) {
+        new_path += platform::PATH_SEPARATOR;
+        new_path += cfg_bin;
+    }
+
+    if (!existing_path.empty()) {
+        if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
+        new_path += existing_path;
+    }
+
+    return new_path;
+}
+
 // Set environment variables for a program before exec
 void setup_envs(const VData& vdata,
                 const std::string& resolved_path,
@@ -164,36 +202,23 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     }
 
     // Always try to resolve exec_name directly in the package directory first.
-    // This must happen before the alias PATH fallback to prevent shim recursion:
-    // the alias fallback runs via std::system (goes through PATH), and if the
-    // xlings shim directory is in PATH it would find a shim instead of the real
-    // binary, causing infinite recursion.  By resolving directly we skip PATH
-    // entirely and exec the real binary with execvp.
+    // When the binary is found, it is exec'd with execvp (no PATH lookup needed).
+    // This is also faster and more deterministic than the alias fallback.
     auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
 
     if (exe_path.empty() && !vdata->alias.empty()) {
-        // exec_name not found in the package directory.
+        // exec_name not found directly in the package directory.
         // Fall back to running the alias command through PATH.
-        // The package's own directories are prepended so the alias binary can be
-        // found there.  cfg_bin (the xlings shim directory) is intentionally
-        // excluded: including it would allow a shim to shadow the real binary and
-        // cause infinite shim recursion.
+        // build_alias_exec_path places the user's vdata path first, appends the
+        // xlings shim dir (so other managed tools stay accessible), and then the
+        // original PATH.  The shim dir is omitted when vdata path is empty to
+        // prevent it from leading PATH and causing infinite shim recursion.
         auto expanded_path = expand_path(vdata->path, xlings_home);
-        auto bin_path = (std::filesystem::path(expanded_path) / "bin").string();
         auto existing_path = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
+        auto cfg_bin = Config::paths().binDir.string();
 
-        std::string new_path;
-        if (!expanded_path.empty() && std::filesystem::exists(expanded_path))
-            new_path = expanded_path;
-        if (std::filesystem::exists(bin_path)) {
-            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
-            new_path += bin_path;
-        }
-        if (!existing_path.empty()) {
-            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
-            new_path += existing_path;
-        }
-        platform::set_env_variable("PATH", new_path);
+        platform::set_env_variable("PATH",
+            build_alias_exec_path(expanded_path, cfg_bin, existing_path));
 
         // Setup custom envs
         setup_envs(*vdata, "", xlings_home);
