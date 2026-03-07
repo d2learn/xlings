@@ -163,12 +163,24 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         }
     }
 
-    if (!vdata->alias.empty()) {
-        // Env alias fallback: prepend bindir to PATH, run alias via system
+    // Always try to resolve exec_name directly in the package directory first.
+    // This must happen before the alias PATH fallback to prevent shim recursion:
+    // the alias fallback runs via std::system (goes through PATH), and if the
+    // xlings shim directory is in PATH it would find a shim instead of the real
+    // binary, causing infinite recursion.  By resolving directly we skip PATH
+    // entirely and exec the real binary with execvp.
+    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
+
+    if (exe_path.empty() && !vdata->alias.empty()) {
+        // exec_name not found in the package directory.
+        // Fall back to running the alias command through PATH.
+        // The package's own directories are prepended so the alias binary can be
+        // found there.  cfg_bin (the xlings shim directory) is intentionally
+        // excluded: including it would allow a shim to shadow the real binary and
+        // cause infinite shim recursion.
         auto expanded_path = expand_path(vdata->path, xlings_home);
         auto bin_path = (std::filesystem::path(expanded_path) / "bin").string();
         auto existing_path = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
-        auto cfg_bin = Config::paths().binDir.string();
 
         std::string new_path;
         if (!expanded_path.empty() && std::filesystem::exists(expanded_path))
@@ -176,10 +188,6 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         if (std::filesystem::exists(bin_path)) {
             if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
             new_path += bin_path;
-        }
-        if (!cfg_bin.empty()) {
-            if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
-            new_path += cfg_bin;
         }
         if (!existing_path.empty()) {
             if (!new_path.empty()) new_path += platform::PATH_SEPARATOR;
@@ -202,7 +210,6 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         return platform::exec(cmd);
     }
 
-    auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
     if (exe_path.empty()) {
         std::println(stderr, "xlings: executable '{}' not found", exec_name);
         std::println(stderr, "  path: {}", expand_path(vdata->path, xlings_home));
