@@ -195,9 +195,8 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         // Build command: alias + original args, run via platform::exec
         std::string cmd = vdata->alias[0];
         for (int i = 1; i < argc; ++i) {
-            cmd += " \"";
-            cmd += argv[i];
-            cmd += "\"";
+            cmd += " ";
+            cmd += platform::shell_quote(argv[i]);
         }
         return platform::exec(cmd);
     }
@@ -232,11 +231,10 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     return 1;
 #else
     // Fallback for platforms without execvp
-    std::string cmd = "\"" + exe_path.string() + "\"";
+    std::string cmd = platform::shell_quote(exe_path.string());
     for (int i = 1; i < argc; ++i) {
-        cmd += " \"";
-        cmd += argv[i];
-        cmd += "\"";
+        cmd += " ";
+        cmd += platform::shell_quote(argv[i]);
     }
     return platform::exec(cmd);
 #endif

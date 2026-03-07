@@ -71,6 +71,46 @@ namespace platform {
 #endif
     }
 
+    // Escape a single argument for safe embedding in a shell command string.
+    export [[nodiscard]] std::string shell_quote(const std::string& arg) {
+#if defined(_WIN32)
+        if (!arg.empty() && arg.find_first_of(" \t\n\"") == std::string::npos)
+            return arg;
+        // MSVC CRT argv quoting: wrap in double quotes, escape \ before " and trailing \.
+        std::string result = "\"";
+        for (auto it = arg.begin(); ; ++it) {
+            std::size_t num_backslashes = 0;
+            while (it != arg.end() && *it == '\\') {
+                ++it;
+                ++num_backslashes;
+            }
+            if (it == arg.end()) {
+                result.append(num_backslashes * 2, '\\');
+                break;
+            } else if (*it == '"') {
+                result.append(num_backslashes * 2 + 1, '\\');
+                result += '"';
+            } else {
+                result.append(num_backslashes, '\\');
+                result += *it;
+            }
+        }
+        result += '"';
+        return result;
+#else
+        // POSIX sh: single-quote wrapping neutralises all special characters.
+        std::string result = "'";
+        for (char c : arg) {
+            if (c == '\'')
+                result += "'\\''";
+            else
+                result += c;
+        }
+        result += "'";
+        return result;
+#endif
+    }
+
     export [[nodiscard]] std::string read_file_to_string(const std::string& filepath) {
         std::FILE* fp = std::fopen(filepath.c_str(), "rb");
         if (!fp) {
