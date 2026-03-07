@@ -1029,6 +1029,39 @@ TEST(XvmJsonTest, FromJsonNonObject) {
     EXPECT_TRUE(ws.empty());
 }
 
+TEST(XvmJsonTest, WorkspacePlatformAwareManifestParsing) {
+    auto j = nlohmann::json::parse(R"({
+        "node": {
+            "default": "22.17.1",
+            "linux": "20.19.0",
+            "windows": "22.18.0"
+        },
+        "python": {
+            "default": "3.12.9"
+        },
+        "rust": {
+            "windows": "1.86.0"
+        }
+    })");
+
+    auto ws = xlings::xvm::workspace_from_json(j);
+
+#if defined(__linux__)
+    EXPECT_EQ(ws.at("node"), "20.19.0");
+#elif defined(_WIN32)
+    EXPECT_EQ(ws.at("node"), "22.18.0");
+#else
+    EXPECT_EQ(ws.at("node"), "22.17.1");
+#endif
+
+    EXPECT_EQ(ws.at("python"), "3.12.9");
+#if defined(_WIN32)
+    EXPECT_EQ(ws.at("rust"), "1.86.0");
+#else
+    EXPECT_TRUE(ws.find("rust") == ws.end());
+#endif
+}
+
 TEST(XvmJsonTest, FullConfigJsonRoundTrip) {
     // Simulate a complete .xlings.json
     std::string configJson = R"({
