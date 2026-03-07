@@ -79,7 +79,7 @@ jobs:
           path: build/xlings-*-linux-x86_64.tar.gz
 
   build-macos:
-    runs-on: macos-11
+    runs-on: macos-13
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
