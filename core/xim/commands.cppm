@@ -15,6 +15,7 @@ import xlings.config;
 import xlings.ui;
 import xlings.i18n;
 import xlings.platform;
+import xlings.tinyhttps;
 import xlings.xvm.db;
 import xlings.xvm.commands;
 
@@ -208,8 +209,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         [](const InstallStatus& status) {
             switch (status.phase) {
                 case InstallPhase::Downloading:
-                    log::info("[{}] downloading...", status.name);
-                    break;
+                    break;  // TUI progress bar handles this
                 case InstallPhase::Installing:
                     log::info("[{}] installing...", status.name);
                     break;
@@ -403,9 +403,7 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
         auto tmpFile = pkgsDir / filename;
         fs::create_directories(pkgsDir);
         if (fs::exists(tmpFile)) fs::remove(tmpFile);
-        auto cmd = std::format("curl -fLs --retry 3 -o \"{}\" \"{}\"",
-                               tmpFile.string(), fileOrUrl);
-        if (platform::exec(cmd) != 0) {
+        if (!tinyhttps::fetch_to_file(fileOrUrl, tmpFile)) {
             log::error("download failed: {}", fileOrUrl);
             return 1;
         }

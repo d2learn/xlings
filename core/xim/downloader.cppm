@@ -1,3 +1,7 @@
+module;
+
+#include <cstdio>
+
 export module xlings.xim.downloader;
 
 import std;
@@ -5,6 +9,7 @@ import xlings.xim.libxpkg.types.type;
 import xlings.log;
 import xlings.platform;
 import xlings.config;
+import xlings.tinyhttps;
 
 export namespace xlings::xim {
 
@@ -72,12 +77,9 @@ DownloadResult git_clone_one(const DownloadTask& task) {
     return result;
 }
 
-// Download a single file using curl.
-// showProgress: true  -> use curl -# (ASCII progress bar, only safe when one download at a time)
-//               false -> use curl -s (silent, used for concurrent downloads)
-// TODO: replace curl subprocess with libcurl for proper per-task progress callbacks
-//       regardless of concurrency level
-DownloadResult download_one(const DownloadTask& task, bool showProgress = false) {
+// Download a single file using libcurl with real-time progress callback.
+DownloadResult download_one(const DownloadTask& task,
+                            std::function<void(double total, double now)> onProgress = nullptr) {
     namespace fs = std::filesystem;
 
     DownloadResult result;
@@ -96,6 +98,8 @@ DownloadResult download_one(const DownloadTask& task, bool showProgress = false)
     if (is_git_url(task.url)) {
         return git_clone_one(task);
     }
+
+    log::info("downloading {} from {}", task.name, task.url);
 
     // Extract filename from URL
     std::string url = task.url;
@@ -127,25 +131,18 @@ DownloadResult download_one(const DownloadTask& task, bool showProgress = false)
     urls.push_back(url);
     for (auto& fb : task.fallbackUrls) urls.push_back(fb);
 
-    // Download with curl, trying each URL in order
-    bool downloaded = false;
-    for (auto& tryUrl : urls) {
-        log::info("downloading {} from {}", task.name, tryUrl);
-        const char* progressFlag = showProgress ? "-#" : "-s";
-        auto cmd = std::format(
-            "curl -fL {} --retry 3 --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
-            progressFlag, destFile.string(), tryUrl);
-        auto rc = platform::exec(cmd);
-        if (rc == 0) {
-            downloaded = true;
-            break;
-        }
-        result.error = std::format("curl failed (rc={})", rc);
-        if (&tryUrl != &urls.back()) {
-            log::warn("download failed for {}, trying next server...", task.name);
-        }
-    }
-    if (!downloaded) {
+    // Download with libcurl
+    tinyhttps::DownloadOptions opts;
+    opts.destFile = destFile;
+    opts.urls = std::move(urls);
+    opts.retryCount = 3;
+    opts.connectTimeoutSec = 30;
+    opts.maxTimeSec = 600;
+    opts.onProgress = onProgress;
+
+    auto dlResult = tinyhttps::download_file(opts);
+    if (!dlResult.success) {
+        result.error = dlResult.error;
         return result;
     }
 
@@ -164,7 +161,17 @@ DownloadResult download_one(const DownloadTask& task, bool showProgress = false)
     return result;
 }
 
-// Download all tasks with limited concurrency using thread pool
+// Per-task progress state, shared between download threads and the TUI refresh thread
+struct TaskProgress {
+    std::string name;
+    double totalBytes { 0.0 };
+    double downloadedBytes { 0.0 };
+    bool started  { false };
+    bool finished { false };
+    bool success  { false };
+};
+
+// Download all tasks with limited concurrency, real-time per-task progress
 std::vector<DownloadResult>
 download_all(std::span<const DownloadTask> tasks,
              const DownloaderConfig& config,
@@ -172,23 +179,101 @@ download_all(std::span<const DownloadTask> tasks,
 
     if (tasks.empty()) return {};
 
+    tinyhttps::global_init();
+
     std::vector<DownloadResult> results(tasks.size());
     std::mutex mutex;
     std::condition_variable cv;
     int activeCount = 0;
     int maxConcur = std::max(1, config.maxConcurrency);
 
+    // Shared progress state for TUI
+    std::vector<TaskProgress> progState(tasks.size());
+    for (std::size_t i = 0; i < tasks.size(); ++i)
+        progState[i].name = tasks[i].name;
+
+    std::atomic<bool> allDone { false };
+
+    // Pad string to width (GCC 15 modules crash with std::format width specifiers)
+    auto pad = [](const std::string& s, std::size_t width) -> std::string {
+        if (s.size() >= width) return s;
+        return s + std::string(width - s.size(), ' ');
+    };
+
+    // Format percentage with one decimal: "  3.2" / " 45.7" / "100.0"
+    auto fmtPct = [](float pct) -> std::string {
+        int whole = static_cast<int>(pct);
+        int frac  = static_cast<int>((pct - whole) * 10.0f) % 10;
+        std::string s = std::to_string(whole) + "." + std::to_string(frac);
+        while (s.size() < 5) s = " " + s;
+        return s;
+    };
+
+    // Render one task line
+    auto renderLine = [&](const TaskProgress& p) {
+        auto nm = pad(p.name, 24);
+        if (!p.started) {
+            std::println("  [  ] {} pending", nm);
+        } else if (!p.finished) {
+            float pct = (p.totalBytes > 0)
+                ? static_cast<float>(p.downloadedBytes / p.totalBytes) * 100.0f
+                : 0.0f;
+            int barWidth = 20;
+            int filled = static_cast<int>(pct / 100.0f * barWidth);
+            std::string bar(filled, '#');
+            bar.append(barWidth - filled, '-');
+            std::println("  [>>] {} [{}] {}%", nm, bar, fmtPct(pct));
+        } else if (p.success) {
+            std::println("  [ok] {} done", nm);
+        } else {
+            std::println("  [!!] {} failed", nm);
+        }
+    };
+
+    // TUI refresh thread: redraws progress every 200ms
+    std::jthread tuiThread([&](std::stop_token stoken) {
+        int linesPrinted = 0;
+        while (!stoken.stop_requested() && !allDone.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+            // Erase previous output
+            if (linesPrinted > 0) {
+                std::print("\033[{}A\033[J", linesPrinted);
+            }
+
+            linesPrinted = 0;
+            {
+                std::lock_guard lock(mutex);
+                for (auto& p : progState) {
+                    renderLine(p);
+                    ++linesPrinted;
+                }
+            }
+            std::fflush(stdout);
+        }
+
+        // Final render
+        if (linesPrinted > 0) {
+            std::print("\033[{}A\033[J", linesPrinted);
+        }
+        {
+            std::lock_guard lock(mutex);
+            for (auto& p : progState) {
+                auto nm = pad(p.name, 24);
+                if (p.success) {
+                    std::println("  [ok] {} done", nm);
+                } else if (p.finished) {
+                    std::println("  [!!] {} failed", nm);
+                } else {
+                    std::println("  [  ] {} pending", nm);
+                }
+            }
+        }
+        std::fflush(stdout);
+    });
+
     std::vector<std::jthread> threads;
     threads.reserve(tasks.size());
-
-    // Show curl ASCII progress bar only when a single package is being downloaded.
-    // With multiple concurrent downloads the progress bars would interleave on the
-    // terminal and become unreadable, so we keep them silent in that case.
-    // TODO: switch to libcurl for proper multi-task progress reporting.
-    const bool showProgress = (tasks.size() == 1);
-    if (!showProgress) {
-        log::info("downloading {} packages concurrently, please wait...", tasks.size());
-    }
 
     for (std::size_t i = 0; i < tasks.size(); ++i) {
         threads.emplace_back([&, i]() {
@@ -197,29 +282,47 @@ download_all(std::span<const DownloadTask> tasks,
                 std::unique_lock lock(mutex);
                 cv.wait(lock, [&] { return activeCount < maxConcur; });
                 ++activeCount;
+                progState[i].started = true;
             }
 
             if (onProgress) {
                 onProgress(tasks[i].name, 0.0f);
             }
 
-            auto result = download_one(tasks[i], showProgress);
+            // Per-task progress callback updates shared state
+            auto taskProgress = [&](double total, double now) {
+                std::lock_guard lock(mutex);
+                progState[i].totalBytes = total;
+                progState[i].downloadedBytes = now;
+            };
 
-            if (onProgress) {
-                onProgress(tasks[i].name, result.success ? 1.0f : -1.0f);
-            }
+            auto result = download_one(tasks[i], taskProgress);
 
             {
                 std::lock_guard lock(mutex);
+                progState[i].finished = true;
+                progState[i].success = result.success;
                 results[i] = std::move(result);
                 --activeCount;
             }
+
+            if (onProgress) {
+                onProgress(tasks[i].name, results[i].success ? 1.0f : -1.0f);
+            }
+
             cv.notify_one();
         });
     }
 
     // jthread destructor joins automatically
     threads.clear();
+    allDone.store(true);
+
+    // Stop TUI thread
+    tuiThread.request_stop();
+    tuiThread.join();
+
+    tinyhttps::global_cleanup();
     return results;
 }
 
@@ -240,19 +343,6 @@ extract_archive(const std::filesystem::path& archive,
                           archive.string(), destDir.string());
     } else if (ext == ".zip") {
 #ifdef _WIN32
-        // Probe available tools in priority order:
-        //   1. Windows built-in bsdtar (C:\Windows\System32\tar.exe, present since Win10 1803).
-        //      Use the absolute path — not "where tar" — to avoid picking up GNU tar from
-        //      MSYS2/Git-for-Windows which does NOT support ZIP (only bsdtar/libarchive does).
-        //      Check existence with fs::exists, no shell round-trip needed.
-        //   2. unzip (available with Git for Windows / MSYS2 toolchains)
-        //   3. PowerShell Expand-Archive (fallback; uses & { } script-block to avoid
-        //      cmd.exe double-quote stripping that causes "cmdlet not found" errors)
-        // C:\Windows\System32\tar.exe has no spaces, so no quoting needed around
-        // the executable. _popen runs commands via "cmd.exe /c <cmd>", and cmd.exe
-        // has a special rule: when the command starts with '"', it strips the first
-        // and last '"' from the entire line. Quoting the exe path would corrupt the
-        // archive/dest paths, producing "invalid name" errors at runtime.
         const fs::path winTar = "C:\\Windows\\System32\\tar.exe";
         if (fs::exists(winTar)) {
             cmd = std::format("{} -xf \"{}\" -C \"{}\"",
@@ -263,9 +353,6 @@ extract_archive(const std::filesystem::path& archive,
                 cmd = std::format("unzip -o \"{}\" -d \"{}\"",
                                   archive.string(), destDir.string());
             } else {
-                // Avoid "& { }" script-block: '&' is cmd.exe's command separator
-                // and can be misinterpreted even inside a quoted string in some
-                // cmd.exe versions. Call Expand-Archive directly without & { }.
                 cmd = std::format(
                     "powershell -NoProfile -Command \"Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force\"",
                     archive.string(), destDir.string());

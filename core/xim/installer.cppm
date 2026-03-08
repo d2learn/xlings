@@ -633,6 +633,23 @@ load_platform_entries_(const std::filesystem::path& pkgFile, const std::string& 
                     return val;
                 };
                 res.url = read_field("url");
+                // Handle url table: { GLOBAL = "...", CN = "..." }
+                if (res.url.empty()) {
+                    lua::getfield(L, -1, "url");
+                    if (lua::type(L, -1) == lua::TTABLE) {
+                        lua::pushnil(L);
+                        while (lua::next(L, -2)) {
+                            if (lua::type(L, -2) == lua::TSTRING && lua::type(L, -1) == lua::TSTRING)
+                                res.mirrors[lua::tostring(L, -2)] = lua::tostring(L, -1);
+                            lua::pop(L, 1);
+                        }
+                        if (auto it = res.mirrors.find("GLOBAL"); it != res.mirrors.end())
+                            res.url = it->second;
+                        else if (!res.mirrors.empty())
+                            res.url = res.mirrors.begin()->second;
+                    }
+                    lua::pop(L, 1);
+                }
                 res.sha256 = read_field("sha256");
                 res.ref = read_field("ref");
             } else if (lua::type(L, -1) == lua::TSTRING) {
@@ -724,6 +741,15 @@ public:
             if (isXlingsRes) {
                 res.url = detail_::build_xlings_res_url_(node.name, version, platform);
             }
+
+            // Mirror selection: prefer dlConfig.preferredMirror, fallback others
+            if (!res.mirrors.empty()) {
+                auto preferred = dlConfig.preferredMirror.empty() ? "GLOBAL" : dlConfig.preferredMirror;
+                if (auto it = res.mirrors.find(preferred); it != res.mirrors.end()) {
+                    res.url = it->second;
+                }
+            }
+
             if (res.url.empty()) continue;
 
             DownloadTask task;
@@ -736,6 +762,15 @@ public:
                 task.fallbackUrls = detail_::build_xlings_res_fallback_urls_(
                     node.name, version, platform);
             }
+
+            // Add remaining mirrors as fallbacks
+            if (!res.mirrors.empty()) {
+                for (auto& [key, mirrorUrl] : res.mirrors) {
+                    if (mirrorUrl != res.url) {
+                        task.fallbackUrls.push_back(mirrorUrl);
+                    }
+                }
+            }
             plannedDownloads.insert(task.name);
             dlTasks.push_back(std::move(task));
         }
@@ -744,7 +779,7 @@ public:
 
         // Download all
         if (!dlTasks.empty()) {
-            log::info("downloading {} packages...", dlTasks.size());
+            log::info("downloading {} package(s)...", dlTasks.size());
             auto results = download_all(dlTasks, dlConfig,
                 [&](std::string_view name, float progress) {
                     if (onStatus) {

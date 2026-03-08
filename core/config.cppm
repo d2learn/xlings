@@ -5,6 +5,7 @@ import std;
 import xlings.json;
 import xlings.platform;
 import xlings.utils;
+import xlings.tinyhttps;
 import xlings.xvm.types;
 import xlings.xvm.db;
 
@@ -312,26 +313,7 @@ private:
     }
 
     static double probe_resource_server_latency_(const std::string& server) {
-#if defined(_WIN32)
-        constexpr auto kNullDevice = "NUL";
-#else
-        constexpr auto kNullDevice = "/dev/null";
-#endif
-        auto cmd = std::format(
-            "curl -sS -I -L -o {} --connect-timeout 1 --max-time 2 -w \"%{{time_connect}}\" \"{}\"",
-            kNullDevice,
-            server);
-        auto [rc, out] = platform::run_command_capture(cmd);
-        if (rc != 0) return std::numeric_limits<double>::infinity();
-
-        auto latencyText = utils::trim_string(out);
-        if (latencyText.empty()) return std::numeric_limits<double>::infinity();
-
-        try {
-            return std::stod(latencyText);
-        } catch (...) {
-            return std::numeric_limits<double>::infinity();
-        }
+        return tinyhttps::probe_latency(server, 2000);
     }
 
     [[nodiscard]] std::string selected_resource_server_for_(std::string_view mirror) const {
