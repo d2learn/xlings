@@ -13,6 +13,8 @@ module;
 
 // Platform sockets
 #ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define poll WSAPoll
