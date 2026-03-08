@@ -44,13 +44,22 @@ std::filesystem::path resolve_executable(const std::string& program_name,
     auto expanded = expand_path(path, xlings_home);
     auto base = fs::path(expanded);
 
-    // Try direct: path/program_name
+    // Try direct: path/program_name, then path/bin/program_name
     auto candidate1 = base / program_name;
     if (fs::exists(candidate1)) return candidate1;
-
-    // Try: path/bin/program_name
     auto candidate2 = base / "bin" / program_name;
     if (fs::exists(candidate2)) return candidate2;
+
+#if defined(_WIN32)
+    // Windows: try .exe / .bat / .cmd (bare name already tried above)
+    constexpr std::string_view win_exts[] = {".exe", ".bat", ".cmd"};
+    for (auto ext : win_exts) {
+        auto p1 = base / (program_name + std::string(ext));
+        if (fs::exists(p1)) return p1;
+        auto p2 = base / "bin" / (program_name + std::string(ext));
+        if (fs::exists(p2)) return p2;
+    }
+#endif
 
     return {};
 }
