@@ -103,7 +103,7 @@ jobs:
       - name: "E2E-07: Sub-Index Search + pkgindex-build"
         shell: pwsh
         run: |
-          & "$env:GITHUB_WORKSPACE\tests\e2e\sub_index_search_test.ps1"
+          & "$env:GITHUB_WORKSPACE\tests\e2e\sub_index_search_test.ps1" "build\release.zip"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4
