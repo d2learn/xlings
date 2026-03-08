@@ -24,6 +24,10 @@ jobs:
         with:
           xmake-version: latest
 
+      - name: Prepare fixture index repo
+        run: |
+          bash tests/e2e/prepare_fixture_index.sh
+
       - name: Configure xmake
         run: xmake f -p windows -m release -y
 
@@ -85,6 +89,11 @@ jobs:
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\tests\e2e\release_subos_smoke_test.ps1" "build\release.zip"
+
+      - name: "E2E-05: Project Shim Mirror"
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tests\e2e\project_shim_mirror_test.ps1"
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4
