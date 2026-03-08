@@ -708,6 +708,11 @@ public:
         return instance_().paths_.homeDir / "subos" / name;
     }
 
+    [[nodiscard]] static std::filesystem::path global_subos_bin_dir() {
+        auto& self = instance_();
+        return self.paths_.homeDir / "subos" / self.globalActiveSubos_ / "bin";
+    }
+
     static std::vector<std::string> list_subos_names() {
         std::vector<std::string> names;
         auto dir = instance_().paths_.homeDir / "subos";
