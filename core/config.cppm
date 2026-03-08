@@ -5,7 +5,7 @@ import std;
 import xlings.json;
 import xlings.platform;
 import xlings.utils;
-import xlings.curl;
+import xlings.tinyhttps;
 import xlings.xvm.types;
 import xlings.xvm.db;
 
@@ -313,7 +313,7 @@ private:
     }
 
     static double probe_resource_server_latency_(const std::string& server) {
-        return curl::probe_latency(server, 2000);
+        return tinyhttps::probe_latency(server, 2000);
     }
 
     [[nodiscard]] std::string selected_resource_server_for_(std::string_view mirror) const {

@@ -15,7 +15,7 @@ import xlings.config;
 import xlings.ui;
 import xlings.i18n;
 import xlings.platform;
-import xlings.curl;
+import xlings.tinyhttps;
 import xlings.xvm.db;
 import xlings.xvm.commands;
 
@@ -403,7 +403,7 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
         auto tmpFile = pkgsDir / filename;
         fs::create_directories(pkgsDir);
         if (fs::exists(tmpFile)) fs::remove(tmpFile);
-        if (!curl::fetch_to_file(fileOrUrl, tmpFile)) {
+        if (!tinyhttps::fetch_to_file(fileOrUrl, tmpFile)) {
             log::error("download failed: {}", fileOrUrl);
             return 1;
         }

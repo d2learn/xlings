@@ -9,7 +9,7 @@ import xlings.xim.libxpkg.types.type;
 import xlings.log;
 import xlings.platform;
 import xlings.config;
-import xlings.curl;
+import xlings.tinyhttps;
 
 export namespace xlings::xim {
 
@@ -130,7 +130,7 @@ DownloadResult download_one(const DownloadTask& task,
     for (auto& fb : task.fallbackUrls) urls.push_back(fb);
 
     // Download with libcurl
-    curl::DownloadOptions opts;
+    tinyhttps::DownloadOptions opts;
     opts.destFile = destFile;
     opts.urls = std::move(urls);
     opts.retryCount = 3;
@@ -138,7 +138,7 @@ DownloadResult download_one(const DownloadTask& task,
     opts.maxTimeSec = 600;
     opts.onProgress = onProgress;
 
-    auto dlResult = curl::download_file(opts);
+    auto dlResult = tinyhttps::download_file(opts);
     if (!dlResult.success) {
         result.error = dlResult.error;
         return result;
@@ -177,7 +177,7 @@ download_all(std::span<const DownloadTask> tasks,
 
     if (tasks.empty()) return {};
 
-    curl::global_init();
+    tinyhttps::global_init();
 
     std::vector<DownloadResult> results(tasks.size());
     std::mutex mutex;
@@ -320,7 +320,7 @@ download_all(std::span<const DownloadTask> tasks,
     tuiThread.request_stop();
     tuiThread.join();
 
-    curl::global_cleanup();
+    tinyhttps::global_cleanup();
     return results;
 }
 
