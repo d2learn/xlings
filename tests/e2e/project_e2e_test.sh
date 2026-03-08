@@ -11,3 +11,4 @@ bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_xlings_res_region_ma
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_xlings_res_multi_server_test.sh"
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/subos_payload_refcount_test.sh"
 bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_shim_mirror_test.sh"
+bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/shim_project_context_test.sh"

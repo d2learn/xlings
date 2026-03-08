@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# E2E test: verify that shims recover project context via XLINGS_PROJECT_DIR
+# when CWD is outside the project directory.
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_test_lib.sh"
+
+require_fixture_index
+
+SCENARIO_DIR="$ROOT_DIR/tests/e2e/scenarios/local_repo"
+HOME_DIR="$(runtime_home_dir shim_project_context_home)"
+CONFIG_BACKUP="$(prepare_scenario "$SCENARIO_DIR" "$HOME_DIR")"
+cleanup() {
+  restore_scenario "$SCENARIO_DIR" "$HOME_DIR" "$CONFIG_BACKUP"
+}
+trap cleanup EXIT
+write_home_config "$HOME_DIR" "GLOBAL"
+
+# --- Install node in project context (from project dir) ---
+(
+  cd "$SCENARIO_DIR" &&
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" update
+)
+INSTALL_OUT="$(
+  cd "$SCENARIO_DIR" &&
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
+)"
+echo "$INSTALL_OUT"
+
+# --- Verify: project subos bin has the node shim ---
+PROJECT_BIN="$SCENARIO_DIR/.xlings/subos/_/bin"
+[[ -e "$PROJECT_BIN/node" ]] || fail "project node shim missing after install"
+
+# --- Test 1: With XLINGS_PROJECT_DIR set, shim works from outside project ---
+OUTSIDE_DIR="$(mktemp -d)"
+trap 'rm -rf "$OUTSIDE_DIR"; cleanup' EXIT
+
+NODE_VER="$(
+  cd "$OUTSIDE_DIR" &&
+  env XLINGS_HOME="$HOME_DIR" XLINGS_PROJECT_DIR="$SCENARIO_DIR" \
+    "$PROJECT_BIN/node" --version 2>&1
+)" || true
+echo "node --version (with XLINGS_PROJECT_DIR): $NODE_VER"
+[[ "$NODE_VER" == "v22.17.1" ]] || fail "shim with XLINGS_PROJECT_DIR did not resolve expected version (got: $NODE_VER)"
+
+# --- Test 2: Without XLINGS_PROJECT_DIR, shim fails from outside project ---
+set +e
+NODE_ERR="$(
+  cd "$OUTSIDE_DIR" &&
+  env -i HOME="$HOME" PATH="$PATH" XLINGS_HOME="$HOME_DIR" \
+    "$PROJECT_BIN/node" --version 2>&1
+)"
+NODE_RC=$?
+set -e
+echo "node --version (without XLINGS_PROJECT_DIR): $NODE_ERR"
+[[ $NODE_RC -ne 0 ]] || fail "shim without XLINGS_PROJECT_DIR should have failed"
+echo "$NODE_ERR" | grep -q "no version set" \
+  || fail "expected 'no version set' error without XLINGS_PROJECT_DIR (got: $NODE_ERR)"
+
+log "PASS: shim project context via XLINGS_PROJECT_DIR"

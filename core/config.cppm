@@ -446,6 +446,66 @@ private:
         update_effective_paths_();
     }
 
+    void load_project_config_from_dir_(const std::filesystem::path& dir) {
+        namespace fs = std::filesystem;
+        auto cfg = dir / ".xlings.json";
+        try {
+            auto content = platform::read_file_to_string(cfg.string());
+            auto json = nlohmann::json::parse(content, nullptr, false);
+            if (!json.is_discarded()) {
+                projectDir_ = dir;
+                hasProjectConfig_ = true;
+                // Project-level mirror/lang override global
+                if (json.contains("mirror") && json["mirror"].is_string())
+                    mirror_ = json["mirror"].get<std::string>();
+                if (json.contains("lang") && json["lang"].is_string())
+                    lang_ = json["lang"].get<std::string>();
+                if (json.contains("workspace") && json["workspace"].is_object()) {
+                    projectWorkspace_ = xvm::workspace_from_json(json["workspace"]);
+                }
+                load_index_repos_from_json_(json, projectIndexRepos_);
+                load_resource_servers_from_json_(json, projectResourceServers_);
+                projectSubosName_ = load_project_subos_name_(json);
+
+                auto projectStatePath = project_state_path_();
+                nlohmann::json projectStateJson;
+                bool hasProjectStateJson = false;
+                if (!projectStatePath.empty() && fs::exists(projectStatePath)) {
+                    try {
+                        auto stateContent = platform::read_file_to_string(projectStatePath.string());
+                        projectStateJson = nlohmann::json::parse(stateContent, nullptr, false);
+                        hasProjectStateJson = !projectStateJson.is_discarded() && projectStateJson.is_object();
+                    } catch (...) {
+                        hasProjectStateJson = false;
+                    }
+                }
+
+                if (hasProjectStateJson && projectStateJson.contains("versions") &&
+                    projectStateJson["versions"].is_object()) {
+                    projectVersions_ = xvm::versions_from_json(projectStateJson["versions"]);
+                } else if (json.contains("versions") && json["versions"].is_object()) {
+                    projectVersions_ = xvm::versions_from_json(json["versions"]);
+                }
+
+                if (!projectSubosName_.empty()) {
+                    projectSubosMode_ = ProjectSubosMode::Named;
+                    projectSubosWorkspace_ =
+                        load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
+                } else {
+                    projectSubosMode_ = ProjectSubosMode::Anonymous;
+                    if (hasProjectStateJson && projectStateJson.contains("workspace") &&
+                        projectStateJson["workspace"].is_object()) {
+                        projectSubosWorkspace_ =
+                            xvm::workspace_from_json(projectStateJson["workspace"]);
+                    } else {
+                        projectSubosWorkspace_ =
+                            load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
+                    }
+                }
+            }
+        } catch (...) {}
+    }
+
     void load_project_config_() {
         namespace fs = std::filesystem;
         std::error_code ec;
@@ -461,67 +521,28 @@ private:
             if (fs::exists(cfg, ec) && fs::is_regular_file(cfg, ec)) {
                 auto curNorm = fs::weakly_canonical(cur, ec);
                 if (curNorm != homeNorm) {
-                    try {
-                        auto content = platform::read_file_to_string(cfg.string());
-                        auto json = nlohmann::json::parse(content, nullptr, false);
-                        if (!json.is_discarded()) {
-                            projectDir_ = cur;
-                            hasProjectConfig_ = true;
-                            // Project-level mirror/lang override global
-                            if (json.contains("mirror") && json["mirror"].is_string())
-                                mirror_ = json["mirror"].get<std::string>();
-                            if (json.contains("lang") && json["lang"].is_string())
-                                lang_ = json["lang"].get<std::string>();
-                            if (json.contains("workspace") && json["workspace"].is_object()) {
-                                projectWorkspace_ = xvm::workspace_from_json(json["workspace"]);
-                            }
-                            load_index_repos_from_json_(json, projectIndexRepos_);
-                            load_resource_servers_from_json_(json, projectResourceServers_);
-                            projectSubosName_ = load_project_subos_name_(json);
-
-                            auto projectStatePath = project_state_path_();
-                            nlohmann::json projectStateJson;
-                            bool hasProjectStateJson = false;
-                            if (!projectStatePath.empty() && fs::exists(projectStatePath)) {
-                                try {
-                                    auto stateContent = platform::read_file_to_string(projectStatePath.string());
-                                    projectStateJson = nlohmann::json::parse(stateContent, nullptr, false);
-                                    hasProjectStateJson = !projectStateJson.is_discarded() && projectStateJson.is_object();
-                                } catch (...) {
-                                    hasProjectStateJson = false;
-                                }
-                            }
-
-                            if (hasProjectStateJson && projectStateJson.contains("versions") &&
-                                projectStateJson["versions"].is_object()) {
-                                projectVersions_ = xvm::versions_from_json(projectStateJson["versions"]);
-                            } else if (json.contains("versions") && json["versions"].is_object()) {
-                                projectVersions_ = xvm::versions_from_json(json["versions"]);
-                            }
-
-                            if (!projectSubosName_.empty()) {
-                                projectSubosMode_ = ProjectSubosMode::Named;
-                                projectSubosWorkspace_ =
-                                    load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
-                            } else {
-                                projectSubosMode_ = ProjectSubosMode::Anonymous;
-                                if (hasProjectStateJson && projectStateJson.contains("workspace") &&
-                                    projectStateJson["workspace"].is_object()) {
-                                    projectSubosWorkspace_ =
-                                        xvm::workspace_from_json(projectStateJson["workspace"]);
-                                } else {
-                                    projectSubosWorkspace_ =
-                                        load_workspace_from_file_(project_subos_dir_() / ".xlings.json");
-                                }
-                            }
-                        }
-                    } catch (...) {}
+                    load_project_config_from_dir_(cur);
                     return;
                 }
             }
             auto parent = cur.parent_path();
             if (parent == cur) break;
             cur = parent;
+        }
+
+        // CWD traversal did not find project config — check XLINGS_PROJECT_DIR env var
+        if (!hasProjectConfig_) {
+            auto env_project = utils::get_env_or_default("XLINGS_PROJECT_DIR");
+            if (!env_project.empty()) {
+                auto dir = fs::path(env_project);
+                auto cfgFile = dir / ".xlings.json";
+                if (fs::exists(cfgFile, ec) && fs::is_regular_file(cfgFile, ec)) {
+                    auto dirNorm = fs::weakly_canonical(dir, ec);
+                    if (dirNorm != homeNorm) {
+                        load_project_config_from_dir_(dir);
+                    }
+                }
+            }
         }
     }
 

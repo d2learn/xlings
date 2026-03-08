@@ -12,6 +12,7 @@
 - `xlings_tests` 在 macOS 上的运行时崩溃分析: `docs/mcpp-version/gtest-macos-runtime-analysis.md`
 - `XLINGS_HOME` bootstrap 包与统一目录模型: `docs/mcpp-version/unified-xlings-home-bootstrap-design.md`
 - `xim` 已安装复用、subos attach/detach 与 payload 引用回收: `docs/mcpp-version/xim-subos-attach-detach-design.md`
+- Shim 项目上下文在 CWD 离开项目时的恢复方案: `docs/mcpp-version/shim-project-context-design.md`
 
 ### 1.1 背景
 
