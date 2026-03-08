@@ -13,6 +13,7 @@ import xlings.log;
 import xlings.platform;
 import xlings.config;
 import xlings.json;
+import xlings.common;
 import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
@@ -446,6 +447,7 @@ void process_xvm_operations_(const PlanNode& node,
                         shim_name += shim_ext;
                     std::filesystem::create_directories(paths.binDir);
                     xself::create_shim(xlings_bin, paths.binDir / shim_name);
+                    common::mirror_shim_to_global_bin(xlings_bin, shim_name);
                 }
             } else if (type == "lib" && !op.bindir.empty()) {
                 // Install lib symlink to subos lib dir

@@ -6,6 +6,7 @@ export module xlings.xvm.commands;
 
 import std;
 
+import xlings.common;
 import xlings.config;
 import xlings.log;
 import xlings.platform;
@@ -189,6 +190,8 @@ int cmd_use(const std::string& target, const std::string& version) {
             log::warn("[xlings:use] failed to create shim for '{}'", shim_name);
         }
 
+        common::mirror_shim_to_global_bin(xlings_bin, shim_name);
+
         // Create shims for bindings
         if (vinfo) {
             for (auto& [binding_name, vermap] : vinfo->bindings) {
@@ -196,30 +199,7 @@ int cmd_use(const std::string& target, const std::string& version) {
                 if (!shim_ext.empty() && !bind_name.ends_with(shim_ext))
                     bind_name += shim_ext;
                 xself::create_shim(xlings_bin, p.binDir / bind_name);
-            }
-        }
-
-        // Mirror shims to global subos bin so PATH can find them
-        // (project subos bin is not in PATH; global subos/current/bin is)
-        if (Config::has_project_config()) {
-            auto global_bin = Config::global_subos_bin_dir();
-            if (global_bin != p.binDir) {
-                fs::create_directories(global_bin);
-                auto dst = global_bin / shim_name;
-                if (!fs::exists(dst)) {
-                    xself::create_shim(xlings_bin, dst);
-                }
-                if (vinfo) {
-                    for (auto& [binding_name, vermap] : vinfo->bindings) {
-                        std::string bind_name{binding_name};
-                        if (!shim_ext.empty() && !bind_name.ends_with(shim_ext))
-                            bind_name += shim_ext;
-                        auto bdst = global_bin / bind_name;
-                        if (!fs::exists(bdst)) {
-                            xself::create_shim(xlings_bin, bdst);
-                        }
-                    }
-                }
+                common::mirror_shim_to_global_bin(xlings_bin, bind_name);
             }
         }
     }

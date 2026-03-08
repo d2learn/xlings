@@ -3,6 +3,7 @@ export module xlings.xim.libxpkg.types.script;
 import std;
 import xlings.xim.libxpkg.types.type;
 import xlings.xim.catalog;
+import xlings.common;
 import xlings.config;
 import xlings.log;
 import xlings.xself;
@@ -61,6 +62,7 @@ bool default_config(const PlanNode& node,
             shim_name += std::string(shim_ext);
         std::filesystem::create_directories(paths.binDir);
         xself::create_shim(xlings_bin, paths.binDir / shim_name);
+        common::mirror_shim_to_global_bin(xlings_bin, shim_name);
     }
 
     Config::save_versions();
