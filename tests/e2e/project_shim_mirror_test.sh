@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# E2E test: verify that project-context `use` mirrors shims to global subos bin
-# so that tools are reachable via PATH (~/.xlings/subos/current/bin).
+# E2E test: verify that project-context `xlings install` mirrors shims to
+# global subos bin so that tools are reachable via PATH.
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_test_lib.sh"
@@ -16,51 +16,55 @@ cleanup() {
 trap cleanup EXIT
 write_home_config "$HOME_DIR" "GLOBAL"
 
-# --- Pre-check: global subos bin should NOT have a node shim ---
+# --- Clean global subos bin to avoid cache interference ---
 GLOBAL_BIN="$HOME_DIR/subos/default/bin"
+rm -rf "$GLOBAL_BIN"
+mkdir -p "$GLOBAL_BIN"
+
+# --- Pre-check: no node shim in global subos bin ---
 [[ ! -e "$GLOBAL_BIN/node" ]] || fail "global node shim already exists before test"
 
-# --- Install & use node in project context ---
+# --- Scenario uses .xlings.json with workspace: {"projectrepo:node": "22.17.1"} ---
+# `xlings install` reads workspace, installs the package, then calls cmd_use()
+# which should create shims in both project and global subos bin.
 (
   cd "$SCENARIO_DIR" &&
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" update
 )
-(
+INSTALL_OUT="$(
   cd "$SCENARIO_DIR" &&
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install projectrepo:node@22.17.1
-)
-(
-  cd "$SCENARIO_DIR" &&
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" use node 22.17.1 >/dev/null
-)
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
+)"
+echo "$INSTALL_OUT"
 
 # --- Verify: project subos bin has the shim ---
 PROJECT_BIN="$SCENARIO_DIR/.xlings/subos/_/bin"
-[[ -e "$PROJECT_BIN/node" ]] || fail "project node shim missing after use"
+[[ -e "$PROJECT_BIN/node" ]] || fail "project node shim missing after install"
 
 # --- Verify: global subos bin now also has the shim ---
-[[ -e "$GLOBAL_BIN/node" ]] || fail "global node shim was NOT mirrored after project use"
+[[ -e "$GLOBAL_BIN/node" ]] || fail "global node shim was NOT mirrored after project install"
 [[ -L "$GLOBAL_BIN/node" ]] || fail "global node shim is not a symlink"
 
 # --- Verify: global shim resolves to xlings binary ---
-XLINGS_BIN_PATH="$(find_xlings_bin)"
 RESOLVED="$(realpath "$GLOBAL_BIN/node")"
 EXPECTED="$(realpath "$HOME_DIR/xlings")"
 [[ "$RESOLVED" = "$EXPECTED" ]] || \
   fail "global node shim resolves to '$RESOLVED', expected '$EXPECTED'"
 
+# --- Verify: npm/npx bindings also mirrored (node has npm/npx bindings) ---
+for binding in npm npx; do
+  [[ -e "$GLOBAL_BIN/$binding" ]] || fail "global $binding binding shim was NOT mirrored"
+  [[ -L "$GLOBAL_BIN/$binding" ]] || fail "global $binding binding shim is not a symlink"
+done
+
 # --- Verify: pre-existing global shim is not overwritten ---
-# Create a marker shim, then run use again — it should remain untouched.
+# Create a marker file, then run install again — it should remain untouched.
 echo "marker" > "$GLOBAL_BIN/node"
 (
   cd "$SCENARIO_DIR" &&
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" use node 22.17.1 >/dev/null
-)
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
+) >/dev/null 2>&1
 MARKER="$(cat "$GLOBAL_BIN/node")"
 [[ "$MARKER" = "marker" ]] || fail "global node shim was overwritten (should preserve existing)"
-
-# --- Verify: non-project use does NOT attempt global mirror ---
-# (This is implicitly covered: write_home_config doesn't set project config,
-#  and outside a project dir, has_project_config() is false.)
 
 log "PASS: project shim mirror to global subos bin"
