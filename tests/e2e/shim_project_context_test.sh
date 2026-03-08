@@ -44,12 +44,16 @@ echo "node --version (with XLINGS_PROJECT_DIR): $NODE_VER"
 [[ "$NODE_VER" == "v22.17.1" ]] || fail "shim with XLINGS_PROJECT_DIR did not resolve expected version (got: $NODE_VER)"
 
 # --- Test 2: Without XLINGS_PROJECT_DIR, shim fails from outside project ---
+set +e
 NODE_ERR="$(
   cd "$OUTSIDE_DIR" &&
-  env XLINGS_HOME="$HOME_DIR" -u XLINGS_PROJECT_DIR \
+  env -i HOME="$HOME" PATH="$PATH" XLINGS_HOME="$HOME_DIR" \
     "$PROJECT_BIN/node" --version 2>&1
-)" && fail "shim without XLINGS_PROJECT_DIR should have failed" || true
+)"
+NODE_RC=$?
+set -e
 echo "node --version (without XLINGS_PROJECT_DIR): $NODE_ERR"
+[[ $NODE_RC -ne 0 ]] || fail "shim without XLINGS_PROJECT_DIR should have failed"
 echo "$NODE_ERR" | grep -q "no version set" \
   || fail "expected 'no version set' error without XLINGS_PROJECT_DIR (got: $NODE_ERR)"
 

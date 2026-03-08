@@ -92,20 +92,19 @@ if ($nodeVer -ne "v22.17.1") { Fail "shim with XLINGS_PROJECT_DIR did not resolv
 $env:XLINGS_HOME = $HOME_DIR
 Remove-Item Env:XLINGS_PROJECT_DIR -ErrorAction SilentlyContinue
 Push-Location $OUTSIDE_DIR
-$shimFailed = $false
 try {
     $nodeErr = & "$PROJECT_BIN\node.exe" --version 2>&1 | Out-String
     $nodeErr = $nodeErr.Trim()
-} catch {
-    $shimFailed = $true
-    $nodeErr = $_.Exception.Message
-}
-finally {
+    $nodeRc = $LASTEXITCODE
+} finally {
     Pop-Location
     Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
 }
 
 Log "node --version (without XLINGS_PROJECT_DIR): $nodeErr"
+if ($nodeRc -eq 0) {
+    Fail "shim without XLINGS_PROJECT_DIR should have failed"
+}
 if ($nodeErr -notmatch "no version set") {
     Fail "expected 'no version set' error without XLINGS_PROJECT_DIR (got: $nodeErr)"
 }
@@ -114,6 +113,9 @@ if ($nodeErr -notmatch "no version set") {
 Remove-Item -Recurse -Force $OUTSIDE_DIR -ErrorAction SilentlyContinue
 
 Log "PASS: shim project context via XLINGS_PROJECT_DIR"
+
+# Reset exit code so script exits 0 on success
+$host.SetShouldExit(0)
 
 } finally {
     Cleanup

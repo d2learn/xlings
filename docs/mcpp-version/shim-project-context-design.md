@@ -55,6 +55,23 @@ config, a new fallback checks `XLINGS_PROJECT_DIR`:
 The extracted `load_project_config_from_dir_()` method is shared by both
 the CWD-walk path and the env var fallback path.
 
+## 为什么传环境变量而不是直接设 PATH
+
+另一种思路是：直接把项目 subos bin 路径加到 `PATH` 里，让子进程绕过 shim
+直接找到真实二进制。但这样会绕过 shim 的核心逻辑：
+
+| | 传 env var（让子 shim 重新加载配置） | 直接设 PATH 到 subos bin |
+|---|---|---|
+| 子 shim 拿到的信息 | 完整项目上下文（workspace、versions、bindings、envs…） | 只是多了一个 PATH 路径 |
+| binding 解析（如 cc→gcc） | 正常工作 | 不走 shim 逻辑，binding 断裂 |
+| vdata.envs 设置 | 正常设置 | 跳过了 |
+| 版本选择 | 按 workspace 中的版本 | 取决于 PATH 里碰巧找到什么 |
+
+Shim 不只是"找到二进制"——它还要解析 binding（如 `cc` → `gcc`）、设置
+`vdata.envs`（如 `JAVA_HOME`）、做版本模糊匹配。直接改 PATH 会绕过这些
+逻辑，导致行为不一致。传 `XLINGS_PROJECT_DIR` 让每个子 shim 走完整的
+配置加载流程，保证语义正确。
+
 ## Security Considerations
 
 - The env var is only consulted when CWD traversal finds nothing
