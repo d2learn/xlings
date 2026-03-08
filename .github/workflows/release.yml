@@ -125,13 +125,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          # Temporary workaround: configure xmake with the explicit SDK path
-          # from the bootstrap-installed LLVM toolchain on the GitHub runner.
-          xmake f -c -p macosx -m release \
-            --toolchain=llvm \
-            --sdk="$LLVM_PREFIX" \
-            -y
-          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
+          xmake f -c -p macosx -m release --target_minver=11.0 -y
 
       - name: Build (macos_release)
         run: |
