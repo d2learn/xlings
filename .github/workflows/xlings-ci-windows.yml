@@ -100,6 +100,11 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\tests\e2e\shim_project_context_test.ps1"
 
+      - name: "E2E-07: Sub-Index Search + pkgindex-build"
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tests\e2e\sub_index_search_test.ps1"
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
