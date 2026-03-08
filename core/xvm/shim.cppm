@@ -208,7 +208,21 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
 
         // Build command: alias + original args, run via platform::exec
-        std::string cmd = vdata->alias[0];
+        // Resolve the first word of the alias to an absolute path so that
+        // system() doesn't re-discover the shim via PATH search.
+        std::string alias_str = vdata->alias[0];
+        std::string cmd;
+        auto first_space = alias_str.find(' ');
+        auto alias_prog = first_space != std::string::npos
+            ? alias_str.substr(0, first_space) : alias_str;
+        auto alias_rest = first_space != std::string::npos
+            ? alias_str.substr(first_space) : std::string{};
+        auto resolved_alias = resolve_executable(alias_prog, vdata->path, xlings_home);
+        if (!resolved_alias.empty()) {
+            cmd = platform::shell_quote(resolved_alias.string()) + alias_rest;
+        } else {
+            cmd = alias_str;
+        }
         for (int i = 1; i < argc; ++i) {
             cmd += " ";
             cmd += platform::shell_quote(argv[i]);
