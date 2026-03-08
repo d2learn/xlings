@@ -108,55 +108,84 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     auto workspace = Config::effective_workspace();
 
     // Look up active version for this program
-    auto version = get_active_version(workspace, program_name);
-    if (version.empty()) {
-        std::println(stderr, "xlings: no version set for '{}'", program_name);
-        std::println(stderr, "  hint: xlings use {} <version>", program_name);
-        return 1;
-    }
-
-    // Resolve version (fuzzy match)
     auto db = Config::versions();
-    auto resolved_version = match_version(db, program_name, version);
-    if (resolved_version.empty()) {
-        std::println(stderr, "xlings: version '{}' not found for '{}'", version, program_name);
-        auto all = get_all_versions(db, program_name);
-        if (!all.empty()) {
-            std::print(stderr, "  available:");
-            for (auto& v : all) std::print(stderr, " {}", v);
-            std::println(stderr, "");
-        }
-        return 1;
-    }
+    auto version = get_active_version(workspace, program_name);
 
-    auto vdata = get_vdata(db, program_name, resolved_version);
-    if (!vdata) {
-        std::println(stderr, "xlings: no path info for {} {}", program_name, resolved_version);
-        return 1;
-    }
-
-    // Determine actual program name to exec (check bindings)
+    // Determine actual program name to exec
     std::string exec_name = program_name;
-    auto vinfo = get_vinfo(db, program_name);
-
-    // Check if the program_name is actually a binding of another target
-    // Walk all targets to see if program_name is a binding key
+    std::string resolved_version;
+    const VData* vdata = nullptr;
     std::string binding_target;
-    for (auto& [target, info] : db) {
-        auto bit = info.bindings.find(program_name);
-        if (bit != info.bindings.end()) {
-            // This program is a binding of 'target'
-            auto ws_ver = get_active_version(workspace, target);
-            if (!ws_ver.empty()) {
-                auto rv = match_version(db, target, ws_ver);
-                if (!rv.empty()) {
-                    auto bvit = bit->second.find(rv);
-                    if (bvit != bit->second.end()) {
-                        binding_target = bvit->second;
-                        // Use the parent target's vdata for path resolution
-                        vdata = get_vdata(db, target, rv);
-                        exec_name = binding_target;
-                        break;
+
+    // If no direct workspace entry, check if program_name is a binding
+    // of another target (e.g. "cc" is a binding of "gcc")
+    if (version.empty()) {
+        for (auto& [target, info] : db) {
+            auto bit = info.bindings.find(program_name);
+            if (bit != info.bindings.end()) {
+                auto ws_ver = get_active_version(workspace, target);
+                if (!ws_ver.empty()) {
+                    auto rv = match_version(db, target, ws_ver);
+                    if (!rv.empty()) {
+                        auto bvit = bit->second.find(rv);
+                        if (bvit != bit->second.end()) {
+                            binding_target = bvit->second;
+                            vdata = get_vdata(db, target, rv);
+                            exec_name = binding_target;
+                            resolved_version = rv;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (binding_target.empty()) {
+            std::println(stderr, "xlings: no version set for '{}'", program_name);
+            std::println(stderr, "  hint: xlings use {} <version>", program_name);
+            return 1;
+        }
+    }
+
+    // Resolve version (direct target path)
+    if (resolved_version.empty()) {
+        resolved_version = match_version(db, program_name, version);
+        if (resolved_version.empty()) {
+            std::println(stderr, "xlings: version '{}' not found for '{}'", version, program_name);
+            auto all = get_all_versions(db, program_name);
+            if (!all.empty()) {
+                std::print(stderr, "  available:");
+                for (auto& v : all) std::print(stderr, " {}", v);
+                std::println(stderr, "");
+            }
+            return 1;
+        }
+    }
+
+    if (!vdata) {
+        vdata = get_vdata(db, program_name, resolved_version);
+        if (!vdata) {
+            std::println(stderr, "xlings: no path info for {} {}", program_name, resolved_version);
+            return 1;
+        }
+    }
+
+    // If still a direct target (not resolved via binding above),
+    // check if the program_name is a binding of another target
+    if (binding_target.empty()) {
+        for (auto& [target, info] : db) {
+            auto bit = info.bindings.find(program_name);
+            if (bit != info.bindings.end()) {
+                auto ws_ver = get_active_version(workspace, target);
+                if (!ws_ver.empty()) {
+                    auto rv = match_version(db, target, ws_ver);
+                    if (!rv.empty()) {
+                        auto bvit = bit->second.find(rv);
+                        if (bvit != bit->second.end()) {
+                            binding_target = bvit->second;
+                            vdata = get_vdata(db, target, rv);
+                            exec_name = binding_target;
+                            break;
+                        }
                     }
                 }
             }
