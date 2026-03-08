@@ -13,6 +13,7 @@ import xlings.log;
 import xlings.platform;
 import xlings.config;
 import xlings.json;
+import xlings.common;
 import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
@@ -446,18 +447,7 @@ void process_xvm_operations_(const PlanNode& node,
                         shim_name += shim_ext;
                     std::filesystem::create_directories(paths.binDir);
                     xself::create_shim(xlings_bin, paths.binDir / shim_name);
-
-                    // Mirror shim to global subos bin so PATH can find it
-                    if (Config::has_project_config()) {
-                        auto global_bin = Config::global_subos_bin_dir();
-                        if (global_bin != paths.binDir) {
-                            std::filesystem::create_directories(global_bin);
-                            auto dst = global_bin / shim_name;
-                            if (!std::filesystem::exists(dst)) {
-                                xself::create_shim(xlings_bin, dst);
-                            }
-                        }
-                    }
+                    common::mirror_shim_to_global_bin(xlings_bin, shim_name);
                 }
             } else if (type == "lib" && !op.bindir.empty()) {
                 // Install lib symlink to subos lib dir
