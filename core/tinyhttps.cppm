@@ -4,12 +4,16 @@ module;
 #include <cstring>
 
 // mbedTLS
+#include <mbedtls/build_info.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/error.h>
 #include <mbedtls/net_sockets.h>
+#ifdef MBEDTLS_USE_PSA_CRYPTO
+#include <psa/crypto.h>
+#endif
 
 // Platform sockets
 #ifdef _WIN32
@@ -556,10 +560,30 @@ download_once(const std::string& url,
 
 // ── Public API implementations ──────────────────────────────────────────
 
-void global_init()    { /* mbedTLS needs no global init */ }
-void global_cleanup() { /* nothing to do */ }
+namespace detail_ {
+    std::once_flag globalInitFlag_;
+    void ensure_init_() {
+        std::call_once(globalInitFlag_, [] {
+#ifdef MBEDTLS_USE_PSA_CRYPTO
+            psa_crypto_init();
+#endif
+#ifdef _WIN32
+            WSADATA wsa;
+            WSAStartup(MAKEWORD(2, 2), &wsa);
+#endif
+        });
+    }
+} // namespace detail_
+
+void global_init()    { detail_::ensure_init_(); }
+void global_cleanup() {
+#ifdef _WIN32
+    WSACleanup();
+#endif
+}
 
 DownloadFileResult download_file(const DownloadOptions& opts) {
+    detail_::ensure_init_();
     namespace fs = std::filesystem;
     if (opts.urls.empty()) return {false, "no URLs provided"};
 
@@ -583,6 +607,7 @@ DownloadFileResult download_file(const DownloadOptions& opts) {
 }
 
 double probe_latency(const std::string& url, int timeoutMs) {
+    detail_::ensure_init_();
     auto parsed = detail_::parse_url(url);
     auto t0 = std::chrono::steady_clock::now();
     auto fd = detail_::tcp_connect(parsed.host, parsed.port, timeoutMs);
