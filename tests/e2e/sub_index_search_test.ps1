@@ -112,16 +112,16 @@ git init -q; git add -A; git commit -q -m "init"
 Pop-Location
 
 # ── 3. Write xim-indexrepos.lua ──
-# Use forward slashes in file:// URLs for git compatibility on Windows
-$subUrl = "file:///$($SUB_INDEX_DIR -replace '\\','/')"
-$buildUrl = "file:///$($BUILD_INDEX_DIR -replace '\\','/')"
+# Use plain local paths (forward slashes) — git clone handles them directly
+$subPath = $SUB_INDEX_DIR -replace '\\','/'
+$buildPath = $BUILD_INDEX_DIR -replace '\\','/'
 @"
 xim_indexrepos = {
     ["testd2x"] = {
-        ["GLOBAL"] = "$subUrl",
+        ["GLOBAL"] = "$subPath",
     },
     ["testbuild"] = {
-        ["GLOBAL"] = "$buildUrl",
+        ["GLOBAL"] = "$buildPath",
     }
 }
 "@ | Set-Content $INDEXREPOS_LUA -Encoding UTF8
@@ -149,9 +149,18 @@ function Run-Xlings {
 
 # ── 5. Run update to sync repos ──
 Log "Running xlings update..."
-Run-Xlings update
+Log "xim-indexrepos.lua content:"
+Get-Content $INDEXREPOS_LUA | Write-Host
+$updateOut = (Run-Xlings update 2>&1) | Out-String
+Write-Host $updateOut
+if ($LASTEXITCODE -ne 0) { Fail "xlings update failed with exit code $LASTEXITCODE" }
 
 # ── 6. Verify sub-repos were synced ──
+Log "Listing xim-index-repos directory:"
+$indexReposDir = Join-Path $RUNTIME_DIR 'data\xim-index-repos'
+if (Test-Path $indexReposDir) { Get-ChildItem $indexReposDir | ForEach-Object { Write-Host "  $_" } }
+else { Log "WARNING: xim-index-repos directory does not exist" }
+
 $syncedD2x = Join-Path $RUNTIME_DIR 'data\xim-index-repos\xim-pkgindex-testd2x-win'
 if (-not (Test-Path "$syncedD2x\pkgs")) { Fail "sub-index repo testd2x was not synced" }
 
