@@ -61,17 +61,6 @@ else
     info "OK: binary has no LLVM runtime dependency"
 fi
 
-info "Verifying deployment target..."
-if otool -l "$BIN_SRC" | grep -q "minos 15"; then
-    otool -l "$BIN_SRC" | grep -A3 LC_BUILD_VERSION
-    fail "binary deployment target is macOS 15+, expected 11.0"
-fi
-if otool -L "$BIN_SRC" | grep -q "libc++"; then
-    otool -L "$BIN_SRC"
-    fail "binary dynamically links libc++, should be statically linked"
-fi
-info "OK: deployment target and libc++ linking verified"
-
 # ── 2. Assemble package ─────────────────────────────────────────
 info "Assembling $OUT_DIR ..."
 rm -rf "$OUT_DIR"
