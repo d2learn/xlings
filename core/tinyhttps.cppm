@@ -268,6 +268,10 @@ struct Conn {
                                            MBEDTLS_SSL_PRESET_DEFAULT);
         if (ret != 0) return "ssl config: " + tls_err(ret);
 
+        // mbedTLS 3.6.1 TLS 1.3 key derivation fails in static builds;
+        // force TLS 1.2 which works reliably
+        mbedtls_ssl_conf_max_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_2);
+
         auto ca = find_ca_bundle();
         if (!ca.empty()) {
             mbedtls_x509_crt_parse_file(&cacert, ca.c_str());

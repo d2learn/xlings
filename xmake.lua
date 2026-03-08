@@ -9,7 +9,7 @@ add_requires("ftxui 6.1.9")
 add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.28")
 add_requires("gtest 1.15.2")
-add_requires("mbedtls")
+add_requires("mbedtls 3.6.1")
 
 -- C++23 main binary
 target("xlings")
