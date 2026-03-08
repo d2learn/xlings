@@ -95,6 +95,11 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\tests\e2e\project_shim_mirror_test.ps1"
 
+      - name: "E2E-06: Shim Project Context"
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\tests\e2e\shim_project_context_test.ps1"
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

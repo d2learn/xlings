@@ -104,6 +104,12 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     auto& cfg = Config::paths();
     auto xlings_home = cfg.homeDir.string();
 
+    // If in project context, propagate project dir to child shims via env var
+    if (Config::has_project_config()) {
+        platform::set_env_variable("XLINGS_PROJECT_DIR",
+                                   Config::project_dir().string());
+    }
+
     // Get effective workspace (project > subos > global)
     auto workspace = Config::effective_workspace();
 
