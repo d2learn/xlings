@@ -24,23 +24,25 @@ $BACKUP_FILE = [System.IO.Path]::GetTempFileName()
 Copy-Item "$SCENARIO_DIR\.xlings.json" $BACKUP_FILE
 
 function Cleanup {
-    if (Test-Path "$SCENARIO_DIR\.xlings") { Remove-Item -Recurse -Force "$SCENARIO_DIR\.xlings" }
-    if (Test-Path $HOME_DIR) { Remove-Item -Recurse -Force $HOME_DIR }
+    if (Test-Path "$SCENARIO_DIR\.xlings") { Remove-Item -Recurse -Force "$SCENARIO_DIR\.xlings" -ErrorAction SilentlyContinue }
+    if (Test-Path $HOME_DIR) { Remove-Item -Recurse -Force $HOME_DIR -ErrorAction SilentlyContinue }
     if (Test-Path $BACKUP_FILE) {
-        Copy-Item $BACKUP_FILE "$SCENARIO_DIR\.xlings.json"
-        Remove-Item $BACKUP_FILE
+        Copy-Item $BACKUP_FILE "$SCENARIO_DIR\.xlings.json" -ErrorAction SilentlyContinue
+        Remove-Item $BACKUP_FILE -ErrorAction SilentlyContinue
     }
 }
 
-trap { Cleanup }
+try {
 
 # --- Setup isolated XLINGS_HOME ---
 if (Test-Path $HOME_DIR) { Remove-Item -Recurse -Force $HOME_DIR }
 if (Test-Path "$SCENARIO_DIR\.xlings") { Remove-Item -Recurse -Force "$SCENARIO_DIR\.xlings" }
 New-Item -ItemType Directory -Force -Path $HOME_DIR | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $HOME_DIR 'bin') | Out-Null
+New-Item -ItemType Directory -Force -Path $GLOBAL_BIN | Out-Null
 
-# Copy xlings binary
-Copy-Item $XLINGS_BIN (Join-Path $HOME_DIR 'xlings.exe')
+# Copy xlings binary to bin/ (C++ looks for homeDir\bin\xlings.exe on Windows)
+Copy-Item $XLINGS_BIN (Join-Path $HOME_DIR 'bin\xlings.exe')
 
 # Write home config
 $homeConfig = @{
@@ -98,5 +100,8 @@ try {
 $marker = Get-Content "$GLOBAL_BIN\node.exe" -Raw
 if ($marker.Trim() -ne "marker") { Fail "global node shim was overwritten (should preserve existing)" }
 
-Cleanup
 Log "PASS: project shim mirror to global subos bin"
+
+} finally {
+    Cleanup
+}
