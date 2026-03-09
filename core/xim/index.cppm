@@ -147,7 +147,7 @@ public:
                 std::format("pkgs/ directory not found in {}", repoDir_.string()));
         }
 
-        log::info("building package index from {}", repoDir_.string());
+        log::debug("building package index from {}", repoDir_.string());
 
         auto result = xpkg::build_index(repoDir_);
         if (!result) {
@@ -158,7 +158,7 @@ public:
         index_ = std::move(*result);
         loaded_ = true;
 
-        log::info("index built: {} entries", index_.entries.size());
+        log::debug("index built: {} entries", index_.entries.size());
         return {};
     }
 
@@ -179,7 +179,7 @@ public:
             if (cacheResult.valid && cacheResult.repoHeadHash == repoHeadHash) {
                 index_ = std::move(cached);
                 loaded_ = true;
-                log::info("index loaded from cache: {} entries", index_.entries.size());
+                log::debug("index loaded from cache: {} entries", index_.entries.size());
                 return {};
             }
         }

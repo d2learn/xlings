@@ -1,7 +1,3 @@
-module;
-
-#include <cstdio>
-
 export module xlings.xvm.commands;
 
 import std;
@@ -47,7 +43,7 @@ void install_headers(const std::string& includedir, const fs::path& sysroot_incl
     for (auto& entry : platform::dir_entries(src)) {
         auto target = sysroot_include / entry.path().filename();
         if (fs::exists(target, ec) || fs::is_symlink(target, ec)) {
-            log::info("[xvm] overwriting header: {}", entry.path().filename().string());
+            log::debug("[xvm] overwriting header: {}", entry.path().filename().string());
             fs::remove_all(target, ec);
         }
         create_link_(entry.path(), target);
@@ -126,29 +122,32 @@ int cmd_use(const std::string& target, const std::string& version) {
     auto& p  = Config::paths();
 
     if (!has_target(db, target)) {
-        std::println(stderr, "[xlings:use] '{}' not found in version database", target);
-        std::println(stderr, "  hint: install it first with `xlings install {}`", target);
+        log::error("[xlings:use] '{}' not found in version database", target);
+        log::error("  hint: install it first with `xlings install {}`", target);
         return 1;
     }
 
     // Fuzzy match version
     auto resolved = match_version(db, target, version);
     if (resolved.empty()) {
-        std::println(stderr, "[xlings:use] version '{}' not found for '{}'", version, target);
+        log::error("[xlings:use] version '{}' not found for '{}'", version, target);
         auto all = get_all_versions(db, target);
         if (!all.empty()) {
-            std::print(stderr, "  available:");
-            for (auto& v : all) std::print(stderr, " {}", v);
-            std::println(stderr, "");
+            std::string avail = "  available:";
+            for (auto& v : all) avail += " " + v;
+            log::error("{}", avail);
         }
         return 1;
     }
+
+    log::debug("fuzzy version match: {} -> {}", version, resolved);
 
     // Header & lib switching: remove old, install new
     auto sysroot_include = p.subosDir / "usr" / "include";
     auto sysroot_lib     = p.subosDir / "usr" / "lib";
     auto workspace = Config::effective_workspace();
     auto old_active = get_active_version(workspace, target);
+    log::debug("switching headers: {} -> {}", old_active.empty() ? "(none)" : old_active, resolved);
     if (!old_active.empty() && old_active != resolved) {
         auto old_vdata = get_vdata(db, target, old_active);
         if (old_vdata && !old_vdata->includedir.empty())
@@ -204,7 +203,7 @@ int cmd_use(const std::string& target, const std::string& version) {
         }
     }
 
-    std::println("[xlings:use] {} -> {}", target, resolved);
+    log::println("[xlings:use] {} -> {}", target, resolved);
     return 0;
 }
 
@@ -213,7 +212,7 @@ int cmd_list_versions(const std::string& target) {
     auto db = Config::versions();
 
     if (!has_target(db, target)) {
-        std::println(stderr, "[xlings] '{}' not found in version database", target);
+        log::error("[xlings] '{}' not found in version database", target);
         return 1;
     }
 

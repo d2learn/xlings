@@ -51,7 +51,7 @@ DownloadResult git_clone_one(const DownloadTask& task) {
 
     // If already cloned, pull latest
     if (fs::exists(destDir / ".git")) {
-        log::info("already cloned {}, pulling latest...", task.name);
+        log::debug("already cloned {}, pulling latest...", task.name);
         auto cmd = std::format("git -C \"{}\" pull --ff-only", destDir.string());
         auto rc = platform::exec(cmd);
         if (rc == 0) {

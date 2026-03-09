@@ -96,9 +96,9 @@ export template<typename... Args>
 void warn(std::format_string<Args...> fmt, Args&&... args) {
     if (gLevel_ <= Level::Warn) {
         auto msg = std::format(fmt, std::forward<Args>(args)...);
-        std::print("[warn] ");
-        if (!gContext_.empty()) std::print("[{}] ", gContext_);
-        std::println("{}", msg);
+        std::print(stderr, "[warn] ");
+        if (!gContext_.empty()) std::print(stderr, "[{}] ", gContext_);
+        std::println(stderr, "{}", msg);
         write_to_file_("[warn] ", msg);
     }
 }
@@ -106,10 +106,27 @@ void warn(std::format_string<Args...> fmt, Args&&... args) {
 export template<typename... Args>
 void error(std::format_string<Args...> fmt, Args&&... args) {
     auto msg = std::format(fmt, std::forward<Args>(args)...);
-    std::print("[error] ");
-    if (!gContext_.empty()) std::print("[{}] ", gContext_);
-    std::println("{}", msg);
+    std::print(stderr, "[error] ");
+    if (!gContext_.empty()) std::print(stderr, "[{}] ", gContext_);
+    std::println(stderr, "{}", msg);
     write_to_file_("[error] ", msg);
+}
+
+export template<typename... Args>
+void println(std::format_string<Args...> fmt, Args&&... args) {
+    if (gLevel_ <= Level::Info) {
+        auto msg = std::format(fmt, std::forward<Args>(args)...);
+        std::println("{}", msg);
+        write_to_file_("[status] ", msg);
+    }
+}
+
+export template<typename... Args>
+void print(std::format_string<Args...> fmt, Args&&... args) {
+    if (gLevel_ <= Level::Info) {
+        auto msg = std::format(fmt, std::forward<Args>(args)...);
+        std::print("{}", msg);
+    }
 }
 
 } // namespace xlings::log

@@ -692,6 +692,7 @@ public:
         auto platform = detect_platform_();
 
         // Phase 1: Collect download tasks for non-installed packages
+        log::debug("installer: {} node(s) in plan, dataDir={}", plan.nodes.size(), dataDir.string());
         std::vector<DownloadTask> dlTasks;
         std::unordered_set<std::string> plannedDownloads;
         for (auto& node : plan.nodes) {
@@ -894,6 +895,7 @@ public:
             // Run install hook
             if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
                 log::info("installing {}...", node.name);
+                log::debug("installer: install_dir={}", ctx.install_dir.string());
                 // Set cwd to the download/runtime directory so hooks can
                 // find downloaded files via relative paths.  ctx.run_dir
                 // (user's original cwd) is exposed via system.rundir().

@@ -100,6 +100,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                 match = fuzzy.front();
             } else {
                 // Interactive selection
+                // TODO(tui)
                 std::println("did you mean one of these?");
                 for (std::size_t i = 0; i < fuzzy.size(); ++i) {
                     std::println("  {}. {}@{}", i + 1,
@@ -162,11 +163,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                               match.name, match.version);
                 }
             }
-            std::println("version: {}", match.version);
+            log::println("version: {}", match.version);
             if (requestedAlreadyInstalled[plan_key(match)]) {
-                std::println("{}@{} already installed", match.canonicalName, match.version);
+                log::println("{}@{} already installed", match.canonicalName, match.version);
             } else {
-                std::println("{}@{} installed", match.canonicalName, match.version);
+                log::println("{}@{} installed", match.canonicalName, match.version);
             }
         }
     };
@@ -174,10 +175,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     auto pending = plan.pending_count();
     auto allAlreadyInstalled = (pending == 0);
     if (allAlreadyInstalled) {
-        std::println("all packages already installed");
+        log::println("all packages already installed");
     }
 
     // Show plan
+    // TODO(tui)
     if (!allAlreadyInstalled) {
         std::println("packages to install ({}):", pending);
         for (auto& node : plan.nodes) {
@@ -189,6 +191,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     }
 
     // Confirm
+    // TODO(tui)
     if (!allAlreadyInstalled && !yes) {
         std::print("\nproceed? [Y/n] ");
         std::string input;
@@ -248,7 +251,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
 
     activate_requested_targets();
     if (!allAlreadyInstalled) {
-        std::println("\n{} package(s) installed successfully", pending);
+        log::println("\n{} package(s) installed successfully", pending);
     }
     return 0;
 }
@@ -281,7 +284,7 @@ int cmd_search(const std::string& keyword) {
 
     auto results = catalog.search(keyword, detect_platform());
     if (results.empty()) {
-        std::println("no packages found matching '{}'", keyword);
+        std::println("no packages found matching '{}'", keyword); // TODO(tui)
         return 0;
     }
 
@@ -313,6 +316,7 @@ int cmd_list(const std::string& filter) {
         if (match.installed) installed.push_back(std::move(match));
     }
 
+    // TODO(tui)
     if (installed.empty()) {
         std::println("no installed packages found");
         return 0;
@@ -347,6 +351,7 @@ int cmd_info(const std::string& target) {
         return 1;
     }
 
+    // TODO(tui)
     std::println("name:        {}", match->canonicalName);
     std::println("description: {}", pkg->description);
     if (!pkg->homepage.empty())
@@ -440,7 +445,7 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
         luaFile = destFile;
     }
 
-    std::println("add xpkg - {}", luaFile.string());
+    log::println("add xpkg - {}", luaFile.string());
     // Rebuild index so the new package is immediately available
     auto& catalog = get_catalog();
     // get_catalog() already triggers a rebuild on first call,
@@ -465,7 +470,7 @@ int cmd_update(const std::string& target) {
         return 1;
     }
 
-    std::println("index updated");
+    log::println("index updated");
 
     if (!target.empty()) {
         // TODO: Upgrade specific package

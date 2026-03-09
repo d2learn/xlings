@@ -3,6 +3,7 @@ export module xlings.config;
 import std;
 
 import xlings.json;
+import xlings.log;
 import xlings.platform;
 import xlings.utils;
 import xlings.tinyhttps;
@@ -419,6 +420,8 @@ private:
         paths_.dataDir  = paths_.homeDir / "data";
         update_effective_paths_();
 
+        log::debug("config: home={}, selfContained={}", paths_.homeDir.string(), paths_.selfContained);
+
         // Load subos workspace
         auto subosConfigPath = paths_.homeDir / "subos" / globalActiveSubos_ / ".xlings.json";
         globalWorkspace_ = load_workspace_from_file_(subosConfigPath);
@@ -431,6 +434,7 @@ private:
     void load_project_config_from_dir_(const std::filesystem::path& dir) {
         namespace fs = std::filesystem;
         auto cfg = dir / ".xlings.json";
+        log::debug("config: loading project config from {}", cfg.string());
         try {
             auto content = platform::read_file_to_string(cfg.string());
             auto json = nlohmann::json::parse(content, nullptr, false);
