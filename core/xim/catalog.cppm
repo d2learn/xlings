@@ -4,6 +4,7 @@ import std;
 import mcpplibs.xpkg;
 
 import xlings.config;
+import xlings.log;
 import xlings.xim.index;
 import xlings.xim.repo;
 import xlings.xim.libxpkg.types.type;
@@ -346,7 +347,11 @@ public:
         projectRepos_.clear();
         globalRepos_.clear();
 
-        for (auto& spec : repo_specs_()) {
+        auto specs = repo_specs_();
+        log::debug("catalog rebuild: {} repo(s), force={}", specs.size(), forceRebuild);
+
+        for (auto& spec : specs) {
+            log::debug("catalog: loading repo '{}' from {}", spec.name, spec.dir.string());
             auto state = make_state_(spec);
             auto hash = get_repo_head_hash(spec.dir);
             auto result = state.index.load_or_rebuild(hash, forceRebuild);

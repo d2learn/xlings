@@ -61,7 +61,7 @@ bool ensure_local_repo_link_(const std::filesystem::path& localDir,
     }
 #endif
 
-    log::info("linked local index repo: {} -> {}", localDir.string(), sourceDir.string());
+    log::debug("linked local index repo: {} -> {}", localDir.string(), sourceDir.string());
     return true;
 }
 

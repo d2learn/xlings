@@ -141,10 +141,10 @@ int install_from_project_config_() {
         if (fs::exists(legacyCfg, ec) && fs::is_regular_file(legacyCfg, ec)) {
             auto workspace = parse_legacy_config_(legacyCfg);
             if (!workspace.empty()) {
-                std::println("detected legacy config: {}", legacyCfg.string());
-                std::println("generating .xlings.json from config.xlings ...");
+                log::println("detected legacy config: {}", legacyCfg.string());
+                log::println("generating .xlings.json from config.xlings ...");
                 generate_xlings_json_(cur, workspace);
-                std::println("generated: {}", (cur / ".xlings.json").string());
+                log::println("generated: {}", (cur / ".xlings.json").string());
                 auto targets = Config::workspace_install_targets(workspace);
                 return xim::cmd_install(targets, true, false);
             }
@@ -155,7 +155,7 @@ int install_from_project_config_() {
         cur = parent;
     }
 
-    std::println("Tip: create <project>/.xlings.json with workspace, or run `xlings install <package>`");
+    std::println("Tip: create <project>/.xlings.json with workspace, or run `xlings install <package>`"); // TODO(tui)
     return 0;
 }
 
@@ -174,6 +174,7 @@ export int run(int argc, char* argv[]) {
 
         // Handle -h/--help/--version before cmdline library to avoid
         // std::format width-specifier crash in GCC 15 C++23 modules.
+        // TODO(tui)
         if (cmd == "-h" || cmd == "--help") {
             auto pad = [](std::string s, std::size_t w) {
                 while (s.size() < w) s += ' ';
@@ -217,7 +218,7 @@ export int run(int argc, char* argv[]) {
         if (cmd == "self") return xself::run(argc, argv);
         if (cmd == "script") {
             if (argc < 3) {
-                std::println("Usage: xlings script <script-file> [args...]");
+                std::println("Usage: xlings script <script-file> [args...]"); // TODO(tui)
                 return 1;
             }
             namespace fs = std::filesystem;

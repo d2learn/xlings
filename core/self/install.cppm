@@ -1,7 +1,3 @@
-module;
-
-#include <cstdio>
-
 export module xlings.xself:install;
 
 import std;
@@ -9,6 +5,7 @@ import :init;
 
 import xlings.config;
 import xlings.json;
+import xlings.log;
 import xlings.platform;
 import xlings.utils;
 
@@ -80,7 +77,7 @@ static fs::path detect_source_dir() {
     if (exe.empty()) return {};
     auto binDir = exe.parent_path();
     auto candidate = binDir.parent_path();
-    std::println("[xlings:self]: candidate: {}", candidate.string());
+    log::debug("[xlings:self]: candidate: {}", candidate.string());
     if (is_bootstrap_home_root(candidate)) {
         return fs::weakly_canonical(candidate);
     }
@@ -138,8 +135,8 @@ static void copy_directory_contents(const fs::path& src, const fs::path& dst) {
                           fs::copy_options::overwrite_existing, ec);
         }
         if (ec) {
-            std::println(stderr, "[xlings:self] copy failed: {} -> {} ({})",
-                         entry.path().string(), target.string(), ec.message());
+            log::error("[xlings:self] copy failed: {} -> {} ({})",
+                       entry.path().string(), target.string(), ec.message());
             ec.clear();
         }
     }
@@ -172,13 +169,13 @@ static void setup_shell_profiles(const fs::path& homeDir) {
         if (!fs::exists(prof)) continue;
         auto content = platform::read_file_to_string(prof.string());
         if (content.find("xlings-profile") != std::string::npos) {
-            std::println("[xlings:self] profile ok ({})", prof.filename().string());
+            log::debug("[xlings:self] profile ok ({})", prof.filename().string());
             added = true;
             break;
         }
         std::string appendStr = "\n# xlings\n" + sourceLine + "\n";
         platform::write_string_to_file(prof.string(), content + appendStr);
-        std::println("[xlings:self] added profile ({})", prof.filename().string());
+        log::println("[xlings:self] added profile ({})", prof.filename().string());
         added = true;
         break;
     }
@@ -194,9 +191,9 @@ static void setup_shell_profiles(const fs::path& homeDir) {
         if (fishContent.find("xlings-profile") == std::string::npos) {
             platform::write_string_to_file(fishConfig.string(),
                                            fishContent + "\n# xlings\n" + fishSourceLine + "\n");
-            std::println("[xlings:self] added profile (config.fish)");
+            log::println("[xlings:self] added profile (config.fish)");
         } else {
-            std::println("[xlings:self] profile ok (fish)");
+            log::debug("[xlings:self] profile ok (fish)");
         }
         added = true;
     }
@@ -241,8 +238,8 @@ static void setup_shell_profiles(const fs::path& homeDir) {
 export int cmd_install() {
     auto srcDir = detect_source_dir();
     if (srcDir.empty()) {
-        std::println(stderr, "[xlings:self] cannot detect source package directory.");
-        std::println(stderr, "  run this command from inside a valid xlings release package");
+        log::error("[xlings:self] cannot detect source package directory.");
+        log::error("  run this command from inside a valid xlings release package");
         return 1;
     }
 
@@ -285,13 +282,13 @@ export int cmd_install() {
 
     // Skip if source == target and not temp — "fix links" in place (e.g. dev from source).
     if (!cmp_ec && sameDir && !fromTempExtract) {
-        std::println("\n[xlings:self] already in target dir, fixing links");
+        log::println("\n[xlings:self] already in target dir, fixing links");
         if (!ensure_home_layout(targetHome)) {
-            std::println(stderr, "[xlings:self] failed to initialize {}", targetHome.string());
+            log::error("[xlings:self] failed to initialize {}", targetHome.string());
             return 1;
         }
         setup_shell_profiles(targetHome);
-        std::println("[xlings:self] {} ({}) - ok\n", targetHome.string(), pkgVersion);
+        log::println("[xlings:self] {} ({}) - ok\n", targetHome.string(), pkgVersion);
         return 0;
     }
 
@@ -315,7 +312,7 @@ export int cmd_install() {
     }
 
     // Selective install: preserve data/ and subos/ unless user chose to overwrite
-    std::println("[xlings:self] copying binaries and config ...");
+    log::println("[xlings:self] copying binaries and config ...");
     fs::create_directories(targetHome);
 
     std::error_code ec;
@@ -359,8 +356,8 @@ export int cmd_install() {
             fs::copy_file(entry.path(), target, fs::copy_options::overwrite_existing, ec);
         }
         if (ec) {
-            std::println(stderr, "[xlings:self] copy failed: {} -> {} ({})",
-                         entry.path().string(), target.string(), ec.message());
+            log::error("[xlings:self] copy failed: {} -> {} ({})",
+                       entry.path().string(), target.string(), ec.message());
             ec.clear();
         }
     }
@@ -396,7 +393,7 @@ export int cmd_install() {
 
     // 5. Materialize a complete home layout even if the source package is minimal.
     if (!ensure_home_layout(targetHome)) {
-        std::println(stderr, "[xlings:self] failed to initialize {}", targetHome.string());
+        log::error("[xlings:self] failed to initialize {}", targetHome.string());
         return 1;
     }
 
@@ -412,7 +409,7 @@ export int cmd_install() {
         auto [rc, out] = platform::run_command_capture(
             "\"" + verifyBin.string() + "\" -h");
         if (rc != 0)
-            std::println(stderr, "[xlings:self] warning: verification failed");
+            log::warn("[xlings:self] verification failed");
     }
 
 #if defined(__linux__)
@@ -422,11 +419,11 @@ export int cmd_install() {
         auto existingPath = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
         platform::set_env_variable("PATH", binDir + platform::PATH_SEPARATOR + existingPath);
 
-        std::println("[xlings:self] installing elfpatch (runtime dependency) ...");
+        log::println("[xlings:self] installing elfpatch (runtime dependency) ...");
         auto rc = platform::exec("xlings install xim:elfpatch@0.18.0 -y");
         if (rc != 0) {
-            std::println(stderr, "[xlings:self] warning: elfpatch install failed (rc={})", rc);
-            std::println(stderr, "  hint: run manually: xlings install xim:elfpatch@0.18.0 -y");
+            log::warn("[xlings:self] elfpatch install failed (rc={})", rc);
+            log::warn("  hint: run manually: xlings install xim:elfpatch@0.18.0 -y");
         }
     }
 #endif

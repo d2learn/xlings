@@ -4,8 +4,6 @@ module;
 #include <unistd.h>
 #endif
 
-#include <cstdio>
-
 export module xlings.xvm.shim;
 
 import std;
@@ -105,10 +103,12 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     auto depth_str = std::getenv("XLINGS_SHIM_DEPTH");
     int depth = depth_str ? std::atoi(depth_str) : 0;
     if (depth >= MAX_SHIM_DEPTH) {
-        std::println(stderr, "xlings: shim recursion detected for '{}' (depth={})", program_name, depth);
-        std::println(stderr, "  hint: the real '{}' binary may not be installed", program_name);
+        log::error("xlings: shim recursion detected for '{}' (depth={})", program_name, depth);
+        log::error("  hint: the real '{}' binary may not be installed", program_name);
         return 1;
     }
+
+    log::debug("shim dispatch: program={}, depth={}", program_name, depth);
 
     auto& cfg = Config::paths();
     auto xlings_home = cfg.homeDir.string();
@@ -125,8 +125,8 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     // Look up active version for this program
     auto version = get_active_version(workspace, program_name);
     if (version.empty()) {
-        std::println(stderr, "xlings: no version set for '{}'", program_name);
-        std::println(stderr, "  hint: xlings use {} <version>", program_name);
+        log::error("xlings: no version set for '{}'", program_name);
+        log::error("  hint: xlings use {} <version>", program_name);
         return 1;
     }
 
@@ -134,19 +134,21 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     auto db = Config::versions();
     auto resolved_version = match_version(db, program_name, version);
     if (resolved_version.empty()) {
-        std::println(stderr, "xlings: version '{}' not found for '{}'", version, program_name);
+        log::error("xlings: version '{}' not found for '{}'", version, program_name);
         auto all = get_all_versions(db, program_name);
         if (!all.empty()) {
-            std::print(stderr, "  available:");
-            for (auto& v : all) std::print(stderr, " {}", v);
-            std::println(stderr, "");
+            std::string avail = "  available:";
+            for (auto& v : all) avail += " " + v;
+            log::error("{}", avail);
         }
         return 1;
     }
 
+    log::debug("resolved version: {} -> {}", version, resolved_version);
+
     auto vdata = get_vdata(db, program_name, resolved_version);
     if (!vdata) {
-        std::println(stderr, "xlings: no path info for {} {}", program_name, resolved_version);
+        log::error("xlings: no path info for {} {}", program_name, resolved_version);
         return 1;
     }
 
@@ -168,6 +170,7 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
                     auto bvit = bit->second.find(rv);
                     if (bvit != bit->second.end()) {
                         binding_target = bvit->second;
+                        log::debug("binding found: {} -> {} (via {})", program_name, binding_target, target);
                         // Use the parent target's vdata for path resolution
                         vdata = get_vdata(db, target, rv);
                         exec_name = binding_target;
@@ -218,11 +221,13 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
 
     auto exe_path = resolve_executable(exec_name, vdata->path, xlings_home);
     if (exe_path.empty()) {
-        std::println(stderr, "xlings: executable '{}' not found", exec_name);
-        std::println(stderr, "  path: {}", expand_path(vdata->path, xlings_home));
-        std::println(stderr, "  hint: install with xlings install {}@{}", program_name, resolved_version);
+        log::error("xlings: executable '{}' not found", exec_name);
+        log::error("  path: {}", expand_path(vdata->path, xlings_home));
+        log::error("  hint: install with xlings install {}@{}", program_name, resolved_version);
         return 1;
     }
+
+    log::debug("exe path: {}", exe_path.string());
 
     // Setup environment
     setup_envs(*vdata, exe_path.string(), xlings_home);
@@ -242,7 +247,7 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
 #if defined(__linux__) || defined(__APPLE__)
     execvp(exe_path.c_str(), const_cast<char* const*>(new_argv.data()));
     // If execvp returns, it failed
-    std::println(stderr, "xlings: failed to exec '{}'", exe_path.string());
+    log::error("xlings: failed to exec '{}'", exe_path.string());
     return 1;
 #else
     // Fallback for platforms without execvp

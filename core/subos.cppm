@@ -121,8 +121,8 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     json["subos"][name] = {{"dir", customDir.empty() ? "" : customDir.string()}};
     write_config_json_(configPath, json);
 
-    std::println("[xlings:subos] created '{}'", name);
-    std::println("  dir: {}", dir.string());
+    log::println("[xlings:subos] created '{}'", name);
+    log::println("  dir: {}", dir.string());
     return 0;
 }
 
@@ -143,7 +143,7 @@ export int use(const std::string& name) {
     auto dir = Config::subos_dir(name);
     update_current_symlink_(p.homeDir, dir);
 
-    std::println("[xlings:subos] switched to '{}' ({})", name, dir.string());
+    log::println("[xlings:subos] switched to '{}' ({})", name, dir.string());
     return 0;
 }
 
@@ -181,7 +181,7 @@ export int remove(const std::string& name) {
     json["subos"].erase(name);
     write_config_json_(configPath, json);
 
-    std::println("[xlings:subos] removed '{}'", name);
+    log::println("[xlings:subos] removed '{}'", name);
     return 0;
 }
 
@@ -202,6 +202,7 @@ export std::optional<SubosInfo> info(const std::string& name) {
     return SubosInfo{name, dir, p.activeSubos == name, toolCount};
 }
 
+// TODO(tui)
 int run_list_() {
     auto all = list_all();
     std::println("[xlings:subos] list:");
@@ -213,6 +214,7 @@ int run_list_() {
     return 0;
 }
 
+// TODO(tui)
 int run_info_(const std::string& name) {
     auto& p = Config::paths();
     auto target = name.empty() ? p.activeSubos : name;

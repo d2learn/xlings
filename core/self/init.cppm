@@ -1,13 +1,10 @@
-module;
-
-#include <cstdio>
-
 export module xlings.xself:init;
 
 import std;
 
 import xlings.config;
 import xlings.json;
+import xlings.log;
 import xlings.platform;
 
 namespace xlings::xself {
@@ -98,7 +95,7 @@ LinkResult create_shim(const fs::path& source, const fs::path& target) {
     fs::copy_file(source, target, fs::copy_options::overwrite_existing, ec);
     if (!ec) return LinkResult::Copy;
 
-    std::println(stderr, "[xlings:self]: failed to create shim {} - {}",
+    log::error("[xlings:self]: failed to create shim {} - {}",
         target.string(), ec.message());
     return LinkResult::Failed;
 }
@@ -189,7 +186,7 @@ bool ensure_home_layout(const fs::path& home_dir) {
     for (auto& dir : dirs) {
         fs::create_directories(dir, ec);
         if (ec) {
-            std::println(stderr, "[xlings:self]: failed to create {} - {}", dir.string(), ec.message());
+            log::error("[xlings:self]: failed to create {} - {}", dir.string(), ec.message());
             return false;
         }
     }
