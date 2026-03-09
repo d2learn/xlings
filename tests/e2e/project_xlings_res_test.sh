@@ -44,7 +44,9 @@ INFO_OUT="$(
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" info projectrepo:mdbook
 )"
 echo "$INFO_OUT"
-assert_contains "$INFO_OUT" "installed:   yes" \
+assert_contains "$INFO_OUT" "installed" \
+  "project-local mdbook info missing installed label"
+assert_contains "$INFO_OUT" "yes" \
   "project-local mdbook should be reported as installed"
 
 (

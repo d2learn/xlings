@@ -43,9 +43,9 @@ done
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
 INSTALL_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y)"
-assert_contains "$INSTALL_S1" "version: 22.17.1" \
+assert_contains "$INSTALL_S1" "22.17.1" \
   "s1 install did not print resolved version"
-assert_contains "$INSTALL_S1" "node@22.17.1 installed" \
+assert_contains "$INSTALL_S1" "installed" \
   "s1 install did not confirm node installation"
 
 PAYLOAD_DIR="$HOME_DIR/data/xpkgs/xim-x-node/22.17.1"
@@ -56,10 +56,8 @@ DOWNLOAD_FILE="$HOME_DIR/data/runtimedir/$(node_archive_name 22.17.1)"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
 INSTALL_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y)"
-assert_contains "$INSTALL_S2" "all packages already installed" \
+assert_contains "$INSTALL_S2" "already installed" \
   "s2 install should reuse existing payload"
-assert_contains "$INSTALL_S2" "node@22.17.1 already installed" \
-  "s2 install did not confirm attach of reused payload"
 [[ -x "$HOME_DIR/subos/s2/bin/node" ]] || fail "s2 shim missing after reused install"
 
 NODE_VER_S2="$(

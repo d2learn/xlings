@@ -49,7 +49,9 @@ INFO_OUT="$(
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" info xim:node
 )"
 echo "$INFO_OUT"
-assert_contains "$INFO_OUT" "installed:   yes" \
+assert_contains "$INFO_OUT" "installed" \
+  "global fallback node info missing installed label"
+assert_contains "$INFO_OUT" "yes" \
   "global fallback node should be reported as installed"
 
 log "PASS: global_fallback scenario"

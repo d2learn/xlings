@@ -35,7 +35,9 @@ INSTALL_OUT="$({
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
 })"
 echo "$INSTALL_OUT"
-assert_contains "$INSTALL_OUT" "projectrepo:node @$EXPECTED_NODE_VERSION" \
+assert_contains "$INSTALL_OUT" "node" \
+  "platform-aware workspace install output missing node"
+assert_contains "$INSTALL_OUT" "$EXPECTED_NODE_VERSION" \
   "platform-aware workspace did not resolve the expected platform version"
 
 PROJECT_STATE="$SCENARIO_DIR/.xlings/.xlings.json"

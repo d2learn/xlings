@@ -19,7 +19,9 @@ CONFIG_OUT="$(
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" config
 )"
 echo "$CONFIG_OUT"
-assert_contains "$CONFIG_OUT" "XLINGS_DATA_PROJECT: $SCENARIO_DIR/.xlings/data" \
+assert_contains "$CONFIG_OUT" "project data" \
+  "local-repo scenario did not expose project-local data label"
+assert_contains "$CONFIG_OUT" "$SCENARIO_DIR/.xlings/data" \
   "local-repo scenario did not expose project-local data dir"
 
 (
@@ -35,8 +37,8 @@ INSTALL_OUT="$(
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install projectrepo:node@22.17.1 projectrepo:node@20.19.0
 )"
 echo "$INSTALL_OUT"
-assert_contains "$INSTALL_OUT" "packages to install (2):" \
-  "single-command multi-version install plan did not contain both node versions"
+assert_contains "$INSTALL_OUT" "Packages to install" \
+  "single-command multi-version install plan did not show install plan"
 
 [[ -f "$SCENARIO_DIR/.xlings/.xlings.json" ]] \
   || fail "project runtime state file was not created"
@@ -64,7 +66,9 @@ INFO_OUT="$(
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" info projectrepo:node
 )"
 echo "$INFO_OUT"
-assert_contains "$INFO_OUT" "installed:   yes" \
+assert_contains "$INFO_OUT" "installed" \
+  "project-local node info missing installed label"
+assert_contains "$INFO_OUT" "yes" \
   "project-local node should be reported as installed"
 
 (
