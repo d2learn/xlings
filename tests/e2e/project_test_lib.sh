@@ -104,9 +104,13 @@ mdbook_archive_name() {
   esac
 }
 
+strip_ansi() {
+  sed 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\x1b\[[?][0-9]*[a-zA-Z]//g'
+}
+
 assert_contains() {
   local haystack="$1"
   local needle="$2"
   local message="$3"
-  echo "$haystack" | grep -F "$needle" >/dev/null || fail "$message"
+  echo "$haystack" | strip_ansi | grep -F "$needle" >/dev/null || fail "$message"
 }
