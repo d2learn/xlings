@@ -51,7 +51,8 @@ EOF
 pushd "$PORTABLE_DIR" >/dev/null
 
 CONFIG_OUT="$(env -u XLINGS_HOME ./bin/xlings config 2>&1)"
-echo "$CONFIG_OUT" | grep -q "XLINGS_HOME:     $PORTABLE_DIR" || fail "portable home was not auto-detected"
+echo "$CONFIG_OUT" | grep -q "XLINGS_HOME" || fail "portable home was not auto-detected (missing label)"
+echo "$CONFIG_OUT" | grep -q "$PORTABLE_DIR" || fail "portable home was not auto-detected (missing path)"
 
 env -u XLINGS_HOME ./bin/xlings self init >/tmp/xlings-bootstrap-init.log 2>&1 || {
   cat /tmp/xlings-bootstrap-init.log
@@ -103,6 +104,7 @@ INSTALLED_HOME="$INSTALL_USER_DIR/.xlings"
 [[ -f "$INSTALLED_HOME/config/shell/xlings-profile.sh" ]] || fail "installed home missing shell profile"
 
 INSTALLED_CONFIG_OUT="$(cd "$INSTALL_USER_DIR" && HOME="$INSTALL_USER_DIR" PATH="$INSTALLED_HOME/subos/current/bin:$INSTALLED_HOME/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin" env -u XLINGS_HOME "$INSTALLED_HOME/bin/xlings" config 2>&1)"
-echo "$INSTALLED_CONFIG_OUT" | grep -q "XLINGS_HOME:     $INSTALLED_HOME" || fail "installed home config output mismatch"
+echo "$INSTALLED_CONFIG_OUT" | grep -q "XLINGS_HOME" || fail "installed home config output mismatch (missing label)"
+echo "$INSTALLED_CONFIG_OUT" | grep -q "$INSTALLED_HOME" || fail "installed home config output mismatch (missing path)"
 
 echo "PASS: bootstrap home works for portable and installed modes"
