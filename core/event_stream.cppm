@@ -27,9 +27,11 @@ public:
     ~EventStream() = default;
     EventStream(const EventStream&) = delete;
     EventStream& operator=(const EventStream&) = delete;
-    EventStream(EventStream&&) = default;
-    EventStream& operator=(EventStream&&) = default;
+    EventStream(EventStream&&) = delete;
+    EventStream& operator=(EventStream&&) = delete;
 
+    // Thread safety: register all consumers before emitting from other threads.
+    // on_event() and emit() are not synchronized — call on_event() during setup only.
     void on_event(EventConsumer consumer) {
         consumers_.push_back(std::move(consumer));
     }

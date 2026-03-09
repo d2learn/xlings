@@ -116,7 +116,7 @@ public:
         });
 
         auto paramsCopy = std::string(params);
-        state->thread = std::thread([cap, paramsCopy, s = state.get()]() {
+        state->thread = std::thread([cap, paramsCopy, s = state]() {
             s->status.store(TaskStatus::running);
             try {
                 cap->execute(paramsCopy, s->stream);
