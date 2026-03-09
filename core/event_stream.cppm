@@ -23,6 +23,13 @@ private:
     std::unordered_map<std::string, std::string> promptResponses_;
 
 public:
+    EventStream() = default;
+    ~EventStream() = default;
+    EventStream(const EventStream&) = delete;
+    EventStream& operator=(const EventStream&) = delete;
+    EventStream(EventStream&&) = default;
+    EventStream& operator=(EventStream&&) = default;
+
     void on_event(EventConsumer consumer) {
         consumers_.push_back(std::move(consumer));
     }

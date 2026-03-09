@@ -25,6 +25,8 @@ import xlings.xself;
 import xlings.profile;
 import xlings.event;
 import xlings.event_stream;
+import xlings.capability;
+import xlings.task;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -2132,6 +2134,245 @@ TEST(EventStream, ConcurrentPromptsFromMultipleTasks) {
 
     EXPECT_EQ(answer1, "ans_a");
     EXPECT_EQ(answer2, "ans_b");
+}
+
+// ============================================================
+// ─── Mock Capabilities for testing ───
+// ============================================================
+
+namespace {
+
+class MockSearchCapability : public xlings::capability::Capability {
+public:
+    auto spec() const -> xlings::capability::CapabilitySpec override {
+        return {
+            .name = "search_packages",
+            .description = "Search for packages",
+            .inputSchema = R"({"type":"object","properties":{"query":{"type":"string"}}})",
+            .outputSchema = R"({"type":"object","properties":{"results":{"type":"array"}}})",
+            .destructive = false,
+            .asyncCapable = true
+        };
+    }
+
+    auto execute(xlings::capability::Params params,
+                 xlings::EventStream& stream) -> xlings::capability::Result override {
+        stream.emit(xlings::LogEvent{xlings::LogLevel::info, "Searching..."});
+        stream.emit(xlings::DataEvent{.kind = "search_results", .json = R"({"results":["gcc","g++"]})"});
+        stream.emit(xlings::CompletedEvent{.success = true, .summary = "Found 2 packages"});
+        return R"({"count":2})";
+    }
+};
+
+class MockInstallCapability : public xlings::capability::Capability {
+public:
+    auto spec() const -> xlings::capability::CapabilitySpec override {
+        return {
+            .name = "install_package",
+            .description = "Install a package",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}}})",
+            .outputSchema = R"({"type":"object","properties":{"status":{"type":"string"}}})",
+            .destructive = true,
+            .asyncCapable = true
+        };
+    }
+
+    auto execute(xlings::capability::Params params,
+                 xlings::EventStream& stream) -> xlings::capability::Result override {
+        stream.emit(xlings::ProgressEvent{xlings::Phase::installing, 0.5f, "Installing..."});
+        auto answer = stream.prompt({
+            .id = "confirm_install",
+            .question = "Proceed with install?",
+            .options = {"y", "n"},
+            .defaultValue = "y"
+        });
+        if (answer == "n") {
+            return R"({"status":"cancelled"})";
+        }
+        stream.emit(xlings::CompletedEvent{.success = true, .summary = "Installed"});
+        return R"({"status":"ok"})";
+    }
+};
+
+}  // anonymous namespace
+
+// ============================================================
+// ─── Capability Tests ───
+// ============================================================
+
+TEST(Capability, RegistryRegisterAndGet) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+    reg.register_capability(std::make_unique<MockInstallCapability>());
+
+    auto* search = reg.get("search_packages");
+    ASSERT_NE(search, nullptr);
+    EXPECT_EQ(search->spec().name, "search_packages");
+    EXPECT_FALSE(search->spec().destructive);
+
+    auto* install = reg.get("install_package");
+    ASSERT_NE(install, nullptr);
+    EXPECT_TRUE(install->spec().destructive);
+
+    EXPECT_EQ(reg.get("nonexistent"), nullptr);
+}
+
+TEST(Capability, RegistryListAll) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+    reg.register_capability(std::make_unique<MockInstallCapability>());
+
+    auto specs = reg.list_all();
+    EXPECT_EQ(specs.size(), 2);
+}
+
+TEST(Capability, ExecuteWithEventStream) {
+    xlings::EventStream stream;
+    std::vector<xlings::Event> events;
+    stream.on_event([&](const xlings::Event& e) { events.push_back(e); });
+
+    MockSearchCapability search;
+    auto result = search.execute(R"({"query":"gcc"})", stream);
+
+    ASSERT_EQ(events.size(), 3);
+    EXPECT_TRUE(std::holds_alternative<xlings::LogEvent>(events[0]));
+    EXPECT_TRUE(std::holds_alternative<xlings::DataEvent>(events[1]));
+    EXPECT_TRUE(std::holds_alternative<xlings::CompletedEvent>(events[2]));
+    EXPECT_EQ(result, R"({"count":2})");
+}
+
+TEST(Capability, ExecuteWithPrompt) {
+    xlings::EventStream stream;
+    stream.on_event([&](const xlings::Event& e) {
+        if (auto* p = std::get_if<xlings::PromptEvent>(&e)) {
+            stream.respond(p->id, "y");
+        }
+    });
+
+    MockInstallCapability install;
+    auto result = install.execute(R"({"name":"gcc"})", stream);
+    EXPECT_EQ(result, R"({"status":"ok"})");
+}
+
+TEST(Capability, ExecutePromptCancelled) {
+    xlings::EventStream stream;
+    stream.on_event([&](const xlings::Event& e) {
+        if (auto* p = std::get_if<xlings::PromptEvent>(&e)) {
+            stream.respond(p->id, "n");
+        }
+    });
+
+    MockInstallCapability install;
+    auto result = install.execute(R"({"name":"gcc"})", stream);
+    EXPECT_EQ(result, R"({"status":"cancelled"})");
+}
+
+// ============================================================
+// ─── TaskManager Tests ───
+// ============================================================
+
+TEST(TaskManager, SubmitAndComplete) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+
+    xlings::task::TaskManager tm { reg };
+    auto tid = tm.submit("search_packages", R"({"query":"gcc"})");
+    EXPECT_FALSE(tid.empty());
+
+    for (int i { 0 }; i < 100; ++i) {
+        if (tm.info(tid).status == xlings::task::TaskStatus::completed) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    auto taskInfo = tm.info(tid);
+    EXPECT_EQ(taskInfo.status, xlings::task::TaskStatus::completed);
+    EXPECT_EQ(taskInfo.capabilityName, "search_packages");
+}
+
+TEST(TaskManager, EventsRetrieval) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+
+    xlings::task::TaskManager tm { reg };
+    auto tid = tm.submit("search_packages", R"({"query":"gcc"})");
+
+    for (int i { 0 }; i < 100; ++i) {
+        if (tm.info(tid).status == xlings::task::TaskStatus::completed) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    auto evts = tm.events(tid);
+    EXPECT_GE(evts.size(), 3);  // LogEvent + DataEvent + CompletedEvent
+
+    auto evts2 = tm.events(tid, evts.size());
+    EXPECT_EQ(evts2.size(), 0);
+}
+
+TEST(TaskManager, PromptHandling) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockInstallCapability>());
+
+    xlings::task::TaskManager tm { reg };
+    auto tid = tm.submit("install_package", R"({"name":"gcc"})");
+
+    bool foundPrompt { false };
+    std::string promptId;
+    for (int i { 0 }; i < 100; ++i) {
+        auto taskInfo = tm.info(tid);
+        if (taskInfo.status == xlings::task::TaskStatus::waiting_prompt) {
+            auto evts = tm.events(tid);
+            for (auto& rec : evts) {
+                if (auto* p = std::get_if<xlings::PromptEvent>(&rec.event)) {
+                    promptId = p->id;
+                    foundPrompt = true;
+                }
+            }
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    ASSERT_TRUE(foundPrompt);
+    tm.respond(tid, promptId, "y");
+
+    for (int i { 0 }; i < 100; ++i) {
+        if (tm.info(tid).status == xlings::task::TaskStatus::completed) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    EXPECT_EQ(tm.info(tid).status, xlings::task::TaskStatus::completed);
+}
+
+TEST(TaskManager, ConcurrentTasks) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+
+    xlings::task::TaskManager tm { reg };
+    auto t1 = tm.submit("search_packages", R"({})");
+    auto t2 = tm.submit("search_packages", R"({})");
+    auto t3 = tm.submit("search_packages", R"({})");
+
+    for (int i { 0 }; i < 200; ++i) {
+        if (!tm.has_active_tasks()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    EXPECT_FALSE(tm.has_active_tasks());
+    EXPECT_EQ(tm.info(t1).status, xlings::task::TaskStatus::completed);
+    EXPECT_EQ(tm.info(t2).status, xlings::task::TaskStatus::completed);
+    EXPECT_EQ(tm.info(t3).status, xlings::task::TaskStatus::completed);
+}
+
+TEST(TaskManager, InfoAll) {
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+
+    xlings::task::TaskManager tm { reg };
+    tm.submit("search_packages", R"({})");
+    tm.submit("search_packages", R"({})");
+
+    auto all = tm.info_all();
+    EXPECT_EQ(all.size(), 2);
 }
 
 // ============================================================
