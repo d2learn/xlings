@@ -23,6 +23,7 @@ import xlings.platform;
 import xlings.json;
 import xlings.xself;
 import xlings.profile;
+import xlings.event;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -1956,6 +1957,55 @@ TEST(LogTest, LevelFiltering) {
 
     fs::remove(tmpFile, ec);
     xlings::log::set_level(savedLevel);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  EventStream tests
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Event, ProgressEventConstruction) {
+    xlings::ProgressEvent e{
+        .phase = xlings::Phase::downloading,
+        .percent = 0.5f,
+        .message = "Downloading gcc-15..."
+    };
+    EXPECT_EQ(e.phase, xlings::Phase::downloading);
+    EXPECT_FLOAT_EQ(e.percent, 0.5f);
+    EXPECT_EQ(e.message, "Downloading gcc-15...");
+}
+
+TEST(Event, PromptEventConstruction) {
+    xlings::PromptEvent e{
+        .id = "p1",
+        .question = "Override existing?",
+        .options = {"y", "n"},
+        .default_value = "n"
+    };
+    EXPECT_EQ(e.id, "p1");
+    EXPECT_EQ(e.options.size(), 2);
+    EXPECT_EQ(e.default_value, "n");
+}
+
+TEST(Event, VariantHoldsTypes) {
+    xlings::Event ev = xlings::LogEvent{xlings::LogLevel::info, "hello"};
+    EXPECT_TRUE(std::holds_alternative<xlings::LogEvent>(ev));
+
+    ev = xlings::ErrorEvent{.code = 42, .message = "fail", .recoverable = true};
+    auto& err = std::get<xlings::ErrorEvent>(ev);
+    EXPECT_EQ(err.code, 42);
+    EXPECT_TRUE(err.recoverable);
+}
+
+TEST(Event, CompletedEvent) {
+    xlings::Event ev = xlings::CompletedEvent{.success = true, .summary = "done"};
+    auto& c = std::get<xlings::CompletedEvent>(ev);
+    EXPECT_TRUE(c.success);
+}
+
+TEST(Event, DataEvent) {
+    xlings::Event ev = xlings::DataEvent{.kind = "search_results", .json = R"({"count":3})"};
+    auto& d = std::get<xlings::DataEvent>(ev);
+    EXPECT_EQ(d.kind, "search_results");
 }
 
 // ============================================================
