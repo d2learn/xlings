@@ -59,6 +59,8 @@ void global_cleanup();
 DownloadFileResult download_file(const DownloadOptions& opts);
 double probe_latency(const std::string& url, int timeoutMs = 2000);
 bool fetch_to_file(const std::string& url, const std::filesystem::path& dest);
+// Query Content-Length via HEAD request (follows redirects). Returns -1 on failure.
+int64_t query_content_length(const std::string& url, int connectTimeoutSec = 10);
 
 // ── Internal detail ─────────────────────────────────────────────────────
 
@@ -630,6 +632,38 @@ bool fetch_to_file(const std::string& url, const std::filesystem::path& dest) {
     o.connectTimeoutSec = 30;
     o.maxTimeSec = 120;
     return download_file(o).success;
+}
+
+int64_t query_content_length(const std::string& url, int connectTimeoutSec) {
+    detail_::ensure_init_();
+    auto current = url;
+
+    for (int redir = 0; redir < 10; ++redir) {
+        auto parsed = detail_::parse_url(current);
+
+        detail_::Conn conn;
+        auto err = conn.open(parsed, connectTimeoutSec * 1000);
+        if (!err.empty()) return -1;
+
+        auto req = "HEAD " + parsed.path + " HTTP/1.1\r\n"
+                 + "Host: " + parsed.host + "\r\n"
+                 + "User-Agent: xlings/1.0\r\n"
+                 + "Connection: close\r\n\r\n";
+
+        if (conn.send_all(req) != 0) return -1;
+
+        auto [resp, extra] = detail_::read_http_response(conn);
+
+        if (resp.status >= 300 && resp.status < 400 && !resp.location.empty()) {
+            current = detail_::resolve_redirect(current, resp.location);
+            continue;
+        }
+
+        if (resp.status == 200) return resp.contentLen;
+        return -1;
+    }
+
+    return -1;
 }
 
 } // namespace xlings::tinyhttps

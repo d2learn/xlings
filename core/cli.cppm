@@ -8,6 +8,7 @@ import mcpplibs.xpkg.executor;
 import xlings.config;
 import xlings.json;
 import xlings.log;
+import xlings.ui;
 import xlings.i18n;
 import xlings.platform;
 import xlings.subos;
@@ -155,14 +156,133 @@ int install_from_project_config_() {
         cur = parent;
     }
 
-    std::println("Tip: create <project>/.xlings.json with workspace, or run `xlings install <package>`"); // TODO(tui)
+    ui::print_tip("create <project>/.xlings.json with workspace, or run `xlings install <package>`");
     return 0;
 }
 
 void apply_global_opts_(const mcpplibs::cmdline::ParsedArgs& args) {
     if (args.is_flag_set("verbose")) log::set_level(log::Level::Debug);
     if (args.is_flag_set("quiet")) log::set_level(log::Level::Error);
-    if (auto lang = args.value("lang")) i18n::set_language(*lang);
+}
+
+// Read-modify-write the global .xlings.json config file
+nlohmann::json load_global_config_json_() {
+    auto configPath = Config::paths().homeDir / ".xlings.json";
+    if (std::filesystem::exists(configPath)) {
+        try {
+            auto content = platform::read_file_to_string(configPath.string());
+            auto json = nlohmann::json::parse(content, nullptr, false);
+            if (!json.is_discarded()) return json;
+        } catch (...) {}
+    }
+    return nlohmann::json::object();
+}
+
+void save_global_config_json_(const nlohmann::json& json) {
+    auto configPath = Config::paths().homeDir / ".xlings.json";
+    platform::write_string_to_file(configPath.string(), json.dump(2));
+}
+
+// config subcommand handler
+int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args) {
+    bool changed = false;
+    auto json = load_global_config_json_();
+
+    // --lang
+    if (auto lang = args.value("lang")) {
+        json["lang"] = std::string(*lang);
+        log::println("lang = {}", *lang);
+        changed = true;
+    }
+
+    // --mirror
+    if (auto mirror = args.value("mirror")) {
+        json["mirror"] = std::string(*mirror);
+        log::println("mirror = {}", *mirror);
+        changed = true;
+    }
+
+    // --add-xpkg
+    if (auto xpkg = args.value("add-xpkg")) {
+        if (changed) save_global_config_json_(json);
+        return xim::cmd_add_xpkg(std::string(*xpkg));
+    }
+
+    // --index-repo  namespace:https://....git
+    if (auto repo = args.value("index-repo")) {
+        std::string val(*repo);
+        auto colonPos = val.find(':');
+        // Find the colon that separates name from URL (skip scheme "https://")
+        // Format: name:url  e.g. myrepo:https://github.com/user/repo.git
+        if (colonPos == std::string::npos || colonPos == 0) {
+            log::error("invalid format, expected: <namespace>:<url>");
+            log::error("  e.g. myrepo:https://github.com/user/repo.git");
+            return 1;
+        }
+        auto name = val.substr(0, colonPos);
+        auto url = val.substr(colonPos + 1);
+        if (url.empty()) {
+            log::error("invalid format, expected: <namespace>:<url>");
+            return 1;
+        }
+
+        if (!json.contains("index_repos") || !json["index_repos"].is_array()) {
+            json["index_repos"] = nlohmann::json::array();
+        }
+        // Check for existing repo with same name and update
+        bool found = false;
+        for (auto& entry : json["index_repos"]) {
+            if (entry.is_object() && entry.contains("name") &&
+                entry["name"].get<std::string>() == name) {
+                entry["url"] = url;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            nlohmann::json entry;
+            entry["name"] = name;
+            entry["url"] = url;
+            json["index_repos"].push_back(entry);
+        }
+        log::println("index-repo {} = {}", name, url);
+        changed = true;
+    }
+
+    if (changed) {
+        save_global_config_json_(json);
+        return 0;
+    }
+
+    // No options: show current config via TUI info panel
+    auto& p = Config::paths();
+    std::vector<ui::InfoField> fields;
+    fields.push_back({"home", p.homeDir.string()});
+    fields.push_back({"data", p.dataDir.string()});
+    fields.push_back({"subos", p.subosDir.string()});
+    fields.push_back({"active subos", p.activeSubos, true});
+    fields.push_back({"bin", p.binDir.string()});
+
+    auto mirror = Config::mirror();
+    if (!mirror.empty()) fields.push_back({"mirror", mirror});
+    auto lang = Config::lang();
+    if (!lang.empty()) fields.push_back({"lang", lang});
+
+    auto& repos = Config::global_index_repos();
+    for (auto& repo : repos) {
+        fields.push_back({"index-repo", repo.name + " : " + repo.url});
+    }
+
+    if (Config::has_project_config()) {
+        fields.push_back({"project data", Config::project_data_dir().string()});
+        auto& projectRepos = Config::project_index_repos();
+        for (auto& repo : projectRepos) {
+            fields.push_back({"project repo", repo.name + " : " + repo.url});
+        }
+    }
+
+    ui::print_info_panel("xlings config", fields);
+    return 0;
 }
 
 export int run(int argc, char* argv[]) {
@@ -174,35 +294,8 @@ export int run(int argc, char* argv[]) {
 
         // Handle -h/--help/--version before cmdline library to avoid
         // std::format width-specifier crash in GCC 15 C++23 modules.
-        // TODO(tui)
         if (cmd == "-h" || cmd == "--help") {
-            auto pad = [](std::string s, std::size_t w) {
-                while (s.size() < w) s += ' ';
-                return s;
-            };
-            std::println("xlings {}", Info::VERSION);
-            std::println("\nA modern package manager and development environment tool\n");
-            std::println("USAGE:");
-            std::println("    xlings [OPTIONS] [SUBCOMMAND]\n");
-            std::println("OPTIONS:");
-            std::println("    {}  {}", pad("-y, --yes", 24), "Skip confirmation prompts");
-            std::println("    {}  {}", pad("-v, --verbose", 24), "Enable verbose output");
-            std::println("    {}  {}", pad("-q, --quiet", 24), "Suppress non-essential output");
-            std::println("    {}  {}", pad("--lang <LANG>", 24), "Override language (en/zh)");
-            std::println("    {}  {}", pad("--mirror <MIRROR>", 24), "Override mirror (GLOBAL/CN)");
-            std::println("\nSUBCOMMANDS:");
-            std::println("    {}  {}", pad("install", 12), "Install packages (e.g. xlings install gcc@15 node)");
-            std::println("    {}  {}", pad("remove", 12), "Remove a package");
-            std::println("    {}  {}", pad("update", 12), "Update package index or a specific package");
-            std::println("    {}  {}", pad("search", 12), "Search for packages");
-            std::println("    {}  {}", pad("list", 12), "List installed packages");
-            std::println("    {}  {}", pad("info", 12), "Show package information");
-            std::println("    {}  {}", pad("add-xpkg", 12), "Add xpkg file to package index");
-            std::println("    {}  {}", pad("use", 12), "Switch tool version");
-            std::println("    {}  {}", pad("config", 12), "Show xlings configuration");
-            std::println("    {}  {}", pad("subos", 12), "Manage sub-OS environments");
-            std::println("    {}  {}", pad("self", 12), "Manage xlings itself (install, update, clean)");
-            std::println("    {}  {}", pad("script", 12), "Run xlings scripts");
+            ui::print_help(Info::VERSION);
             return 0;
         }
         if (cmd == "--version") {
@@ -210,15 +303,118 @@ export int run(int argc, char* argv[]) {
             return 0;
         }
 
-        if (cmd == "--add-xpkg" && argc >= 3) {
-            return xim::cmd_add_xpkg(std::string(argv[2]));
+        // Intercept subcommand help: xlings <cmd> -h/--help
+        bool wantsHelp = false;
+        for (int i = 2; i < argc; ++i) {
+            std::string_view a { argv[i] };
+            if (a == "-h" || a == "--help") { wantsHelp = true; break; }
+        }
+        if (wantsHelp) {
+            using A = ui::HelpArg;
+            using O = ui::HelpOpt;
+
+            struct SubHelp {
+                std::string_view name;
+                std::string_view desc;
+                std::vector<A> args;
+                std::vector<O> opts;
+            };
+
+            auto match = [&](std::string_view n) { return cmd == n; };
+
+            std::optional<SubHelp> h;
+            if (match("install")) h = SubHelp{
+                "install", "Install packages (e.g. xlings install gcc@15 node)",
+                { {"packages", "Package names with optional version"} },
+                { {"-g, --global", "Install to global scope (not project-local subos)"} },
+            };
+            else if (match("remove")) h = SubHelp{
+                "remove", "Remove a package",
+                { {"package", "Package to remove", true} }, {},
+            };
+            else if (match("update")) h = SubHelp{
+                "update", "Update package index or a specific package",
+                { {"package", "Package to update (omit for index only)"} }, {},
+            };
+            else if (match("search")) h = SubHelp{
+                "search", "Search for packages",
+                { {"keyword", "Search keyword", true} }, {},
+            };
+            else if (match("list")) h = SubHelp{
+                "list", "List installed packages",
+                { {"filter", "Filter pattern"} }, {},
+            };
+            else if (match("info")) h = SubHelp{
+                "info", "Show package information",
+                { {"package", "Package name", true} }, {},
+            };
+            else if (match("use")) h = SubHelp{
+                "use", "Switch tool version",
+                { {"target", "Tool name", true}, {"version", "Version to switch to (omit to list)"} }, {},
+            };
+            else if (match("config")) h = SubHelp{
+                "config", "Show or modify xlings configuration", {},
+                {
+                    {"--lang <LANG>",       "Set language (en/zh)"},
+                    {"--mirror <MIRROR>",   "Set mirror (GLOBAL/CN)"},
+                    {"--add-xpkg <FILE>",   "Add xpkg file to package index"},
+                    {"--index-repo <NS:URL>", "Add/update index repo (e.g. myns:https://...git)"},
+                },
+            };
+            else if (match("self")) h = SubHelp{
+                "self", "Manage xlings itself", {},
+                {
+                    {"install",  "Install xlings from release package"},
+                    {"init",     "Create home/data/subos dirs"},
+                    {"update",   "Update index + install latest xlings"},
+                    {"config",   "Show configuration details"},
+                    {"clean",    "Remove cache + gc orphaned packages (--dry-run)"},
+                    {"migrate",  "Migrate old layout to subos/default"},
+                },
+            };
+            else if (match("subos")) h = SubHelp{
+                "subos", "Manage sub-OS environments", {},
+                {
+                    {"new <name>",    "Create a new sub-OS"},
+                    {"use <name>",    "Switch active sub-OS"},
+                    {"list",          "List all sub-OS environments"},
+                    {"remove <name>", "Remove a sub-OS"},
+                    {"info [name]",   "Show sub-OS details"},
+                },
+            };
+            else if (match("script")) h = SubHelp{
+                "script", "Run xlings scripts",
+                { {"script-file", "Path to script file", true}, {"args", "Script arguments"} }, {},
+            };
+
+            if (h) {
+                ui::print_subcommand_help(h->name, h->desc, h->args, h->opts);
+                return 0;
+            }
+        }
+
+        // Detect unknown commands early — show TUI error + help
+        {
+            static constexpr std::string_view known_cmds[] = {
+                "install", "remove", "update", "search", "list",
+                "info", "use", "config", "subos", "self", "script",
+            };
+            bool known = false;
+            for (auto& k : known_cmds) {
+                if (cmd == k) { known = true; break; }
+            }
+            if (!known && !cmd.starts_with("-")) {
+                log::error("unknown command: {}", cmd);
+                ui::print_help(Info::VERSION);
+                return 1;
+            }
         }
 
         if (cmd == "subos") return subos::run(argc, argv);
         if (cmd == "self") return xself::run(argc, argv);
         if (cmd == "script") {
             if (argc < 3) {
-                std::println("Usage: xlings script <script-file> [args...]"); // TODO(tui)
+                ui::print_usage("xlings script <script-file> [args...]");
                 return 1;
             }
             namespace fs = std::filesystem;
@@ -255,12 +451,11 @@ export int run(int argc, char* argv[]) {
         .option("yes").short_name('y').help("Skip confirmation prompts").global()
         .option("verbose").short_name('v').help("Enable verbose output").global()
         .option("quiet").short_name('q').help("Suppress non-essential output").global()
-        .option("lang").takes_value().value_name("LANG").help("Override language (en/zh)").global()
-        .option("mirror").takes_value().value_name("MIRROR").help("Override mirror (GLOBAL/CN)").global()
 
-        // install: use global --use, package names are positional
+        // install
         .subcommand("install")
             .description("Install packages (e.g. xlings install gcc@15 node)")
+            .option(cmdline::Option("global").short_name('g').help("Install to global scope (not project-local subos)"))
             .arg("packages").help("Package names with optional version")
             .action([](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
@@ -272,7 +467,8 @@ export int run(int argc, char* argv[]) {
                 if (targets.empty()) return install_from_project_config_();
 
                 bool yes = args.is_flag_set("yes");
-                return xim::cmd_install(targets, yes, false);
+                bool global = args.is_flag_set("global");
+                return xim::cmd_install(targets, yes, false, global);
             })
 
         // remove
@@ -326,15 +522,6 @@ export int run(int argc, char* argv[]) {
                 return xim::cmd_info(std::string(args.positional(0)));
             })
 
-        // add-xpkg
-        .subcommand("add-xpkg")
-            .description("Add xpkg file to package index")
-            .arg("file").required().help("Path or URL to .lua xpkg file")
-            .action([](const cmdline::ParsedArgs& args) -> int {
-                apply_global_opts_(args);
-                return xim::cmd_add_xpkg(std::string(args.positional(0)));
-            })
-
         // use
         .subcommand("use")
             .description("Switch tool version")
@@ -351,10 +538,14 @@ export int run(int argc, char* argv[]) {
 
         // config
         .subcommand("config")
-            .description("Show xlings configuration")
-            .action([](const cmdline::ParsedArgs&) -> int {
-                Config::print_paths();
-                return 0;
+            .description("Show or modify xlings configuration")
+            .option(cmdline::Option("lang").takes_value().value_name("LANG").help("Set language (en/zh)"))
+            .option(cmdline::Option("mirror").takes_value().value_name("MIRROR").help("Set mirror (GLOBAL/CN)"))
+            .option(cmdline::Option("add-xpkg").takes_value().value_name("FILE").help("Add xpkg file to package index"))
+            .option(cmdline::Option("index-repo").takes_value().value_name("NS:URL").help("Add/update index repo (e.g. myns:https://...git)"))
+            .action([](const cmdline::ParsedArgs& args) -> int {
+                apply_global_opts_(args);
+                return cmd_config_(args);
             });
 
     return app.run(argc, argv);

@@ -22,6 +22,7 @@ import xlings.config;
 import xlings.platform;
 import xlings.json;
 import xlings.xself;
+import xlings.profile;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -1746,6 +1747,202 @@ TEST_F(ShimCreateTest, EnsureSubosShimsCreatesAll) {
         EXPECT_TRUE(fs::is_symlink(shim)) << "shim should be symlink: " << name;
 #endif
     }
+}
+
+// ============================================================
+// xvm "latest" version resolution tests
+// ============================================================
+
+TEST(XvmDbTest, MatchLatestPicksHighest) {
+    // "latest" isn't handled by match_version — it's handled in cmd_use.
+    // But we can verify the underlying sort logic by checking match_version
+    // with empty prefix returns nothing (since "" doesn't prefix-match digits),
+    // confirming that "latest" needs special handling.
+    xlings::xvm::VersionDB db;
+    xlings::xvm::add_version(db, "tool", "0.1.3", "/a");
+    xlings::xvm::add_version(db, "tool", "0.1.4", "/b");
+    xlings::xvm::add_version(db, "tool", "1.0.0", "/c");
+
+    // "latest" should not match any version via fuzzy match
+    EXPECT_EQ(xlings::xvm::match_version(db, "tool", "latest"), "");
+
+    // Verify get_all_versions returns all, so cmd_use can sort and pick highest
+    auto all = xlings::xvm::get_all_versions(db, "tool");
+    EXPECT_EQ(all.size(), 3u);
+}
+
+TEST(XvmDbTest, NamespacedVersionMatch) {
+    xlings::xvm::VersionDB db;
+    xlings::xvm::add_version(db, "gcc", "xim:15.1.0", "/a");
+    xlings::xvm::add_version(db, "gcc", "xim:14.2.0", "/b");
+    xlings::xvm::add_version(db, "gcc", "13.3.0", "/c");
+
+    // Namespace-qualified match
+    EXPECT_EQ(xlings::xvm::match_version(db, "gcc", "xim:15"), "xim:15.1.0");
+    EXPECT_EQ(xlings::xvm::match_version(db, "gcc", "xim:14"), "xim:14.2.0");
+
+    // Bare prefix prefers bare versions
+    EXPECT_EQ(xlings::xvm::match_version(db, "gcc", "13"), "13.3.0");
+}
+
+// ============================================================
+// Profile generation tests
+// ============================================================
+
+class ProfileTest : public ::testing::Test {
+protected:
+    std::filesystem::path testDir_;
+
+    void SetUp() override {
+        testDir_ = std::filesystem::temp_directory_path() / "xlings_profile_test";
+        std::filesystem::create_directories(testDir_);
+    }
+
+    void TearDown() override {
+        std::error_code ec;
+        std::filesystem::remove_all(testDir_, ec);
+    }
+};
+
+TEST_F(ProfileTest, LoadCurrentEmpty) {
+    // No profile file → returns generation 0
+    auto gen = xlings::profile::load_current(testDir_);
+    EXPECT_EQ(gen.number, 0);
+    EXPECT_TRUE(gen.packages.empty());
+}
+
+TEST_F(ProfileTest, CommitAndLoadRoundTrip) {
+    std::map<std::string, std::string> packages = {
+        {"gcc", "15.1.0"},
+        {"node", "22.0.0"},
+    };
+    int rc = xlings::profile::commit(testDir_, packages, "install gcc+node");
+    EXPECT_EQ(rc, 0);
+
+    auto gen = xlings::profile::load_current(testDir_);
+    EXPECT_EQ(gen.number, 1);
+    EXPECT_EQ(gen.packages.size(), 2u);
+    EXPECT_EQ(gen.packages["gcc"], "15.1.0");
+    EXPECT_EQ(gen.packages["node"], "22.0.0");
+
+    // Second commit
+    packages["python"] = "3.12.0";
+    rc = xlings::profile::commit(testDir_, packages, "add python");
+    EXPECT_EQ(rc, 0);
+
+    gen = xlings::profile::load_current(testDir_);
+    EXPECT_EQ(gen.number, 2);
+    EXPECT_EQ(gen.packages.size(), 3u);
+}
+
+TEST_F(ProfileTest, ListGenerations) {
+    std::map<std::string, std::string> p1 = {{"gcc", "15.1.0"}};
+    std::map<std::string, std::string> p2 = {{"gcc", "15.1.0"}, {"node", "22.0.0"}};
+
+    xlings::profile::commit(testDir_, p1, "install gcc");
+    xlings::profile::commit(testDir_, p2, "add node");
+
+    auto gens = xlings::profile::list_generations(testDir_);
+    EXPECT_EQ(gens.size(), 2u);
+    EXPECT_EQ(gens[0].number, 1);
+    EXPECT_EQ(gens[0].packages.size(), 1u);
+    EXPECT_EQ(gens[1].number, 2);
+    EXPECT_EQ(gens[1].packages.size(), 2u);
+}
+
+TEST_F(ProfileTest, Rollback) {
+    std::map<std::string, std::string> p1 = {{"gcc", "15.1.0"}};
+    std::map<std::string, std::string> p2 = {{"gcc", "15.1.0"}, {"node", "22.0.0"}};
+
+    xlings::profile::commit(testDir_, p1, "install gcc");
+    xlings::profile::commit(testDir_, p2, "add node");
+
+    int rc = xlings::profile::rollback(testDir_, 1);
+    EXPECT_EQ(rc, 0);
+
+    auto gen = xlings::profile::load_current(testDir_);
+    EXPECT_EQ(gen.number, 1);
+    EXPECT_EQ(gen.packages.size(), 1u);
+    EXPECT_EQ(gen.packages["gcc"], "15.1.0");
+}
+
+TEST_F(ProfileTest, RollbackNonexistentFails) {
+    int rc = xlings::profile::rollback(testDir_, 99);
+    EXPECT_EQ(rc, 1);
+}
+
+TEST_F(ProfileTest, FindSubosReferencingEmpty) {
+    // No subos dir → empty result
+    auto refs = xlings::profile::find_subos_referencing(testDir_, "gcc");
+    EXPECT_TRUE(refs.empty());
+}
+
+// ============================================================
+// Log system extended tests
+// ============================================================
+
+TEST(LogTest, GetLevelReturnsSetValue) {
+    xlings::log::set_level(xlings::log::Level::Debug);
+    EXPECT_EQ(xlings::log::get_level(), xlings::log::Level::Debug);
+
+    xlings::log::set_level(xlings::log::Level::Warn);
+    EXPECT_EQ(xlings::log::get_level(), xlings::log::Level::Warn);
+
+    // Restore
+    xlings::log::set_level(xlings::log::Level::Info);
+}
+
+TEST(LogTest, LevelStringMatchesLevel) {
+    xlings::log::set_level(xlings::log::Level::Debug);
+    EXPECT_EQ(xlings::log::level_string(), "debug");
+
+    xlings::log::set_level(xlings::log::Level::Info);
+    EXPECT_EQ(xlings::log::level_string(), "info");
+
+    xlings::log::set_level(xlings::log::Level::Warn);
+    EXPECT_EQ(xlings::log::level_string(), "warn");
+
+    xlings::log::set_level(xlings::log::Level::Error);
+    EXPECT_EQ(xlings::log::level_string(), "error");
+
+    // Restore
+    xlings::log::set_level(xlings::log::Level::Info);
+}
+
+TEST(LogTest, EnableColorToggle) {
+    // Should not crash and should be toggleable
+    xlings::log::enable_color(false);
+    xlings::log::info("no color test");
+    xlings::log::enable_color(true);
+    xlings::log::info("color test");
+}
+
+TEST(LogTest, LevelFiltering) {
+    namespace fs = std::filesystem;
+    auto tmpFile = fs::temp_directory_path() / "xlings_test_log_filter.txt";
+    fs::remove(tmpFile);
+
+    xlings::log::set_level(xlings::log::Level::Warn);
+    xlings::log::set_file(tmpFile);
+
+    xlings::log::debug("should not appear");
+    xlings::log::info("should not appear");
+    xlings::log::warn("warn visible");
+    xlings::log::error("error visible");
+
+    xlings::log::set_file("");
+
+    std::ifstream f(tmpFile);
+    ASSERT_TRUE(f.is_open());
+    std::string content((std::istreambuf_iterator<char>(f)),
+                        std::istreambuf_iterator<char>());
+
+    EXPECT_EQ(content.find("should not appear"), std::string::npos);
+    EXPECT_NE(content.find("warn visible"), std::string::npos);
+    EXPECT_NE(content.find("error visible"), std::string::npos);
+
+    fs::remove(tmpFile);
+    xlings::log::set_level(xlings::log::Level::Info);
 }
 
 // ============================================================

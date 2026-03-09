@@ -18,6 +18,7 @@ import xlings.platform;
 import xlings.tinyhttps;
 import xlings.xvm.db;
 import xlings.xvm.commands;
+import xlings.profile;
 
 namespace xpkg = mcpplibs::xpkg;
 
@@ -54,7 +55,8 @@ std::string detect_platform() {
 int cmd_remove(const std::string& target);
 
 // === install command ===
-int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
+int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
+                bool forceGlobal = false) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -78,7 +80,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                 log::error("{}", match.error());
                 return 1;
             }
-            // Explicit namespace (e.g. scode:linux-headers) — don't fuzzy-match
+            // Explicit namespace (e.g. scode:linux-headers) -- don't fuzzy-match
             // across other namespaces, which can cause infinite recursion
             if (target.find(':') != std::string::npos) {
                 log::error("{}", match.error());
@@ -93,30 +95,36 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
             if (fuzzy.size() > 5) fuzzy.resize(5);
 
             if (fuzzy.size() == 1) {
-                // Single fuzzy match — use it directly
+                // Single fuzzy match -- use it directly
                 match = fuzzy.front();
             } else if (yes) {
                 // -y mode: auto-select first match
                 match = fuzzy.front();
             } else {
-                // Interactive selection
-                // TODO(tui)
-                std::println("did you mean one of these?");
-                for (std::size_t i = 0; i < fuzzy.size(); ++i) {
-                    std::println("  {}. {}@{}", i + 1,
-                                 fuzzy[i].canonicalName, fuzzy[i].version);
+                // Interactive selection using themed UI
+                std::vector<std::pair<std::string, std::string>> items;
+                for (auto& f : fuzzy) {
+                    items.emplace_back(
+                        f.canonicalName + "@" + f.version,
+                        ""
+                    );
                 }
-                std::print("select [1-{}] or 0 to cancel: ", fuzzy.size());
-                std::cout.flush();
-                std::string input;
-                std::getline(std::cin, input);
-                int choice = 0;
-                try { choice = std::stoi(input); } catch (...) {}
-                if (choice < 1 || choice > static_cast<int>(fuzzy.size())) {
-                    std::println("cancelled");
+                auto chosen = ui::select_package(items);
+                if (!chosen) {
+                    log::println("cancelled");
                     return 0;
                 }
-                match = fuzzy[static_cast<std::size_t>(choice - 1)];
+                // Find matching fuzzy result
+                for (auto& f : fuzzy) {
+                    if ((f.canonicalName + "@" + f.version) == *chosen) {
+                        match = f;
+                        break;
+                    }
+                }
+                if (!match) {
+                    log::println("cancelled");
+                    return 0;
+                }
             }
             // Update target so dependency resolution uses the resolved name
             target = match->canonicalName;
@@ -142,6 +150,19 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         return 1;
     }
 
+    // -g: force all packages to install into global scope
+    if (forceGlobal) {
+        auto globalXpkgs = Config::global_data_dir() / "xpkgs";
+        for (auto& node : plan.nodes) {
+            node.scope = PackageScope::Global;
+            node.storeRoot = globalXpkgs;
+        }
+        for (auto& match : requestedMatches) {
+            match.scope = PackageScope::Global;
+            match.storeRoot = globalXpkgs;
+        }
+    }
+
     auto plan_key = [](const PackageMatch& match) {
         return match.canonicalName + "@" + match.version;
     };
@@ -163,11 +184,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
                               match.name, match.version);
                 }
             }
-            log::println("version: {}", match.version);
+            log::debug("version: {}", match.version);
             if (requestedAlreadyInstalled[plan_key(match)]) {
-                log::println("{}@{} already installed", match.canonicalName, match.version);
+                log::debug("{}@{} already installed", match.canonicalName, match.version);
             } else {
-                log::println("{}@{} installed", match.canonicalName, match.version);
+                log::debug("{}@{} installed", match.canonicalName, match.version);
             }
         }
     };
@@ -178,26 +199,23 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         log::println("all packages already installed");
     }
 
-    // Show plan
-    // TODO(tui)
+    // Show install plan with themed UI
     if (!allAlreadyInstalled) {
-        std::println("packages to install ({}):", pending);
+        std::vector<std::pair<std::string, std::string>> planItems;
         for (auto& node : plan.nodes) {
             if (!node.alreadyInstalled) {
-                std::println("  {} {}", node.canonicalName,
-                             node.version.empty() ? "" : "@" + node.version);
+                std::string nameVer = node.canonicalName;
+                if (!node.version.empty()) nameVer += "@" + node.version;
+                planItems.emplace_back(nameVer, "");
             }
         }
+        ui::print_install_plan(planItems);
     }
 
-    // Confirm
-    // TODO(tui)
+    // Confirm with themed prompt
     if (!allAlreadyInstalled && !yes) {
-        std::print("\nproceed? [Y/n] ");
-        std::string input;
-        std::getline(std::cin, input);
-        if (!input.empty() && input[0] != 'y' && input[0] != 'Y') {
-            std::println("cancelled");
+        if (!ui::confirm("Proceed with installation?", true)) {
+            log::println("cancelled");
             return 0;
         }
     }
@@ -208,22 +226,27 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
 
+    int successCount = 0;
+    int failedCount = 0;
+
     auto result = installer.execute(plan, dlConfig,
-        [](const InstallStatus& status) {
+        [&](const InstallStatus& status) {
             switch (status.phase) {
                 case InstallPhase::Downloading:
                     break;  // TUI progress bar handles this
                 case InstallPhase::Installing:
-                    log::info("[{}] installing...", status.name);
+                    log::debug("[{}] installing...", status.name);
                     break;
                 case InstallPhase::Configuring:
-                    log::info("[{}] configuring...", status.name);
+                    log::debug("[{}] configuring...", status.name);
                     break;
                 case InstallPhase::Done:
-                    log::info("[{}] done", status.name);
+                    log::debug("[{}] done", status.name);
+                    ++successCount;
                     break;
                 case InstallPhase::Failed:
                     log::error("[{}] failed: {}", status.name, status.message);
+                    ++failedCount;
                     break;
                 default:
                     break;
@@ -231,14 +254,14 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
         },
         // Process deferred pkgmanager.install()/remove() requests synchronously
         // between install and config hooks so config can access sub-dependencies
-        [](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
+        [forceGlobal](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
             for (auto& req : reqs) {
                 if (req.op == "install") {
-                    log::info("installing sub-dependency: {}", req.target);
+                    log::debug("installing sub-dependency: {}", req.target);
                     std::vector<std::string> subTargets = { req.target };
-                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false);
+                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, forceGlobal);
                 } else if (req.op == "remove") {
-                    log::info("removing sub-dependency: {}", req.target);
+                    log::debug("removing sub-dependency: {}", req.target);
                     cmd_remove(req.target);
                 }
             }
@@ -251,7 +274,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps) {
 
     activate_requested_targets();
     if (!allAlreadyInstalled) {
-        log::println("\n{} package(s) installed successfully", pending);
+        ui::print_install_summary(successCount, failedCount);
     }
     return 0;
 }
@@ -271,6 +294,7 @@ int cmd_remove(const std::string& target) {
         return 1;
     }
 
+    ui::print_remove_summary(target);
     return 0;
 }
 
@@ -284,11 +308,11 @@ int cmd_search(const std::string& keyword) {
 
     auto results = catalog.search(keyword, detect_platform());
     if (results.empty()) {
-        std::println("no packages found matching '{}'", keyword); // TODO(tui)
+        log::println("no packages found matching '{}'", keyword);
         return 0;
     }
 
-    // Display results with descriptions
+    // Display results with descriptions (same style as list)
     std::vector<std::pair<std::string, std::string>> items;
     for (auto& match : results) {
         auto pkg = catalog.load_package(match);
@@ -296,7 +320,7 @@ int cmd_search(const std::string& keyword) {
         items.emplace_back(match.canonicalName, desc);
     }
 
-    xlings::ui::print_search_results(items);
+    ui::print_styled_list("Search results:", items, true);
     return 0;
 }
 
@@ -316,18 +340,20 @@ int cmd_list(const std::string& filter) {
         if (match.installed) installed.push_back(std::move(match));
     }
 
-    // TODO(tui)
     if (installed.empty()) {
-        std::println("no installed packages found");
+        log::println("no installed packages found");
         return 0;
     }
 
+    // Use themed list display
+    std::vector<std::pair<std::string, std::string>> items;
     for (auto& match : installed) {
         auto pkg = catalog.load_package(match);
         std::string desc = pkg ? std::string(pkg->description) : std::string{};
-        std::println("  {}@{}  {}", match.canonicalName, match.version, desc);
+        items.emplace_back(match.canonicalName + "@" + match.version, desc);
     }
-    std::println("\ntotal: {} installed", installed.size());
+    ui::print_styled_list("Installed packages:", items, true);
+    log::println("total: {} installed", installed.size());
     return 0;
 }
 
@@ -351,45 +377,123 @@ int cmd_info(const std::string& target) {
         return 1;
     }
 
-    // TODO(tui)
-    std::println("name:        {}", match->canonicalName);
-    std::println("description: {}", pkg->description);
+    // Build info fields
+    std::vector<ui::InfoField> fields;
+    fields.push_back({"description", std::string(pkg->description)});
     if (!pkg->homepage.empty())
-        std::println("homepage:    {}", pkg->homepage);
+        fields.push_back({"homepage", std::string(pkg->homepage)});
     if (!pkg->repo.empty())
-        std::println("repo:        {}", pkg->repo);
+        fields.push_back({"repo", std::string(pkg->repo)});
     if (!pkg->licenses.empty()) {
-        std::print("licenses:    ");
-        for (auto& l : pkg->licenses) std::print("{} ", l);
-        std::println("");
+        std::string licStr;
+        for (auto& l : pkg->licenses) {
+            if (!licStr.empty()) licStr += " ";
+            licStr += l;
+        }
+        fields.push_back({"licenses", licStr});
     }
     if (!pkg->categories.empty()) {
-        std::print("categories:  ");
-        for (auto& c : pkg->categories) std::print("{} ", c);
-        std::println("");
+        std::string catStr;
+        for (auto& c : pkg->categories) {
+            if (!catStr.empty()) catStr += " ";
+            catStr += c;
+        }
+        fields.push_back({"categories", catStr});
     }
 
     // Show platform versions
     auto platform = detect_platform();
     auto platformIt = pkg->xpm.entries.find(platform);
     if (platformIt != pkg->xpm.entries.end()) {
-        std::println("versions ({}):", platform);
+        std::string verStr;
         for (auto& [ver, res] : platformIt->second) {
-            std::println("  {}{}", ver,
-                         res.ref.empty() ? "" : " -> " + res.ref);
+            if (!verStr.empty()) verStr += ", ";
+            verStr += ver;
+            if (!res.ref.empty()) verStr += " -> " + res.ref;
         }
+        fields.push_back({"versions", verStr});
     }
 
     // Show deps
     auto depsIt = pkg->xpm.deps.find(platform);
     if (depsIt != pkg->xpm.deps.end() && !depsIt->second.empty()) {
-        std::print("deps:        ");
-        for (auto& d : depsIt->second) std::print("{} ", d);
-        std::println("");
+        std::string depStr;
+        for (auto& d : depsIt->second) {
+            if (!depStr.empty()) depStr += " ";
+            depStr += d;
+        }
+        fields.push_back({"deps", depStr});
     }
 
-    std::println("installed:   {}", match->installed ? "yes" : "no");
+    fields.push_back({"installed", match->installed ? "yes" : "no", match->installed});
 
+    // Build installation detail section if installed
+    std::vector<ui::InfoField> installFields;
+    if (match->installed) {
+        auto db = Config::versions();
+        auto ws = Config::effective_workspace();
+        auto target = match->name;
+
+        auto activeVer = xvm::get_active_version(ws, target);
+        if (!activeVer.empty()) {
+            installFields.push_back({"active", activeVer, true});
+        }
+
+        auto allVers = xvm::get_all_versions(db, target);
+        if (!allVers.empty()) {
+            std::string verList;
+            for (auto& v : allVers) {
+                if (!verList.empty()) verList += ", ";
+                verList += v;
+                if (v == activeVer) verList += " *";
+            }
+            installFields.push_back({"versions", verList});
+        }
+
+        // xpkg store path
+        auto storeName = package_store_name(match->namespaceName, match->name);
+        auto storePath = match->storeRoot / storeName;
+        installFields.push_back({"xpkg path", storePath.string()});
+
+        // shim path
+        auto binDir = Config::global_subos_bin_dir();
+        auto shimPath = binDir / target;
+        if (std::filesystem::exists(shimPath)) {
+            installFields.push_back({"shim", shimPath.string()});
+        }
+
+        // bindings
+        auto* vinfo = xvm::get_vinfo(db, target);
+        if (vinfo && !vinfo->bindings.empty()) {
+            std::string bindStr;
+            for (auto& [bindName, verMap] : vinfo->bindings) {
+                if (!bindStr.empty()) bindStr += ", ";
+                bindStr += bindName;
+                // Show the executable for active version if available
+                if (!activeVer.empty()) {
+                    auto vit = verMap.find(activeVer);
+                    if (vit != verMap.end()) {
+                        bindStr += " -> " + vit->second;
+                    }
+                }
+            }
+            installFields.push_back({"bindings", bindStr});
+        }
+
+        // subos references
+        auto subosRefs = profile::find_subos_referencing(
+            Config::paths().homeDir, target);
+        if (!subosRefs.empty()) {
+            std::string refStr;
+            for (auto& s : subosRefs) {
+                if (!refStr.empty()) refStr += ", ";
+                refStr += s;
+            }
+            installFields.push_back({"subos", refStr});
+        }
+    }
+
+    ui::print_info_panel(match->canonicalName, fields, installFields);
     return 0;
 }
 
@@ -474,7 +578,7 @@ int cmd_update(const std::string& target) {
 
     if (!target.empty()) {
         // TODO: Upgrade specific package
-        std::println("package upgrade not yet implemented");
+        log::println("package upgrade not yet implemented");
     }
 
     return 0;

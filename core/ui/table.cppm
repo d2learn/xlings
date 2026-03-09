@@ -3,10 +3,12 @@ module;
 #include "ftxui/dom/elements.hpp"
 #include "ftxui/dom/table.hpp"
 #include "ftxui/screen/screen.hpp"
+#include "ftxui/screen/color.hpp"
 
 export module xlings.ui:table;
 
 import std;
+import :theme;
 
 export namespace xlings::ui {
 
@@ -22,10 +24,11 @@ void print_table(std::span<const std::string> headers,
     }
 
     auto table = Table(std::move(tableData));
-    table.SelectAll().Border(LIGHT);
+    table.SelectAll().Border(ROUNDED);
     table.SelectRow(0).Decorate(bold);
+    table.SelectRow(0).Decorate(color(theme::cyan()));
     table.SelectRow(0).SeparatorVertical(LIGHT);
-    table.SelectRow(0).Border(DOUBLE);
+    table.SelectRow(0).BorderBottom(LIGHT);
 
     auto doc = table.Render();
     auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
@@ -48,9 +51,16 @@ void print_search_results(
     }
 
     auto table = Table(std::move(tableData));
-    table.SelectAll().Border(LIGHT);
+    table.SelectAll().Border(ROUNDED);
     table.SelectRow(0).Decorate(bold);
-    table.SelectRow(0).Border(DOUBLE);
+    table.SelectRow(0).Decorate(color(theme::cyan()));
+    table.SelectRow(0).BorderBottom(LIGHT);
+
+    // Style package name column with magenta
+    for (int i = 1; i < static_cast<int>(results.size()) + 1; ++i) {
+        table.SelectCell(i, 0).Decorate(bold);
+        table.SelectCell(i, 0).Decorate(color(theme::magenta()));
+    }
 
     auto doc = table.Render();
     auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));

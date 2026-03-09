@@ -10,6 +10,11 @@ import xlings.xvm.shim;
 #endif
 
 int main(int argc, char* argv[]) {
+    // Restore terminal cursor visibility on exit (safety net for TUI download progress)
+    std::atexit([]() {
+        std::cout << "\033[?25h" << std::flush;
+    });
+
     auto& p = xlings::Config::paths();
     xlings::platform::set_env_variable("XLINGS_HOME", p.homeDir.string());
 
@@ -26,7 +31,8 @@ int main(int argc, char* argv[]) {
 #ifdef __APPLE__
     // On macOS, static libc++ linked with dynamic libc++abi causes SIGABRT
     // during static destruction. Skip destructors — CLI tool needs no cleanup.
-    std::cout.flush();
+    // _Exit skips atexit handlers, so restore cursor explicitly here.
+    std::cout << "\033[?25h" << std::flush;
     std::cerr.flush();
     std::_Exit(rc);
 #else

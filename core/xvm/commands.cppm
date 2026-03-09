@@ -6,6 +6,7 @@ import xlings.common;
 import xlings.config;
 import xlings.log;
 import xlings.platform;
+import xlings.ui;
 import xlings.xself;
 import xlings.xvm.types;
 import xlings.xvm.db;
@@ -127,15 +128,50 @@ int cmd_use(const std::string& target, const std::string& version) {
         return 1;
     }
 
-    // Fuzzy match version
-    auto resolved = match_version(db, target, version);
+    // "latest" means pick the highest available version
+    std::string resolved;
+    if (version == "latest") {
+        auto all = get_all_versions(db, target);
+        if (all.empty()) {
+            log::error("no versions installed for '{}'", target);
+            return 1;
+        }
+        // sort_desc: highest version first
+        std::ranges::sort(all, [](const std::string& a, const std::string& b) {
+            auto split = [](const std::string& s) {
+                std::vector<int> parts;
+                std::istringstream iss(s);
+                std::string part;
+                while (std::getline(iss, part, '.')) {
+                    int n = 0;
+                    std::from_chars(part.data(), part.data() + part.size(), n);
+                    parts.push_back(n);
+                }
+                return parts;
+            };
+            auto pa = split(strip_namespace(a));
+            auto pb = split(strip_namespace(b));
+            for (std::size_t i = 0; i < std::min(pa.size(), pb.size()); ++i) {
+                if (pa[i] != pb[i]) return pa[i] > pb[i];
+            }
+            return pa.size() > pb.size();
+        });
+        resolved = all[0];
+    } else {
+        // Fuzzy match version
+        resolved = match_version(db, target, version);
+    }
+
     if (resolved.empty()) {
-        log::error("[xlings:use] version '{}' not found for '{}'", version, target);
+        log::error("version '{}' not found for '{}'", version, target);
         auto all = get_all_versions(db, target);
         if (!all.empty()) {
-            std::string avail = "  available:";
-            for (auto& v : all) avail += " " + v;
-            log::error("{}", avail);
+            std::string avail;
+            for (auto& v : all) {
+                if (!avail.empty()) avail += ", ";
+                avail += v;
+            }
+            log::error("  available: {}", avail);
         }
         return 1;
     }
@@ -203,7 +239,7 @@ int cmd_use(const std::string& target, const std::string& version) {
         }
     }
 
-    log::println("[xlings:use] {} -> {}", target, resolved);
+    log::info("{} -> {}", target, resolved);
     return 0;
 }
 
@@ -212,7 +248,7 @@ int cmd_list_versions(const std::string& target) {
     auto db = Config::versions();
 
     if (!has_target(db, target)) {
-        log::error("[xlings] '{}' not found in version database", target);
+        log::error("'{}' not found in version database", target);
         return 1;
     }
 
@@ -220,16 +256,15 @@ int cmd_list_versions(const std::string& target) {
     auto active = get_active_version(workspace, target);
     auto all = get_all_versions(db, target);
 
-    std::println("[xlings] versions for '{}':", target);
+    std::vector<ui::InfoField> fields;
     for (auto& ver : all) {
         auto vdata = get_vdata(db, target, ver);
-        std::string marker = (ver == active) ? " *" : "  ";
         std::string path_info;
-        if (vdata && !vdata->path.empty()) {
-            path_info = " (" + vdata->path + ")";
-        }
-        std::println(" {} {}{}", marker, ver, path_info);
+        if (vdata && !vdata->path.empty()) path_info = vdata->path;
+        bool highlight = (ver == active);
+        fields.push_back({ver, path_info, highlight});
     }
+    ui::print_info_panel(target + " versions", fields);
 
     return 0;
 }

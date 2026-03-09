@@ -3,14 +3,16 @@ module;
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/color.hpp"
 
 export module xlings.ui:selector;
 
 import std;
+import :theme;
 
 export namespace xlings::ui {
 
-// Interactive version selector — returns chosen version or nullopt if cancelled
+// Interactive version selector -- returns chosen version or nullopt if cancelled
 std::optional<std::string>
 select_version(std::string_view pkgName, std::span<const std::string> versions) {
     using namespace ftxui;
@@ -46,12 +48,13 @@ select_version(std::string_view pkgName, std::span<const std::string> versions) 
 
     auto renderer = Renderer(component, [&] {
         return vbox({
-            text(std::format("Select version for {}:", pkgName)) | bold,
-            separator(),
-            component->Render() | vscroll_indicator | frame | size(HEIGHT, LESS_THAN, 15),
-            separator(),
-            text("Enter=select  q/Esc=cancel") | dim,
-        }) | border;
+            text(std::format(" Select version for {}:", pkgName)) | theme::title(),
+            separator() | color(theme::border_color()),
+            component->Render() | vscroll_indicator | frame
+                | size(HEIGHT, LESS_THAN, 15),
+            separator() | color(theme::border_color()),
+            text(" \u2191\u2193 navigate  Enter select  Esc cancel") | theme::hint(),
+        }) | borderRounded | color(theme::border_color());
     });
 
     screen.Loop(renderer);
@@ -76,7 +79,7 @@ select_package(std::span<const std::pair<std::string, std::string>> items) {
     std::vector<std::string> labels;
     labels.reserve(items.size());
     for (auto& [name, desc] : items) {
-        // Avoid {:<20s} — GCC 15 modules crash on width specifiers
+        // Avoid {:<20s} -- GCC 15 modules crash on width specifiers
         std::string padded = name;
         while (padded.size() < 20) padded += ' ';
         labels.push_back(padded + " " + desc);
@@ -100,10 +103,13 @@ select_package(std::span<const std::pair<std::string, std::string>> items) {
 
     screen.Loop(Renderer(component, [&] {
         return vbox({
-            text("Select a package:") | bold,
-            separator(),
-            component->Render() | vscroll_indicator | frame | size(HEIGHT, LESS_THAN, 20),
-        }) | border;
+            text(" Select a package:") | theme::title(),
+            separator() | color(theme::border_color()),
+            component->Render() | vscroll_indicator | frame
+                | size(HEIGHT, LESS_THAN, 20),
+            separator() | color(theme::border_color()),
+            text(" \u2191\u2193 navigate  Enter select  Esc cancel") | theme::hint(),
+        }) | borderRounded | color(theme::border_color());
     }));
 
     if (confirmed && selected >= 0 && selected < (int)items.size()) {
@@ -112,11 +118,12 @@ select_package(std::span<const std::pair<std::string, std::string>> items) {
     return std::nullopt;
 }
 
-// Simple yes/no confirmation using ftxui
+// Simple yes/no confirmation with styled prompt
 bool confirm(std::string_view message, bool defaultYes) {
-    // For non-interactive or simple cases, use stdin
     std::string prompt = defaultYes ? "[Y/n] " : "[y/N] ";
-    std::print("{}{}", message, prompt);
+    // Use ANSI colors for inline prompt (not ftxui rendered)
+    std::print("\033[38;2;34;211;238m{}\033[0m{}\033[38;2;148;163;184m{}\033[0m",
+               std::string(theme::icon::arrow) + " ", message, prompt);
     std::cout.flush();
 
     std::string input;
