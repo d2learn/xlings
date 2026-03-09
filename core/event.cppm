@@ -8,6 +8,7 @@ export module xlings.event;
 
 namespace xlings {
 
+// ─── Phase ───
 export enum class Phase {
     resolving,
     downloading,
@@ -17,11 +18,14 @@ export enum class Phase {
     verifying
 };
 
+// ─── LogLevel ───
 export enum class LogLevel { debug, info, warn, error };
+
+// ─── Event Types ───
 
 export struct ProgressEvent {
     Phase phase;
-    float percent;
+    float percent;           // 0.0 ~ 1.0
     std::string message;
 };
 
@@ -33,18 +37,18 @@ export struct LogEvent {
 export struct PromptEvent {
     std::string id;
     std::string question;
-    std::vector<std::string> options;
-    std::string default_value;
+    std::vector<std::string> options;    // empty = free input
+    std::string defaultValue;
 };
 
 export struct ErrorEvent {
     int code;
     std::string message;
-    bool recoverable = false;
+    bool recoverable { false };
 };
 
 export struct DataEvent {
-    std::string kind;
+    std::string kind;        // "search_results" / "package_info" etc.
     std::string json;
 };
 
@@ -53,6 +57,7 @@ export struct CompletedEvent {
     std::string summary;
 };
 
+// ─── Unified Event ───
 export using Event = std::variant<
     ProgressEvent,
     LogEvent,

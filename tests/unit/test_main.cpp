@@ -24,6 +24,7 @@ import xlings.json;
 import xlings.xself;
 import xlings.profile;
 import xlings.event;
+import xlings.event_stream;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -1979,11 +1980,11 @@ TEST(Event, PromptEventConstruction) {
         .id = "p1",
         .question = "Override existing?",
         .options = {"y", "n"},
-        .default_value = "n"
+        .defaultValue = "n"
     };
     EXPECT_EQ(e.id, "p1");
     EXPECT_EQ(e.options.size(), 2);
-    EXPECT_EQ(e.default_value, "n");
+    EXPECT_EQ(e.defaultValue, "n");
 }
 
 TEST(Event, VariantHoldsTypes) {
@@ -2006,6 +2007,79 @@ TEST(Event, DataEvent) {
     xlings::Event ev = xlings::DataEvent{.kind = "search_results", .json = R"({"count":3})"};
     auto& d = std::get<xlings::DataEvent>(ev);
     EXPECT_EQ(d.kind, "search_results");
+}
+
+// ============================================================
+// EventStream tests
+// ============================================================
+
+TEST(EventStream, EmitAndConsume) {
+    xlings::EventStream stream;
+    std::vector<xlings::Event> received;
+
+    stream.on_event([&](const xlings::Event& e) {
+        received.push_back(e);
+    });
+
+    stream.emit(xlings::LogEvent{xlings::LogLevel::info, "hello"});
+    stream.emit(xlings::ProgressEvent{xlings::Phase::downloading, 0.5f, "..."});
+
+    ASSERT_EQ(received.size(), 2);
+    EXPECT_TRUE(std::holds_alternative<xlings::LogEvent>(received[0]));
+    EXPECT_TRUE(std::holds_alternative<xlings::ProgressEvent>(received[1]));
+}
+
+TEST(EventStream, MultipleConsumers) {
+    xlings::EventStream stream;
+    int count_a = 0, count_b = 0;
+
+    stream.on_event([&](const xlings::Event&) { ++count_a; });
+    stream.on_event([&](const xlings::Event&) { ++count_b; });
+
+    stream.emit(xlings::LogEvent{xlings::LogLevel::info, "test"});
+
+    EXPECT_EQ(count_a, 1);
+    EXPECT_EQ(count_b, 1);
+}
+
+TEST(EventStream, PromptAndRespond) {
+    xlings::EventStream stream;
+    std::string captured_question;
+
+    stream.on_event([&](const xlings::Event& e) {
+        if (auto* p = std::get_if<xlings::PromptEvent>(&e)) {
+            captured_question = p->question;
+            stream.respond(p->id, "y");
+        }
+    });
+
+    auto answer = stream.prompt({
+        .id = "p1",
+        .question = "Override?",
+        .options = {"y", "n"},
+        .defaultValue = "n"
+    });
+
+    EXPECT_EQ(captured_question, "Override?");
+    EXPECT_EQ(answer, "y");
+}
+
+TEST(EventStream, PromptDefaultOnEmpty) {
+    xlings::EventStream stream;
+
+    stream.on_event([&](const xlings::Event& e) {
+        if (auto* p = std::get_if<xlings::PromptEvent>(&e)) {
+            stream.respond(p->id, p->defaultValue);
+        }
+    });
+
+    auto answer = stream.prompt({
+        .id = "p2",
+        .question = "Continue?",
+        .options = {},
+        .defaultValue = "yes"
+    });
+    EXPECT_EQ(answer, "yes");
 }
 
 // ============================================================
