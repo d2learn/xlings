@@ -257,9 +257,9 @@ int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args) {
     // No options: show current config via TUI info panel
     auto& p = Config::paths();
     std::vector<ui::InfoField> fields;
-    fields.push_back({"home", p.homeDir.string()});
-    fields.push_back({"data", p.dataDir.string()});
-    fields.push_back({"subos", p.subosDir.string()});
+    fields.push_back({"XLINGS_HOME", p.homeDir.string()});
+    fields.push_back({"XLINGS_DATA", p.dataDir.string()});
+    fields.push_back({"XLINGS_SUBOS", p.subosDir.string()});
     fields.push_back({"active subos", p.activeSubos, true});
     fields.push_back({"bin", p.binDir.string()});
 
