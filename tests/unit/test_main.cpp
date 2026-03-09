@@ -2082,6 +2082,58 @@ TEST(EventStream, PromptDefaultOnEmpty) {
     EXPECT_EQ(answer, "yes");
 }
 
+TEST(EventStream, PromptBlocksUntilRespond) {
+    xlings::EventStream stream;
+    std::atomic<bool> promptReturned { false };
+    std::string answer;
+
+    stream.on_event([](const xlings::Event&) {});
+
+    std::thread taskThread([&] {
+        answer = stream.prompt({
+            .id = "p_async",
+            .question = "Confirm?",
+            .options = {"y", "n"},
+            .defaultValue = "n"
+        });
+        promptReturned.store(true);
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_FALSE(promptReturned.load());
+
+    stream.respond("p_async", "confirmed");
+
+    taskThread.join();
+    EXPECT_TRUE(promptReturned.load());
+    EXPECT_EQ(answer, "confirmed");
+}
+
+TEST(EventStream, ConcurrentPromptsFromMultipleTasks) {
+    xlings::EventStream stream;
+    std::string answer1, answer2;
+
+    stream.on_event([](const xlings::Event&) {});
+
+    std::thread t1([&] {
+        answer1 = stream.prompt({.id = "pa", .question = "Q1"});
+    });
+    std::thread t2([&] {
+        answer2 = stream.prompt({.id = "pb", .question = "Q2"});
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    stream.respond("pb", "ans_b");
+    stream.respond("pa", "ans_a");
+
+    t1.join();
+    t2.join();
+
+    EXPECT_EQ(answer1, "ans_a");
+    EXPECT_EQ(answer2, "ans_b");
+}
+
 // ============================================================
 
 int main(int argc, char** argv) {
