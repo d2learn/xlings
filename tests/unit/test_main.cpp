@@ -2376,6 +2376,82 @@ TEST(TaskManager, InfoAll) {
 }
 
 // ============================================================
+// ─── Integration Tests: EventStream + Capability + TaskManager ───
+// ============================================================
+
+TEST(Integration, TuiPathSynchronous) {
+    // Simulate CLI/TUI path: synchronous call, consumer handles events directly
+    xlings::EventStream stream;
+    std::vector<std::string> rendered;
+
+    stream.on_event([&](const xlings::Event& e) {
+        std::visit([&](auto&& ev) {
+            using T = std::decay_t<decltype(ev)>;
+            if constexpr (std::is_same_v<T, xlings::ProgressEvent>) {
+                rendered.push_back("progress:" + std::to_string(ev.percent));
+            } else if constexpr (std::is_same_v<T, xlings::LogEvent>) {
+                rendered.push_back("log:" + ev.message);
+            } else if constexpr (std::is_same_v<T, xlings::PromptEvent>) {
+                rendered.push_back("prompt:" + ev.question);
+                stream.respond(ev.id, "y");
+            } else if constexpr (std::is_same_v<T, xlings::DataEvent>) {
+                rendered.push_back("data:" + ev.kind);
+            } else if constexpr (std::is_same_v<T, xlings::CompletedEvent>) {
+                rendered.push_back("completed:" + ev.summary);
+            }
+        }, e);
+    });
+
+    MockSearchCapability search;
+    search.execute(R"({})", stream);
+
+    ASSERT_EQ(rendered.size(), 3);
+    EXPECT_EQ(rendered[0], "log:Searching...");
+    EXPECT_EQ(rendered[1], "data:search_results");
+    EXPECT_EQ(rendered[2], "completed:Found 2 packages");
+}
+
+TEST(Integration, AgentPathConcurrentWithPrompt) {
+    // Simulate Agent path: concurrent tasks + prompt handling
+    xlings::capability::Registry reg;
+    reg.register_capability(std::make_unique<MockInstallCapability>());
+    reg.register_capability(std::make_unique<MockSearchCapability>());
+
+    xlings::task::TaskManager tm { reg };
+
+    auto tSearch = tm.submit("search_packages", R"({})");
+    auto tInstall = tm.submit("install_package", R"({"name":"gcc"})");
+
+    // Agent main loop: poll events, handle prompts
+    bool installDone = false;
+    for (int i = 0; i < 200 && !installDone; ++i) {
+        auto installInfo = tm.info(tInstall);
+        if (installInfo.status == xlings::task::TaskStatus::waiting_prompt) {
+            auto evts = tm.events(tInstall);
+            for (auto& rec : evts) {
+                if (auto* p = std::get_if<xlings::PromptEvent>(&rec.event)) {
+                    tm.respond(tInstall, p->id, "y");
+                }
+            }
+        }
+        if (installInfo.status == xlings::task::TaskStatus::completed) {
+            installDone = true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    EXPECT_TRUE(installDone);
+    EXPECT_EQ(tm.info(tSearch).status, xlings::task::TaskStatus::completed);
+
+    // Verify event stream contents
+    auto searchEvents = tm.events(tSearch);
+    EXPECT_GE(searchEvents.size(), 3);
+
+    auto installEvents = tm.events(tInstall);
+    EXPECT_GE(installEvents.size(), 2);  // ProgressEvent + PromptEvent + CompletedEvent
+}
+
+// ============================================================
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
