@@ -40,6 +40,7 @@ export struct TaskInfo {
     std::string capabilityName;
     TaskStatus status;
     float progressPct { 0.0f };
+    std::string currentPhase;
     std::size_t eventCount { 0 };
     std::size_t pendingPromptCount { 0 };
 };
@@ -49,6 +50,7 @@ struct TaskState {
     std::string capabilityName;
     std::atomic<TaskStatus> status { TaskStatus::pending };
     std::atomic<float> progressPct { 0.0f };
+    std::string currentPhase;
 
     EventStream stream;
     std::vector<EventRecord> eventBuffer;
@@ -103,6 +105,8 @@ public:
 
             if (auto* p = std::get_if<ProgressEvent>(&e)) {
                 s->progressPct.store(p->percent);
+                std::lock_guard phaseLock(s->bufferMutex);
+                s->currentPhase = p->message;
             }
             if (std::holds_alternative<PromptEvent>(e)) {
                 std::lock_guard lock(s->bufferMutex);
@@ -146,6 +150,7 @@ public:
             .capabilityName = s->capabilityName,
             .status = s->status.load(),
             .progressPct = s->progressPct.load(),
+            .currentPhase = s->currentPhase,
             .eventCount = s->eventBuffer.size(),
             .pendingPromptCount = s->pendingPromptCount
         };
@@ -161,6 +166,7 @@ public:
                 .capabilityName = s->capabilityName,
                 .status = s->status.load(),
                 .progressPct = s->progressPct.load(),
+                .currentPhase = s->currentPhase,
                 .eventCount = s->eventBuffer.size(),
                 .pendingPromptCount = s->pendingPromptCount
             });
