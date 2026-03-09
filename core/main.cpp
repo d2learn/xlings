@@ -5,14 +5,26 @@ import xlings.config;
 import xlings.platform;
 import xlings.xvm.shim;
 
+#ifdef _WIN32
+#include <io.h>
+#define isatty _isatty
+#define STDOUT_FD 1
+#else
+#include <unistd.h>
+#define STDOUT_FD STDOUT_FILENO
+#endif
+
 #ifdef __APPLE__
 #include <cstdlib>  // std::_Exit
 #endif
 
 int main(int argc, char* argv[]) {
     // Restore terminal cursor visibility on exit (safety net for TUI download progress)
+    // Only emit when stdout is a TTY to avoid polluting captured output
     std::atexit([]() {
-        std::cout << "\033[?25h" << std::flush;
+        if (isatty(STDOUT_FD)) {
+            std::cout << "\033[?25h" << std::flush;
+        }
     });
 
     auto& p = xlings::Config::paths();
@@ -32,7 +44,7 @@ int main(int argc, char* argv[]) {
     // On macOS, static libc++ linked with dynamic libc++abi causes SIGABRT
     // during static destruction. Skip destructors — CLI tool needs no cleanup.
     // _Exit skips atexit handlers, so restore cursor explicitly here.
-    std::cout << "\033[?25h" << std::flush;
+    if (isatty(STDOUT_FD)) std::cout << "\033[?25h" << std::flush;
     std::cerr.flush();
     std::_Exit(rc);
 #else
