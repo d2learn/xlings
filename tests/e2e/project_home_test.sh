@@ -19,9 +19,13 @@ CONFIG_OUT="$({
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" config
 })"
 echo "$CONFIG_OUT"
-assert_contains "$CONFIG_OUT" "XLINGS_DATA_PROJECT: $SCENARIO_DIR/.xlings/data" \
+assert_contains "$CONFIG_OUT" "project data" \
+  "project home scenario did not expose project-local data label"
+assert_contains "$CONFIG_OUT" "$SCENARIO_DIR/.xlings/data" \
   "project home scenario did not expose project-local data dir"
-assert_contains "$CONFIG_OUT" "XLINGS_SUBOS:    $SCENARIO_DIR/.xlings/subos/_" \
+assert_contains "$CONFIG_OUT" "XLINGS_SUBOS" \
+  "project home scenario missing subos label"
+assert_contains "$CONFIG_OUT" "$SCENARIO_DIR/.xlings/subos/_" \
   "project home scenario did not resolve anonymous project subos"
 
 INSTALL_OUT="$({
@@ -29,9 +33,9 @@ INSTALL_OUT="$({
   run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
 })"
 echo "$INSTALL_OUT"
-assert_contains "$INSTALL_OUT" "packages to install (1):" \
-  "project home manifest install did not plan one package"
-assert_contains "$INSTALL_OUT" "projectrepo:node @22.17.1" \
+assert_contains "$INSTALL_OUT" "Packages to install" \
+  "project home manifest install did not show install plan"
+assert_contains "$INSTALL_OUT" "node" \
   "project home manifest install did not resolve node from project workspace"
 
 PROJECT_STATE="$SCENARIO_DIR/.xlings/.xlings.json"

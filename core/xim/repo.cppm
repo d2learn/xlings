@@ -165,7 +165,7 @@ bool sync_repo(const std::filesystem::path& localDir,
     namespace fs = std::filesystem;
 
     if (!fs::exists(localDir / ".git")) {
-        log::info("cloning index repo: {}", url);
+        log::debug("cloning index repo: {}", url);
         auto cmd = std::format("git clone --depth 1 \"{}\" \"{}\"",
                                url, localDir.string());
         auto [rc, output] = platform::run_command_capture(cmd);
@@ -191,7 +191,7 @@ bool sync_repo(const std::filesystem::path& localDir,
         }
     }
 
-    log::info("updating index repo: {}", localDir.filename().string());
+    log::debug("updating index repo: {}", localDir.filename().string());
     auto cmd = std::format("git -C \"{}\" pull --ff-only", localDir.string());
     auto [rc, output] = platform::run_command_capture(cmd);
     if (rc != 0) {

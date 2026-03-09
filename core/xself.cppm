@@ -1,7 +1,3 @@
-module;
-
-#include <cstdio>
-
 export module xlings.xself;
 
 import std;
@@ -11,41 +7,77 @@ export import :install;
 
 import xlings.config;
 import xlings.json;
+import xlings.log;
 import xlings.platform;
 import xlings.profile;
+import xlings.ui;
 import xlings.utils;
 
 namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
-template<typename... Args>
-static void print_line(std::format_string<Args...> fmt, Args&&... args) {
-    std::cout << std::format(fmt, std::forward<Args>(args)...) << '\n';
-}
-
 static int cmd_init() {
     auto& p = Config::paths();
     if (!ensure_home_layout(p.homeDir)) return 1;
-    print_line("[xlings:self]: init ok");
+    log::info("init ok");
     return 0;
 }
 
 static int cmd_update() {
-    auto& p = Config::paths();
-    auto git_dir = p.homeDir / ".git";
-    if (!fs::exists(git_dir) || !fs::is_directory(git_dir)) {
-        print_line("[xlings:self]: {} is not a git repo, skip update", p.homeDir.string());
-        return 0;
+    // Use platform::exec to avoid circular module dependency
+    // (xvm.commands and xim.commands both import xself)
+
+    // Step 1: update package index
+    log::info("updating package index...");
+    int rc = platform::exec("xlings update");
+    if (rc != 0) {
+        log::error("failed to update package index");
+        return rc;
     }
-    print_line("[xlings:self]: update from git ...");
-    std::string cmd = "git -C \"" + p.homeDir.string() + "\" pull";
-    int ret = platform::exec(cmd);
-    return ret != 0 ? 1 : 0;
+
+    // Step 2: install xlings@latest
+    log::info("installing xlings@latest...");
+    rc = platform::exec("xlings install xlings@latest -y");
+    if (rc != 0) {
+        log::warn("xlings package not available or install failed, skipping");
+    } else {
+        // Step 3: switch to latest xlings
+        platform::exec("xlings use xlings latest");
+    }
+
+    return 0;
 }
 
 static int cmd_config() {
-    Config::print_paths();
+    auto& p = Config::paths();
+    std::vector<ui::InfoField> fields;
+    fields.push_back({"XLINGS_HOME", p.homeDir.string()});
+    fields.push_back({"XLINGS_DATA", p.dataDir.string()});
+    fields.push_back({"XLINGS_SUBOS", p.subosDir.string()});
+    fields.push_back({"active subos", p.activeSubos, true});
+    fields.push_back({"bin", p.binDir.string()});
+
+    auto mirror = Config::mirror();
+    if (!mirror.empty()) fields.push_back({"mirror", mirror});
+    auto lang = Config::lang();
+    if (!lang.empty()) fields.push_back({"lang", lang});
+
+    // Index repos
+    auto& repos = Config::global_index_repos();
+    for (auto& repo : repos) {
+        fields.push_back({"index-repo", repo.name + " : " + repo.url});
+    }
+
+    if (Config::has_project_config()) {
+        fields.push_back({"project data", Config::project_data_dir().string()});
+        auto& projectRepos = Config::project_index_repos();
+        for (auto& repo : projectRepos) {
+            fields.push_back({"project repo", repo.name + " : " + repo.url});
+        }
+    }
+
+    ui::print_info_panel("xlings config", fields);
     return 0;
 }
 
@@ -55,22 +87,21 @@ static int cmd_clean(bool dryRun = false) {
     auto cachedir = p.homeDir / ".xlings";
     if (fs::exists(cachedir) && fs::is_directory(cachedir)) {
         if (dryRun) {
-            print_line("[xlings:self] would remove cache: {}", cachedir.string());
+            log::println("  would remove cache: {}", cachedir.string());
         } else {
             std::error_code ec;
             fs::remove_all(cachedir, ec);
             if (ec) {
-                std::fprintf(stderr, "[xlings:self] failed to remove %s - %s\n",
-                             cachedir.string().c_str(), ec.message().c_str());
+                log::error("failed to remove {}: {}", cachedir.string(), ec.message());
                 return 1;
             }
-            print_line("[xlings:self] cleaned cache: {}", cachedir.string());
+            log::debug("cleaned cache: {}", cachedir.string());
         }
     }
 
     profile::gc(p.homeDir, dryRun);
 
-    if (!dryRun) print_line("[xlings:self] clean ok");
+    if (!dryRun) log::info("clean ok");
     return 0;
 }
 
@@ -80,7 +111,7 @@ static int cmd_migrate() {
     auto defaultDir = subosDir / "default";
 
     if (fs::exists(defaultDir / "bin")) {
-        print_line("[xlings:self] already migrated (subos/default/bin exists)");
+        log::info("already migrated (subos/default/bin exists)");
         return 0;
     }
 
@@ -98,13 +129,12 @@ static int cmd_migrate() {
             if (ec) {
                 fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
                 if (ec) {
-                    std::fprintf(stderr, "[xlings:self] failed to move %s: %s\n",
-                                 name.c_str(), ec.message().c_str());
+                    log::error("failed to move {}: {}", name, ec.message());
                     return;
                 }
                 fs::remove_all(src, ec);
             }
-            print_line("[xlings:self] migrated data/{} -> subos/default/{}", name, name);
+            log::info("migrated data/{} -> subos/default/{}", name, name);
             moved = true;
         }
     };
@@ -137,24 +167,23 @@ static int cmd_migrate() {
     fs::create_directory_symlink(defaultDir, currentLink, lec);
 
     if (moved) {
-        print_line("[xlings:self] migration complete");
+        log::info("migration complete");
     } else {
-        print_line("[xlings:self] no legacy data found; initialized subos/default");
+        log::info("no legacy data found; initialized subos/default");
     }
     return 0;
 }
 
 static int cmd_help() {
-    std::cout << R"(
-xlings self [action]
-  install install xlings from extracted release package
-  init    create home/data/subos dirs
-  update  git pull in XLINGS_HOME (if a repo)
-  config  print paths
-  clean   remove cache + gc orphaned packages (--dry-run)
-  migrate migrate old layout to subos/default
-  help    this message
-)" << '\n';
+    ui::HelpOpt opts[] = {
+        {"install",  "Install xlings from release package"},
+        {"init",     "Create home/data/subos dirs"},
+        {"update",   "Update index + install latest xlings"},
+        {"config",   "Show configuration details"},
+        {"clean",    "Remove cache + gc orphaned packages (--dry-run)"},
+        {"migrate",  "Migrate old layout to subos/default"},
+    };
+    ui::print_subcommand_help("self", "Manage xlings itself", {}, opts);
     return 0;
 }
 

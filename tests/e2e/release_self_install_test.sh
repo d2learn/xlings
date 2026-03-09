@@ -33,8 +33,8 @@ CONFIG_OUT="$(
   HOME="$INSTALL_USER_DIR" PATH="$INSTALLED_PATH" env -u XLINGS_HOME \
     "$INSTALLED_HOME/bin/xlings" config
 )"
-echo "$CONFIG_OUT" | grep -q "XLINGS_HOME:     $INSTALLED_HOME" || \
-  fail "installed home config output mismatch"
+echo "$CONFIG_OUT" | grep -q "XLINGS_HOME" || fail "installed home config output mismatch (missing label)"
+echo "$CONFIG_OUT" | grep -q "$INSTALLED_HOME" || fail "installed home config output mismatch (missing path)"
 
 # Verify elfpatch (patchelf) was installed as runtime dependency (Linux only)
 if [[ "$(uname -s)" == "Linux" ]]; then

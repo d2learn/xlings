@@ -27,7 +27,7 @@ bool default_install(const PlanNode& node,
         log::error("failed to copy script {} -> {}: {}", node.pkgFile.string(), dest.string(), ec.message());
         return false;
     }
-    log::info("script installed: {}", dest.string());
+    log::debug("script installed: {}", dest.string());
     return true;
 }
 

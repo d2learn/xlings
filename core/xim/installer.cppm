@@ -780,7 +780,7 @@ public:
 
         // Download all
         if (!dlTasks.empty()) {
-            log::info("downloading {} package(s)...", dlTasks.size());
+            log::debug("downloading {} package(s)...", dlTasks.size());
             auto results = download_all(dlTasks, dlConfig,
                 [&](std::string_view name, float progress) {
                     if (onStatus) {
@@ -822,6 +822,7 @@ public:
             }
 
             auto& executor = *execResult;
+            executor.set_log_level(std::string(log::level_string()));
 
             // Build execution context
             mcpplibs::xpkg::ExecutionContext ctx;
@@ -886,7 +887,7 @@ public:
             if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Installed)) {
                 auto hookResult = executor.check_installed(ctx);
                 if (hookResult.success && !hookResult.version.empty()) {
-                    log::info("{} already installed (version {})",
+                    log::debug("{} already installed (version {})",
                               node.name, hookResult.version);
                     payloadInstalled = true;
                 }
@@ -894,7 +895,7 @@ public:
 
             // Run install hook
             if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
-                log::info("installing {}...", node.name);
+                log::debug("installing {}...", node.name);
                 log::debug("installer: install_dir={}", ctx.install_dir.string());
                 // Set cwd to the download/runtime directory so hooks can
                 // find downloaded files via relative paths.  ctx.run_dir
@@ -920,7 +921,7 @@ public:
                     continue;
                 }
             } else if (!payloadInstalled && node.pkgType == 1 /* Script */) {
-                log::info("installing script {}...", node.name);
+                log::debug("installing script {}...", node.name);
                 if (!script::default_install(node, ctx)) {
                     if (onStatus) {
                         onStatus({ node.name, InstallPhase::Failed, 0.0f,
@@ -954,9 +955,9 @@ public:
             if (!payloadInstalled) {
                 auto epResult = executor.apply_elfpatch_auto();
                 if (epResult.success && !epResult.output.empty()) {
-                    log::info("{}: elfpatch auto: {}", node.name, epResult.output);
+                    log::debug("{}: elfpatch auto: {}", node.name, epResult.output);
                 } else if (!epResult.success) {
-                    log::warn("{}: elfpatch auto failed: {}", node.name, epResult.error);
+                    log::debug("{}: elfpatch auto failed: {}", node.name, epResult.error);
                 }
             }
 
@@ -966,7 +967,7 @@ public:
                 auto reqs = executor.install_requests();
                 if (!reqs.empty() && onInstallRequests) {
                     for (auto& req : reqs) {
-                        log::info("[{}] deferred {}: {}", node.name, req.op, req.target);
+                        log::debug("[{}] deferred {}: {}", node.name, req.op, req.target);
                     }
                     onInstallRequests(reqs);
                 }
@@ -1010,9 +1011,9 @@ public:
                            payloadInstalled ? "already installed" : "" });
             }
             if (payloadInstalled) {
-                log::info("{}@{} mapping to current subos", node.name, node.version);
+                log::debug("{}@{} mapping to current subos", node.name, node.version);
             } else {
-                log::info("{}@{} installed successfully", node.name, node.version);
+                log::debug("{}@{} installed successfully", node.name, node.version);
             }
         }
 
@@ -1072,7 +1073,7 @@ public:
         }
 
         if (stillReferenced) {
-            log::info("{}@{} detached from current subos; payload retained",
+            log::debug("{}@{} detached from current subos; payload retained",
                       detachTarget, detachVersion);
             return {};
         }
@@ -1083,6 +1084,7 @@ public:
         }
 
         auto& executor = *execResult;
+        executor.set_log_level(std::string(log::level_string()));
 
         mcpplibs::xpkg::ExecutionContext ctx;
         ctx.pkg_name = resolvedMatch ? resolvedMatch->name : name;
@@ -1094,7 +1096,7 @@ public:
         ctx.subos_sysrootdir = Config::paths().subosDir.string();
 
         if (executor.has_hook(mcpplibs::xpkg::HookType::Uninstall)) {
-            log::info("uninstalling {}...", name);
+            log::debug("uninstalling {}...", name);
             auto result = executor.run_hook(
                 mcpplibs::xpkg::HookType::Uninstall, ctx);
             if (!result.success) {
@@ -1160,7 +1162,7 @@ public:
         if (ec) {
             log::warn("failed to remove payload dir {}: {}", installDir.string(), ec.message());
         }
-        log::info("{} uninstalled", resolvedTarget);
+        log::debug("{} uninstalled", resolvedTarget);
         return {};
     }
 

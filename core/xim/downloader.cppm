@@ -1,6 +1,9 @@
 module;
 
 #include <cstdio>
+#include "ftxui/dom/elements.hpp"
+#include "ftxui/screen/screen.hpp"
+#include "ftxui/screen/color.hpp"
 
 export module xlings.xim.downloader;
 
@@ -10,6 +13,7 @@ import xlings.log;
 import xlings.platform;
 import xlings.config;
 import xlings.tinyhttps;
+import xlings.ui;
 
 export namespace xlings::xim {
 
@@ -63,7 +67,7 @@ DownloadResult git_clone_one(const DownloadTask& task) {
         fs::remove_all(destDir, ec);
     }
 
-    log::info("cloning {} from {}", task.name, url);
+    log::debug("cloning {} from {}", task.name, url);
     auto cmd = std::format(
         "git clone --depth 1 --recursive \"{}\" \"{}\"",
         url, destDir.string());
@@ -99,7 +103,7 @@ DownloadResult download_one(const DownloadTask& task,
         return git_clone_one(task);
     }
 
-    log::info("downloading {} from {}", task.name, task.url);
+    log::debug("downloading {} from {}", task.name, task.url);
 
     // Extract filename from URL
     std::string url = task.url;
@@ -171,6 +175,146 @@ struct TaskProgress {
     bool success  { false };
 };
 
+// Format ETA string from seconds
+std::string format_eta_(int seconds) {
+    if (seconds < 0) return "";
+    if (seconds < 60) return std::to_string(seconds) + "s";
+    int min = seconds / 60;
+    int sec = seconds % 60;
+    return std::to_string(min) + "m" + std::to_string(sec) + "s";
+}
+
+// Format speed in human-readable units
+std::string format_speed_(double bytesPerSec) {
+    if (bytesPerSec < 1024.0)
+        return std::to_string(static_cast<int>(bytesPerSec)) + " B/s";
+    if (bytesPerSec < 1024.0 * 1024.0) {
+        int kb = static_cast<int>(bytesPerSec / 1024.0 * 10.0) ;
+        return std::to_string(kb / 10) + "." + std::to_string(kb % 10) + " KB/s";
+    }
+    int mb = static_cast<int>(bytesPerSec / (1024.0 * 1024.0) * 10.0);
+    return std::to_string(mb / 10) + "." + std::to_string(mb % 10) + " MB/s";
+}
+
+// Render progress using FTXUI themed elements.
+// Layout matches install plan: "    icon name  status"
+// Includes overall progress bar + ETA at the bottom.
+void render_progress_(const std::vector<TaskProgress>& progState,
+                      std::size_t nameWidth,
+                      std::chrono::steady_clock::time_point startTime,
+                      bool sizesReady) {
+    using namespace ftxui;
+    constexpr std::size_t statusWidth = 8;
+
+    Elements rows;
+    double totalBytes = 0.0;       // sum of all totalBytes (pre-fetched via HEAD)
+    double totalDownloaded = 0.0;  // sum of all downloaded bytes
+
+    for (auto& p : progState) {
+        Element icon;
+        Element nameEl;
+        std::string statusStr;
+
+        // Always count totalBytes (pre-fetched by HEAD before download starts)
+        totalBytes += p.totalBytes;
+
+        if (!p.started) {
+            icon = text("    " + std::string(ui::theme::icon::pending) + " ")
+                | color(ui::theme::dim_color());
+            nameEl = ui::name_as_progress(p.name, 0.0f,
+                ui::theme::dim_color(), ui::theme::border_color(), nameWidth, false);
+            statusStr = "pending";
+        } else if (!p.finished) {
+            float pct = (p.totalBytes > 0)
+                ? static_cast<float>(p.downloadedBytes / p.totalBytes)
+                : 0.0f;
+            totalDownloaded += p.downloadedBytes;
+            icon = text("    " + std::string(ui::theme::icon::downloading) + " ")
+                | color(ui::theme::cyan());
+            nameEl = ui::name_as_progress(p.name, pct,
+                ui::theme::cyan(), ui::theme::border_color(), nameWidth, true, true);
+            if (pct > 0.0f) {
+                int whole = static_cast<int>(pct * 100.0f);
+                int frac = static_cast<int>(pct * 1000.0f) % 10;
+                statusStr = std::to_string(whole) + "." + std::to_string(frac) + "%";
+            } else {
+                statusStr = "0.0%";
+            }
+        } else if (p.success) {
+            totalDownloaded += p.totalBytes;
+            icon = text("    " + std::string(ui::theme::icon::done) + " ")
+                | color(ui::theme::green());
+            nameEl = ui::name_as_progress(p.name, 1.0f,
+                ui::theme::green(), ui::theme::green(), nameWidth, true);
+            statusStr = "done";
+        } else {
+            totalDownloaded += p.totalBytes;
+            icon = text("    " + std::string(ui::theme::icon::failed) + " ")
+                | color(ui::theme::red()) | bold;
+            nameEl = ui::name_as_progress(p.name, 1.0f,
+                ui::theme::red(), ui::theme::red(), nameWidth, true);
+            statusStr = "failed";
+        }
+
+        while (statusStr.size() < statusWidth) statusStr = " " + statusStr;
+
+        auto statusEl = text(" " + statusStr);
+        if (p.finished && p.success) statusEl = statusEl | color(ui::theme::green());
+        else if (p.finished) statusEl = statusEl | color(ui::theme::red()) | bold;
+        else if (!p.started) statusEl = statusEl | color(ui::theme::dim_color());
+        else statusEl = statusEl | color(ui::theme::dim_color());
+
+        rows.push_back(hbox({ icon, nameEl, statusEl }));
+    }
+
+    // Overall progress: byte-weighted once sizes are known via HEAD requests
+    float overallPct = 0.0f;
+    std::string speedStr;
+    std::string etaStr;
+
+    auto elapsed = std::chrono::steady_clock::now() - startTime;
+    auto elapsedSec = std::chrono::duration<double>(elapsed).count();
+
+    if (sizesReady && totalBytes > 0.0) {
+        overallPct = static_cast<float>(totalDownloaded / totalBytes);
+        if (overallPct > 1.0f) overallPct = 1.0f;
+
+        if (elapsedSec > 0.5 && totalDownloaded > 0.0) {
+            double speed = totalDownloaded / elapsedSec;
+            speedStr = "  " + format_speed_(speed);
+        }
+
+        if (overallPct > 0.01f && overallPct < 1.0f && elapsedSec > 1.0) {
+            double speed = totalDownloaded / elapsedSec;
+            if (speed > 0.0) {
+                double remainingBytes = totalBytes - totalDownloaded;
+                int remainingSec = static_cast<int>(remainingBytes / speed);
+                etaStr = "  ETA " + format_eta_(remainingSec);
+            }
+        }
+    }
+
+    int pctWhole = static_cast<int>(overallPct * 100.0f);
+    int pctFrac = static_cast<int>(overallPct * 1000.0f) % 10;
+    std::string pctStr = std::to_string(pctWhole) + "." + std::to_string(pctFrac) + "%";
+
+    rows.push_back(text(""));
+    rows.push_back(hbox({
+        text("  " + std::string(ui::theme::icon::arrow) + " ") | color(ui::theme::cyan()),
+        gauge(overallPct) | size(WIDTH, EQUAL, 30) | color(ui::theme::cyan()),
+        text("  " + pctStr) | bold | color(ui::theme::text_color()),
+        text(speedStr) | color(ui::theme::cyan()),
+        text(etaStr) | color(ui::theme::dim_color()),
+    }));
+
+    auto doc = vbox(std::move(rows));
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
+    Render(screen, doc);
+    screen.Print();
+    std::print("\n");
+    std::fflush(stdout);
+}
+
 // Download all tasks with limited concurrency, real-time per-task progress
 std::vector<DownloadResult>
 download_all(std::span<const DownloadTask> tasks,
@@ -193,82 +337,67 @@ download_all(std::span<const DownloadTask> tasks,
         progState[i].name = tasks[i].name;
 
     std::atomic<bool> allDone { false };
+    std::atomic<bool> sizesReady { false };
 
-    // Pad string to width (GCC 15 modules crash with std::format width specifiers)
-    auto pad = [](const std::string& s, std::size_t width) -> std::string {
-        if (s.size() >= width) return s;
-        return s + std::string(width - s.size(), ' ');
-    };
+    // Compute max name width for alignment
+    std::size_t nameWidth = 20;
+    for (auto& t : tasks) {
+        if (t.name.size() > nameWidth) nameWidth = t.name.size();
+    }
+    nameWidth += 2; // padding
 
-    // Format percentage with one decimal: "  3.2" / " 45.7" / "100.0"
-    auto fmtPct = [](float pct) -> std::string {
-        int whole = static_cast<int>(pct);
-        int frac  = static_cast<int>((pct - whole) * 10.0f) % 10;
-        std::string s = std::to_string(whole) + "." + std::to_string(frac);
-        while (s.size() < 5) s = " " + s;
-        return s;
-    };
-
-    // Render one task line
-    auto renderLine = [&](const TaskProgress& p) {
-        auto nm = pad(p.name, 24);
-        if (!p.started) {
-            std::println("  [  ] {} pending", nm);
-        } else if (!p.finished) {
-            float pct = (p.totalBytes > 0)
-                ? static_cast<float>(p.downloadedBytes / p.totalBytes) * 100.0f
-                : 0.0f;
-            int barWidth = 20;
-            int filled = static_cast<int>(pct / 100.0f * barWidth);
-            std::string bar(filled, '#');
-            bar.append(barWidth - filled, '-');
-            std::println("  [>>] {} [{}] {}%", nm, bar, fmtPct(pct));
-        } else if (p.success) {
-            std::println("  [ok] {} done", nm);
-        } else {
-            std::println("  [!!] {} failed", nm);
+    // Background HEAD requests to pre-fetch Content-Length for byte-weighted progress.
+    // Runs in parallel with downloads — does not block startup.
+    std::jthread headThread([&]() {
+        std::vector<std::jthread> headWorkers;
+        headWorkers.reserve(tasks.size());
+        for (std::size_t i = 0; i < tasks.size(); ++i) {
+            if (is_git_url(tasks[i].url)) continue;
+            headWorkers.emplace_back([&, i]() {
+                auto len = tinyhttps::query_content_length(tasks[i].url);
+                if (len > 0) {
+                    std::lock_guard lock(mutex);
+                    // Only set if download hasn't already reported a size
+                    if (progState[i].totalBytes <= 0.0)
+                        progState[i].totalBytes = static_cast<double>(len);
+                }
+            });
         }
-    };
+        // jthread destructors join all HEAD workers
+        headWorkers.clear();
+        sizesReady.store(true);
+    });
 
-    // TUI refresh thread: redraws progress every 200ms
+    // TUI refresh thread: redraws progress every 200ms using FTXUI.
+    // Cursor was saved by print_install_plan (\033[s) before package lines.
+    // Progress rendering replaces those lines in-place.
+    auto startTime = std::chrono::steady_clock::now();
+
     std::jthread tuiThread([&](std::stop_token stoken) {
-        int linesPrinted = 0;
+        // Hide cursor during download
+        std::print("\033[?25l");
+        std::fflush(stdout);
+
         while (!stoken.stop_requested() && !allDone.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-            // Erase previous output
-            if (linesPrinted > 0) {
-                std::print("\033[{}A\033[J", linesPrinted);
-            }
+            // Restore to cursor saved by print_install_plan, clear from there
+            std::print("\033[u\033[J");
 
-            linesPrinted = 0;
             {
                 std::lock_guard lock(mutex);
-                for (auto& p : progState) {
-                    renderLine(p);
-                    ++linesPrinted;
-                }
+                render_progress_(progState, nameWidth, startTime, sizesReady.load());
             }
-            std::fflush(stdout);
         }
 
         // Final render
-        if (linesPrinted > 0) {
-            std::print("\033[{}A\033[J", linesPrinted);
-        }
+        std::print("\033[u\033[J");
         {
             std::lock_guard lock(mutex);
-            for (auto& p : progState) {
-                auto nm = pad(p.name, 24);
-                if (p.success) {
-                    std::println("  [ok] {} done", nm);
-                } else if (p.finished) {
-                    std::println("  [!!] {} failed", nm);
-                } else {
-                    std::println("  [  ] {} pending", nm);
-                }
-            }
+            render_progress_(progState, nameWidth, startTime, sizesReady.load());
         }
+        // Show cursor again
+        std::print("\033[?25h");
         std::fflush(stdout);
     });
 

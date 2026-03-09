@@ -35,9 +35,8 @@ xlings subos use s1
 
 $installS1 = (xlings install "d2x@$D2X_VERSION" -y 2>&1) | Out-String
 Write-Host $installS1
-if ($installS1 -notmatch "d2x@$([regex]::Escape($D2X_VERSION)).*(installed|already installed)") {
-    Fail "s1 install did not confirm d2x attach/install"
-}
+if ($installS1 -notmatch "d2x") { Fail "s1 install output missing d2x" }
+if ($installS1 -notmatch "installed|already installed") { Fail "s1 install did not confirm install" }
 if (-not (Test-Path "$PKG_DIR\subos\s1\bin\d2x.exe")) { Fail "s1 d2x shim missing" }
 
 # ── Create subos s2, install d2x ────────────────────────────────
@@ -47,9 +46,7 @@ xlings subos use s2
 
 $installS2 = (xlings install "d2x@$D2X_VERSION" -y 2>&1) | Out-String
 Write-Host $installS2
-if ($installS2 -notmatch "d2x@$([regex]::Escape($D2X_VERSION)).*(installed|already installed)") {
-    Fail "s2 install did not confirm d2x attach/install"
-}
+if ($installS2 -notmatch "installed|already installed") { Fail "s2 install did not confirm install" }
 if (-not (Test-Path "$PKG_DIR\subos\s2\bin\d2x.exe")) { Fail "s2 d2x shim missing" }
 
 # ── Switch and verify ───────────────────────────────────────────

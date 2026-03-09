@@ -6,6 +6,7 @@ import xlings.config;
 import xlings.json;
 import xlings.log;
 import xlings.platform;
+import xlings.ui;
 import xlings.utils;
 import xlings.xself;
 
@@ -202,19 +203,16 @@ export std::optional<SubosInfo> info(const std::string& name) {
     return SubosInfo{name, dir, p.activeSubos == name, toolCount};
 }
 
-// TODO(tui)
 int run_list_() {
     auto all = list_all();
-    std::println("[xlings:subos] list:");
+    std::vector<std::tuple<std::string, std::string, int, bool>> entries;
     for (auto& s : all) {
-        std::println("  {}{}  ({}  tools: {})",
-            s.isActive ? "* " : "  ",
-            s.name, s.dir.string(), s.toolCount);
+        entries.emplace_back(s.name, s.dir.string(), s.toolCount, s.isActive);
     }
+    ui::print_subos_list(entries);
     return 0;
 }
 
-// TODO(tui)
 int run_info_(const std::string& name) {
     auto& p = Config::paths();
     auto target = name.empty() ? p.activeSubos : name;
@@ -223,10 +221,11 @@ int run_info_(const std::string& name) {
         log::error("[xlings:subos] '{}' not found", target);
         return 1;
     }
-    std::println("[xlings:subos] info for '{}':", si->name);
-    std::println("  active: {}", si->isActive);
-    std::println("  dir:    {}", si->dir.string());
-    std::println("  tools:  {}", si->toolCount);
+    std::vector<ui::InfoField> fields;
+    fields.push_back({"active", si->isActive ? "yes" : "no", si->isActive});
+    fields.push_back({"dir", si->dir.string()});
+    fields.push_back({"tools", std::to_string(si->toolCount)});
+    ui::print_info_panel(si->name, fields);
     return 0;
 }
 

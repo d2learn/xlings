@@ -1,6 +1,7 @@
 module;
 
 #include <ctime>
+#include <cstdio>
 
 export module xlings.profile;
 
@@ -11,6 +12,8 @@ import xlings.json;
 import xlings.log;
 import xlings.platform;
 import xlings.utils;
+import xlings.xvm.db;
+import xlings.xvm.types;
 
 namespace xlings::profile {
 
@@ -98,7 +101,7 @@ export int commit(const fs::path& envDir,
         {"reason",     reason},
         {"packages",   packages}
     };
-    auto genFile = gensDir / (std::format("{:03d}", nextGen) + ".json");
+    auto genFile = gensDir / (([](int n) { char b[8]; std::snprintf(b, sizeof(b), "%03d", n); return std::string(b); })(nextGen) + ".json");
     platform::write_string_to_file(genFile.string(), genJson.dump(2));
 
     nlohmann::json profileJson = {
@@ -143,7 +146,7 @@ export int rollback(const fs::path& envDir, int targetGen) {
 
     if (targetGen > 0) {
         auto gensDir = envDir / "generations";
-        auto genFile = gensDir / (std::format("{:03d}", targetGen) + ".json");
+        auto genFile = gensDir / (([](int n) { char b[8]; std::snprintf(b, sizeof(b), "%03d", n); return std::string(b); })(targetGen) + ".json");
         if (!fs::exists(genFile)) {
             log::error("[xlings:profile] generation {} not found", targetGen);
             return 1;
@@ -172,25 +175,97 @@ export int rollback(const fs::path& envDir, int targetGen) {
     return 0;
 }
 
-export int gc(const fs::path& xlingsHome, bool dryRun = false) {
+// Build a set of referenced xpkg "dirname/version" keys from all subos workspaces
+// by mapping workspace target names to xpkg directory paths via the versions DB.
+std::set<std::string> collect_subos_references_(const fs::path& xlingsHome) {
     std::set<std::string> referenced;
+    auto xpkgsDir = xlingsHome / "data" / "xpkgs";
 
+    // Load global versions DB
+    auto configPath = xlingsHome / ".xlings.json";
+    xvm::VersionDB globalDB;
+    if (fs::exists(configPath)) {
+        try {
+            auto content = platform::read_file_to_string(configPath.string());
+            auto json = nlohmann::json::parse(content, nullptr, false);
+            if (!json.is_discarded() && json.contains("versions"))
+                globalDB = xvm::versions_from_json(json["versions"]);
+        } catch (...) {}
+    }
+
+    // Build a map: xpkg_dir_name/version -> key, from versions DB paths
+    // e.g., "xim-x-gcc/15.1.0" from path "/home/.../.xlings/data/xpkgs/xim-x-gcc/15.1.0/bin"
+    auto add_refs_from_workspace = [&](const xvm::Workspace& ws) {
+        for (auto& [target, activeVer] : ws) {
+            // Find this target in the versions DB
+            auto it = globalDB.find(target);
+            if (it == globalDB.end()) continue;
+            for (auto& [verKey, vdata] : it->second.versions) {
+                if (vdata.path.empty()) continue;
+                // Extract xpkg dir from path: .../xpkgs/<dirname>/<version>/...
+                auto xpkgsPos = vdata.path.find("xpkgs/");
+                if (xpkgsPos == std::string::npos) continue;
+                auto rel = vdata.path.substr(xpkgsPos + 6); // after "xpkgs/"
+                // rel is like "xim-x-gcc/15.1.0/bin" or "xim-x-gcc/15.1.0"
+                // Extract first two path components: dirname/version
+                auto slash1 = rel.find('/');
+                if (slash1 == std::string::npos) continue;
+                auto slash2 = rel.find('/', slash1 + 1);
+                auto dirAndVer = (slash2 != std::string::npos)
+                    ? rel.substr(0, slash2)
+                    : rel;
+                referenced.insert(dirAndVer);
+            }
+        }
+    };
+
+    // Scan all subos workspace files
     auto subosDir = xlingsHome / "subos";
     if (fs::exists(subosDir)) {
         for (auto& envEntry : platform::dir_entries(subosDir)) {
             if (!envEntry.is_directory()) continue;
-            auto gensDir = envEntry.path() / "generations";
-            if (!fs::exists(gensDir)) continue;
-            for (auto& genEntry : platform::dir_entries(gensDir)) {
-                try {
-                    auto content = platform::read_file_to_string(genEntry.path().string());
-                    auto json = nlohmann::json::parse(content);
-                    for (auto it = json["packages"].begin(); it != json["packages"].end(); ++it)
-                        referenced.insert(it.key() + "@" + it.value().get<std::string>());
-                } catch (...) {}
-            }
+            auto name = envEntry.path().filename().string();
+            if (name == "current") continue; // symlink
+            auto wsPath = envEntry.path() / ".xlings.json";
+            if (!fs::exists(wsPath)) continue;
+            try {
+                auto content = platform::read_file_to_string(wsPath.string());
+                auto json = nlohmann::json::parse(content, nullptr, false);
+                if (!json.is_discarded() && json.contains("workspace"))
+                    add_refs_from_workspace(xvm::workspace_from_json(json["workspace"]));
+            } catch (...) {}
         }
     }
+
+    return referenced;
+}
+
+// Find which subos environments reference a given package target name.
+export std::vector<std::string> find_subos_referencing(
+        const fs::path& xlingsHome, const std::string& target) {
+    std::vector<std::string> result;
+    auto subosDir = xlingsHome / "subos";
+    if (!fs::exists(subosDir)) return result;
+
+    for (auto& envEntry : platform::dir_entries(subosDir)) {
+        if (!envEntry.is_directory()) continue;
+        auto name = envEntry.path().filename().string();
+        if (name == "current") continue;
+        auto wsPath = envEntry.path() / ".xlings.json";
+        if (!fs::exists(wsPath)) continue;
+        try {
+            auto content = platform::read_file_to_string(wsPath.string());
+            auto json = nlohmann::json::parse(content, nullptr, false);
+            if (json.is_discarded() || !json.contains("workspace")) continue;
+            auto ws = xvm::workspace_from_json(json["workspace"]);
+            if (ws.contains(target)) result.push_back(name);
+        } catch (...) {}
+    }
+    return result;
+}
+
+export int gc(const fs::path& xlingsHome, bool dryRun = false) {
+    auto referenced = collect_subos_references_(xlingsHome);
 
     auto pkgDir = xlingsHome / "data" / "xpkgs";
     if (!fs::exists(pkgDir)) {
@@ -207,11 +282,10 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
         for (auto& verEntry : platform::dir_entries(pkgEntry)) {
             if (!verEntry.is_directory()) continue;
             auto ver = verEntry.path().filename().string();
-            auto key = pkgName + "@" + ver;
+            auto key = pkgName + "/" + ver;
             if (!referenced.count(key)) {
                 auto size = dir_size_(verEntry.path());
                 if (dryRun) {
-                    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
                     auto mb = static_cast<int>(static_cast<double>(size) / 1e5) / 10.0;
                     std::println("  would remove xpkgs/{}/{} ({} MB)", pkgName, ver, mb);
                 } else {
@@ -226,7 +300,6 @@ export int gc(const fs::path& xlingsHome, bool dryRun = false) {
         }
     }
 
-    // Avoid {:.1f} — GCC 15 modules crash on precision specifiers
     auto totalMb = static_cast<int>(static_cast<double>(freedBytes) / 1e5) / 10.0;
     if (dryRun) {
         std::println("[xlings:store] gc dry-run: {} packages, {} MB would be freed",
