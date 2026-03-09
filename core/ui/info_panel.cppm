@@ -54,6 +54,17 @@ void print_info_panel(std::string_view title,
         text("  ────────────────────────────────────────") | color(theme::border_color())
     );
 
+    // Calculate minimum width needed to avoid truncation
+    int minWidth = 40; // separator width
+    auto measure = [&](std::span<const InfoField> fs) {
+        for (auto& f : fs) {
+            int w = 2 + 14 + 2 + static_cast<int>(f.value.size()) + 2;
+            if (w > minWidth) minWidth = w;
+        }
+    };
+    measure(fields);
+    if (!extra.empty()) measure(extra);
+
     render_fields_(rows, fields);
 
     if (!extra.empty()) {
@@ -66,7 +77,9 @@ void print_info_panel(std::string_view title,
     rows.push_back(text(""));
 
     auto doc = vbox(std::move(rows));
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
+    auto termDim = Dimension::Full();
+    int width = std::max(termDim.dimx, minWidth);
+    auto screen = Screen::Create(Dimension::Fixed(width), Dimension::Fit(doc));
     Render(screen, doc);
     screen.Print();
     std::println("");
