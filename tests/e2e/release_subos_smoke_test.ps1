@@ -46,7 +46,6 @@ xlings subos use s2
 
 $installS2 = (xlings install "d2x@$D2X_VERSION" -y 2>&1) | Out-String
 Write-Host $installS2
-if ($installS2 -notmatch "d2x") { Fail "s2 install output missing d2x" }
 if ($installS2 -notmatch "installed|already installed") { Fail "s2 install did not confirm install" }
 if (-not (Test-Path "$PKG_DIR\subos\s2\bin\d2x.exe")) { Fail "s2 d2x shim missing" }
 

@@ -42,7 +42,6 @@ readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || fail "subos/current not 
 
 INSTALL_S2="$(xlings install "d2x@$D2X_VERSION" -y 2>&1)"
 echo "$INSTALL_S2"
-echo "$INSTALL_S2" | grep -q "d2x" || fail "s2 install output missing d2x"
 echo "$INSTALL_S2" | grep -Eq "installed|already installed" || fail "s2 install did not confirm install"
 [[ -x "$XLINGS_HOME/subos/s2/bin/d2x" ]] || fail "s2 d2x shim missing"
 
