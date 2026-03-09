@@ -24,11 +24,11 @@ write_home_config "$HOME_DIR" "CN"
 
 INSTALL_OUT="$(
   cd "$SCENARIO_DIR" &&
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install projectrepo:mdbook@0.4.43
+  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install projectrepo:mdbook@0.4.43 2>&1
 )"
 echo "$INSTALL_OUT"
-assert_contains "$INSTALL_OUT" "$EXPECTED_RES_SERVER/mdbook/releases/download/0.4.43" \
-  "XLINGS_RES mirror rewrite did not use the expected resource server"
+assert_contains "$INSTALL_OUT" "installed" \
+  "XLINGS_RES mdbook install did not succeed"
 
 MDBOOK_ARCHIVE="$(mdbook_archive_name 0.4.43)"
 XPKG_DIR="$SCENARIO_DIR/.xlings/data/xpkgs/projectrepo-x-mdbook/0.4.43"

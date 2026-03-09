@@ -103,7 +103,7 @@ DownloadResult download_one(const DownloadTask& task,
         return git_clone_one(task);
     }
 
-    log::info("downloading {} from {}", task.name, task.url);
+    log::debug("downloading {} from {}", task.name, task.url);
 
     // Extract filename from URL
     std::string url = task.url;
