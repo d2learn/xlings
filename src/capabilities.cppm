@@ -1,13 +1,7 @@
-module;
-
-#include <cstdio>
-#if defined(__linux__) || defined(__APPLE__)
-#include <sys/wait.h>
-#endif
-
 export module xlings.capabilities;
 
 import std;
+import xlings.platform;
 import xlings.runtime.event;
 import xlings.runtime.event_stream;
 import xlings.runtime.capability;
@@ -243,38 +237,13 @@ public:
             return nlohmann::json({{"error", "empty command"}}).dump();
         }
 
-        // Redirect stderr to a temp approach: use 2>&1 to merge
-        std::string full_cmd = command + " 2>&1";
-        std::string output;
-        int exit_code = -1;
-
-#ifdef _WIN32
-        FILE* pipe = ::_popen(full_cmd.c_str(), "r");
-#else
-        FILE* pipe = ::popen(full_cmd.c_str(), "r");
-#endif
-        if (pipe) {
-            char buffer[4096];
-            while (auto n = std::fread(buffer, 1, sizeof(buffer), pipe)) {
-                output.append(buffer, n);
-            }
-#ifdef _WIN32
-            int status = ::_pclose(pipe);
-#else
-            int status = ::pclose(pipe);
-#endif
-#if defined(__linux__) || defined(__APPLE__)
-            exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-#else
-            exit_code = status;
-#endif
-        }
+        auto [exit_code, output] = xlings::platform::run_command_capture(command);
 
         // Store in shared output buffer
         shared_output_buffer().set(output);
 
         // Truncate for LLM if too long
-        constexpr size_t MAX_OUTPUT = 8000;
+        constexpr std::size_t MAX_OUTPUT = 8000;
         bool truncated = false;
         std::string display_output = output;
         if (display_output.size() > MAX_OUTPUT) {
