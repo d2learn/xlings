@@ -248,13 +248,21 @@ public:
         std::string output;
         int exit_code = -1;
 
+#ifdef _WIN32
+        FILE* pipe = ::_popen(full_cmd.c_str(), "r");
+#else
         FILE* pipe = ::popen(full_cmd.c_str(), "r");
+#endif
         if (pipe) {
             char buffer[4096];
             while (auto n = std::fread(buffer, 1, sizeof(buffer), pipe)) {
                 output.append(buffer, n);
             }
+#ifdef _WIN32
+            int status = ::_pclose(pipe);
+#else
             int status = ::pclose(pipe);
+#endif
 #if defined(__linux__) || defined(__APPLE__)
             exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 #else
