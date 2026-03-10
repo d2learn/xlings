@@ -39,20 +39,11 @@ auto make_client(int connectTimeoutSec, int readTimeoutSec = 60)
     cfg.readTimeoutMs = readTimeoutSec * 1000;
     cfg.verifySsl = true;
     cfg.keepAlive = false;
+    cfg.maxRedirects = 10;
     return mcpplibs::tinyhttps::HttpClient(std::move(cfg));
 }
 
-// Find Location header (case-insensitive)
-std::string find_location(const std::map<std::string, std::string>& headers) {
-    for (auto& [k, v] : headers) {
-        std::string lower = k;
-        for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (lower == "location") return v;
-    }
-    return {};
-}
-
-// Single download attempt: GET url → dest file, with redirect following
+// Single download attempt: GET url → dest file
 DownloadFileResult download_once(
     const std::string& url,
     const std::filesystem::path& dest,
@@ -60,52 +51,35 @@ DownloadFileResult download_once(
     int maxSec,
     std::function<void(double, double)> onProgress
 ) {
-    constexpr int MAX_REDIRECTS = 10;
-    std::string current_url = url;
+    auto client = make_client(connectSec, maxSec);
 
-    for (int redirects = 0; redirects <= MAX_REDIRECTS; ++redirects) {
-        auto client = make_client(connectSec, maxSec);
+    mcpplibs::tinyhttps::HttpRequest req;
+    req.method = mcpplibs::tinyhttps::Method::GET;
+    req.url = url;
+    req.headers["User-Agent"] = "xlings/1.0";
+    req.headers["Accept"] = "*/*";
 
-        mcpplibs::tinyhttps::HttpRequest req;
-        req.method = mcpplibs::tinyhttps::Method::GET;
-        req.url = current_url;
-        req.headers["User-Agent"] = "xlings/1.0";
-        req.headers["Accept"] = "*/*";
+    auto resp = client.send(req);
 
-        auto resp = client.send(req);
-
-        // Follow 3xx redirects
-        if (resp.statusCode >= 300 && resp.statusCode < 400) {
-            auto loc = find_location(resp.headers);
-            if (loc.empty()) {
-                return {false, "HTTP " + std::to_string(resp.statusCode) + " redirect without Location"};
-            }
-            current_url = loc;
-            continue;
-        }
-
-        if (!resp.ok()) {
-            return {false, "HTTP " + std::to_string(resp.statusCode) + " " + resp.statusText};
-        }
-
-        std::error_code ec;
-        std::filesystem::create_directories(dest.parent_path(), ec);
-
-        std::ofstream ofs(dest, std::ios::binary);
-        if (!ofs) return {false, "cannot open: " + dest.string()};
-
-        ofs.write(resp.body.data(), static_cast<std::streamsize>(resp.body.size()));
-        ofs.close();
-
-        if (onProgress) {
-            auto total = static_cast<double>(resp.body.size());
-            onProgress(total, total);
-        }
-
-        return {true, {}};
+    if (!resp.ok()) {
+        return {false, "HTTP " + std::to_string(resp.statusCode) + " " + resp.statusText};
     }
 
-    return {false, "too many redirects"};
+    std::error_code ec;
+    std::filesystem::create_directories(dest.parent_path(), ec);
+
+    std::ofstream ofs(dest, std::ios::binary);
+    if (!ofs) return {false, "cannot open: " + dest.string()};
+
+    ofs.write(resp.body.data(), static_cast<std::streamsize>(resp.body.size()));
+    ofs.close();
+
+    if (onProgress) {
+        auto total = static_cast<double>(resp.body.size());
+        onProgress(total, total);
+    }
+
+    return {true, {}};
 }
 
 } // namespace detail_
@@ -144,7 +118,6 @@ DownloadFileResult download_file(const DownloadOptions& opts) {
 
 double probe_latency(const std::string& url, int timeoutMs) {
     global_init();
-    // Parse host:port from URL to do a TCP connect timing
     mcpplibs::tinyhttps::Socket sock;
     // Extract host and port from URL
     std::string rest = url;
@@ -182,37 +155,24 @@ bool fetch_to_file(const std::string& url, const std::filesystem::path& dest) {
 
 std::int64_t query_content_length(const std::string& url, int connectTimeoutSec) {
     global_init();
-    constexpr int MAX_REDIRECTS = 10;
-    std::string current_url = url;
+    auto client = detail_::make_client(connectTimeoutSec);
 
-    for (int redirects = 0; redirects <= MAX_REDIRECTS; ++redirects) {
-        auto client = detail_::make_client(connectTimeoutSec);
+    mcpplibs::tinyhttps::HttpRequest req;
+    req.method = mcpplibs::tinyhttps::Method::HEAD;
+    req.url = url;
+    req.headers["User-Agent"] = "xlings/1.0";
 
-        mcpplibs::tinyhttps::HttpRequest req;
-        req.method = mcpplibs::tinyhttps::Method::HEAD;
-        req.url = current_url;
-        req.headers["User-Agent"] = "xlings/1.0";
+    auto resp = client.send(req);
 
-        auto resp = client.send(req);
+    if (!resp.ok()) return -1;
 
-        if (resp.statusCode >= 300 && resp.statusCode < 400) {
-            auto loc = detail_::find_location(resp.headers);
-            if (loc.empty()) return -1;
-            current_url = loc;
-            continue;
+    // Case-insensitive content-length lookup
+    for (auto& [k, v] : resp.headers) {
+        std::string lower = k;
+        for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (lower == "content-length") {
+            try { return std::stoll(v); } catch (...) { return -1; }
         }
-
-        if (!resp.ok()) return -1;
-
-        // Case-insensitive content-length lookup
-        for (auto& [k, v] : resp.headers) {
-            std::string lower = k;
-            for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            if (lower == "content-length") {
-                try { return std::stoll(v); } catch (...) { return -1; }
-            }
-        }
-        return -1;
     }
     return -1;
 }
