@@ -13,7 +13,7 @@ import xlings.core.xim.installer;
 import xlings.core.log;
 import xlings.core.config;
 import xlings.runtime;
-import xlings.ui;
+import xlings.libs.json;
 import xlings.core.i18n;
 import xlings.platform;
 import xlings.libs.tinyhttps;
@@ -102,22 +102,23 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                 // -y mode: auto-select first match
                 match = fuzzy.front();
             } else {
-                // Interactive selection using themed UI
-                std::vector<std::pair<std::string, std::string>> items;
+                // Interactive selection via EventStream prompt
+                std::vector<std::string> options;
                 for (auto& f : fuzzy) {
-                    items.emplace_back(
-                        f.canonicalName + "@" + f.version,
-                        ""
-                    );
+                    options.push_back(f.canonicalName + "@" + f.version);
                 }
-                auto chosen = ui::select_package(items);
-                if (!chosen) {
+                PromptEvent req;
+                req.id = "select_package";
+                req.question = "Multiple matches found. Select a package:";
+                req.options = std::move(options);
+                auto chosen = stream.prompt(std::move(req));
+                if (chosen.empty()) {
                     log::println("cancelled");
                     return 0;
                 }
                 // Find matching fuzzy result
                 for (auto& f : fuzzy) {
-                    if ((f.canonicalName + "@" + f.version) == *chosen) {
+                    if ((f.canonicalName + "@" + f.version) == chosen) {
                         match = f;
                         break;
                     }
@@ -202,20 +203,28 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
 
     // Show install plan with themed UI
     if (!allAlreadyInstalled) {
-        std::vector<std::pair<std::string, std::string>> planItems;
+        nlohmann::json planPackages = nlohmann::json::array();
         for (auto& node : plan.nodes) {
             if (!node.alreadyInstalled) {
                 std::string nameVer = node.canonicalName;
                 if (!node.version.empty()) nameVer += "@" + node.version;
-                planItems.emplace_back(nameVer, "");
+                planPackages.push_back({nameVer, ""});
             }
         }
-        ui::print_install_plan(planItems);
+        nlohmann::json planPayload;
+        planPayload["packages"] = std::move(planPackages);
+        stream.emit(DataEvent{"install_plan", planPayload.dump()});
     }
 
-    // Confirm with themed prompt
+    // Confirm via EventStream prompt
     if (!allAlreadyInstalled && !yes) {
-        if (!ui::confirm("Proceed with installation?", true)) {
+        PromptEvent confirmReq;
+        confirmReq.id = "confirm_install";
+        confirmReq.question = "Proceed with installation?";
+        confirmReq.options = {"y", "n"};
+        confirmReq.defaultValue = "y";
+        auto answer = stream.prompt(std::move(confirmReq));
+        if (answer != "y") {
             log::println("cancelled");
             return 0;
         }
@@ -275,7 +284,10 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
 
     activate_requested_targets();
     if (!allAlreadyInstalled) {
-        ui::print_install_summary(successCount, failedCount);
+        nlohmann::json summaryPayload;
+        summaryPayload["success"] = successCount;
+        summaryPayload["failed"] = failedCount;
+        stream.emit(DataEvent{"install_summary", summaryPayload.dump()});
     }
     return 0;
 }
@@ -295,7 +307,7 @@ int cmd_remove(const std::string& target, EventStream& stream) {
         return 1;
     }
 
-    ui::print_remove_summary(target);
+    stream.emit(DataEvent{"remove_summary", nlohmann::json{{"target", target}}.dump()});
     return 0;
 }
 
@@ -313,15 +325,17 @@ int cmd_search(const std::string& keyword, EventStream& stream) {
         return 0;
     }
 
-    // Display results with descriptions (same style as list)
-    std::vector<std::pair<std::string, std::string>> items;
+    nlohmann::json itemsJson = nlohmann::json::array();
     for (auto& match : results) {
         auto pkg = catalog.load_package(match);
         std::string desc = pkg ? pkg->description : "";
-        items.emplace_back(match.canonicalName, desc);
+        itemsJson.push_back({match.canonicalName, desc});
     }
-
-    ui::print_styled_list("Search results:", items, true);
+    nlohmann::json searchPayload;
+    searchPayload["title"] = "Search results:";
+    searchPayload["items"] = std::move(itemsJson);
+    searchPayload["numbered"] = true;
+    stream.emit(DataEvent{"styled_list", searchPayload.dump()});
     return 0;
 }
 
@@ -346,14 +360,17 @@ int cmd_list(const std::string& filter, EventStream& stream) {
         return 0;
     }
 
-    // Use themed list display
-    std::vector<std::pair<std::string, std::string>> items;
+    nlohmann::json listItems = nlohmann::json::array();
     for (auto& match : installed) {
         auto pkg = catalog.load_package(match);
         std::string desc = pkg ? std::string(pkg->description) : std::string{};
-        items.emplace_back(match.canonicalName + "@" + match.version, desc);
+        listItems.push_back({match.canonicalName + "@" + match.version, desc});
     }
-    ui::print_styled_list("Installed packages:", items, true);
+    nlohmann::json listPayload;
+    listPayload["title"] = "Installed packages:";
+    listPayload["items"] = std::move(listItems);
+    listPayload["numbered"] = true;
+    stream.emit(DataEvent{"styled_list", listPayload.dump()});
     log::println("total: {} installed", installed.size());
     return 0;
 }
@@ -378,20 +395,25 @@ int cmd_info(const std::string& target, EventStream& stream) {
         return 1;
     }
 
-    // Build info fields
-    std::vector<ui::InfoField> fields;
-    fields.push_back({"description", std::string(pkg->description)});
+    // Build info fields as JSON
+    auto addField = [](nlohmann::json& arr, const std::string& label,
+                       const std::string& value, bool hl = false) {
+        arr.push_back({{"label", label}, {"value", value}, {"highlight", hl}});
+    };
+
+    nlohmann::json fieldsJson = nlohmann::json::array();
+    addField(fieldsJson, "description", std::string(pkg->description));
     if (!pkg->homepage.empty())
-        fields.push_back({"homepage", std::string(pkg->homepage)});
+        addField(fieldsJson, "homepage", std::string(pkg->homepage));
     if (!pkg->repo.empty())
-        fields.push_back({"repo", std::string(pkg->repo)});
+        addField(fieldsJson, "repo", std::string(pkg->repo));
     if (!pkg->licenses.empty()) {
         std::string licStr;
         for (auto& l : pkg->licenses) {
             if (!licStr.empty()) licStr += " ";
             licStr += l;
         }
-        fields.push_back({"licenses", licStr});
+        addField(fieldsJson, "licenses", licStr);
     }
     if (!pkg->categories.empty()) {
         std::string catStr;
@@ -399,10 +421,9 @@ int cmd_info(const std::string& target, EventStream& stream) {
             if (!catStr.empty()) catStr += " ";
             catStr += c;
         }
-        fields.push_back({"categories", catStr});
+        addField(fieldsJson, "categories", catStr);
     }
 
-    // Show platform versions
     auto platform = detect_platform();
     auto platformIt = pkg->xpm.entries.find(platform);
     if (platformIt != pkg->xpm.entries.end()) {
@@ -412,10 +433,9 @@ int cmd_info(const std::string& target, EventStream& stream) {
             verStr += ver;
             if (!res.ref.empty()) verStr += " -> " + res.ref;
         }
-        fields.push_back({"versions", verStr});
+        addField(fieldsJson, "versions", verStr);
     }
 
-    // Show deps
     auto depsIt = pkg->xpm.deps.find(platform);
     if (depsIt != pkg->xpm.deps.end() && !depsIt->second.empty()) {
         std::string depStr;
@@ -423,13 +443,12 @@ int cmd_info(const std::string& target, EventStream& stream) {
             if (!depStr.empty()) depStr += " ";
             depStr += d;
         }
-        fields.push_back({"deps", depStr});
+        addField(fieldsJson, "deps", depStr);
     }
 
-    fields.push_back({"installed", match->installed ? "yes" : "no", match->installed});
+    addField(fieldsJson, "installed", match->installed ? "yes" : "no", match->installed);
 
-    // Build installation detail section if installed
-    std::vector<ui::InfoField> installFields;
+    nlohmann::json extraJson = nlohmann::json::array();
     if (match->installed) {
         auto db = Config::versions();
         auto ws = Config::effective_workspace();
@@ -437,7 +456,7 @@ int cmd_info(const std::string& target, EventStream& stream) {
 
         auto activeVer = xvm::get_active_version(ws, target);
         if (!activeVer.empty()) {
-            installFields.push_back({"active", activeVer, true});
+            addField(extraJson, "active", activeVer, true);
         }
 
         auto allVers = xvm::get_all_versions(db, target);
@@ -448,29 +467,25 @@ int cmd_info(const std::string& target, EventStream& stream) {
                 verList += v;
                 if (v == activeVer) verList += " *";
             }
-            installFields.push_back({"versions", verList});
+            addField(extraJson, "versions", verList);
         }
 
-        // xpkg store path
         auto storeName = package_store_name(match->namespaceName, match->name);
         auto storePath = match->storeRoot / storeName;
-        installFields.push_back({"xpkg path", storePath.string()});
+        addField(extraJson, "xpkg path", storePath.string());
 
-        // shim path
         auto binDir = Config::global_subos_bin_dir();
         auto shimPath = binDir / target;
         if (std::filesystem::exists(shimPath)) {
-            installFields.push_back({"shim", shimPath.string()});
+            addField(extraJson, "shim", shimPath.string());
         }
 
-        // bindings
         auto* vinfo = xvm::get_vinfo(db, target);
         if (vinfo && !vinfo->bindings.empty()) {
             std::string bindStr;
             for (auto& [bindName, verMap] : vinfo->bindings) {
                 if (!bindStr.empty()) bindStr += ", ";
                 bindStr += bindName;
-                // Show the executable for active version if available
                 if (!activeVer.empty()) {
                     auto vit = verMap.find(activeVer);
                     if (vit != verMap.end()) {
@@ -478,10 +493,9 @@ int cmd_info(const std::string& target, EventStream& stream) {
                     }
                 }
             }
-            installFields.push_back({"bindings", bindStr});
+            addField(extraJson, "bindings", bindStr);
         }
 
-        // subos references
         auto subosRefs = profile::find_subos_referencing(
             Config::paths().homeDir, target);
         if (!subosRefs.empty()) {
@@ -490,11 +504,15 @@ int cmd_info(const std::string& target, EventStream& stream) {
                 if (!refStr.empty()) refStr += ", ";
                 refStr += s;
             }
-            installFields.push_back({"subos", refStr});
+            addField(extraJson, "subos", refStr);
         }
     }
 
-    ui::print_info_panel(match->canonicalName, fields, installFields);
+    nlohmann::json infoPayload;
+    infoPayload["title"] = match->canonicalName;
+    infoPayload["fields"] = std::move(fieldsJson);
+    infoPayload["extra_fields"] = std::move(extraJson);
+    stream.emit(DataEvent{"info_panel", infoPayload.dump()});
     return 0;
 }
 
