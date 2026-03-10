@@ -12,6 +12,7 @@ import xlings.runtime;
 import xlings.ui;
 import xlings.core.i18n;
 import xlings.platform;
+import xlings.capabilities;
 import xlings.core.subos;
 import xlings.core.xself;
 import xlings.core.xim.commands;
@@ -483,6 +484,9 @@ export int run(int argc, char* argv[]) {
             handle_prompt(stream, *p);
         }
     });
+
+    // Build Capability Registry (for Agent/MCP use — CLI keeps direct dispatch)
+    auto registry = capabilities::build_registry();
 
     // Special: subos, self, script need raw argc/argv
     if (argc >= 2) {
