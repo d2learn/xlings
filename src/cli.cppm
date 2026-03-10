@@ -23,6 +23,170 @@ namespace lua = mcpplibs::capi::lua;
 
 namespace xlings::cli {
 
+// ─── EventStream consumer: dispatch DataEvent to ui:: functions ───
+
+static void dispatch_data_event(const DataEvent& e) {
+    auto json = nlohmann::json::parse(e.json, nullptr, false);
+    if (json.is_discarded()) {
+        log::warn("invalid JSON in DataEvent kind={}", e.kind);
+        return;
+    }
+
+    if (e.kind == "info_panel") {
+        std::string title = json.value("title", "");
+        std::vector<ui::InfoField> fields;
+        if (json.contains("fields") && json["fields"].is_array()) {
+            for (auto& f : json["fields"]) {
+                fields.push_back({
+                    f.value("label", ""),
+                    f.value("value", ""),
+                    f.value("highlight", false)
+                });
+            }
+        }
+        std::vector<ui::InfoField> extra;
+        if (json.contains("extra_fields") && json["extra_fields"].is_array()) {
+            for (auto& f : json["extra_fields"]) {
+                extra.push_back({
+                    f.value("label", ""),
+                    f.value("value", ""),
+                    f.value("highlight", false)
+                });
+            }
+        }
+        ui::print_info_panel(title, fields, extra);
+    }
+    else if (e.kind == "help") {
+        std::string name = json.value("name", "");
+        std::string desc = json.value("description", "");
+        std::vector<ui::HelpArg> args;
+        if (json.contains("args") && json["args"].is_array()) {
+            for (auto& a : json["args"]) {
+                args.push_back({
+                    a.value("name", ""),
+                    a.value("desc", ""),
+                    a.value("required", false)
+                });
+            }
+        }
+        std::vector<ui::HelpOpt> opts;
+        if (json.contains("opts") && json["opts"].is_array()) {
+            for (auto& o : json["opts"]) {
+                opts.push_back({
+                    o.value("name", ""),
+                    o.value("desc", "")
+                });
+            }
+        }
+        ui::print_subcommand_help(name, desc, args, opts);
+    }
+    else if (e.kind == "styled_list") {
+        std::string title = json.value("title", "");
+        bool numbered = json.value("numbered", false);
+        std::vector<std::pair<std::string, std::string>> items;
+        if (json.contains("items") && json["items"].is_array()) {
+            for (auto& item : json["items"]) {
+                if (item.is_array() && item.size() >= 2) {
+                    items.emplace_back(item[0].get<std::string>(), item[1].get<std::string>());
+                } else if (item.is_string()) {
+                    items.emplace_back(item.get<std::string>(), "");
+                }
+            }
+        }
+        ui::print_styled_list(title, items, numbered);
+    }
+    else if (e.kind == "install_plan") {
+        std::vector<std::pair<std::string, std::string>> packages;
+        if (json.contains("packages") && json["packages"].is_array()) {
+            for (auto& p : json["packages"]) {
+                if (p.is_array() && p.size() >= 2) {
+                    packages.emplace_back(p[0].get<std::string>(), p[1].get<std::string>());
+                }
+            }
+        }
+        ui::print_install_plan(packages);
+    }
+    else if (e.kind == "install_summary") {
+        ui::print_install_summary(json.value("success", 0), json.value("failed", 0));
+    }
+    else if (e.kind == "remove_summary") {
+        ui::print_remove_summary(json.value("target", ""));
+    }
+    else if (e.kind == "subos_list") {
+        std::vector<std::tuple<std::string, std::string, int, bool>> entries;
+        if (json.contains("entries") && json["entries"].is_array()) {
+            for (auto& e : json["entries"]) {
+                entries.emplace_back(
+                    e.value("name", ""),
+                    e.value("dir", ""),
+                    e.value("pkgCount", 0),
+                    e.value("active", false)
+                );
+            }
+        }
+        ui::print_subos_list(entries);
+    }
+    else if (e.kind == "search_results") {
+        std::vector<std::pair<std::string, std::string>> results;
+        if (json.contains("results") && json["results"].is_array()) {
+            for (auto& r : json["results"]) {
+                if (r.is_array() && r.size() >= 2) {
+                    results.emplace_back(r[0].get<std::string>(), r[1].get<std::string>());
+                }
+            }
+        }
+        ui::print_search_results(results);
+    }
+    else if (e.kind == "table") {
+        std::vector<std::string> headers;
+        if (json.contains("headers") && json["headers"].is_array()) {
+            for (auto& h : json["headers"]) {
+                headers.push_back(h.get<std::string>());
+            }
+        }
+        std::vector<std::vector<std::string>> rows;
+        if (json.contains("rows") && json["rows"].is_array()) {
+            for (auto& r : json["rows"]) {
+                std::vector<std::string> row;
+                if (r.is_array()) {
+                    for (auto& c : r) row.push_back(c.get<std::string>());
+                }
+                rows.push_back(std::move(row));
+            }
+        }
+        ui::print_table(headers, rows);
+    }
+    else {
+        log::debug("unhandled DataEvent kind: {}", e.kind);
+    }
+}
+
+// ─── EventStream consumer: handle PromptEvent via ui:: interactive functions ───
+
+static void handle_prompt(EventStream& stream, const PromptEvent& p) {
+    // Binary yes/no → confirm dialog
+    if (p.options.size() == 2 && p.options[0] == "y" && p.options[1] == "n") {
+        bool defaultYes = (p.defaultValue == "y");
+        bool result = ui::confirm(p.question, defaultYes);
+        stream.respond(p.id, result ? "y" : "n");
+        return;
+    }
+
+    // Multiple options → package/version selector
+    if (!p.options.empty()) {
+        std::vector<std::pair<std::string, std::string>> items;
+        for (auto& opt : p.options) {
+            items.emplace_back(opt, "");
+        }
+        auto result = ui::select_package(items);
+        stream.respond(p.id, result.value_or(""));
+        return;
+    }
+
+    // Free input — use default
+    stream.respond(p.id, p.defaultValue);
+}
+
 // Parse legacy config.xlings (Lua format) and extract workspace from the xim table.
 // Returns empty workspace if file doesn't exist or has no xim/xlings_deps.
 xvm::Workspace parse_legacy_config_(const std::filesystem::path& configFile) {
@@ -291,6 +455,14 @@ export int run(int argc, char* argv[]) {
 
     // Create EventStream for core→UI decoupling
     EventStream stream;
+    stream.on_event([&stream](const Event& e) {
+        if (auto* d = std::get_if<DataEvent>(&e)) {
+            dispatch_data_event(*d);
+        }
+        if (auto* p = std::get_if<PromptEvent>(&e)) {
+            handle_prompt(stream, *p);
+        }
+    });
 
     // Special: subos, self, script need raw argc/argv
     if (argc >= 2) {
