@@ -97,10 +97,9 @@ public:
         return true;
     }
 
-    // Manually evict turns to L2, keeping last N turns in L1
+    // Manually evict turns to L2, keeping last N logical turns in L1
     void compact(llm::Conversation& conv, int keep_recent_turns = 3) {
-        int keep_msgs = keep_recent_turns * 2;  // user + assistant per turn
-        evict_to_l2_(conv, keep_msgs);
+        evict_to_l2_(conv, keep_recent_turns);
     }
 
     // Inject relevant L2 summaries into conversation as context
@@ -230,7 +229,46 @@ public:
     }
 
 private:
-    // Evict oldest turns from conversation to L2 until we've freed `target_tokens` worth
+    // Find logical turn boundaries in the conversation.
+    // A logical turn starts with a User message and includes all subsequent
+    // Assistant and Tool messages until the next User message.
+    // This prevents orphaning tool_calls/tool results during eviction.
+    struct LogicalTurn {
+        std::size_t start_idx;     // index of user message
+        std::size_t end_idx;       // index past last message in this turn
+        int estimated_tokens;
+    };
+
+    auto find_logical_turns_(const llm::Conversation& conv, std::size_t start) const
+        -> std::vector<LogicalTurn> {
+        std::vector<LogicalTurn> turns;
+        std::size_t n = conv.messages.size();
+
+        for (std::size_t i = start; i < n; ) {
+            if (conv.messages[i].role != llm::Role::User) {
+                ++i;  // skip orphaned non-user messages
+                continue;
+            }
+            LogicalTurn turn;
+            turn.start_idx = i;
+            turn.estimated_tokens = 0;
+
+            // Consume this user message + all following assistant/tool messages
+            for (std::size_t j = i; j < n; ++j) {
+                if (j > i && conv.messages[j].role == llm::Role::User) {
+                    turn.end_idx = j;
+                    break;
+                }
+                turn.estimated_tokens += estimate_tokens_(message_text_(conv.messages[j]));
+                turn.end_idx = j + 1;
+            }
+            turns.push_back(turn);
+            i = turn.end_idx;
+        }
+        return turns;
+    }
+
+    // Evict oldest logical turns from conversation to L2 until we've freed `target_tokens` worth
     void evict_oldest_turns_(llm::Conversation& conv, int target_tokens) {
         // Find system message boundary
         std::size_t start = 0;
@@ -243,68 +281,65 @@ private:
             ++start;
         }
 
-        // Count how many messages are available for eviction
-        // Keep at least min_keep_turns * 2 messages at the end
-        int keep_msgs = config_.min_keep_turns * 2;
-        auto available = conv.messages.size() - start;
-        if (static_cast<int>(available) <= keep_msgs) return;  // nothing to evict
+        auto turns = find_logical_turns_(conv, start);
+        if (static_cast<int>(turns.size()) <= config_.min_keep_turns) return;
 
-        int evictable = static_cast<int>(available) - keep_msgs;
+        int evictable_turns = static_cast<int>(turns.size()) - config_.min_keep_turns;
         int freed = 0;
-        int evicted_count = 0;
+        int turns_evicted = 0;
 
-        // Evict in pairs (user + assistant) from the oldest
-        for (int i = 0; i < evictable - 1; i += 2) {
-            auto idx = start + i;
-            if (idx + 1 >= conv.messages.size()) break;
+        for (int t = 0; t < evictable_turns && freed < target_tokens; ++t) {
+            auto& turn = turns[t];
 
-            auto& msg1 = conv.messages[idx];
-            auto& msg2 = conv.messages[idx + 1];
-
-            // Create L2 summary for this turn pair
+            // Create L2 summary from this logical turn
             TurnSummary summary;
-            summary.turn_id = next_turn_id_ - (evictable / 2 - i / 2);
-            if (summary.turn_id < 0) summary.turn_id = i / 2;
+            summary.turn_id = next_turn_id_ - (evictable_turns - t);
+            if (summary.turn_id < 0) summary.turn_id = static_cast<int>(l2_summaries_.size());
 
-            // Extract text content
-            auto text1 = message_text_(msg1);
-            auto text2 = message_text_(msg2);
-            int est_tokens = estimate_tokens_(text1) + estimate_tokens_(text2);
+            // Extract user brief from first message, assistant brief from last non-tool message
+            std::string user_text, assistant_text, all_text;
+            std::vector<std::string> tool_names;
+            for (std::size_t i = turn.start_idx; i < turn.end_idx; ++i) {
+                auto& msg = conv.messages[i];
+                auto text = message_text_(msg);
+                all_text += text + " ";
+                if (msg.role == llm::Role::User && user_text.empty()) {
+                    user_text = text;
+                } else if (msg.role == llm::Role::Assistant) {
+                    assistant_text = text;  // keep last assistant text
+                } else if (msg.role == llm::Role::Tool) {
+                    // Try to extract tool name from content
+                    tool_names.push_back("tool");
+                }
+            }
 
-            summary.user_brief = truncate_(text1, 120);
-            summary.assistant_brief = truncate_(text2, 120);
-            summary.estimated_tokens = est_tokens;
+            summary.user_brief = truncate_(user_text, 120);
+            summary.assistant_brief = truncate_(assistant_text, 120);
+            summary.estimated_tokens = turn.estimated_tokens;
+            summary.tool_names = std::move(tool_names);
+            summary.keywords = extract_keywords_(all_text);
 
-            // Extract keywords for L3 index
-            summary.keywords = extract_keywords_(text1 + " " + text2);
-
-            // Also check for tool messages right after assistant
-            // (tool result messages may follow)
-
-            // Index keywords in L3
             for (auto& kw : summary.keywords) {
                 l3_index_[kw].push_back(summary.turn_id);
             }
 
-            total_evicted_tokens_ += est_tokens;
-            freed += est_tokens;
+            total_evicted_tokens_ += turn.estimated_tokens;
+            freed += turn.estimated_tokens;
             l2_summaries_.push_back(std::move(summary));
-            evicted_count += 2;
-
-            if (freed >= target_tokens) break;
+            ++turns_evicted;
         }
 
-        if (evicted_count == 0) return;
+        if (turns_evicted == 0) return;
+
+        // Calculate the message index boundary for eviction
+        std::size_t evict_end = turns[turns_evicted - 1].end_idx;
 
         // Remove evicted messages from conversation
-        // Preserve system messages at the beginning
         std::vector<llm::Message> remaining;
-        // Keep all messages before start
         for (std::size_t i = 0; i < start; ++i) {
             remaining.push_back(std::move(conv.messages[i]));
         }
-        // Keep messages after evicted range
-        for (std::size_t i = start + evicted_count; i < conv.messages.size(); ++i) {
+        for (std::size_t i = evict_end; i < conv.messages.size(); ++i) {
             remaining.push_back(std::move(conv.messages[i]));
         }
 
@@ -317,8 +352,8 @@ private:
         save_cache();
     }
 
-    // Manual eviction: keep only last N messages
-    void evict_to_l2_(llm::Conversation& conv, int keep_msgs) {
+    // Manual eviction: keep only last N logical turns
+    void evict_to_l2_(llm::Conversation& conv, int keep_turns) {
         std::size_t start = 0;
         if (!conv.messages.empty() && conv.messages[0].role == llm::Role::System) {
             start = 1;
@@ -328,30 +363,33 @@ private:
             ++start;
         }
 
-        auto available = conv.messages.size() - start;
-        if (static_cast<int>(available) <= keep_msgs) return;
+        auto turns = find_logical_turns_(conv, start);
+        if (static_cast<int>(turns.size()) <= keep_turns) return;
 
-        int to_evict = static_cast<int>(available) - keep_msgs;
-        // Make even (evict in pairs)
-        to_evict = (to_evict / 2) * 2;
-        if (to_evict <= 0) return;
+        int to_evict = static_cast<int>(turns.size()) - keep_turns;
 
-        // Create L2 summaries for evicted turns
-        for (int i = 0; i < to_evict - 1; i += 2) {
-            auto idx = start + i;
-            auto& msg1 = conv.messages[idx];
-            auto& msg2 = conv.messages[idx + 1];
+        for (int t = 0; t < to_evict; ++t) {
+            auto& turn = turns[t];
 
             TurnSummary summary;
             summary.turn_id = static_cast<int>(l2_summaries_.size());
 
-            auto text1 = message_text_(msg1);
-            auto text2 = message_text_(msg2);
+            std::string user_text, assistant_text, all_text;
+            for (std::size_t i = turn.start_idx; i < turn.end_idx; ++i) {
+                auto& msg = conv.messages[i];
+                auto text = message_text_(msg);
+                all_text += text + " ";
+                if (msg.role == llm::Role::User && user_text.empty()) {
+                    user_text = text;
+                } else if (msg.role == llm::Role::Assistant) {
+                    assistant_text = text;
+                }
+            }
 
-            summary.user_brief = truncate_(text1, 120);
-            summary.assistant_brief = truncate_(text2, 120);
-            summary.estimated_tokens = estimate_tokens_(text1) + estimate_tokens_(text2);
-            summary.keywords = extract_keywords_(text1 + " " + text2);
+            summary.user_brief = truncate_(user_text, 120);
+            summary.assistant_brief = truncate_(assistant_text, 120);
+            summary.estimated_tokens = turn.estimated_tokens;
+            summary.keywords = extract_keywords_(all_text);
 
             for (auto& kw : summary.keywords) {
                 l3_index_[kw].push_back(summary.turn_id);
@@ -362,11 +400,12 @@ private:
         }
 
         // Remove evicted messages
+        std::size_t evict_end = turns[to_evict - 1].end_idx;
         std::vector<llm::Message> remaining;
         for (std::size_t i = 0; i < start; ++i) {
             remaining.push_back(std::move(conv.messages[i]));
         }
-        for (std::size_t i = start + to_evict; i < conv.messages.size(); ++i) {
+        for (std::size_t i = evict_end; i < conv.messages.size(); ++i) {
             remaining.push_back(std::move(conv.messages[i]));
         }
         conv.messages = std::move(remaining);

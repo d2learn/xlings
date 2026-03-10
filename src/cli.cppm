@@ -1297,7 +1297,9 @@ export int run(int argc, char* argv[]) {
             }});
 
             // ─── Build ftxui component (minimal: active content + input + status) ───
-            std::string input_content;
+            // Start with a space so ftxui places a blinking cursor (workaround for
+            // Chinese IME positioning — empty input has no cursor anchor).
+            std::string input_content = " ";
 
             auto input_opt = ftxui::InputOption();
             input_opt.content = &input_content;
@@ -1308,9 +1310,15 @@ export int run(int argc, char* argv[]) {
                 return state.element;
             };
             input_opt.on_change = [&] {
-                if (!input_content.empty() && input_content[0] == '/' &&
-                    input_content.find(' ') == std::string::npos) {
-                    auto matches = cmd_registry.match(input_content);
+                // Ensure leading space cursor anchor is preserved
+                if (input_content.empty() || input_content[0] != ' ') {
+                    input_content = " " + input_content;
+                }
+                // Check for slash commands (after the leading space)
+                auto trimmed = input_content.substr(1);
+                if (!trimmed.empty() && trimmed[0] == '/' &&
+                    trimmed.find(' ') == std::string::npos) {
+                    auto matches = cmd_registry.match(trimmed);
                     tui_state.completions = std::move(matches);
                     tui_state.completion_selected = tui_state.completions.empty() ? -1 : 0;
                 } else {
@@ -1325,9 +1333,11 @@ export int run(int argc, char* argv[]) {
                     approval_cv.notify_one();
                     return;
                 }
-                if (input_content.empty()) return;
+                // Trim leading space (cursor workaround)
                 auto msg = input_content;
-                input_content.clear();
+                if (!msg.empty() && msg[0] == ' ') msg.erase(0, 1);
+                if (msg.empty()) return;
+                input_content = " ";  // reset with cursor anchor space
                 tui_state.history_pos = -1;
                 tui_state.saved_input.clear();
                 tui_state.completions.clear();
@@ -1369,7 +1379,7 @@ export int run(int argc, char* argv[]) {
                         } else if (tui_state.history_pos > 0) {
                             --tui_state.history_pos;
                         }
-                        input_content = tui_state.history[tui_state.history_pos];
+                        input_content = " " + tui_state.history[tui_state.history_pos];
                     }
                     return true;
                 }
@@ -1383,7 +1393,7 @@ export int run(int argc, char* argv[]) {
                             tui_state.history_pos = -1;
                             input_content = tui_state.saved_input;
                         } else {
-                            input_content = tui_state.history[tui_state.history_pos];
+                            input_content = " " + tui_state.history[tui_state.history_pos];
                         }
                     }
                     return true;
@@ -1391,7 +1401,7 @@ export int run(int argc, char* argv[]) {
                 if (event == ftxui::Event::Tab) {
                     if (tui_state.completion_selected >= 0 &&
                         tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
-                        input_content = tui_state.completions[tui_state.completion_selected].first + " ";
+                        input_content = " " + tui_state.completions[tui_state.completion_selected].first + " ";
                         tui_state.completions.clear();
                         tui_state.completion_selected = -1;
                     }
@@ -1411,31 +1421,20 @@ export int run(int argc, char* argv[]) {
                 return false;
             });
 
-            // Renderer: only active content + input + status (compact, not fullscreen)
+            // Renderer: adaptive layout — expands downward until reaching
+            // terminal bottom, then pins input/status and scrolls content up.
             auto renderer = ftxui::Renderer(component, [&] {
                 using namespace ftxui;
                 auto now_ms = agent::tui::steady_now_ms();
-                auto term_h = ftxui::Terminal::Size().dimy;
+                auto term_sz = ftxui::Terminal::Size();
+                int term_h = term_sz.dimy;
+                int term_w = term_sz.dimx;
 
-                // Reserve lines for: sep_above(1) + input(1) + sep_below(1) + status(1)
-                // + active content estimate (streaming ~3, tool action ~5)
-                int reserved = 4;
-                if (tui_state.is_streaming) reserved += 3;
-                if (!tui_state.active_action_text.empty()) {
-                    reserved += 2 + static_cast<int>(tui_state.active_sub_steps.size())
-                        + static_cast<int>(tui_state.active_details.size());
-                    if (tui_state.active_progress > 0.01f) reserved += 1;
-                }
-                if (!tui_state.completions.empty()) {
-                    reserved += std::min(static_cast<int>(tui_state.completions.size()), 8);
-                }
-                if (tui_state.approval_pending) reserved += 1;
-                int avail = std::max(term_h - reserved, 4);
+                // ── Build content elements (history + streaming + active action) ──
+                // Trim history for performance (keep at most ~2x terminal height)
+                int max_history = std::max(term_h * 2, 40);
+                Elements content_elems;
 
-                Elements elems;
-
-                // Completed chat lines — estimate height per line, render tail
-                // Simple heuristic: each line ~1-4 rows depending on type
                 int est_rows = 0;
                 int start_idx = static_cast<int>(tui_state.lines.size());
                 for (int i = static_cast<int>(tui_state.lines.size()) - 1; i >= 0; --i) {
@@ -1445,49 +1444,45 @@ export int run(int argc, char* argv[]) {
                         h += static_cast<int>(line.sub_steps.size())
                            + static_cast<int>(line.details.size());
                     } else if (line.type == agent::tui::ChatLine::AssistantText) {
-                        // Rough: 1 line per 80 chars
-                        h = std::max(1, static_cast<int>(line.text.size()) / 80 + 1);
+                        h = std::max(1, static_cast<int>(line.text.size()) / std::max(term_w - 4, 20) + 1);
                     }
-                    if (est_rows + h > avail) break;
+                    if (est_rows + h > max_history) break;
                     est_rows += h;
                     start_idx = i;
                 }
                 for (int i = start_idx; i < static_cast<int>(tui_state.lines.size()); ++i) {
-                    elems.push_back(agent::tui::render_chat_line(tui_state.lines[i], now_ms));
+                    content_elems.push_back(agent::tui::render_chat_line(tui_state.lines[i], now_ms));
                 }
 
-                // Active streaming / thinking (only during turn)
+                // Active streaming / thinking
                 if (tui_state.is_streaming) {
                     if (tui_state.is_thinking && tui_state.streaming_text.empty()) {
                         auto elapsed_str = tui_state.turn_start_ms > 0
                             ? agent::tui::format_duration(now_ms - tui_state.turn_start_ms) : "";
-                        elems.push_back(hbox({
+                        content_elems.push_back(hbox({
                             text("  thinking... ") | color(agent::tui::colors::dim()),
                             text(elapsed_str) | color(agent::tui::colors::border()),
                         }));
                     } else if (!tui_state.streaming_text.empty()) {
-                        elems.push_back(hbox({
+                        content_elems.push_back(hbox({
                             text("\xe2\x97\x86 ") | color(agent::tui::colors::magenta()),
                             paragraph(tui_state.streaming_text),
                         }));
                     }
                 }
 
-                // Active tool action (running) — show title + sub-steps + progress
+                // Active tool action
                 if (!tui_state.active_action_text.empty()) {
-                    // Action title line (running)
-                    elems.push_back(hbox({
+                    content_elems.push_back(hbox({
                         text("  \xe2\x9a\xa1 ") | color(agent::tui::colors::amber()),
                         text(tui_state.active_action_text) | color(agent::tui::colors::amber()),
                     }));
-                    // Sub-steps with real-time timing
                     for (auto& ss : tui_state.active_sub_steps) {
-                        elems.push_back(agent::tui::render_sub_step(ss, now_ms));
+                        content_elems.push_back(agent::tui::render_sub_step(ss, now_ms));
                     }
-                    // Show progress bar if active
                     if (tui_state.active_progress > 0.01f) {
                         int pct = static_cast<int>(tui_state.active_progress * 100.0f);
-                        elems.push_back(hbox({
+                        content_elems.push_back(hbox({
                             text("      \xe2\x96\xb8 ") | color(agent::tui::colors::cyan()),
                             gauge(tui_state.active_progress)
                                 | size(WIDTH, EQUAL, 24) | color(agent::tui::colors::cyan()),
@@ -1500,37 +1495,62 @@ export int run(int argc, char* argv[]) {
                                 | color(agent::tui::colors::dim()),
                         }));
                     }
-                    // Show active details
                     for (auto& d : tui_state.active_details) {
-                        elems.push_back(text("      " + d) | color(agent::tui::colors::border()));
+                        content_elems.push_back(text("      " + d) | color(agent::tui::colors::border()));
                     }
                 }
 
-                // Separator above input
-                elems.push_back(separator() | color(agent::tui::colors::border()));
-
-                // Input
+                // ── Bottom area: separator + input + separator + completions + status + margin ──
+                Elements bottom_elems;
+                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
                 if (tui_state.approval_pending) {
-                    elems.push_back(agent::tui::render_approval(tui_state));
+                    bottom_elems.push_back(agent::tui::render_approval(tui_state));
                 } else {
-                    elems.push_back(hbox({
+                    bottom_elems.push_back(hbox({
                         text("> ") | bold | color(agent::tui::colors::cyan()),
                         component->Render() | flex,
-                    }));
+                    }) | size(WIDTH, EQUAL, term_w));
                 }
-
-                // Separator below input
-                elems.push_back(separator() | color(agent::tui::colors::border()));
-
-                // Completions
+                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
                 if (!tui_state.completions.empty()) {
-                    elems.push_back(agent::tui::render_completions(tui_state));
+                    bottom_elems.push_back(agent::tui::render_completions(tui_state));
+                }
+                bottom_elems.push_back(agent::tui::render_status_bar(tui_state, now_ms));
+                bottom_elems.push_back(text(""));
+
+                // Count bottom area height: sep(1) + input(1) + sep(1) + status(1) + margin(1) = 5
+                int bottom_h = 5;
+                if (!tui_state.completions.empty()) {
+                    bottom_h += std::min(static_cast<int>(tui_state.completions.size()), 8);
+                }
+                if (tui_state.approval_pending) bottom_h += 1;
+
+                // Estimate content height (rough: reuse est_rows from trimming + active elements)
+                int content_h = est_rows;
+                if (tui_state.is_streaming) content_h += 1;
+                if (!tui_state.active_action_text.empty()) {
+                    content_h += 1 + static_cast<int>(tui_state.active_sub_steps.size())
+                        + static_cast<int>(tui_state.active_details.size());
+                    if (tui_state.active_progress > 0.01f) content_h += 1;
                 }
 
-                // Status bar
-                elems.push_back(agent::tui::render_status_bar(tui_state, now_ms));
+                int total_h = content_h + bottom_h;
 
-                return vbox(std::move(elems));
+                if (total_h < term_h) {
+                    // ── Not yet at bottom: natural expansion, no pinning ──
+                    Elements all;
+                    for (auto& e : content_elems) all.push_back(std::move(e));
+                    for (auto& e : bottom_elems) all.push_back(std::move(e));
+                    return vbox(std::move(all));
+                } else {
+                    // ── Reached bottom: pin bottom area, scroll content up ──
+                    auto scroll_area = vbox(std::move(content_elems))
+                        | yframe | focusPositionRelative(0, 1) | flex;
+                    return vbox({
+                        scroll_area,
+                        vbox(std::move(bottom_elems)),
+                    }) | size(HEIGHT, EQUAL, term_h);
+                }
             });
 
             // ─── Agent worker thread ───
@@ -1567,7 +1587,6 @@ export int run(int argc, char* argv[]) {
                             .type = agent::tui::ChatLine::UserMsg,
                             .text = input,
                         });
-                        tui_state.lines.push_back({.type = agent::tui::ChatLine::Separator});
                         tui_state.is_streaming = true;
                         tui_state.is_thinking = true;
                         tui_state.streaming_text.clear();
@@ -1771,10 +1790,10 @@ export int run(int argc, char* argv[]) {
                 }
             });
 
-            // ─── Timer thread: periodic re-render for real-time timing ───
+            // ─── Timer thread: 24fps re-render for smooth UI and resize handling ───
             std::jthread timer_thread([&](std::stop_token st) {
                 while (!st.stop_requested()) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(42));
                     if (!st.stop_requested()) {
                         screen.PostEvent(ftxui::Event::Custom);
                     }

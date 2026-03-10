@@ -155,9 +155,13 @@ export auto render_chat_line(const ChatLine& line, int64_t now_ms = 0) -> ftxui:
 
     switch (line.type) {
         case ChatLine::UserMsg:
-            return hbox({
-                text("> ") | bold | color(colors::cyan()),
-                paragraph(line.text) | color(colors::txt()),
+            return vbox({
+                separator() | color(colors::amber()),
+                hbox({
+                    text("> ") | bold | color(colors::amber()),
+                    paragraph(line.text) | color(colors::amber()),
+                }),
+                separator() | color(colors::amber()),
             });
 
         case ChatLine::AssistantText:
