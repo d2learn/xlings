@@ -34,12 +34,13 @@ src/
 │   │   ├── json.hpp
 │   │   └── LICENSE
 │   └── tinyhttps.cppm               # xlings.libs.tinyhttps
-├── runtime.cppm                     # xlings.runtime (重导出分区)
+├── runtime.cppm                     # xlings.runtime (重导出子模块)
 ├── runtime/
-│   ├── event.cppm                   # xlings.runtime:event
-│   ├── event_stream.cppm            # xlings.runtime:event_stream
-│   ├── capability.cppm              # xlings.runtime:capability
-│   └── task.cppm                    # xlings.runtime:task
+│   ├── event.cppm                   # xlings.runtime.event
+│   ├── event_stream.cppm            # xlings.runtime.event_stream
+│   ├── capability.cppm              # xlings.runtime.capability
+│   └── task.cppm                    # xlings.runtime.task
+│   # NOTE: 使用子模块而非分区，因 GCC 15 ICE bug — 重导出含 std::atomic/mutex 的分区会触发编译器崩溃
 ├── core.cppm                        # xlings.core (重导出子模块)
 ├── core/
 │   ├── log.cppm                     # xlings.core.log
