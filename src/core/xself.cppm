@@ -10,6 +10,7 @@ import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
 import xlings.core.profile;
+import xlings.runtime;
 import xlings.ui;
 import xlings.core.utils;
 
@@ -49,7 +50,7 @@ static int cmd_update() {
     return 0;
 }
 
-static int cmd_config() {
+static int cmd_config(EventStream& stream) {
     auto& p = Config::paths();
     std::vector<ui::InfoField> fields;
     fields.push_back({"XLINGS_HOME", p.homeDir.string()});
@@ -174,7 +175,7 @@ static int cmd_migrate() {
     return 0;
 }
 
-static int cmd_help() {
+static int cmd_help(EventStream& stream) {
     ui::HelpOpt opts[] = {
         {"install",  "Install xlings from release package"},
         {"init",     "Create home/data/subos dirs"},
@@ -187,18 +188,18 @@ static int cmd_help() {
     return 0;
 }
 
-export int run(int argc, char* argv[]) {
+export int run(int argc, char* argv[], EventStream& stream) {
     std::string action = (argc >= 3) ? argv[2] : "help";
     if (action == "install") return cmd_install();
     if (action == "init") return cmd_init();
     if (action == "update") return cmd_update();
-    if (action == "config") return cmd_config();
+    if (action == "config") return cmd_config(stream);
     if (action == "clean") {
         bool dryRun = argc >= 4 && std::string(argv[3]) == "--dry-run";
         return cmd_clean(dryRun);
     }
     if (action == "migrate") return cmd_migrate();
-    return cmd_help();
+    return cmd_help(stream);
 }
 
 } // namespace xlings::xself

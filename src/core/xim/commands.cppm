@@ -12,6 +12,7 @@ import xlings.core.xim.downloader;
 import xlings.core.xim.installer;
 import xlings.core.log;
 import xlings.core.config;
+import xlings.runtime;
 import xlings.ui;
 import xlings.core.i18n;
 import xlings.platform;
@@ -52,11 +53,11 @@ std::string detect_platform() {
 }
 
 // Forward declaration for deferred install request processing
-int cmd_remove(const std::string& target);
+int cmd_remove(const std::string& target, EventStream& stream);
 
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
-                bool forceGlobal = false) {
+                EventStream& stream, bool forceGlobal = false) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -178,7 +179,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
             auto active = xvm::get_active_version(Config::effective_workspace(), match.name);
             if (xvm::has_version(db, match.name, match.version) &&
                 active != match.version) {
-                auto useRet = xvm::cmd_use(match.name, match.version);
+                auto useRet = xvm::cmd_use(match.name, match.version, stream);
                 if (useRet != 0) {
                     log::warn("failed to activate {}@{} in current subos",
                               match.name, match.version);
@@ -254,15 +255,15 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
         },
         // Process deferred pkgmanager.install()/remove() requests synchronously
         // between install and config hooks so config can access sub-dependencies
-        [forceGlobal](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
+        [forceGlobal, &stream](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
             for (auto& req : reqs) {
                 if (req.op == "install") {
                     log::debug("installing sub-dependency: {}", req.target);
                     std::vector<std::string> subTargets = { req.target };
-                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, forceGlobal);
+                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, stream, forceGlobal);
                 } else if (req.op == "remove") {
                     log::debug("removing sub-dependency: {}", req.target);
-                    cmd_remove(req.target);
+                    cmd_remove(req.target, stream);
                 }
             }
         });
@@ -280,7 +281,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
 }
 
 // === remove command ===
-int cmd_remove(const std::string& target) {
+int cmd_remove(const std::string& target, EventStream& stream) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::error("package index not available");
@@ -299,7 +300,7 @@ int cmd_remove(const std::string& target) {
 }
 
 // === search command ===
-int cmd_search(const std::string& keyword) {
+int cmd_search(const std::string& keyword, EventStream& stream) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::error("package index not available");
@@ -325,7 +326,7 @@ int cmd_search(const std::string& keyword) {
 }
 
 // === list command ===
-int cmd_list(const std::string& filter) {
+int cmd_list(const std::string& filter, EventStream& stream) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::error("package index not available");
@@ -358,7 +359,7 @@ int cmd_list(const std::string& filter) {
 }
 
 // === info command ===
-int cmd_info(const std::string& target) {
+int cmd_info(const std::string& target, EventStream& stream) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::error("package index not available");
@@ -498,7 +499,7 @@ int cmd_info(const std::string& target) {
 }
 
 // === add-xpkg command ===
-int cmd_add_xpkg(const std::string& fileOrUrl) {
+int cmd_add_xpkg(const std::string& fileOrUrl, EventStream& stream) {
     namespace fs = std::filesystem;
     auto localRepoDir = Config::global_data_dir() / "xim-pkgindex-local";
     auto pkgsDir = localRepoDir / "pkgs";
@@ -559,7 +560,7 @@ int cmd_add_xpkg(const std::string& fileOrUrl) {
 }
 
 // === update command ===
-int cmd_update(const std::string& target) {
+int cmd_update(const std::string& target, EventStream& stream) {
     // Sync repos
     if (!sync_all_repos(true)) {
         log::error("failed to sync repositories");

@@ -7,6 +7,7 @@ import xlings.libs.json;
 import xlings.core.config;
 import xlings.core.subos;
 import xlings.platform;
+import xlings.runtime;
 import xlings.core.xself;
 import mcpplibs.xpkg.executor;
 
@@ -301,7 +302,8 @@ export CommandProcessor create_processor() {
             })
         .add("subos", "manage sub-os environments",
             [](int argc, char* argv[]) {
-                return subos::run(argc, argv);
+                EventStream stream;
+                return subos::run(argc, argv, stream);
             },
             "xlings subos <new|use|list|ls|remove|rm|info|i> [name]")
         .add("script", "run xpkg script",
@@ -336,7 +338,8 @@ export CommandProcessor create_processor() {
             "xlings script <script-file> [args...]")
         .add("self", "self management (init/update/config/clean/migrate)",
             [](int argc, char* argv[]) {
-                return xself::run(argc, argv);
+                EventStream stream;
+                return xself::run(argc, argv, stream);
             },
             "xlings self [init|update|config|clean [--dry-run]|migrate|help]");
 }

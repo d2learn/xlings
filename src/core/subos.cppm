@@ -6,6 +6,7 @@ import xlings.core.config;
 import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
+import xlings.runtime;
 import xlings.ui;
 import xlings.core.utils;
 import xlings.core.xself;
@@ -203,7 +204,7 @@ export std::optional<SubosInfo> info(const std::string& name) {
     return SubosInfo{name, dir, p.activeSubos == name, toolCount};
 }
 
-int run_list_() {
+int run_list_(EventStream& stream) {
     auto all = list_all();
     std::vector<std::tuple<std::string, std::string, int, bool>> entries;
     for (auto& s : all) {
@@ -213,7 +214,7 @@ int run_list_() {
     return 0;
 }
 
-int run_info_(const std::string& name) {
+int run_info_(const std::string& name, EventStream& stream) {
     auto& p = Config::paths();
     auto target = name.empty() ? p.activeSubos : name;
     auto si = info(target);
@@ -229,8 +230,8 @@ int run_info_(const std::string& name) {
     return 0;
 }
 
-export int run(int argc, char* argv[]) {
-    if (argc < 3) return run_list_();
+export int run(int argc, char* argv[], EventStream& stream) {
+    if (argc < 3) return run_list_(stream);
 
     std::string sub = argv[2];
     if (sub == "ls") sub = "list";
@@ -245,12 +246,12 @@ export int run(int argc, char* argv[]) {
         if (argc < 4) { log::error("usage: xlings subos use <name>"); return 1; }
         return use(argv[3]);
     }
-    if (sub == "list")   return run_list_();
+    if (sub == "list")   return run_list_(stream);
     if (sub == "remove") {
         if (argc < 4) { log::error("usage: xlings subos remove|rm <name>"); return 1; }
         return remove(argv[3]);
     }
-    if (sub == "info")   return run_info_(argc > 3 ? argv[3] : "");
+    if (sub == "info")   return run_info_(argc > 3 ? argv[3] : "", stream);
 
     log::error("[xlings:subos] unknown subcommand: {}", sub);
     log::error("usage: xlings subos <new|use|list|ls|remove|rm|info|i> [name]");

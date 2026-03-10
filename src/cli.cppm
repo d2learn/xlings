@@ -8,6 +8,7 @@ import mcpplibs.xpkg.executor;
 import xlings.core.config;
 import xlings.libs.json;
 import xlings.core.log;
+import xlings.runtime;
 import xlings.ui;
 import xlings.core.i18n;
 import xlings.platform;
@@ -99,7 +100,7 @@ void generate_xlings_json_(const std::filesystem::path& dir, const xvm::Workspac
 }
 
 // Install packages from project .xlings.json workspace
-int install_from_project_config_() {
+int install_from_project_config_(EventStream& stream) {
     namespace fs = std::filesystem;
     std::error_code ec;
     auto cwd = fs::current_path(ec);
@@ -128,7 +129,7 @@ int install_from_project_config_() {
                     auto workspace = xvm::workspace_from_json(json["workspace"]);
                     auto targets = Config::workspace_install_targets(workspace);
                     if (!targets.empty()) {
-                        return xim::cmd_install(targets, true, false);
+                        return xim::cmd_install(targets, true, false, stream);
                     }
                 }
             } catch (...) {
@@ -147,7 +148,7 @@ int install_from_project_config_() {
                 generate_xlings_json_(cur, workspace);
                 log::println("generated: {}", (cur / ".xlings.json").string());
                 auto targets = Config::workspace_install_targets(workspace);
-                return xim::cmd_install(targets, true, false);
+                return xim::cmd_install(targets, true, false, stream);
             }
         }
 
@@ -184,7 +185,7 @@ void save_global_config_json_(const nlohmann::json& json) {
 }
 
 // config subcommand handler
-int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args) {
+int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args, EventStream& stream) {
     bool changed = false;
     auto json = load_global_config_json_();
 
@@ -205,7 +206,7 @@ int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args) {
     // --add-xpkg
     if (auto xpkg = args.value("add-xpkg")) {
         if (changed) save_global_config_json_(json);
-        return xim::cmd_add_xpkg(std::string(*xpkg));
+        return xim::cmd_add_xpkg(std::string(*xpkg), stream);
     }
 
     // --index-repo  namespace:https://....git
@@ -287,6 +288,9 @@ int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args) {
 
 export int run(int argc, char* argv[]) {
     using namespace mcpplibs;
+
+    // Create EventStream for core→UI decoupling
+    EventStream stream;
 
     // Special: subos, self, script need raw argc/argv
     if (argc >= 2) {
@@ -410,8 +414,8 @@ export int run(int argc, char* argv[]) {
             }
         }
 
-        if (cmd == "subos") return subos::run(argc, argv);
-        if (cmd == "self") return xself::run(argc, argv);
+        if (cmd == "subos") return subos::run(argc, argv, stream);
+        if (cmd == "self") return xself::run(argc, argv, stream);
         if (cmd == "script") {
             if (argc < 3) {
                 ui::print_usage("xlings script <script-file> [args...]");
@@ -457,69 +461,69 @@ export int run(int argc, char* argv[]) {
             .description("Install packages (e.g. xlings install gcc@15 node)")
             .option(cmdline::Option("global").short_name('g').help("Install to global scope (not project-local subos)"))
             .arg("packages").help("Package names with optional version")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::vector<std::string> targets;
                 for (std::size_t i = 0; i < args.positional_count(); ++i) {
                     auto t = args.positional(i);
                     if (!t.empty()) targets.emplace_back(t);
                 }
-                if (targets.empty()) return install_from_project_config_();
+                if (targets.empty()) return install_from_project_config_(stream);
 
                 bool yes = args.is_flag_set("yes");
                 bool global = args.is_flag_set("global");
-                return xim::cmd_install(targets, yes, false, global);
+                return xim::cmd_install(targets, yes, false, stream, global);
             })
 
         // remove
         .subcommand("remove")
             .description("Remove a package")
             .arg("package").required().help("Package to remove")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return xim::cmd_remove(std::string(args.positional(0)));
+                return xim::cmd_remove(std::string(args.positional(0)), stream);
             })
 
         // update
         .subcommand("update")
             .description("Update package index or a specific package")
             .arg("package").help("Package to update (omit for index only)")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string target;
                 if (args.positional_count() > 0)
                     target = std::string(args.positional(0));
-                return xim::cmd_update(target);
+                return xim::cmd_update(target, stream);
             })
 
         // search
         .subcommand("search")
             .description("Search for packages")
             .arg("keyword").required().help("Search keyword")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return xim::cmd_search(std::string(args.positional(0)));
+                return xim::cmd_search(std::string(args.positional(0)), stream);
             })
 
         // list
         .subcommand("list")
             .description("List installed packages")
             .arg("filter").help("Filter pattern")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string filter;
                 if (args.positional_count() > 0)
                     filter = std::string(args.positional(0));
-                return xim::cmd_list(filter);
+                return xim::cmd_list(filter, stream);
             })
 
         // info
         .subcommand("info")
             .description("Show package information")
             .arg("package").required().help("Package name")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return xim::cmd_info(std::string(args.positional(0)));
+                return xim::cmd_info(std::string(args.positional(0)), stream);
             })
 
         // use
@@ -527,13 +531,13 @@ export int run(int argc, char* argv[]) {
             .description("Switch tool version")
             .arg("target").required().help("Tool name")
             .arg("version").help("Version to switch to (omit to list)")
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 auto target = std::string(args.positional(0));
                 if (args.positional_count() >= 2) {
-                    return xvm::cmd_use(target, std::string(args.positional(1)));
+                    return xvm::cmd_use(target, std::string(args.positional(1)), stream);
                 }
-                return xvm::cmd_list_versions(target);
+                return xvm::cmd_list_versions(target, stream);
             })
 
         // config
@@ -543,9 +547,9 @@ export int run(int argc, char* argv[]) {
             .option(cmdline::Option("mirror").takes_value().value_name("MIRROR").help("Set mirror (GLOBAL/CN)"))
             .option(cmdline::Option("add-xpkg").takes_value().value_name("FILE").help("Add xpkg file to package index"))
             .option(cmdline::Option("index-repo").takes_value().value_name("NS:URL").help("Add/update index repo (e.g. myns:https://...git)"))
-            .action([](const cmdline::ParsedArgs& args) -> int {
+            .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return cmd_config_(args);
+                return cmd_config_(args, stream);
             });
 
     return app.run(argc, argv);

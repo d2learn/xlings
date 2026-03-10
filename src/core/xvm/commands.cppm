@@ -6,6 +6,7 @@ import xlings.core.common;
 import xlings.core.config;
 import xlings.core.log;
 import xlings.platform;
+import xlings.runtime;
 import xlings.ui;
 import xlings.core.xself;
 import xlings.core.xvm.types;
@@ -118,7 +119,7 @@ void remove_libdir(const std::string& libdir, const fs::path& sysroot_lib) {
 
 // xlings use <target> <version>
 // Updates the active subos workspace and creates/updates bin/ hardlinks
-int cmd_use(const std::string& target, const std::string& version) {
+int cmd_use(const std::string& target, const std::string& version, EventStream& stream) {
     auto db = Config::versions();
     auto& p  = Config::paths();
 
@@ -244,7 +245,7 @@ int cmd_use(const std::string& target, const std::string& version) {
 }
 
 // List versions for a target (used by `xlings use <target>` without version)
-int cmd_list_versions(const std::string& target) {
+int cmd_list_versions(const std::string& target, EventStream& stream) {
     auto db = Config::versions();
 
     if (!has_target(db, target)) {

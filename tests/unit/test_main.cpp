@@ -750,14 +750,16 @@ TEST(XimCommandsTest, SearchNonexistentReturnsZero) {
     // not from test fixtures. Skip if catalog cannot load.
     auto& catalog = xlings::xim::get_catalog();
     if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
-    auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999");
+    xlings::EventStream stream;
+    auto rc = xlings::xim::cmd_search("zzz_nonexistent_pkg_xyz_999", stream);
     EXPECT_EQ(rc, 0);  // returns 0 with "no packages found" message
 }
 
 TEST(XimCommandsTest, ListWithFilter) {
     auto& catalog = xlings::xim::get_catalog();
     if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
-    auto rc = xlings::xim::cmd_list("gcc");
+    xlings::EventStream stream;
+    auto rc = xlings::xim::cmd_list("gcc", stream);
     EXPECT_EQ(rc, 0);
 }
 
@@ -767,14 +769,16 @@ TEST(XimCommandsTest, InfoKnownPackage) {
     auto platform = xlings::xim::detect_platform();
     // gcc fixture only has linux entries; skip on other platforms
     if (platform != "linux") GTEST_SKIP() << "gcc fixture not available on " << platform;
-    auto rc = xlings::xim::cmd_info("gcc");
+    xlings::EventStream stream;
+    auto rc = xlings::xim::cmd_info("gcc", stream);
     EXPECT_EQ(rc, 0);
 }
 
 TEST(XimCommandsTest, InfoUnknownPackage) {
     auto& catalog = xlings::xim::get_catalog();
     if (!catalog.is_loaded()) GTEST_SKIP() << "package catalog not available";
-    auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999");
+    xlings::EventStream stream;
+    auto rc = xlings::xim::cmd_info("nonexistent_pkg_xyz_999", stream);
     EXPECT_EQ(rc, 1);
 }
 
