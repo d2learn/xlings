@@ -7,7 +7,7 @@ import xlings.core.config;
 import xlings.core.log;
 import xlings.platform;
 import xlings.runtime;
-import xlings.ui;
+import xlings.libs.json;
 import xlings.core.xself;
 import xlings.core.xvm.types;
 import xlings.core.xvm.db;
@@ -257,15 +257,18 @@ int cmd_list_versions(const std::string& target, EventStream& stream) {
     auto active = get_active_version(workspace, target);
     auto all = get_all_versions(db, target);
 
-    std::vector<ui::InfoField> fields;
+    nlohmann::json fieldsJson = nlohmann::json::array();
     for (auto& ver : all) {
         auto vdata = get_vdata(db, target, ver);
         std::string path_info;
         if (vdata && !vdata->path.empty()) path_info = vdata->path;
         bool highlight = (ver == active);
-        fields.push_back({ver, path_info, highlight});
+        fieldsJson.push_back({{"label", ver}, {"value", path_info}, {"highlight", highlight}});
     }
-    ui::print_info_panel(target + " versions", fields);
+    nlohmann::json payload;
+    payload["title"] = target + " versions";
+    payload["fields"] = std::move(fieldsJson);
+    stream.emit(DataEvent{"info_panel", payload.dump()});
 
     return 0;
 }
