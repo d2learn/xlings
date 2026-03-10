@@ -1,14 +1,14 @@
-export module xlings.subos;
+export module xlings.core.subos;
 
 import std;
 
-import xlings.config;
-import xlings.json;
-import xlings.log;
+import xlings.core.config;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.platform;
 import xlings.ui;
-import xlings.utils;
-import xlings.xself;
+import xlings.core.utils;
+import xlings.core.xself;
 
 namespace xlings::subos {
 

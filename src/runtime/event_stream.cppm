@@ -1,8 +1,8 @@
-export module xlings.event_stream;
+export module xlings.runtime:event_stream;
 
 import std;
 
-import xlings.event;
+import :event;
 
 namespace xlings {
 

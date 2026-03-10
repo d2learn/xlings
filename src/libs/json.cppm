@@ -2,7 +2,7 @@ module;
 
 #include <json.hpp>
 
-export module xlings.json;
+export module xlings.libs.json;
 
 export namespace nlohmann {
     using ::nlohmann::adl_serializer;

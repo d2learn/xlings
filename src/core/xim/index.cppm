@@ -1,12 +1,12 @@
-export module xlings.xim.index;
+export module xlings.core.xim.index;
 
 import std;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.loader;
 import mcpplibs.xpkg.index;
-import xlings.json;
-import xlings.log;
-import xlings.config;
+import xlings.libs.json;
+import xlings.core.log;
+import xlings.core.config;
 import xlings.platform;
 
 // All libxpkg functions live in mcpplibs::xpkg namespace regardless of module name

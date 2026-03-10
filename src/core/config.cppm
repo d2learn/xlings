@@ -1,14 +1,14 @@
-export module xlings.config;
+export module xlings.core.config;
 
 import std;
 
-import xlings.json;
-import xlings.log;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.platform;
-import xlings.utils;
-import xlings.tinyhttps;
-import xlings.xvm.types;
-import xlings.xvm.db;
+import xlings.core.utils;
+import xlings.libs.tinyhttps;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
 
 namespace xlings {
 

@@ -1,10 +1,10 @@
-export module xlings.xim;
+export module xlings.core.xim;
 
-export import xlings.xim.libxpkg.types.type;
-export import xlings.xim.repo;
-export import xlings.xim.index;
-export import xlings.xim.catalog;
-export import xlings.xim.resolver;
-export import xlings.xim.downloader;
-export import xlings.xim.installer;
-export import xlings.xim.commands;
+export import xlings.core.xim.libxpkg.types.type;
+export import xlings.core.xim.repo;
+export import xlings.core.xim.index;
+export import xlings.core.xim.catalog;
+export import xlings.core.xim.resolver;
+export import xlings.core.xim.downloader;
+export import xlings.core.xim.installer;
+export import xlings.core.xim.commands;

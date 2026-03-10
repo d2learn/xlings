@@ -4,15 +4,15 @@ module;
 #include <unistd.h>
 #endif
 
-export module xlings.xvm.shim;
+export module xlings.core.xvm.shim;
 
 import std;
 
-import xlings.config;
-import xlings.log;
+import xlings.core.config;
+import xlings.core.log;
 import xlings.platform;
-import xlings.xvm.types;
-import xlings.xvm.db;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
 
 export namespace xlings::xvm {
 

@@ -1,4 +1,4 @@
-export module xlings.xim.libxpkg.types.type;
+export module xlings.core.xim.libxpkg.types.type;
 
 import std;
 

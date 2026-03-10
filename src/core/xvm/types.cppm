@@ -1,4 +1,4 @@
-export module xlings.xvm.types;
+export module xlings.core.xvm.types;
 
 import std;
 

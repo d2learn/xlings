@@ -1,4 +1,4 @@
-export module xlings.i18n;
+export module xlings.core.i18n;
 
 import std;
 

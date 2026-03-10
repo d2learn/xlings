@@ -2,7 +2,7 @@ module;
 #include <ctime>
 #include <cstdio>
 
-export module xlings.log;
+export module xlings.core.log;
 
 import std;
 

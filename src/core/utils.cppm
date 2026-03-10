@@ -1,6 +1,6 @@
 module;
 #include <cstdlib>
-export module xlings.utils;
+export module xlings.core.utils;
 
 import std;
 

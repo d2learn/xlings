@@ -1,9 +1,9 @@
 import std;
 
 import xlings.cli;
-import xlings.config;
+import xlings.core.config;
 import xlings.platform;
-import xlings.xvm.shim;
+import xlings.core.xvm.shim;
 
 #ifdef _WIN32
 #include <io.h>

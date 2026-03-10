@@ -5,14 +5,14 @@ module;
 #include "ftxui/screen/screen.hpp"
 #include "ftxui/screen/color.hpp"
 
-export module xlings.xim.downloader;
+export module xlings.core.xim.downloader;
 
 import std;
-import xlings.xim.libxpkg.types.type;
-import xlings.log;
+import xlings.core.xim.libxpkg.types.type;
+import xlings.core.log;
 import xlings.platform;
-import xlings.config;
-import xlings.tinyhttps;
+import xlings.core.config;
+import xlings.libs.tinyhttps;
 import xlings.ui;
 
 export namespace xlings::xim {

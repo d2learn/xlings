@@ -3,17 +3,17 @@ module;
 #include <ctime>
 #include <cstdio>
 
-export module xlings.profile;
+export module xlings.core.profile;
 
 import std;
 
-import xlings.config;
-import xlings.json;
-import xlings.log;
+import xlings.core.config;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.platform;
-import xlings.utils;
-import xlings.xvm.db;
-import xlings.xvm.types;
+import xlings.core.utils;
+import xlings.core.xvm.db;
+import xlings.core.xvm.types;
 
 namespace xlings::profile {
 

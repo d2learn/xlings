@@ -1,13 +1,13 @@
-export module xlings.cmdprocessor;
+export module xlings.core.cmdprocessor;
 
 import std;
 
-import xlings.log;
-import xlings.json;
-import xlings.config;
-import xlings.subos;
+import xlings.core.log;
+import xlings.libs.json;
+import xlings.core.config;
+import xlings.core.subos;
 import xlings.platform;
-import xlings.xself;
+import xlings.core.xself;
 import mcpplibs.xpkg.executor;
 
 namespace xlings::cmdprocessor {

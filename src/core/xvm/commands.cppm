@@ -1,15 +1,15 @@
-export module xlings.xvm.commands;
+export module xlings.core.xvm.commands;
 
 import std;
 
-import xlings.common;
-import xlings.config;
-import xlings.log;
+import xlings.core.common;
+import xlings.core.config;
+import xlings.core.log;
 import xlings.platform;
 import xlings.ui;
-import xlings.xself;
-import xlings.xvm.types;
-import xlings.xvm.db;
+import xlings.core.xself;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
 
 export namespace xlings::xvm {
 

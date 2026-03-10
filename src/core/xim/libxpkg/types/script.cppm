@@ -1,13 +1,13 @@
-export module xlings.xim.libxpkg.types.script;
+export module xlings.core.xim.libxpkg.types.script;
 
 import std;
-import xlings.xim.libxpkg.types.type;
-import xlings.xim.catalog;
-import xlings.common;
-import xlings.config;
-import xlings.log;
-import xlings.xself;
-import xlings.xvm.db;
+import xlings.core.xim.libxpkg.types.type;
+import xlings.core.xim.catalog;
+import xlings.core.common;
+import xlings.core.config;
+import xlings.core.log;
+import xlings.core.xself;
+import xlings.core.xvm.db;
 import mcpplibs.xpkg.executor;
 
 export namespace xlings::xim::script {

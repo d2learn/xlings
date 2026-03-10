@@ -1,13 +1,13 @@
 module;
 #include <ctime>
 
-export module xlings.xim.repo;
+export module xlings.core.xim.repo;
 
 import std;
-import xlings.json;
-import xlings.log;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.platform;
-import xlings.config;
+import xlings.core.config;
 
 export namespace xlings::xim {
 

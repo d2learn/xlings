@@ -1,24 +1,24 @@
-export module xlings.xim.installer;
+export module xlings.core.xim.installer;
 
 import std;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.executor;
 import mcpplibs.capi.lua;
-import xlings.xim.libxpkg.types.type;
-import xlings.xim.index;
-import xlings.xim.catalog;
-import xlings.xim.resolver;
-import xlings.xim.downloader;
-import xlings.log;
+import xlings.core.xim.libxpkg.types.type;
+import xlings.core.xim.index;
+import xlings.core.xim.catalog;
+import xlings.core.xim.resolver;
+import xlings.core.xim.downloader;
+import xlings.core.log;
 import xlings.platform;
-import xlings.config;
-import xlings.json;
-import xlings.common;
-import xlings.xself;
-import xlings.xvm.types;
-import xlings.xvm.db;
-import xlings.xvm.commands;
-import xlings.xim.libxpkg.types.script;
+import xlings.core.config;
+import xlings.libs.json;
+import xlings.core.common;
+import xlings.core.xself;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
+import xlings.core.xvm.commands;
+import xlings.core.xim.libxpkg.types.script;
 
 export namespace xlings::xim {
 

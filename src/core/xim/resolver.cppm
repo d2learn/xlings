@@ -1,11 +1,11 @@
-export module xlings.xim.resolver;
+export module xlings.core.xim.resolver;
 
 import std;
 import mcpplibs.xpkg;
-import xlings.xim.libxpkg.types.type;
-import xlings.xim.index;
-import xlings.xim.catalog;
-import xlings.log;
+import xlings.core.xim.libxpkg.types.type;
+import xlings.core.xim.index;
+import xlings.core.xim.catalog;
+import xlings.core.log;
 import xlings.platform;
 
 export namespace xlings::xim {

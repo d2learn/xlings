@@ -1,24 +1,24 @@
-export module xlings.xim.commands;
+export module xlings.core.xim.commands;
 
 import std;
-import xlings.xim.libxpkg.types.type;
+import xlings.core.xim.libxpkg.types.type;
 import mcpplibs.xpkg;
 import mcpplibs.xpkg.executor;
 import mcpplibs.xpkg.loader;
-import xlings.xim.catalog;
-import xlings.xim.repo;
-import xlings.xim.resolver;
-import xlings.xim.downloader;
-import xlings.xim.installer;
-import xlings.log;
-import xlings.config;
+import xlings.core.xim.catalog;
+import xlings.core.xim.repo;
+import xlings.core.xim.resolver;
+import xlings.core.xim.downloader;
+import xlings.core.xim.installer;
+import xlings.core.log;
+import xlings.core.config;
 import xlings.ui;
-import xlings.i18n;
+import xlings.core.i18n;
 import xlings.platform;
-import xlings.tinyhttps;
-import xlings.xvm.db;
-import xlings.xvm.commands;
-import xlings.profile;
+import xlings.libs.tinyhttps;
+import xlings.core.xvm.db;
+import xlings.core.xvm.commands;
+import xlings.core.profile;
 
 namespace xpkg = mcpplibs::xpkg;
 

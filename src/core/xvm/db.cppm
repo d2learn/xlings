@@ -1,9 +1,9 @@
-export module xlings.xvm.db;
+export module xlings.core.xvm.db;
 
 import std;
 
-import xlings.xvm.types;
-import xlings.json;
+import xlings.core.xvm.types;
+import xlings.libs.json;
 
 export namespace xlings::xvm {
 

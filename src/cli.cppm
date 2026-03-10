@@ -5,18 +5,18 @@ import std;
 import mcpplibs.cmdline;
 import mcpplibs.capi.lua;
 import mcpplibs.xpkg.executor;
-import xlings.config;
-import xlings.json;
-import xlings.log;
+import xlings.core.config;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.ui;
-import xlings.i18n;
+import xlings.core.i18n;
 import xlings.platform;
-import xlings.subos;
-import xlings.xself;
-import xlings.xim.commands;
-import xlings.xvm.types;
-import xlings.xvm.db;
-import xlings.xvm.commands;
+import xlings.core.subos;
+import xlings.core.xself;
+import xlings.core.xim.commands;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
+import xlings.core.xvm.commands;
 
 namespace lua = mcpplibs::capi::lua;
 

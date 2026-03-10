@@ -1,10 +1,10 @@
-export module xlings.xself:init;
+export module xlings.core.xself:init;
 
 import std;
 
-import xlings.config;
-import xlings.json;
-import xlings.log;
+import xlings.core.config;
+import xlings.libs.json;
+import xlings.core.log;
 import xlings.platform;
 
 namespace xlings::xself {

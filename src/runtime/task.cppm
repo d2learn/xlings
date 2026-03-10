@@ -1,10 +1,10 @@
-export module xlings.task;
+export module xlings.runtime:task;
 
 import std;
 
-import xlings.event;
-import xlings.event_stream;
-import xlings.capability;
+import :event;
+import :event_stream;
+import :capability;
 
 namespace xlings::task {
 

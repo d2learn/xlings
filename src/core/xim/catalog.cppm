@@ -1,13 +1,13 @@
-export module xlings.xim.catalog;
+export module xlings.core.xim.catalog;
 
 import std;
 import mcpplibs.xpkg;
 
-import xlings.config;
-import xlings.log;
-import xlings.xim.index;
-import xlings.xim.repo;
-import xlings.xim.libxpkg.types.type;
+import xlings.core.config;
+import xlings.core.log;
+import xlings.core.xim.index;
+import xlings.core.xim.repo;
+import xlings.core.xim.libxpkg.types.type;
 
 namespace xpkg = mcpplibs::xpkg;
 

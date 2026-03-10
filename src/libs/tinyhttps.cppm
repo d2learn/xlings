@@ -32,7 +32,7 @@ module;
 #include <cerrno>
 #endif
 
-export module xlings.tinyhttps;
+export module xlings.libs.tinyhttps;
 
 import std;
 
