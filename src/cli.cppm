@@ -488,13 +488,45 @@ export int run(int argc, char* argv[]) {
     // Build Capability Registry (for Agent/MCP use — CLI keeps direct dispatch)
     auto registry = capabilities::build_registry();
 
-    // Special: subos, self, script need raw argc/argv
-    if (argc >= 2) {
-        std::string cmd { argv[1] };
+    // Scan for global flags (--verbose, -v, --quiet, -q) anywhere in argv
+    // so they work regardless of position (e.g. `xlings --verbose subos new s1`)
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a { argv[i] };
+        if (a == "--verbose" || a == "-v") log::set_level(log::Level::Debug);
+        else if (a == "--quiet" || a == "-q") log::set_level(log::Level::Error);
+    }
 
+    // Build filtered argv without global flags for positional-arg handlers
+    // (subos, self, script parse argv[2]/argv[3] positionally)
+    std::vector<char*> fargv;
+    fargv.push_back(argv[0]);
+    for (int i = 1; i < argc; ++i) {
+        std::string_view a { argv[i] };
+        if (a == "--verbose" || a == "-v" || a == "--quiet" || a == "-q") continue;
+        fargv.push_back(argv[i]);
+    }
+    int fargc = static_cast<int>(fargv.size());
+
+    // Find the first non-flag argument as the command name
+    std::string cmd;
+    for (int i = 1; i < fargc; ++i) {
+        std::string_view a { fargv[i] };
+        if (!a.starts_with("-")) { cmd = std::string(a); break; }
+    }
+
+    // Special: subos, self, script need raw argc/argv
+    if (fargc >= 2) {
         // Handle -h/--help/--version before cmdline library to avoid
         // std::format width-specifier crash in GCC 15 C++23 modules.
-        if (cmd == "-h" || cmd == "--help") {
+        if (cmd == "-h" || cmd == "--help" || cmd.empty()) {
+            if (cmd.empty()) {
+                // Only flags, no command — check if -h was requested
+                for (int i = 1; i < fargc; ++i) {
+                    std::string_view a { fargv[i] };
+                    if (a == "-h" || a == "--help") { ui::print_help(Info::VERSION); return 0; }
+                    if (a == "--version") { std::println("xlings {}", Info::VERSION); return 0; }
+                }
+            }
             ui::print_help(Info::VERSION);
             return 0;
         }
@@ -505,8 +537,8 @@ export int run(int argc, char* argv[]) {
 
         // Intercept subcommand help: xlings <cmd> -h/--help
         bool wantsHelp = false;
-        for (int i = 2; i < argc; ++i) {
-            std::string_view a { argv[i] };
+        for (int i = 2; i < fargc; ++i) {
+            std::string_view a { fargv[i] };
             if (a == "-h" || a == "--help") { wantsHelp = true; break; }
         }
         if (wantsHelp) {
@@ -610,15 +642,15 @@ export int run(int argc, char* argv[]) {
             }
         }
 
-        if (cmd == "subos") return subos::run(argc, argv, stream);
-        if (cmd == "self") return xself::run(argc, argv, stream);
+        if (cmd == "subos") return subos::run(fargc, fargv.data(), stream);
+        if (cmd == "self") return xself::run(fargc, fargv.data(), stream);
         if (cmd == "script") {
-            if (argc < 3) {
+            if (fargc < 3) {
                 ui::print_usage("xlings script <script-file> [args...]");
                 return 1;
             }
             namespace fs = std::filesystem;
-            fs::path scriptFile = argv[2];
+            fs::path scriptFile = fargv[2];
             auto execResult = mcpplibs::xpkg::create_executor(scriptFile);
             if (!execResult) {
                 log::error("failed to load script: {}", execResult.error());
@@ -630,8 +662,8 @@ export int run(int argc, char* argv[]) {
             ctx.subos_sysrootdir = Config::paths().subosDir.string();
             ctx.run_dir = fs::current_path();
             ctx.xpkg_dir = Config::paths().dataDir / "xpkgs";
-            for (int i = 3; i < argc; ++i) {
-                ctx.args.emplace_back(argv[i]);
+            for (int i = 3; i < fargc; ++i) {
+                ctx.args.emplace_back(fargv[i]);
             }
             auto result = execResult->run_script(ctx);
             if (!result.success) {

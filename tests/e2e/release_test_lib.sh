@@ -8,6 +8,10 @@ FIXTURE_INDEX_DIR="$ROOT_DIR/tests/fixtures/xim-pkgindex"
 log()  { echo "[release-e2e] $*"; }
 fail() { echo "[release-e2e] FAIL: $*" >&2; exit 1; }
 
+strip_ansi() {
+  perl -pe 's/\e\[[0-9;]*[a-zA-Z]//g; s/\e\[\?[0-9]*[a-zA-Z]//g'
+}
+
 minimal_system_path() {
   case "$(uname -s)" in
     Darwin) printf '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin\n' ;;

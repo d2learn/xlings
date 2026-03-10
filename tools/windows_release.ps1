@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $PROJECT_DIR = (Resolve-Path "$SCRIPT_DIR\..").Path
 
-$VERSION = (Select-String -Path "$PROJECT_DIR\core\config.cppm" -Pattern 'VERSION = "([^"]*)"' |
+$VERSION = (Select-String -Path "$PROJECT_DIR\src\core\config.cppm" -Pattern 'VERSION = "([^"]*)"' |
   ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
 if (-not $VERSION) { $VERSION = "0.2.0" }
 

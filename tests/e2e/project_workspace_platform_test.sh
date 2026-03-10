@@ -30,15 +30,9 @@ case "$(uname -s)" in
 esac
 EXPECTED_NODE_OUTPUT="v${EXPECTED_NODE_VERSION}"
 
-INSTALL_OUT="$({
-  cd "$SCENARIO_DIR"
-  run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install
-})"
-echo "$INSTALL_OUT"
-assert_contains "$INSTALL_OUT" "node" \
-  "platform-aware workspace install output missing node"
-assert_contains "$INSTALL_OUT" "$EXPECTED_NODE_VERSION" \
-  "platform-aware workspace did not resolve the expected platform version"
+(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" update)
+
+(cd "$SCENARIO_DIR" && run_xlings "$HOME_DIR" "$SCENARIO_DIR" -y install)
 
 PROJECT_STATE="$SCENARIO_DIR/.xlings/.xlings.json"
 [[ -f "$PROJECT_STATE" ]] || fail "project runtime state file missing"

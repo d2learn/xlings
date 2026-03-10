@@ -71,7 +71,7 @@ sleep 1  # ensure mtime granularity
 
 log "Running xlings search gcc (should use cache)..."
 SEARCH_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search gcc 2>&1)"
-echo "$SEARCH_OUT" | grep -q "gcc" || fail "search did not find gcc"
+assert_contains "$SEARCH_OUT" "gcc" "search did not find gcc"
 
 MAIN_CACHE_MTIME_AFTER="$(stat -c %Y "$MAIN_CACHE" 2>/dev/null || stat -f %m "$MAIN_CACHE")"
 [[ "$MAIN_CACHE_MTIME_BEFORE" == "$MAIN_CACHE_MTIME_AFTER" ]] \
@@ -82,15 +82,14 @@ log "PASS: search used cache (mtime unchanged)"
 log "Running xlings search cachepkg..."
 SEARCH_SUB_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search cachepkg 2>&1)"
 echo "$SEARCH_SUB_OUT"
-echo "$SEARCH_SUB_OUT" | grep -q "cachepkg" \
-  || fail "search did not find cachepkg from sub-index"
+assert_contains "$SEARCH_SUB_OUT" "cachepkg" "search did not find cachepkg from sub-index"
 log "PASS: sub-index package found via cache"
 
 # ── 7. Delete cache, verify rebuild on next command ──
 rm -f "$MAIN_CACHE"
 log "Running xlings search gcc after cache delete..."
 SEARCH_OUT2="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search gcc 2>&1)"
-echo "$SEARCH_OUT2" | grep -q "gcc" || fail "search did not find gcc after cache delete"
+assert_contains "$SEARCH_OUT2" "gcc" "search did not find gcc after cache delete"
 [[ -f "$MAIN_CACHE" ]] || fail "cache was not rebuilt after deletion"
 log "PASS: cache rebuilt after deletion"
 
@@ -114,8 +113,7 @@ LUAEOF
 log "Running xlings search cachepkg2 (should trigger cache rebuild)..."
 SEARCH_NEW_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search cachepkg2 2>&1)"
 echo "$SEARCH_NEW_OUT"
-echo "$SEARCH_NEW_OUT" | grep -q "cachepkg2" \
-  || fail "search did not find cachepkg2 after sub-index update"
+assert_contains "$SEARCH_NEW_OUT" "cachepkg2" "search did not find cachepkg2 after sub-index update"
 
 SUB_CACHE_HASH_AFTER="$(grep -o '"repo_head_hash":"[^"]*"' "$SUB_CACHE" || true)"
 [[ "$SUB_CACHE_HASH_BEFORE" != "$SUB_CACHE_HASH_AFTER" ]] \

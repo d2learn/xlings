@@ -77,7 +77,7 @@ run_xlings() {
   local home_dir="$1"
   local workdir="$2"
   shift 2
-  env XLINGS_HOME="$home_dir" "$(find_xlings_bin)" "$@" 
+  env XLINGS_HOME="$home_dir" "$(find_xlings_bin)" --verbose "$@"
 }
 
 platform_name() {

@@ -50,8 +50,8 @@ log "Testing xlings script direct execution..."
 SCRIPT_PATH="$INSTALL_DIR/xpkg-helper.lua"
 SCRIPT_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" script "$SCRIPT_PATH" 2>&1)" || true
 echo "$SCRIPT_OUT"
-echo "$SCRIPT_OUT" | grep -q "XPackage Helper Tools" \
-  || fail "xlings script did not execute xpkg_main correctly"
+assert_contains "$SCRIPT_OUT" "XPackage Helper Tools" \
+  "xlings script did not execute xpkg_main correctly"
 
 # ── 9. Verify xpkg-helper can export itself via xlings script ──
 log "Testing xpkg-helper export (xpkg-helper xpkg-helper)..."
