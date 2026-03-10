@@ -15,7 +15,7 @@ add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.29")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
-add_requires("llmapi 0.2.1")
+add_requires("llmapi 0.2.2")
 
 -- C++23 main binary
 target("xlings")
