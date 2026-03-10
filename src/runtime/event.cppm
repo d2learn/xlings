@@ -1,4 +1,4 @@
-export module xlings.runtime:event;
+export module xlings.runtime.event;
 
 import std;
 

@@ -1,9 +1,9 @@
-export module xlings.runtime:capability;
+export module xlings.runtime.capability;
 
 import std;
 
-import :event;
-import :event_stream;
+import xlings.runtime.event;
+import xlings.runtime.event_stream;
 
 namespace xlings::capability {
 
