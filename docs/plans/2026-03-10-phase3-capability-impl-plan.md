@@ -1,7 +1,114 @@
+# Phase 3: Capability 真实实现
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** 将 xim/xvm/config 的核心命令包装为 Capability，通过 Registry 注册，使 Agent/MCP 前端可发现、可调用。
+
+**Architecture:** 每个 Capability 是一个薄包装层：定义 spec（name/schema/destructive）→ 解析 JSON params → 调用现有 cmd_* 函数 → 返回 JSON result。CLI 路径不变（保持直接调用），Registry 供 Agent/MCP 使用。一个 `capabilities.cppm` 模块集中所有实现 + `build_registry()` 工厂函数。
+
+**Tech Stack:** C++23 modules (.cppm), GCC 15, xmake, gtest 1.15.2, nlohmann/json
+
+---
+
+## 现有代码关键发现
+
+| 接口 | 签名 | 说明 |
+|------|------|------|
+| `Capability::execute` | `(Params json, EventStream&) -> Result json` | 输入输出都是 JSON string |
+| `xim::cmd_search` | `(string keyword, EventStream&) -> int` | 返回 exit code |
+| `xim::cmd_install` | `(span<string> targets, bool yes, bool noDeps, EventStream&, bool forceGlobal) -> int` | 最复杂的签名 |
+| `xim::cmd_remove` | `(string target, EventStream&) -> int` | |
+| `xim::cmd_update` | `(string target, EventStream&) -> int` | |
+| `xim::cmd_list` | `(string filter, EventStream&) -> int` | |
+| `xim::cmd_info` | `(string target, EventStream&) -> int` | |
+| `xvm::cmd_use` | `(string target, string version, EventStream&) -> int` | |
+| `xvm::cmd_list_versions` | `(string target, EventStream&) -> int` | |
+
+所有命令已通过 EventStream 发射事件（Phase 2 完成），Capability 只需包装参数解析和调用。
+
+---
+
+## Task 1: Capability 实现模块 + 测试骨架
+
+**Files:**
+- Create: `src/capabilities.cppm`
+- Modify: `tests/unit/test_main.cpp`
+
+**Step 1: 写测试**
+
+在 `tests/unit/test_main.cpp` 末尾追加：
+
+```cpp
+// ═══════════════════════════════════════════════════════════════
+//  Phase 3: Real Capability implementations
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Capabilities, BuildRegistryPopulatesAll) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+
+    // At least 8 capabilities registered
+    EXPECT_GE(specs.size(), 8);
+
+    // Verify key capabilities exist
+    EXPECT_NE(reg.get("search_packages"), nullptr);
+    EXPECT_NE(reg.get("install_packages"), nullptr);
+    EXPECT_NE(reg.get("remove_package"), nullptr);
+    EXPECT_NE(reg.get("update_packages"), nullptr);
+    EXPECT_NE(reg.get("list_packages"), nullptr);
+    EXPECT_NE(reg.get("package_info"), nullptr);
+    EXPECT_NE(reg.get("use_version"), nullptr);
+    EXPECT_NE(reg.get("system_status"), nullptr);
+}
+
+TEST(Capabilities, SpecsHaveRequiredFields) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+
+    for (auto& s : specs) {
+        EXPECT_FALSE(s.name.empty()) << "capability has empty name";
+        EXPECT_FALSE(s.description.empty()) << s.name << " has empty description";
+        EXPECT_FALSE(s.inputSchema.empty()) << s.name << " has empty inputSchema";
+    }
+}
+
+TEST(Capabilities, DestructiveFlags) {
+    auto reg = xlings::capabilities::build_registry();
+
+    // Non-destructive: search, list, info, status
+    EXPECT_FALSE(reg.get("search_packages")->spec().destructive);
+    EXPECT_FALSE(reg.get("list_packages")->spec().destructive);
+    EXPECT_FALSE(reg.get("package_info")->spec().destructive);
+    EXPECT_FALSE(reg.get("system_status")->spec().destructive);
+
+    // Destructive: install, remove, update, use
+    EXPECT_TRUE(reg.get("install_packages")->spec().destructive);
+    EXPECT_TRUE(reg.get("remove_package")->spec().destructive);
+    EXPECT_TRUE(reg.get("update_packages")->spec().destructive);
+    EXPECT_TRUE(reg.get("use_version")->spec().destructive);
+}
+```
+
+**Step 2: 运行测试确认失败**
+
+```bash
+xmake build xlings_tests 2>&1 | tail -5
+```
+
+Expected: 编译失败 — `xlings::capabilities` 不存在
+
+**Step 3: 实现 capabilities.cppm**
+
+创建 `src/capabilities.cppm`：
+
+```cpp
+module;
+
+#include <cstdio>
+
 export module xlings.capabilities;
 
 import std;
-import xlings.platform;
 import xlings.runtime.event;
 import xlings.runtime.event_stream;
 import xlings.runtime.capability;
@@ -9,9 +116,7 @@ import xlings.libs.json;
 import xlings.core.xim.commands;
 import xlings.core.xvm.commands;
 import xlings.core.config;
-import xlings.core.log;
 import xlings.platform;
-import xlings.agent.output_buffer;
 
 namespace xlings::capabilities {
 
@@ -20,15 +125,13 @@ using capability::CapabilitySpec;
 using capability::Params;
 using capability::Result;
 
+// ─── Helper: wrap exit code as JSON result ───
+
 Result exit_result(int code) {
     return nlohmann::json({{"exitCode", code}}).dump();
 }
 
-// Shared output buffer for RunCommand / ViewOutput / SearchContent
-agent::OutputBuffer& shared_output_buffer() {
-    static agent::OutputBuffer buf;
-    return buf;
-}
+// ─── xim capabilities ───
 
 class SearchPackages : public Capability {
 public:
@@ -140,6 +243,8 @@ public:
     }
 };
 
+// ─── xvm capabilities ───
+
 class UseVersion : public Capability {
 public:
     auto spec() const -> CapabilitySpec override {
@@ -161,6 +266,8 @@ public:
         return exit_result(xvm::cmd_use(target, version, stream));
     }
 };
+
+// ─── System capabilities ───
 
 class SystemStatus : public Capability {
 public:
@@ -198,159 +305,7 @@ public:
     }
 };
 
-// ─── Phase 4: Agent Extension Tools ───
-
-class SetLogLevel : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "set_log_level",
-            .description = "Switch log verbosity: debug, info, warn, error",
-            .inputSchema = R"({"type":"object","properties":{"level":{"type":"string","enum":["debug","info","warn","error"]}},"required":["level"]})",
-            .outputSchema = R"({"type":"object","properties":{"success":{"type":"boolean"},"level":{"type":"string"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto level = json.value("level", "info");
-        log::set_level(level);
-        return nlohmann::json({{"success", true}, {"level", level}}).dump();
-    }
-};
-
-class RunCommand : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "run_command",
-            .description = "Execute a shell command and capture stdout/stderr as text",
-            .inputSchema = R"({"type":"object","properties":{"command":{"type":"string"},"timeout_ms":{"type":"integer","default":30000}},"required":["command"]})",
-            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"},"stdout":{"type":"string"},"stderr":{"type":"string"}}})",
-            .destructive = true,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto command = json.value("command", "");
-        if (command.empty()) {
-            return nlohmann::json({{"error", "empty command"}}).dump();
-        }
-
-        auto [exit_code, output] = xlings::platform::run_command_capture(command);
-
-        // Store in shared output buffer
-        shared_output_buffer().set(output);
-
-        // Truncate for LLM if too long
-        constexpr std::size_t MAX_OUTPUT = 8000;
-        bool truncated = false;
-        std::string display_output = output;
-        if (display_output.size() > MAX_OUTPUT) {
-            display_output = display_output.substr(0, MAX_OUTPUT);
-            truncated = true;
-        }
-
-        nlohmann::json result;
-        result["exitCode"] = exit_code;
-        result["stdout"] = std::move(display_output);
-        if (truncated) {
-            result["truncated"] = true;
-            result["totalLines"] = shared_output_buffer().line_count();
-            result["hint"] = "Output truncated. Use view_output to see specific line ranges.";
-        }
-        return result.dump();
-    }
-};
-
-class ViewOutput : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "view_output",
-            .description = "View a range of lines from the last command output",
-            .inputSchema = R"({"type":"object","properties":{"start_line":{"type":"integer","default":1},"end_line":{"type":"integer","default":50},"search":{"type":"string","description":"Optional: filter lines containing this text"}}})",
-            .outputSchema = R"({"type":"object","properties":{"content":{"type":"string"},"totalLines":{"type":"integer"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto& buf = shared_output_buffer();
-        auto total = buf.line_count();
-
-        nlohmann::json result;
-        result["totalLines"] = total;
-
-        if (json.contains("search") && json["search"].is_string()) {
-            auto pattern = json["search"].get<std::string>();
-            int max_results = json.value("max_results", 20);
-            result["content"] = buf.search(pattern, max_results);
-            result["filter"] = pattern;
-        } else {
-            int start = json.value("start_line", 1);
-            int end = json.value("end_line", 50);
-            result["content"] = buf.lines(start, end);
-            result["range"] = std::format("{}-{}", start, end);
-        }
-        return result.dump();
-    }
-};
-
-class SearchContent : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "search_content",
-            .description = "Search for text patterns in files or last command output",
-            .inputSchema = R"JSON({"type":"object","properties":{"pattern":{"type":"string"},"source":{"type":"string","enum":["last_output","file"],"default":"last_output"},"path":{"type":"string","description":"File path when source is file"},"max_results":{"type":"integer","default":20}},"required":["pattern"]})JSON",
-            .outputSchema = R"({"type":"object","properties":{"matches":{"type":"string"},"count":{"type":"integer"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto pattern = json.value("pattern", "");
-        auto source = json.value("source", "last_output");
-        int max_results = json.value("max_results", 20);
-
-        nlohmann::json result;
-
-        if (source == "file") {
-            auto path = json.value("path", "");
-            if (path.empty()) {
-                return nlohmann::json({{"error", "path required when source=file"}}).dump();
-            }
-            std::ifstream file(path);
-            if (!file) {
-                return nlohmann::json({{"error", "cannot open file: " + path}}).dump();
-            }
-            std::string matches;
-            int count = 0;
-            std::string line;
-            int line_num = 0;
-            while (std::getline(file, line) && count < max_results) {
-                ++line_num;
-                if (line.find(pattern) != std::string::npos) {
-                    matches += std::to_string(line_num) + ": " + line + "\n";
-                    ++count;
-                }
-            }
-            result["matches"] = std::move(matches);
-            result["count"] = count;
-        } else {
-            // Search last output buffer
-            auto matches = shared_output_buffer().search(pattern, max_results);
-            int count = 0;
-            for (char c : matches) {
-                if (c == '\n') ++count;
-            }
-            result["matches"] = std::move(matches);
-            result["count"] = count;
-        }
-        return result.dump();
-    }
-};
+// ─── Registry factory ───
 
 export capability::Registry build_registry() {
     capability::Registry reg;
@@ -362,12 +317,141 @@ export capability::Registry build_registry() {
     reg.register_capability(std::make_unique<PackageInfo>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
-    // Agent extension tools
-    reg.register_capability(std::make_unique<SetLogLevel>());
-    reg.register_capability(std::make_unique<RunCommand>());
-    reg.register_capability(std::make_unique<ViewOutput>());
-    reg.register_capability(std::make_unique<SearchContent>());
     return reg;
 }
 
 } // namespace xlings::capabilities
+```
+
+**Step 4: 运行测试确认通过**
+
+```bash
+rm -rf build && xmake build xlings_tests && xmake run xlings_tests --gtest_filter="Capabilities.*"
+```
+
+Expected: 3 tests PASS
+
+**Step 5: 提交**
+
+```bash
+git add src/capabilities.cppm tests/unit/test_main.cpp
+git commit -m "feat: implement real Capability wrappers for all xim/xvm commands"
+```
+
+---
+
+## Task 2: CLI 注册 Registry + Agent 入口准备
+
+**Files:**
+- Modify: `src/cli.cppm`
+- Modify: `tests/unit/test_main.cpp`
+
+**Step 1: 写测试**
+
+```cpp
+TEST(Capabilities, RegistryListAllSpecs) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+
+    // Each spec should have valid JSON schema
+    for (auto& s : specs) {
+        auto parsed = nlohmann::json::parse(s.inputSchema, nullptr, false);
+        EXPECT_FALSE(parsed.is_discarded()) << s.name << " has invalid inputSchema";
+    }
+}
+
+TEST(Capabilities, SearchExecuteWithMockStream) {
+    // Test that execute() correctly parses params and calls through
+    // This test only validates the JSON round-trip, not the actual search
+    // (which requires package index to be loaded)
+    auto reg = xlings::capabilities::build_registry();
+    auto* cap = reg.get("search_packages");
+    ASSERT_NE(cap, nullptr);
+
+    auto s = cap->spec();
+    EXPECT_EQ(s.name, "search_packages");
+
+    // Verify inputSchema parses as valid JSON
+    auto schema = nlohmann::json::parse(s.inputSchema);
+    EXPECT_TRUE(schema.contains("required"));
+    EXPECT_EQ(schema["required"][0], "keyword");
+}
+```
+
+**Step 2: 在 cli.cppm 创建 Registry**
+
+在 `run()` 函数开头，创建 Registry 并保存引用（供未来 Agent 子命令使用）：
+
+```cpp
+// In run() after EventStream setup:
+auto registry = capabilities::build_registry();
+```
+
+新增 `import xlings.capabilities;` 到 cli.cppm 的导入列表。
+
+**Step 3: 运行全部测试**
+
+```bash
+rm -rf build && xmake build xlings_tests && xmake run xlings_tests
+```
+
+Expected: 所有 139 + 5 新测试 PASS
+
+**Step 4: 构建主二进制验证**
+
+```bash
+xmake build xlings
+```
+
+Expected: 编译成功
+
+**Step 5: 提交**
+
+```bash
+git add src/cli.cppm tests/unit/test_main.cpp
+git commit -m "feat: register Capability Registry in CLI, add schema validation tests"
+```
+
+---
+
+## Task 3: 验证全部测试 + 手动验证
+
+**Step 1: 运行全部单元测试**
+
+```bash
+xmake run xlings_tests
+```
+
+Expected: 全部 PASS
+
+**Step 2: 手动验证 CLI 功能不受影响**
+
+```bash
+./build/linux/x86_64/release/xlings search node
+./build/linux/x86_64/release/xlings list
+./build/linux/x86_64/release/xlings info node
+./build/linux/x86_64/release/xlings --version
+```
+
+Expected: 所有命令正常工作，UI 不变
+
+**Step 3: 提交（如有修复）**
+
+---
+
+## 设计决策说明
+
+### 为什么 CLI 保持直接调用？
+
+CLI → xim::cmd_search (直接) 比 CLI → Registry → Capability → xim::cmd_search (间接) 少一层。CLI 路径是高频使用，保持直接调用避免不必要的 JSON 序列化开销。
+
+### 为什么 Capability 是薄包装？
+
+业务逻辑已在 cmd_* 函数中，且已解耦到 EventStream。Capability 只做：
+1. 定义 JSON Schema（供 Agent/MCP 发现）
+2. JSON params ↔ 函数参数转换
+3. exit code → JSON result 转换
+
+### 为什么一个文件？
+
+~8 个 Capability，每个 ~25 行。放一个文件清晰且避免 GCC 模块分区 ICE 风险。

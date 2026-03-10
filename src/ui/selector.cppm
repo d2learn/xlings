@@ -118,6 +118,100 @@ select_package(std::span<const std::pair<std::string, std::string>> items) {
     return std::nullopt;
 }
 
+// Generic option selector with title + description pairs (fullscreen, centered)
+// Returns selected index or nullopt if cancelled
+// default_idx: pre-selected item index (-1 for first)
+std::optional<int>
+select_option(std::string_view title,
+              std::span<const std::pair<std::string, std::string>> items,
+              std::string_view done_label = "",
+              int default_idx = 0) {
+    using namespace ftxui;
+
+    if (items.empty()) return std::nullopt;
+
+    int selected = (default_idx >= 0 && default_idx < static_cast<int>(items.size()))
+        ? default_idx : 0;
+    bool confirmed { false };
+
+    // Build labels: "name   description"
+    std::vector<std::string> labels;
+    labels.reserve(items.size() + (done_label.empty() ? 0 : 1));
+    for (auto& [name, desc] : items) {
+        std::string padded = name;
+        while (padded.size() < 24) padded += ' ';
+        labels.push_back(padded + desc);
+    }
+    if (!done_label.empty()) {
+        labels.push_back(std::string(done_label));
+    }
+
+    MenuOption menu_opt;
+    menu_opt.entries_option.transform = [](const EntryState& state) {
+        auto e = text((state.focused ? "> " : "  ") + state.label);
+        if (state.focused) {
+            e = e | bold | inverted;
+        } else {
+            e = e | color(theme::text_color());
+        }
+        return e;
+    };
+    auto menu = Menu(&labels, &selected, menu_opt);
+    auto screen = ScreenInteractive::Fullscreen();
+
+    auto component = CatchEvent(menu, [&](Event event) {
+        if (event == Event::Return) {
+            confirmed = true;
+            screen.Exit();
+            return true;
+        }
+        if (event == Event::Escape || event == Event::Character('q')) {
+            screen.Exit();
+            return true;
+        }
+        return false;
+    });
+
+    screen.Loop(Renderer(component, [&] {
+        auto box = vbox({
+            text(" " + std::string(title)) | theme::title(),
+            separator() | color(theme::border_color()),
+            component->Render() | vscroll_indicator | frame
+                | size(HEIGHT, LESS_THAN, 15),
+            separator() | color(theme::border_color()),
+            text(" \u2191\u2193 navigate  Enter select  Esc cancel") | theme::hint(),
+        }) | borderRounded | color(theme::border_color())
+           | size(WIDTH, LESS_THAN, 72);
+
+        return box | center;
+    }));
+
+    if (!confirmed) return std::nullopt;
+
+    // "done" item selected
+    if (!done_label.empty() && selected == static_cast<int>(items.size())) {
+        return -1; // sentinel for "done"
+    }
+
+    if (selected >= 0 && selected < static_cast<int>(items.size())) {
+        return selected;
+    }
+    return std::nullopt;
+}
+
+// Read a line from stdin with ANSI-colored prompt
+std::string read_line(std::string_view prompt) {
+    std::print("\033[38;2;34;211;238m  {} \033[0m", prompt);
+    std::cout.flush();
+    std::string line;
+    std::getline(std::cin, line);
+    while (!line.empty() && (line.back() == ' ' || line.back() == '\n' || line.back() == '\r'))
+        line.pop_back();
+    while (!line.empty() && line.front() == ' ')
+        line.erase(line.begin());
+    return line;
+}
+
 // Simple yes/no confirmation with styled prompt
 bool confirm(std::string_view message, bool defaultYes) {
     std::string prompt = defaultYes ? "[Y/n] " : "[y/N] ";

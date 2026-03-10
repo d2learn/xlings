@@ -10,7 +10,14 @@ export using EventConsumer = std::function<void(const Event&)>;
 
 export class EventStream {
 private:
-    std::vector<EventConsumer> consumers_;
+    struct ListenerEntry {
+        int id;
+        EventConsumer consumer;
+        bool enabled;
+    };
+    std::vector<ListenerEntry> consumers_;
+    int next_id_ {0};
+
     std::mutex promptMutex_;
     std::condition_variable promptCv_;
     std::unordered_map<std::string, std::string> promptResponses_;
@@ -25,13 +32,28 @@ public:
 
     // Thread safety: register all consumers before emitting from other threads.
     // on_event() and emit() are not synchronized — call on_event() during setup only.
-    void on_event(EventConsumer consumer) {
-        consumers_.push_back(std::move(consumer));
+    auto on_event(EventConsumer consumer) -> int {
+        int id = next_id_++;
+        consumers_.push_back({id, std::move(consumer), true});
+        return id;
+    }
+
+    void remove_listener(int id) {
+        std::erase_if(consumers_, [id](const ListenerEntry& e) { return e.id == id; });
+    }
+
+    void set_enabled(int id, bool enabled) {
+        for (auto& entry : consumers_) {
+            if (entry.id == id) {
+                entry.enabled = enabled;
+                return;
+            }
+        }
     }
 
     void emit(Event event) {
-        for (auto& consumer : consumers_) {
-            consumer(event);
+        for (auto& entry : consumers_) {
+            if (entry.enabled) entry.consumer(event);
         }
     }
 

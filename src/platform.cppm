@@ -29,6 +29,8 @@ namespace platform {
     export using platform_impl::println;
     export using platform_impl::init_console_output;
     export using platform_impl::supports_rewrite_output;
+    export using platform_impl::get_pid;
+    export using platform_impl::is_process_alive;
 
     export [[nodiscard]] std::string get_rundir() {
         return gRundir;

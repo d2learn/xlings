@@ -43,7 +43,8 @@ struct HelpArg {
 void print_subcommand_help(std::string_view name,
                            std::string_view description,
                            std::span<const HelpArg> args,
-                           std::span<const HelpOpt> opts) {
+                           std::span<const HelpOpt> opts,
+                           std::span<const HelpOpt> subcmds = {}) {
     using namespace ftxui;
 
     Elements rows;
@@ -67,6 +68,7 @@ void print_subcommand_help(std::string_view name,
     rows.push_back(text("  USAGE") | bold | color(theme::text_color()));
     {
         std::string usage = "    xlings " + std::string(name);
+        if (!subcmds.empty()) usage += " [SUBCOMMAND]";
         if (!opts.empty()) usage += " [OPTIONS]";
         for (auto& a : args) {
             if (a.required)
@@ -77,6 +79,19 @@ void print_subcommand_help(std::string_view name,
         rows.push_back(text(usage) | color(theme::dim_color()));
     }
     rows.push_back(text(""));
+
+    // SUBCOMMANDS
+    if (!subcmds.empty()) {
+        rows.push_back(text("  SUBCOMMANDS") | bold | color(theme::text_color()));
+        for (auto& s : subcmds) {
+            rows.push_back(hbox({
+                text("    "),
+                text(pad_to(s.flag, 24)) | bold | color(theme::magenta()),
+                text("  " + s.desc) | color(theme::text_color()),
+            }));
+        }
+        rows.push_back(text(""));
+    }
 
     // ARGS
     bool hasArgs = false;
@@ -151,6 +166,7 @@ void print_help(std::string_view version) {
         {"subos",    "Manage sub-OS environments"},
         {"self",     "Manage xlings itself (install, update, clean)"},
         {"script",   "Run xlings scripts"},
+        {"agent",    "AI agent for interactive package management"},
     };
     for (auto& cmd : cmds) {
         rows.push_back(hbox({

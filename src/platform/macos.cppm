@@ -7,6 +7,7 @@ module;
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <signal.h>
 #endif
 
 export module xlings.platform:macos;
@@ -99,6 +100,16 @@ namespace platform_impl {
 
     export inline void println(const std::string& msg) {
         std::println("{}", msg);
+    }
+
+    export int get_pid() {
+        return static_cast<int>(::getpid());
+    }
+
+    export bool is_process_alive(int pid) {
+        if (pid <= 0) return false;
+        // kill(pid, 0) checks process existence without sending a signal
+        return ::kill(pid, 0) == 0;
     }
 
 } // namespace platform_impl

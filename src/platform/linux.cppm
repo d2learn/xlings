@@ -96,6 +96,17 @@ namespace platform_impl {
         std::println("{}", msg);
     }
 
+    export int get_pid() {
+        return static_cast<int>(::getpid());
+    }
+
+    export bool is_process_alive(int pid) {
+        if (pid <= 0) return false;
+        // Check /proc/<pid> existence
+        auto proc_path = std::filesystem::path("/proc") / std::to_string(pid);
+        return std::filesystem::exists(proc_path);
+    }
+
 } // namespace platform_impl
 }
 
