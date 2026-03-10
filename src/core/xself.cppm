@@ -11,7 +11,6 @@ import xlings.core.log;
 import xlings.platform;
 import xlings.core.profile;
 import xlings.runtime;
-import xlings.ui;
 import xlings.core.utils;
 
 namespace xlings::xself {
@@ -52,33 +51,38 @@ static int cmd_update() {
 
 static int cmd_config(EventStream& stream) {
     auto& p = Config::paths();
-    std::vector<ui::InfoField> fields;
-    fields.push_back({"XLINGS_HOME", p.homeDir.string()});
-    fields.push_back({"XLINGS_DATA", p.dataDir.string()});
-    fields.push_back({"XLINGS_SUBOS", p.subosDir.string()});
-    fields.push_back({"active subos", p.activeSubos, true});
-    fields.push_back({"bin", p.binDir.string()});
+    nlohmann::json fieldsJson = nlohmann::json::array();
+    auto addField = [&](const std::string& label, const std::string& value, bool hl = false) {
+        fieldsJson.push_back({{"label", label}, {"value", value}, {"highlight", hl}});
+    };
+    addField("XLINGS_HOME", p.homeDir.string());
+    addField("XLINGS_DATA", p.dataDir.string());
+    addField("XLINGS_SUBOS", p.subosDir.string());
+    addField("active subos", p.activeSubos, true);
+    addField("bin", p.binDir.string());
 
     auto mirror = Config::mirror();
-    if (!mirror.empty()) fields.push_back({"mirror", mirror});
+    if (!mirror.empty()) addField("mirror", mirror);
     auto lang = Config::lang();
-    if (!lang.empty()) fields.push_back({"lang", lang});
+    if (!lang.empty()) addField("lang", lang);
 
-    // Index repos
     auto& repos = Config::global_index_repos();
     for (auto& repo : repos) {
-        fields.push_back({"index-repo", repo.name + " : " + repo.url});
+        addField("index-repo", repo.name + " : " + repo.url);
     }
 
     if (Config::has_project_config()) {
-        fields.push_back({"project data", Config::project_data_dir().string()});
+        addField("project data", Config::project_data_dir().string());
         auto& projectRepos = Config::project_index_repos();
         for (auto& repo : projectRepos) {
-            fields.push_back({"project repo", repo.name + " : " + repo.url});
+            addField("project repo", repo.name + " : " + repo.url);
         }
     }
 
-    ui::print_info_panel("xlings config", fields);
+    nlohmann::json payload;
+    payload["title"] = "xlings config";
+    payload["fields"] = std::move(fieldsJson);
+    stream.emit(DataEvent{"info_panel", payload.dump()});
     return 0;
 }
 
@@ -176,15 +180,19 @@ static int cmd_migrate() {
 }
 
 static int cmd_help(EventStream& stream) {
-    ui::HelpOpt opts[] = {
-        {"install",  "Install xlings from release package"},
-        {"init",     "Create home/data/subos dirs"},
-        {"update",   "Update index + install latest xlings"},
-        {"config",   "Show configuration details"},
-        {"clean",    "Remove cache + gc orphaned packages (--dry-run)"},
-        {"migrate",  "Migrate old layout to subos/default"},
-    };
-    ui::print_subcommand_help("self", "Manage xlings itself", {}, opts);
+    nlohmann::json payload;
+    payload["name"] = "self";
+    payload["description"] = "Manage xlings itself";
+    payload["args"] = nlohmann::json::array();
+    payload["opts"] = nlohmann::json::array({
+        {{"name", "install"},  {"desc", "Install xlings from release package"}},
+        {{"name", "init"},     {"desc", "Create home/data/subos dirs"}},
+        {{"name", "update"},   {"desc", "Update index + install latest xlings"}},
+        {{"name", "config"},   {"desc", "Show configuration details"}},
+        {{"name", "clean"},    {"desc", "Remove cache + gc orphaned packages (--dry-run)"}},
+        {{"name", "migrate"},  {"desc", "Migrate old layout to subos/default"}},
+    });
+    stream.emit(DataEvent{"help", payload.dump()});
     return 0;
 }
 
