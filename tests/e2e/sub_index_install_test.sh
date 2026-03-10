@@ -100,15 +100,16 @@ SUB_REPO_SYNCED="$HOME_DIR/data/xim-index-repos/xim-pkgindex-testd2x-install"
 log "Searching for d2testpkg..."
 SEARCH_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search d2testpkg 2>&1)"
 echo "$SEARCH_OUT"
-echo "$SEARCH_OUT" | grep -q "d2testpkg" \
-  || fail "search did not find d2testpkg"
+assert_contains "$SEARCH_OUT" "d2testpkg" "search did not find d2testpkg"
 
 # ── 7. Install with explicit namespace (testd2x:d2testpkg) ──
+# NOTE: The package URL (example.com) is unreachable, so actual download fails.
+# We only verify the resolver found & attempted the package (name in output).
 log "Installing testd2x:d2testpkg..."
 INSTALL_NS_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" install testd2x:d2testpkg -y 2>&1)" || true
 echo "$INSTALL_NS_OUT"
-echo "$INSTALL_NS_OUT" | grep -q "d2testpkg" \
-  || fail "install testd2x:d2testpkg did not resolve package"
+assert_contains "$INSTALL_NS_OUT" "d2testpkg" \
+  "install testd2x:d2testpkg did not resolve package"
 
 # ── 8. Clean up installed package for next test ──
 rm -rf "$HOME_DIR/data/xpkgs/testd2x-x-d2testpkg"
@@ -117,7 +118,7 @@ rm -rf "$HOME_DIR/data/xpkgs/testd2x-x-d2testpkg"
 log "Installing d2testpkg (bare name)..."
 INSTALL_BARE_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" install d2testpkg -y 2>&1)" || true
 echo "$INSTALL_BARE_OUT"
-echo "$INSTALL_BARE_OUT" | grep -q "d2testpkg" \
-  || fail "install d2testpkg (bare name) did not resolve package - sub-repo packages should be resolvable by bare name"
+assert_contains "$INSTALL_BARE_OUT" "d2testpkg" \
+  "install d2testpkg (bare name) did not resolve package - sub-repo packages should be resolvable by bare name"
 
 log "PASS: sub-index repo install (namespace + bare name)"

@@ -114,30 +114,25 @@ grep -q '"testbuild"' "$JSON_FILE" || fail "testbuild not in xim-indexrepos.json
 log "Running xlings search testpkg-d2x..."
 SEARCH_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search testpkg-d2x 2>&1)"
 echo "$SEARCH_OUT"
-echo "$SEARCH_OUT" | grep -q "testpkg-d2x" \
-  || fail "search did not find testpkg-d2x"
-echo "$SEARCH_OUT" | grep -q "testd2x" \
-  || fail "search result missing testd2x namespace"
+assert_contains "$SEARCH_OUT" "testpkg-d2x" "search did not find testpkg-d2x"
+assert_contains "$SEARCH_OUT" "testd2x" "search result missing testd2x namespace"
 
 # ── 9. Search by namespace prefix ──
 log "Running xlings search testpkg..."
 SEARCH_NS_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search testpkg 2>&1)"
 echo "$SEARCH_NS_OUT"
-echo "$SEARCH_NS_OUT" | grep -q "testd2x:testpkg-d2x" \
-  || fail "namespace search did not find testd2x:testpkg-d2x"
+assert_contains "$SEARCH_NS_OUT" "testd2x:testpkg-d2x" "namespace search did not find testd2x:testpkg-d2x"
 
 # ── 10. Search for pkgindex-build package ──
 log "Running xlings search buildpkg..."
 SEARCH_BUILD_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" search buildpkg 2>&1)"
 echo "$SEARCH_BUILD_OUT"
-echo "$SEARCH_BUILD_OUT" | grep -q "testbuild:buildpkg" \
-  || fail "search did not find testbuild:buildpkg"
+assert_contains "$SEARCH_BUILD_OUT" "testbuild:buildpkg" "search did not find testbuild:buildpkg"
 
 # ── 11. Verify built package has xpm versions (info shows "latest") ──
 log "Running xlings info testbuild:buildpkg..."
 INFO_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" info testbuild:buildpkg 2>&1)" || true
 echo "$INFO_OUT"
-echo "$INFO_OUT" | grep -q "latest" \
-  || fail "info for testbuild:buildpkg should show 'latest' version"
+assert_contains "$INFO_OUT" "latest" "info for testbuild:buildpkg should show 'latest' version"
 
 log "PASS: sub-index repo search + pkgindex-build"

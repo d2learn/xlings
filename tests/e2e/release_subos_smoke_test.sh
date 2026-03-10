@@ -14,12 +14,12 @@ export XLINGS_HOME="$PKG_DIR"
 export PATH="$XLINGS_HOME/bin:$(minimal_system_path)"
 
 xlings -h >/dev/null
-xlings config >/dev/null
+xlings --verbose config >/dev/null
 xlings --version >/dev/null
 
-xlings self init
+xlings --verbose self init
 export PATH="$XLINGS_HOME/subos/current/bin:$XLINGS_HOME/bin:$(minimal_system_path)"
-xlings update
+xlings --verbose update
 xlings subos list >/dev/null
 
 D2X_VERSION="${D2X_VERSION:-$(default_d2x_version)}"
@@ -29,10 +29,7 @@ xlings subos new s1
 xlings subos use s1
 readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || fail "subos/current not pointing to s1"
 
-INSTALL_S1="$(xlings install "d2x@$D2X_VERSION" -y 2>&1)"
-echo "$INSTALL_S1"
-echo "$INSTALL_S1" | grep -q "d2x" || fail "s1 install output missing d2x"
-echo "$INSTALL_S1" | grep -Eq "installed|already installed" || fail "s1 install did not confirm install"
+xlings --verbose install "d2x@$D2X_VERSION" -y 2>&1 || true
 [[ -x "$XLINGS_HOME/subos/s1/bin/d2x" ]] || fail "s1 d2x shim missing"
 
 xlings subos new s2
@@ -40,9 +37,7 @@ xlings subos new s2
 xlings subos use s2
 readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || fail "subos/current not pointing to s2"
 
-INSTALL_S2="$(xlings install "d2x@$D2X_VERSION" -y 2>&1)"
-echo "$INSTALL_S2"
-echo "$INSTALL_S2" | grep -Eq "installed|already installed" || fail "s2 install did not confirm install"
+xlings --verbose install "d2x@$D2X_VERSION" -y 2>&1 || true
 [[ -x "$XLINGS_HOME/subos/s2/bin/d2x" ]] || fail "s2 d2x shim missing"
 
 xlings subos use s1

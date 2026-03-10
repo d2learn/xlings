@@ -1,0 +1,107 @@
+module;
+
+#include <cstdio>
+#include <cstdlib>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+export module xlings.platform:macos;
+
+#if defined(__APPLE__)
+
+import std;
+
+namespace xlings {
+namespace platform_impl {
+
+    export constexpr char PATH_SEPARATOR = ':';
+    export constexpr std::string_view OS_NAME = "macosx";
+
+    export std::filesystem::path get_executable_path() {
+        char buf[4096];
+        uint32_t size = sizeof(buf);
+        if (::_NSGetExecutablePath(buf, &size) != 0) return {};
+        char real[4096];
+        if (::realpath(buf, real) == nullptr) return std::filesystem::path(buf);
+        return std::filesystem::path(real);
+    }
+
+    export std::pair<int, std::string> run_command_capture(const std::string& cmd) {
+        std::string full = cmd + " 2>&1";
+        FILE* pipe = ::popen(full.c_str(), "r");
+        if (!pipe) {
+            return {-1, std::string{}};
+        }
+        std::string output;
+        std::array<char, 256> buffer{};
+        while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+            output += buffer.data();
+        }
+        int status = ::pclose(pipe);
+        return {status, output};
+    }
+
+    export void clear_console() {
+        std::system("clear");
+    }
+
+    export std::string get_home_dir() {
+        if (const char* home = std::getenv("HOME")) return home;
+        return ".";
+    }
+
+    export void set_env_variable(const std::string& key, const std::string& value) {
+        ::setenv(key.c_str(), value.c_str(), 1);
+    }
+
+    export void make_files_executable(const std::filesystem::path& dir) {
+        if (!std::filesystem::exists(dir)) return;
+        for (auto it = std::filesystem::directory_iterator(dir); it != std::default_sentinel; ++it) {
+            if (it->is_regular_file())
+                ::chmod(it->path().c_str(), 0755);
+        }
+        std::string cmd = "xattr -cr \"" + dir.string() + "\" 2>/dev/null";
+        std::system(cmd.c_str());
+    }
+
+    export bool create_directory_link(const std::filesystem::path& link,
+                                      const std::filesystem::path& target) {
+        std::error_code ec;
+        if (std::filesystem::is_symlink(link)) {
+            std::filesystem::remove(link, ec);
+        } else if (std::filesystem::exists(link)) {
+            std::filesystem::remove_all(link, ec);
+        }
+        auto linkTarget = target;
+        auto rel = std::filesystem::relative(target, link.parent_path(), ec);
+        if (!ec && !rel.empty()) linkTarget = rel;
+        ec.clear();
+        std::filesystem::create_directory_symlink(linkTarget, link, ec);
+        return !static_cast<bool>(ec);
+    }
+
+    // No-op on macOS — terminal generally supports ANSI natively.
+    export void init_console_output() {}
+
+    // Check if stdout is a TTY (supports cursor save/restore).
+    export bool supports_rewrite_output() {
+        return ::isatty(STDOUT_FILENO) != 0;
+    }
+
+    export template<typename... Args>
+    void println(std::format_string<Args...> fmt, Args&&... args) {
+        std::println(fmt, std::forward<Args>(args)...);
+    }
+
+    export inline void println(const std::string& msg) {
+        std::println("{}", msg);
+    }
+
+} // namespace platform_impl
+}
+
+#endif // defined(__APPLE__)

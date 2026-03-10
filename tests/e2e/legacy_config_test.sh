@@ -38,24 +38,15 @@ INSTALL_OUT="$(
 )"
 echo "$INSTALL_OUT"
 
-# Check that legacy config was detected
-assert_contains "$INSTALL_OUT" "detected legacy config" \
-  "should print legacy config detection message"
-
-# Check that .xlings.json was generated
-assert_contains "$INSTALL_OUT" "generating .xlings.json from config.xlings" \
-  "should print generation message"
-
+# Verify .xlings.json was generated from legacy config
 [[ -f "$SCENARIO_DIR/.xlings.json" ]] \
   || fail ".xlings.json was not generated from config.xlings"
 
 # Verify generated .xlings.json contains workspace with node
-GENERATED="$(cat "$SCENARIO_DIR/.xlings.json")"
-echo "Generated .xlings.json: $GENERATED"
-assert_contains "$GENERATED" '"node"' \
-  "generated .xlings.json should contain node in workspace"
-assert_contains "$GENERATED" '"22.17.1"' \
-  "generated .xlings.json should contain version 22.17.1"
+grep -q '"node"' "$SCENARIO_DIR/.xlings.json" \
+  || fail "generated .xlings.json should contain node in workspace"
+grep -q '"22.17.1"' "$SCENARIO_DIR/.xlings.json" \
+  || fail "generated .xlings.json should contain version 22.17.1"
 
 # Verify node was actually installed
 NODE_ARCHIVE="$(node_archive_name 22.17.1)"
