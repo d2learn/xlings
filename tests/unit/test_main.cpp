@@ -1965,11 +1965,11 @@ TEST(LogTest, LevelFiltering) {
 
 TEST(Event, ProgressEventConstruction) {
     xlings::ProgressEvent e{
-        .phase = xlings::Phase::downloading,
+        .phase = "downloading",
         .percent = 0.5f,
         .message = "Downloading gcc-15..."
     };
-    EXPECT_EQ(e.phase, xlings::Phase::downloading);
+    EXPECT_EQ(e.phase, "downloading");
     EXPECT_FLOAT_EQ(e.percent, 0.5f);
     EXPECT_EQ(e.message, "Downloading gcc-15...");
 }
@@ -2021,7 +2021,7 @@ TEST(EventStream, EmitAndConsume) {
     });
 
     stream.emit(xlings::LogEvent{xlings::LogLevel::info, "hello"});
-    stream.emit(xlings::ProgressEvent{xlings::Phase::downloading, 0.5f, "..."});
+    stream.emit(xlings::ProgressEvent{"downloading", 0.5f, "..."});
 
     ASSERT_EQ(received.size(), 2);
     EXPECT_TRUE(std::holds_alternative<xlings::LogEvent>(received[0]));
@@ -2176,7 +2176,7 @@ public:
 
     auto execute(xlings::capability::Params params,
                  xlings::EventStream& stream) -> xlings::capability::Result override {
-        stream.emit(xlings::ProgressEvent{xlings::Phase::installing, 0.5f, "Installing..."});
+        stream.emit(xlings::ProgressEvent{"installing", 0.5f, "Installing..."});
         auto answer = stream.prompt({
             .id = "confirm_install",
             .question = "Proceed with install?",

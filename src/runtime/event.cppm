@@ -4,23 +4,13 @@ import std;
 
 namespace xlings {
 
-// ─── Phase ───
-export enum class Phase {
-    resolving,
-    downloading,
-    extracting,
-    installing,
-    configuring,
-    verifying
-};
-
 // ─── LogLevel ───
 export enum class LogLevel { debug, info, warn, error };
 
 // ─── Event Types ───
 
 export struct ProgressEvent {
-    Phase phase;
+    std::string phase;       // free-form: "resolving", "downloading", etc.
     float percent;           // 0.0 ~ 1.0
     std::string message;
 };
