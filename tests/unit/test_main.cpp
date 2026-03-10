@@ -3629,34 +3629,34 @@ TEST(FileLock, ExclusiveLockAndUnlock) {
 TEST(FileLock, TwoExclusiveLocksConflict) {
     namespace fs = std::filesystem;
     auto tmp = fs::temp_directory_path() / "xlings_test_flock_conflict.lock";
-    xlings::libs::flock::FileLock lk1(tmp.string());
-    EXPECT_TRUE(lk1.is_locked());
+    {
+        xlings::libs::flock::FileLock lk1(tmp.string());
+        EXPECT_TRUE(lk1.is_locked());
 
-    auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string());
-    EXPECT_FALSE(lk2.is_locked());
+        auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string());
+        EXPECT_FALSE(lk2.is_locked());
 
-    lk1.unlock();
-    auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string());
-    EXPECT_TRUE(lk3.is_locked());
-    lk3.unlock();
+        lk1.unlock();
+        auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string());
+        EXPECT_TRUE(lk3.is_locked());
+    } // all handles closed before remove on Windows
     fs::remove(tmp);
 }
 
 TEST(FileLock, SharedLocksConcurrent) {
     namespace fs = std::filesystem;
     auto tmp = fs::temp_directory_path() / "xlings_test_flock_shared.lock";
-    xlings::libs::flock::FileLock lk1(tmp.string(), xlings::libs::flock::LockType::Shared);
-    EXPECT_TRUE(lk1.is_locked());
+    {
+        xlings::libs::flock::FileLock lk1(tmp.string(), xlings::libs::flock::LockType::Shared);
+        EXPECT_TRUE(lk1.is_locked());
 
-    auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Shared);
-    EXPECT_TRUE(lk2.is_locked());
+        auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Shared);
+        EXPECT_TRUE(lk2.is_locked());
 
-    // Exclusive should fail while shared are held
-    auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Exclusive);
-    EXPECT_FALSE(lk3.is_locked());
-
-    lk1.unlock();
-    lk2.unlock();
+        // Exclusive should fail while shared are held
+        auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Exclusive);
+        EXPECT_FALSE(lk3.is_locked());
+    } // all handles closed before remove on Windows
     fs::remove(tmp);
 }
 
