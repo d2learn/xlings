@@ -1417,7 +1417,7 @@ export int run(int argc, char* argv[]) {
                 auto now_ms = agent::tui::steady_now_ms();
                 auto term_h = ftxui::Terminal::Size().dimy;
 
-                // Reserve lines for: input(1) + separator(1) + status(1) + padding(1)
+                // Reserve lines for: sep_above(1) + input(1) + sep_below(1) + status(1)
                 // + active content estimate (streaming ~3, tool action ~5)
                 int reserved = 4;
                 if (tui_state.is_streaming) reserved += 3;
@@ -1506,6 +1506,9 @@ export int run(int argc, char* argv[]) {
                     }
                 }
 
+                // Separator above input
+                elems.push_back(separator() | color(agent::tui::colors::border()));
+
                 // Input
                 if (tui_state.approval_pending) {
                     elems.push_back(agent::tui::render_approval(tui_state));
@@ -1526,9 +1529,6 @@ export int run(int argc, char* argv[]) {
 
                 // Status bar
                 elems.push_back(agent::tui::render_status_bar(tui_state, now_ms));
-
-                // Bottom padding (reserve empty line below status bar)
-                elems.push_back(text(""));
 
                 return vbox(std::move(elems));
             });
@@ -1754,7 +1754,6 @@ export int run(int argc, char* argv[]) {
                             .text = "  total: " + agent::tui::format_duration(
                                 static_cast<int>(total_elapsed)),
                         });
-                        tui_state.lines.push_back({.type = agent::tui::ChatLine::Separator});
 
                         // Update status bar
                         tracker.record(tr.input_tokens, tr.output_tokens);
