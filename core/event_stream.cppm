@@ -1,13 +1,6 @@
-module;
-
-#include <condition_variable>
-#include <functional>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 export module xlings.event_stream;
+
+import std;
 
 import xlings.event;
 

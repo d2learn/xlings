@@ -1,17 +1,6 @@
-module;
-
-#include <atomic>
-#include <condition_variable>
-#include <functional>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <thread>
-#include <unordered_map>
-#include <variant>
-#include <vector>
-
 export module xlings.task;
+
+import std;
 
 import xlings.event;
 import xlings.event_stream;

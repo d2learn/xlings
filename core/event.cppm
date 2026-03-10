@@ -1,10 +1,6 @@
-module;
-
-#include <string>
-#include <variant>
-#include <vector>
-
 export module xlings.event;
+
+import std;
 
 namespace xlings {
 

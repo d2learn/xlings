@@ -1,12 +1,6 @@
-module;
-
-#include <functional>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 export module xlings.capability;
+
+import std;
 
 import xlings.event;
 import xlings.event_stream;
