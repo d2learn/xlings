@@ -681,7 +681,8 @@ public:
     execute(const InstallPlan& plan,
             const DownloaderConfig& dlConfig,
             std::function<void(const InstallStatus&)> onStatus,
-            InstallRequestHandler onInstallRequests = nullptr) {
+            InstallRequestHandler onInstallRequests = nullptr,
+            DownloadProgressRenderer onRender = nullptr) {
 
         if (plan.has_errors()) {
             return std::unexpected(
@@ -781,7 +782,7 @@ public:
         // Download all
         if (!dlTasks.empty()) {
             log::debug("downloading {} package(s)...", dlTasks.size());
-            auto results = download_all(dlTasks, dlConfig,
+            auto results = download_all(dlTasks, dlConfig, onRender,
                 [&](std::string_view name, float progress) {
                     if (onStatus) {
                         InstallStatus status;

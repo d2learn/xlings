@@ -676,7 +676,7 @@ TEST(XimDownloaderTest, ExtractArchiveBadFormat) {
 TEST(XimDownloaderTest, DownloadAllEmpty) {
     std::vector<xlings::xim::DownloadTask> tasks;
     xlings::xim::DownloaderConfig config;
-    auto results = xlings::xim::download_all(tasks, config, nullptr);
+    auto results = xlings::xim::download_all(tasks, config, nullptr, nullptr);
     EXPECT_TRUE(results.empty());
 }
 

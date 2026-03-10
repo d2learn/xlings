@@ -236,6 +236,29 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
 
+    // Download progress renderer: emit via EventStream so CLI consumer renders
+    DownloadProgressRenderer dlRenderer =
+        [&stream](std::span<const TaskProgress> state, std::size_t nameWidth,
+                  double elapsedSec, bool sizesReady) {
+            nlohmann::json files = nlohmann::json::array();
+            for (auto& p : state) {
+                files.push_back({
+                    {"name", p.name},
+                    {"totalBytes", p.totalBytes},
+                    {"downloadedBytes", p.downloadedBytes},
+                    {"started", p.started},
+                    {"finished", p.finished},
+                    {"success", p.success}
+                });
+            }
+            nlohmann::json payload;
+            payload["files"] = std::move(files);
+            payload["nameWidth"] = nameWidth;
+            payload["elapsedSec"] = elapsedSec;
+            payload["sizesReady"] = sizesReady;
+            stream.emit(DataEvent{"download_progress", payload.dump()});
+        };
+
     int successCount = 0;
     int failedCount = 0;
 
@@ -275,7 +298,8 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                     cmd_remove(req.target, stream);
                 }
             }
-        });
+        },
+        dlRenderer);
 
     if (!result) {
         log::error("install failed: {}", result.error());

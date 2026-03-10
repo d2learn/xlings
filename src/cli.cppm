@@ -156,6 +156,25 @@ static void dispatch_data_event(const DataEvent& e) {
         }
         ui::print_table(headers, rows);
     }
+    else if (e.kind == "download_progress") {
+        auto nameWidth = json.value("nameWidth", std::size_t{20});
+        auto elapsedSec = json.value("elapsedSec", 0.0);
+        auto sizesReady = json.value("sizesReady", false);
+        std::vector<ui::DownloadProgressEntry> entries;
+        if (json.contains("files") && json["files"].is_array()) {
+            for (auto& f : json["files"]) {
+                entries.push_back({
+                    f.value("name", std::string{}),
+                    f.value("totalBytes", 0.0),
+                    f.value("downloadedBytes", 0.0),
+                    f.value("started", false),
+                    f.value("finished", false),
+                    f.value("success", false)
+                });
+            }
+        }
+        ui::render_download_progress(entries, nameWidth, elapsedSec, sizesReady);
+    }
     else {
         log::debug("unhandled DataEvent kind: {}", e.kind);
     }

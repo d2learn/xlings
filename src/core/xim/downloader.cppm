@@ -1,9 +1,6 @@
 module;
 
 #include <cstdio>
-#include "ftxui/dom/elements.hpp"
-#include "ftxui/screen/screen.hpp"
-#include "ftxui/screen/color.hpp"
 
 export module xlings.core.xim.downloader;
 
@@ -13,7 +10,6 @@ import xlings.core.log;
 import xlings.platform;
 import xlings.core.config;
 import xlings.libs.tinyhttps;
-import xlings.ui;
 
 export namespace xlings::xim {
 
@@ -175,150 +171,19 @@ struct TaskProgress {
     bool success  { false };
 };
 
-// Format ETA string from seconds
-std::string format_eta_(int seconds) {
-    if (seconds < 0) return "";
-    if (seconds < 60) return std::to_string(seconds) + "s";
-    int min = seconds / 60;
-    int sec = seconds % 60;
-    return std::to_string(min) + "m" + std::to_string(sec) + "s";
-}
-
-// Format speed in human-readable units
-std::string format_speed_(double bytesPerSec) {
-    if (bytesPerSec < 1024.0)
-        return std::to_string(static_cast<int>(bytesPerSec)) + " B/s";
-    if (bytesPerSec < 1024.0 * 1024.0) {
-        int kb = static_cast<int>(bytesPerSec / 1024.0 * 10.0) ;
-        return std::to_string(kb / 10) + "." + std::to_string(kb % 10) + " KB/s";
-    }
-    int mb = static_cast<int>(bytesPerSec / (1024.0 * 1024.0) * 10.0);
-    return std::to_string(mb / 10) + "." + std::to_string(mb % 10) + " MB/s";
-}
-
-// Render progress using FTXUI themed elements.
-// Layout matches install plan: "    icon name  status"
-// Includes overall progress bar + ETA at the bottom.
-void render_progress_(const std::vector<TaskProgress>& progState,
-                      std::size_t nameWidth,
-                      std::chrono::steady_clock::time_point startTime,
-                      bool sizesReady) {
-    using namespace ftxui;
-    constexpr std::size_t statusWidth = 8;
-
-    Elements rows;
-    double totalBytes = 0.0;       // sum of all totalBytes (pre-fetched via HEAD)
-    double totalDownloaded = 0.0;  // sum of all downloaded bytes
-
-    for (auto& p : progState) {
-        Element icon;
-        Element nameEl;
-        std::string statusStr;
-
-        // Always count totalBytes (pre-fetched by HEAD before download starts)
-        totalBytes += p.totalBytes;
-
-        if (!p.started) {
-            icon = text("    " + std::string(ui::theme::icon::pending) + " ")
-                | color(ui::theme::dim_color());
-            nameEl = ui::name_as_progress(p.name, 0.0f,
-                ui::theme::dim_color(), ui::theme::border_color(), nameWidth, false);
-            statusStr = "pending";
-        } else if (!p.finished) {
-            float pct = (p.totalBytes > 0)
-                ? static_cast<float>(p.downloadedBytes / p.totalBytes)
-                : 0.0f;
-            totalDownloaded += p.downloadedBytes;
-            icon = text("    " + std::string(ui::theme::icon::downloading) + " ")
-                | color(ui::theme::cyan());
-            nameEl = ui::name_as_progress(p.name, pct,
-                ui::theme::cyan(), ui::theme::border_color(), nameWidth, true, true);
-            if (pct > 0.0f) {
-                int whole = static_cast<int>(pct * 100.0f);
-                int frac = static_cast<int>(pct * 1000.0f) % 10;
-                statusStr = std::to_string(whole) + "." + std::to_string(frac) + "%";
-            } else {
-                statusStr = "0.0%";
-            }
-        } else if (p.success) {
-            totalDownloaded += p.totalBytes;
-            icon = text("    " + std::string(ui::theme::icon::done) + " ")
-                | color(ui::theme::green());
-            nameEl = ui::name_as_progress(p.name, 1.0f,
-                ui::theme::green(), ui::theme::green(), nameWidth, true);
-            statusStr = "done";
-        } else {
-            totalDownloaded += p.totalBytes;
-            icon = text("    " + std::string(ui::theme::icon::failed) + " ")
-                | color(ui::theme::red()) | bold;
-            nameEl = ui::name_as_progress(p.name, 1.0f,
-                ui::theme::red(), ui::theme::red(), nameWidth, true);
-            statusStr = "failed";
-        }
-
-        while (statusStr.size() < statusWidth) statusStr = " " + statusStr;
-
-        auto statusEl = text(" " + statusStr);
-        if (p.finished && p.success) statusEl = statusEl | color(ui::theme::green());
-        else if (p.finished) statusEl = statusEl | color(ui::theme::red()) | bold;
-        else if (!p.started) statusEl = statusEl | color(ui::theme::dim_color());
-        else statusEl = statusEl | color(ui::theme::dim_color());
-
-        rows.push_back(hbox({ icon, nameEl, statusEl }));
-    }
-
-    // Overall progress: byte-weighted once sizes are known via HEAD requests
-    float overallPct = 0.0f;
-    std::string speedStr;
-    std::string etaStr;
-
-    auto elapsed = std::chrono::steady_clock::now() - startTime;
-    auto elapsedSec = std::chrono::duration<double>(elapsed).count();
-
-    if (sizesReady && totalBytes > 0.0) {
-        overallPct = static_cast<float>(totalDownloaded / totalBytes);
-        if (overallPct > 1.0f) overallPct = 1.0f;
-
-        if (elapsedSec > 0.5 && totalDownloaded > 0.0) {
-            double speed = totalDownloaded / elapsedSec;
-            speedStr = "  " + format_speed_(speed);
-        }
-
-        if (overallPct > 0.01f && overallPct < 1.0f && elapsedSec > 1.0) {
-            double speed = totalDownloaded / elapsedSec;
-            if (speed > 0.0) {
-                double remainingBytes = totalBytes - totalDownloaded;
-                int remainingSec = static_cast<int>(remainingBytes / speed);
-                etaStr = "  ETA " + format_eta_(remainingSec);
-            }
-        }
-    }
-
-    int pctWhole = static_cast<int>(overallPct * 100.0f);
-    int pctFrac = static_cast<int>(overallPct * 1000.0f) % 10;
-    std::string pctStr = std::to_string(pctWhole) + "." + std::to_string(pctFrac) + "%";
-
-    rows.push_back(text(""));
-    rows.push_back(hbox({
-        text("  " + std::string(ui::theme::icon::arrow) + " ") | color(ui::theme::cyan()),
-        gauge(overallPct) | size(WIDTH, EQUAL, 30) | color(ui::theme::cyan()),
-        text("  " + pctStr) | bold | color(ui::theme::text_color()),
-        text(speedStr) | color(ui::theme::cyan()),
-        text(etaStr) | color(ui::theme::dim_color()),
-    }));
-
-    auto doc = vbox(std::move(rows));
-    auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
-    Render(screen, doc);
-    screen.Print();
-    std::print("\n");
-    std::fflush(stdout);
-}
+// Callback for rendering download progress.
+// Called from the TUI refresh thread (under mutex) every ~200ms.
+using DownloadProgressRenderer = std::function<void(
+    std::span<const TaskProgress> state,
+    std::size_t nameWidth,
+    double elapsedSec,
+    bool sizesReady)>;
 
 // Download all tasks with limited concurrency, real-time per-task progress
 std::vector<DownloadResult>
 download_all(std::span<const DownloadTask> tasks,
              const DownloaderConfig& config,
+             DownloadProgressRenderer onRender,
              std::function<void(std::string_view name, float progress)> onProgress) {
 
     if (tasks.empty()) return {};
@@ -374,6 +239,8 @@ download_all(std::span<const DownloadTask> tasks,
     auto startTime = std::chrono::steady_clock::now();
 
     std::jthread tuiThread([&](std::stop_token stoken) {
+        if (!onRender) return;  // No renderer — skip TUI
+
         // Hide cursor during download
         std::print("\033[?25l");
         std::fflush(stdout);
@@ -384,17 +251,21 @@ download_all(std::span<const DownloadTask> tasks,
             // Restore to cursor saved by print_install_plan, clear from there
             std::print("\033[u\033[J");
 
+            auto elapsed = std::chrono::steady_clock::now() - startTime;
+            auto elapsedSec = std::chrono::duration<double>(elapsed).count();
             {
                 std::lock_guard lock(mutex);
-                render_progress_(progState, nameWidth, startTime, sizesReady.load());
+                onRender(progState, nameWidth, elapsedSec, sizesReady.load());
             }
         }
 
         // Final render
         std::print("\033[u\033[J");
         {
+            auto elapsed = std::chrono::steady_clock::now() - startTime;
+            auto elapsedSec = std::chrono::duration<double>(elapsed).count();
             std::lock_guard lock(mutex);
-            render_progress_(progState, nameWidth, startTime, sizesReady.load());
+            onRender(progState, nameWidth, elapsedSec, sizesReady.load());
         }
         // Show cursor again
         std::print("\033[?25h");

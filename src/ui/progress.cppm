@@ -181,4 +181,148 @@ void print_progress(std::span<const StatusEntry> entries) {
     std::println("");
 }
 
+// ─── Download progress rendering ───
+// Data structure mirroring xim::TaskProgress (avoids circular dependency)
+struct DownloadProgressEntry {
+    std::string name;
+    double totalBytes { 0.0 };
+    double downloadedBytes { 0.0 };
+    bool started  { false };
+    bool finished { false };
+    bool success  { false };
+};
+
+std::string format_eta(int seconds) {
+    if (seconds < 0) return "";
+    if (seconds < 60) return std::to_string(seconds) + "s";
+    int min = seconds / 60;
+    int sec = seconds % 60;
+    return std::to_string(min) + "m" + std::to_string(sec) + "s";
+}
+
+std::string format_speed(double bytesPerSec) {
+    if (bytesPerSec < 1024.0)
+        return std::to_string(static_cast<int>(bytesPerSec)) + " B/s";
+    if (bytesPerSec < 1024.0 * 1024.0) {
+        int kb = static_cast<int>(bytesPerSec / 1024.0 * 10.0);
+        return std::to_string(kb / 10) + "." + std::to_string(kb % 10) + " KB/s";
+    }
+    int mb = static_cast<int>(bytesPerSec / (1024.0 * 1024.0) * 10.0);
+    return std::to_string(mb / 10) + "." + std::to_string(mb % 10) + " MB/s";
+}
+
+// Render download progress using FTXUI themed elements.
+// Called from a TUI refresh thread. Outputs to stdout.
+void render_download_progress(std::span<const DownloadProgressEntry> progState,
+                              std::size_t nameWidth,
+                              double elapsedSec,
+                              bool sizesReady) {
+    using namespace ftxui;
+    constexpr std::size_t statusWidth = 8;
+
+    Elements rows;
+    double totalBytes = 0.0;
+    double totalDownloaded = 0.0;
+
+    for (auto& p : progState) {
+        Element icon;
+        Element nameEl;
+        std::string statusStr;
+
+        totalBytes += p.totalBytes;
+
+        if (!p.started) {
+            icon = text("    " + std::string(theme::icon::pending) + " ")
+                | color(theme::dim_color());
+            nameEl = name_as_progress(p.name, 0.0f,
+                theme::dim_color(), theme::border_color(), nameWidth, false);
+            statusStr = "pending";
+        } else if (!p.finished) {
+            float pct = (p.totalBytes > 0)
+                ? static_cast<float>(p.downloadedBytes / p.totalBytes)
+                : 0.0f;
+            totalDownloaded += p.downloadedBytes;
+            icon = text("    " + std::string(theme::icon::downloading) + " ")
+                | color(theme::cyan());
+            nameEl = name_as_progress(p.name, pct,
+                theme::cyan(), theme::border_color(), nameWidth, true, true);
+            if (pct > 0.0f) {
+                int whole = static_cast<int>(pct * 100.0f);
+                int frac = static_cast<int>(pct * 1000.0f) % 10;
+                statusStr = std::to_string(whole) + "." + std::to_string(frac) + "%";
+            } else {
+                statusStr = "0.0%";
+            }
+        } else if (p.success) {
+            totalDownloaded += p.totalBytes;
+            icon = text("    " + std::string(theme::icon::done) + " ")
+                | color(theme::green());
+            nameEl = name_as_progress(p.name, 1.0f,
+                theme::green(), theme::green(), nameWidth, true);
+            statusStr = "done";
+        } else {
+            totalDownloaded += p.totalBytes;
+            icon = text("    " + std::string(theme::icon::failed) + " ")
+                | color(theme::red()) | bold;
+            nameEl = name_as_progress(p.name, 1.0f,
+                theme::red(), theme::red(), nameWidth, true);
+            statusStr = "failed";
+        }
+
+        while (statusStr.size() < statusWidth) statusStr = " " + statusStr;
+
+        auto statusEl = text(" " + statusStr);
+        if (p.finished && p.success) statusEl = statusEl | color(theme::green());
+        else if (p.finished) statusEl = statusEl | color(theme::red()) | bold;
+        else if (!p.started) statusEl = statusEl | color(theme::dim_color());
+        else statusEl = statusEl | color(theme::dim_color());
+
+        rows.push_back(hbox({ icon, nameEl, statusEl }));
+    }
+
+    // Overall progress bar
+    float overallPct = 0.0f;
+    std::string speedStr;
+    std::string etaStr;
+
+    if (sizesReady && totalBytes > 0.0) {
+        overallPct = static_cast<float>(totalDownloaded / totalBytes);
+        if (overallPct > 1.0f) overallPct = 1.0f;
+
+        if (elapsedSec > 0.5 && totalDownloaded > 0.0) {
+            double speed = totalDownloaded / elapsedSec;
+            speedStr = "  " + format_speed(speed);
+        }
+
+        if (overallPct > 0.01f && overallPct < 1.0f && elapsedSec > 1.0) {
+            double speed = totalDownloaded / elapsedSec;
+            if (speed > 0.0) {
+                double remainingBytes = totalBytes - totalDownloaded;
+                int remainingSec = static_cast<int>(remainingBytes / speed);
+                etaStr = "  ETA " + format_eta(remainingSec);
+            }
+        }
+    }
+
+    int pctWhole = static_cast<int>(overallPct * 100.0f);
+    int pctFrac = static_cast<int>(overallPct * 1000.0f) % 10;
+    std::string pctStr = std::to_string(pctWhole) + "." + std::to_string(pctFrac) + "%";
+
+    rows.push_back(text(""));
+    rows.push_back(hbox({
+        text("  " + std::string(theme::icon::arrow) + " ") | color(theme::cyan()),
+        gauge(overallPct) | size(WIDTH, EQUAL, 30) | color(theme::cyan()),
+        text("  " + pctStr) | bold | color(theme::text_color()),
+        text(speedStr) | color(theme::cyan()),
+        text(etaStr) | color(theme::dim_color()),
+    }));
+
+    auto doc = vbox(std::move(rows));
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
+    Render(screen, doc);
+    screen.Print();
+    std::print("\n");
+    std::fflush(stdout);
+}
+
 } // namespace xlings::ui
