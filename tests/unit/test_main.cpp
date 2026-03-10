@@ -24,6 +24,7 @@ import xlings.libs.json;
 import xlings.core.xself;
 import xlings.core.profile;
 import xlings.runtime;
+import xlings.capabilities;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -2450,6 +2451,67 @@ TEST(Integration, AgentPathConcurrentWithPrompt) {
 
     auto installEvents = tm.events(tInstall);
     EXPECT_GE(installEvents.size(), 2);  // ProgressEvent + PromptEvent + CompletedEvent
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Phase 3: Real Capability implementations
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Capabilities, BuildRegistryPopulatesAll) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+    EXPECT_GE(specs.size(), 8);
+
+    EXPECT_NE(reg.get("search_packages"), nullptr);
+    EXPECT_NE(reg.get("install_packages"), nullptr);
+    EXPECT_NE(reg.get("remove_package"), nullptr);
+    EXPECT_NE(reg.get("update_packages"), nullptr);
+    EXPECT_NE(reg.get("list_packages"), nullptr);
+    EXPECT_NE(reg.get("package_info"), nullptr);
+    EXPECT_NE(reg.get("use_version"), nullptr);
+    EXPECT_NE(reg.get("system_status"), nullptr);
+}
+
+TEST(Capabilities, SpecsHaveRequiredFields) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+    for (auto& s : specs) {
+        EXPECT_FALSE(s.name.empty()) << "capability has empty name";
+        EXPECT_FALSE(s.description.empty()) << s.name << " has empty description";
+        EXPECT_FALSE(s.inputSchema.empty()) << s.name << " has empty inputSchema";
+    }
+}
+
+TEST(Capabilities, DestructiveFlags) {
+    auto reg = xlings::capabilities::build_registry();
+    EXPECT_FALSE(reg.get("search_packages")->spec().destructive);
+    EXPECT_FALSE(reg.get("list_packages")->spec().destructive);
+    EXPECT_FALSE(reg.get("package_info")->spec().destructive);
+    EXPECT_FALSE(reg.get("system_status")->spec().destructive);
+    EXPECT_TRUE(reg.get("install_packages")->spec().destructive);
+    EXPECT_TRUE(reg.get("remove_package")->spec().destructive);
+    EXPECT_TRUE(reg.get("update_packages")->spec().destructive);
+    EXPECT_TRUE(reg.get("use_version")->spec().destructive);
+}
+
+TEST(Capabilities, RegistryListAllSpecs) {
+    auto reg = xlings::capabilities::build_registry();
+    auto specs = reg.list_all();
+    for (auto& s : specs) {
+        auto parsed = nlohmann::json::parse(s.inputSchema, nullptr, false);
+        EXPECT_FALSE(parsed.is_discarded()) << s.name << " has invalid inputSchema";
+    }
+}
+
+TEST(Capabilities, SearchSpecSchema) {
+    auto reg = xlings::capabilities::build_registry();
+    auto* cap = reg.get("search_packages");
+    ASSERT_NE(cap, nullptr);
+    auto s = cap->spec();
+    EXPECT_EQ(s.name, "search_packages");
+    auto schema = nlohmann::json::parse(s.inputSchema);
+    EXPECT_TRUE(schema.contains("required"));
+    EXPECT_EQ(schema["required"][0], "keyword");
 }
 
 // ============================================================
