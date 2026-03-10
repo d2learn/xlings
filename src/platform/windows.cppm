@@ -106,6 +106,20 @@ namespace platform_impl {
         std::println("{}", msg);
     }
 
+    export int get_pid() {
+        return static_cast<int>(::GetCurrentProcessId());
+    }
+
+    export bool is_process_alive(int pid) {
+        if (pid <= 0) return false;
+        HANDLE hProcess = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+        if (hProcess == NULL) return false;
+        DWORD exitCode = 0;
+        bool alive = ::GetExitCodeProcess(hProcess, &exitCode) && exitCode == STILL_ACTIVE;
+        ::CloseHandle(hProcess);
+        return alive;
+    }
+
 } // namespace platform_impl
 }
 

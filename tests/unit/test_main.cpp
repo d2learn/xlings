@@ -25,8 +25,18 @@ import xlings.core.xself;
 import xlings.core.profile;
 import xlings.runtime;
 import xlings.capabilities;
+import xlings.agent;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
+import xlings.libs.flock;
+import xlings.libs.agentfs;
+import xlings.libs.soul;
+import xlings.libs.journal;
+import xlings.libs.agent_skill;
+import xlings.libs.semantic_memory;
+import xlings.libs.mcp_server;
+import xlings.libs.resource_lock;
+import mcpplibs.llmapi;
 
 namespace {
 
@@ -2512,6 +2522,1151 @@ TEST(Capabilities, SearchSpecSchema) {
     auto schema = nlohmann::json::parse(s.inputSchema);
     EXPECT_TRUE(schema.contains("required"));
     EXPECT_EQ(schema["required"][0], "keyword");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Agent: LLM Config
+// ═══════════════════════════════════════════════════════════════
+
+TEST(AgentLlmConfig, InferProviderAnthropic) {
+    EXPECT_EQ(xlings::agent::infer_provider("claude-sonnet-4-20250514"), "anthropic");
+    EXPECT_EQ(xlings::agent::infer_provider("claude-opus-4-6"), "anthropic");
+}
+
+TEST(AgentLlmConfig, InferProviderOpenAI) {
+    EXPECT_EQ(xlings::agent::infer_provider("gpt-4o"), "openai");
+    EXPECT_EQ(xlings::agent::infer_provider("gpt-4-turbo"), "openai");
+}
+
+TEST(AgentLlmConfig, InferProviderDeepSeek) {
+    EXPECT_EQ(xlings::agent::infer_provider("deepseek-chat"), "openai");
+}
+
+TEST(AgentLlmConfig, InferProviderUnknownDefaultsOpenAI) {
+    EXPECT_EQ(xlings::agent::infer_provider("llama3"), "openai");
+}
+
+TEST(AgentLlmConfig, DefaultConfig) {
+    auto cfg = xlings::agent::default_llm_config();
+    EXPECT_FALSE(cfg.model.empty());
+    EXPECT_GT(cfg.max_tokens, 0);
+    EXPECT_GT(cfg.temperature, 0.0f);
+}
+
+TEST(AgentLlmConfig, LoadLlmJsonDefault) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_llmjson";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    auto path = tmp / "llm.json";
+    nlohmann::json j;
+    j["default"]["model"] = "gpt-4o";
+    j["default"]["temperature"] = 0.5;
+    j["default"]["max_tokens"] = 4096;
+    std::ofstream(path) << j.dump(2);
+
+    auto cfg = xlings::agent::load_llm_json(path);
+    ASSERT_TRUE(cfg.has_value());
+    EXPECT_EQ(cfg->model, "gpt-4o");
+    EXPECT_EQ(cfg->provider, "openai");
+    EXPECT_FLOAT_EQ(cfg->temperature, 0.5f);
+    EXPECT_EQ(cfg->max_tokens, 4096);
+
+    fs::remove_all(tmp);
+}
+
+TEST(AgentLlmConfig, LoadLlmJsonProfile) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_llmjson_profile";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    auto path = tmp / "llm.json";
+    nlohmann::json j;
+    j["default"]["model"] = "claude-sonnet-4-20250514";
+    j["profiles"]["fast"]["model"] = "claude-haiku-4-5-20251001";
+    j["profiles"]["fast"]["temperature"] = 0.1;
+    j["profiles"]["fast"]["max_tokens"] = 2048;
+    std::ofstream(path) << j.dump(2);
+
+    auto cfg = xlings::agent::load_llm_json(path, "fast");
+    ASSERT_TRUE(cfg.has_value());
+    EXPECT_EQ(cfg->model, "claude-haiku-4-5-20251001");
+    EXPECT_EQ(cfg->provider, "anthropic");
+
+    fs::remove_all(tmp);
+}
+
+TEST(AgentLlmConfig, LoadLlmJsonMissing) {
+    auto cfg = xlings::agent::load_llm_json("/nonexistent/llm.json");
+    EXPECT_FALSE(cfg.has_value());
+}
+
+TEST(AgentLlmConfig, ProviderPresetsFormats) {
+    auto presets = xlings::agent::provider_presets();
+    ASSERT_GE(presets.size(), 4u);
+
+    // MiniMax should have 2 formats (openai + anthropic)
+    bool found_minimax = false;
+    for (auto& p : presets) {
+        if (p.id == "minimax") {
+            found_minimax = true;
+            EXPECT_EQ(p.formats.size(), 2u) << "MiniMax should have 2 API formats";
+            EXPECT_EQ(p.formats[0].name, "openai");
+            EXPECT_EQ(p.formats[1].name, "anthropic");
+            EXPECT_FALSE(p.formats[0].base_url.empty());
+            EXPECT_FALSE(p.formats[1].base_url.empty());
+        }
+        // All providers should have at least 1 format
+        EXPECT_GE(p.formats.size(), 1u) << p.name << " has no formats";
+    }
+    EXPECT_TRUE(found_minimax);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Agent: Tool Bridge
+// ═══════════════════════════════════════════════════════════════
+
+TEST(AgentToolBridge, CapabilityToToolDef) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    auto tools = bridge.tool_definitions();
+    EXPECT_GE(tools.size(), 8u);
+
+    for (const auto& tool : tools) {
+        EXPECT_FALSE(tool.name.empty()) << "tool name is empty";
+        EXPECT_FALSE(tool.description.empty()) << tool.name << " missing description";
+        EXPECT_FALSE(tool.inputSchema.empty()) << tool.name << " missing schema";
+    }
+}
+
+TEST(AgentToolBridge, ToolInfoLookup) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    auto info = bridge.tool_info("search_packages");
+    EXPECT_EQ(info.name, "search_packages");
+    EXPECT_EQ(info.source, "builtin");
+    EXPECT_FALSE(info.destructive);
+}
+
+TEST(AgentToolBridge, ToolInfoDestructive) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    auto info = bridge.tool_info("install_packages");
+    EXPECT_TRUE(info.destructive);
+}
+
+TEST(AgentToolBridge, ExecuteUnknownTool) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    xlings::EventStream stream;
+    auto result = bridge.execute("nonexistent_tool", "{}", stream);
+    EXPECT_TRUE(result.isError);
+    EXPECT_NE(result.content.find("unknown tool"), std::string::npos);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Agent: Loop (unit-level, no real LLM call)
+// ═══════════════════════════════════════════════════════════════
+
+TEST(AgentLoop, BuildSystemPrompt) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+    auto prompt = xlings::agent::build_system_prompt(bridge);
+
+    EXPECT_NE(prompt.find("search_packages"), std::string::npos);
+    EXPECT_NE(prompt.find("install_packages"), std::string::npos);
+}
+
+TEST(AgentLoop, ConvertToolDefsToLlmapi) {
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+    auto llm_tools = xlings::agent::to_llmapi_tools(bridge);
+
+    EXPECT_GE(llm_tools.size(), 8u);
+    for (const auto& t : llm_tools) {
+        EXPECT_FALSE(t.name.empty());
+        EXPECT_FALSE(t.inputSchema.empty());
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SemanticMemory
+// ═══════════════════════════════════════════════════════════════
+
+TEST(SemanticMemory, CosineSimilarity) {
+    std::vector<float> a = {1.0f, 0.0f, 0.0f};
+    std::vector<float> b = {1.0f, 0.0f, 0.0f};
+    EXPECT_NEAR(xlings::libs::semantic_memory::cosine_similarity(a, b), 1.0f, 0.001f);
+
+    std::vector<float> c = {0.0f, 1.0f, 0.0f};
+    EXPECT_NEAR(xlings::libs::semantic_memory::cosine_similarity(a, c), 0.0f, 0.001f);
+}
+
+TEST(SemanticMemory, RememberAndRecallText) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_memory";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::semantic_memory::MemoryStore store(afs);
+
+    auto id1 = store.remember("The user prefers C++ over Rust", "preference");
+    auto id2 = store.remember("GCC 15 has ICE bugs with modules", "fact");
+
+    EXPECT_EQ(store.size(), 2u);
+
+    auto results = store.recall_text("GCC");
+    ASSERT_EQ(results.size(), 1u);
+    EXPECT_NE(results[0].entry.content.find("GCC 15"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+TEST(SemanticMemory, RememberAndForget) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_memory_forget";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::semantic_memory::MemoryStore store(afs);
+
+    auto id = store.remember("temporary note", "fact");
+    EXPECT_EQ(store.size(), 1u);
+    EXPECT_TRUE(store.forget(id));
+    EXPECT_EQ(store.size(), 0u);
+
+    fs::remove_all(tmp);
+}
+
+TEST(SemanticMemory, PersistAndLoad) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_memory_persist";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    {
+        xlings::libs::semantic_memory::MemoryStore store(afs);
+        store.remember("persisted note", "fact");
+    }
+
+    xlings::libs::semantic_memory::MemoryStore store2(afs);
+    store2.load();
+    EXPECT_EQ(store2.size(), 1u);
+    EXPECT_NE(store2.all_entries()[0].content.find("persisted"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  McpServer
+// ═══════════════════════════════════════════════════════════════
+
+TEST(McpServer, Initialize) {
+    xlings::libs::mcp::McpServer server("xlings", "0.4.1");
+
+    auto req = xlings::libs::mcp::McpServer::parse_request(
+        R"JSON({"jsonrpc":"2.0","method":"initialize","params":{},"id":1})JSON"
+    );
+    ASSERT_TRUE(req.has_value());
+
+    auto resp = server.handle_request(*req);
+    auto out = xlings::libs::mcp::McpServer::serialize_response(resp);
+    auto j = nlohmann::json::parse(out);
+    EXPECT_EQ(j["result"]["serverInfo"]["name"], "xlings");
+}
+
+TEST(McpServer, ToolsList) {
+    xlings::libs::mcp::McpServer server("xlings", "0.4.1");
+    server.register_tool(
+        {"test_tool", "A test tool", {{"type", "object"}}},
+        [](const nlohmann::json& params) -> nlohmann::json {
+            return {{"result", "ok"}};
+        }
+    );
+
+    auto req = xlings::libs::mcp::McpServer::parse_request(
+        R"JSON({"jsonrpc":"2.0","method":"tools/list","params":{},"id":2})JSON"
+    );
+    auto resp = server.handle_request(*req);
+    auto out = xlings::libs::mcp::McpServer::serialize_response(resp);
+    auto j = nlohmann::json::parse(out);
+    EXPECT_EQ(j["result"]["tools"].size(), 1u);
+    EXPECT_EQ(j["result"]["tools"][0]["name"], "test_tool");
+}
+
+TEST(McpServer, ToolsCall) {
+    xlings::libs::mcp::McpServer server("xlings", "0.4.1");
+    server.register_tool(
+        {"echo", "Echo input", {{"type", "object"}}},
+        [](const nlohmann::json& params) -> nlohmann::json {
+            return {{"echoed", params.value("msg", "")}};
+        }
+    );
+
+    auto req = xlings::libs::mcp::McpServer::parse_request(
+        R"JSON({"jsonrpc":"2.0","method":"tools/call","params":{"name":"echo","arguments":{"msg":"hello"}},"id":3})JSON"
+    );
+    auto resp = server.handle_request(*req);
+    auto out = xlings::libs::mcp::McpServer::serialize_response(resp);
+    auto j = nlohmann::json::parse(out);
+    EXPECT_FALSE(j.contains("error"));
+    EXPECT_TRUE(j["result"].contains("content"));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  McpClient
+// ═══════════════════════════════════════════════════════════════
+
+TEST(McpClient, LoadConfigs) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_mcp_client";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    nlohmann::json cfg;
+    cfg["name"] = "test-server";
+    cfg["command"] = "python";
+    cfg["args"] = {"-m", "mcp_server"};
+    cfg["env"] = {{"API_KEY", "secret"}};
+    xlings::libs::agentfs::AgentFS::write_json(afs.mcps_path() / "test.json", cfg);
+
+    auto configs = xlings::agent::mcp::load_mcp_configs(afs.mcps_path());
+    ASSERT_EQ(configs.size(), 1u);
+    EXPECT_EQ(configs[0].name, "test-server");
+    EXPECT_EQ(configs[0].command, "python");
+    EXPECT_EQ(configs[0].args.size(), 2u);
+
+    fs::remove_all(tmp);
+}
+
+TEST(McpClient, DiscoveredToolDefs) {
+    xlings::agent::mcp::McpClient client;
+    xlings::agent::mcp::ExternalTool tool;
+    tool.server_name = "test-server";
+    tool.name = "remote_tool";
+    tool.description = "A remote tool";
+    tool.input_schema = R"JSON({"type":"object"})JSON";
+    client.register_discovered_tool(tool);
+
+    auto defs = client.tool_definitions();
+    ASSERT_EQ(defs.size(), 1u);
+    EXPECT_EQ(defs[0].name, "mcp:test-server:remote_tool");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ResourceLock
+// ═══════════════════════════════════════════════════════════════
+
+TEST(ResourceLock, AcquireAndRelease) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_reslock";
+    fs::remove_all(tmp);
+
+    xlings::libs::resource_lock::ResourceLock rl(tmp);
+    {
+        auto lk = rl.acquire("my-resource");
+        EXPECT_TRUE(lk.is_locked());
+    }
+    // Lock released, should be able to re-acquire
+    auto lk2 = rl.try_acquire("my-resource");
+    EXPECT_TRUE(lk2.is_locked());
+    lk2.unlock();
+
+    fs::remove_all(tmp);
+}
+
+TEST(ResourceLock, StaleDetection) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_reslock_stale";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    xlings::libs::resource_lock::ResourceLock rl(tmp);
+
+    // Write a fake PID file with a non-existent PID
+    auto pid_path = tmp / "fake.pid";
+    std::ofstream(pid_path) << 999999;
+
+    EXPECT_TRUE(rl.is_stale("fake"));
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PackageToolRegistry
+// ═══════════════════════════════════════════════════════════════
+
+TEST(PackageToolRegistry, RegisterAndGetDefs) {
+    xlings::agent::PackageToolRegistry registry;
+
+    xlings::agent::PackageTool tool;
+    tool.package_name = "mypackage";
+    tool.tool_name = "my_tool";
+    tool.description = "Does something useful";
+    tool.input_schema = R"JSON({"type":"object","properties":{}})JSON";
+    tool.tier = 1;
+    registry.register_tool(tool);
+
+    EXPECT_EQ(registry.size(), 1u);
+    auto defs = registry.tool_definitions();
+    ASSERT_EQ(defs.size(), 1u);
+    EXPECT_EQ(defs[0].name, "my_tool");
+    EXPECT_NE(defs[0].description.find("mypackage"), std::string::npos);
+}
+
+TEST(PackageToolRegistry, LoadManifest) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_pkgtools";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    auto manifest = tmp / "package_tools.json";
+    nlohmann::json j = nlohmann::json::array();
+    j.push_back({
+        {"package", "gcc"},
+        {"name", "compile_c"},
+        {"description", "Compile C code"},
+        {"input_schema", R"JSON({"type":"object"})JSON"},
+        {"tier", 2}
+    });
+    j.push_back({
+        {"package", "node"},
+        {"name", "run_npm"},
+        {"description", "Run npm commands"},
+        {"input_schema", R"JSON({"type":"object"})JSON"},
+    });
+    std::ofstream(manifest) << j.dump(2);
+
+    xlings::agent::PackageToolRegistry registry;
+    registry.load_manifest(manifest);
+
+    EXPECT_EQ(registry.size(), 2u);
+    auto defs = registry.tool_definitions();
+    EXPECT_EQ(defs[0].name, "compile_c");
+    EXPECT_EQ(defs[1].name, "run_npm");
+
+    fs::remove_all(tmp);
+}
+
+TEST(PackageToolRegistry, PopulateCache) {
+    xlings::agent::PackageToolRegistry registry;
+    xlings::agent::PackageTool tool;
+    tool.package_name = "gcc";
+    tool.tool_name = "compile";
+    tool.description = "Compile";
+    tool.tier = 1;
+    registry.register_tool(tool);
+
+    xlings::agent::ResourceCache cache;
+    registry.populate_cache(cache);
+    EXPECT_EQ(cache.size(), 1u);
+    auto entry = cache.get("pkg-tool:compile");
+    ASSERT_TRUE(entry.has_value());
+    EXPECT_EQ(entry->data["package"], "gcc");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ResourceCache
+// ═══════════════════════════════════════════════════════════════
+
+TEST(ResourceCache, PutAndGet) {
+    xlings::agent::ResourceCache cache;
+    cache.put("gcc", xlings::agent::ResourceKind::Package, "GCC compiler", {{"version", "15.1"}});
+
+    auto entry = cache.get("gcc");
+    ASSERT_TRUE(entry.has_value());
+    EXPECT_TRUE(entry->hit);
+    EXPECT_EQ(entry->meta.id, "gcc");
+    EXPECT_EQ(entry->data["version"], "15.1");
+}
+
+TEST(ResourceCache, SearchByKeyword) {
+    xlings::agent::ResourceCache cache;
+    cache.put("gcc", xlings::agent::ResourceKind::Package, "GCC compiler", {});
+    cache.put("node", xlings::agent::ResourceKind::Package, "Node.js runtime", {});
+    cache.put("debug-skill", xlings::agent::ResourceKind::Skill, "Debug helper skill", {});
+
+    auto results = cache.search("gcc");
+    EXPECT_EQ(results.size(), 1u);
+
+    auto pkg_results = cache.search("", xlings::agent::ResourceKind::Package);
+    EXPECT_EQ(pkg_results.size(), 2u);
+}
+
+TEST(ResourceCache, Invalidate) {
+    xlings::agent::ResourceCache cache;
+    cache.put("gcc", xlings::agent::ResourceKind::Package, "GCC", {});
+    EXPECT_EQ(cache.size(), 1u);
+
+    cache.invalidate("gcc");
+    EXPECT_EQ(cache.size(), 0u);
+    EXPECT_FALSE(cache.get("gcc").has_value());
+}
+
+TEST(ResourceCache, BuildIndex) {
+    xlings::agent::ResourceCache cache;
+    cache.put("gcc", xlings::agent::ResourceKind::Package, "GCC", {});
+    cache.put("node", xlings::agent::ResourceKind::Package, "Node", {});
+    cache.put("skill1", xlings::agent::ResourceKind::Skill, "Skill", {});
+
+    auto idx = cache.build_resource_index();
+    EXPECT_NE(idx.find("2 packages"), std::string::npos);
+    EXPECT_NE(idx.find("1 skill"), std::string::npos);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ResourceTools
+// ═══════════════════════════════════════════════════════════════
+
+TEST(ResourceTools, SearchResources) {
+    xlings::agent::ResourceCache cache;
+    cache.put("gcc", xlings::agent::ResourceKind::Package, "GCC compiler", {});
+
+    auto result = xlings::agent::tool_search_resources(cache, R"({"keyword":"gcc"})");
+    auto j = nlohmann::json::parse(result);
+    ASSERT_TRUE(j.is_array());
+    EXPECT_EQ(j.size(), 1u);
+    EXPECT_EQ(j[0]["id"], "gcc");
+}
+
+TEST(ResourceTools, LoadResource) {
+    xlings::agent::ResourceCache cache;
+    cache.put("node", xlings::agent::ResourceKind::Package, "Node.js", {{"ver", "22"}});
+
+    auto result = xlings::agent::tool_load_resource(cache, R"({"id":"node"})");
+    auto j = nlohmann::json::parse(result);
+    EXPECT_EQ(j["id"], "node");
+    EXPECT_EQ(j["data"]["ver"], "22");
+    EXPECT_TRUE(j["cache_hit"].get<bool>());
+}
+
+TEST(ResourceTools, LoadResourceNotFound) {
+    xlings::agent::ResourceCache cache;
+    auto result = xlings::agent::tool_load_resource(cache, R"({"id":"missing"})");
+    auto j = nlohmann::json::parse(result);
+    EXPECT_TRUE(j.contains("error"));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PromptBuilder
+// ═══════════════════════════════════════════════════════════════
+
+TEST(PromptBuilder, CoreLayerIncludesSoulPersona) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_pb";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    xlings::libs::soul::Soul soul;
+    soul.id = "test";
+    soul.persona = "friendly package helper";
+    soul.trust_level = "confirm";
+    soul.allowed_capabilities = {"*"};
+
+    xlings::agent::PromptBuilder pb(bridge, soul, afs);
+    auto prompt = pb.build();
+
+    EXPECT_NE(prompt.find("friendly package helper"), std::string::npos);
+    EXPECT_NE(prompt.find("search_packages"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+TEST(PromptBuilder, ReadonlyBoundary) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_pb_ro";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    xlings::libs::soul::Soul soul;
+    soul.id = "test";
+    soul.trust_level = "readonly";
+
+    xlings::agent::PromptBuilder pb(bridge, soul, afs);
+    auto prompt = pb.build();
+
+    EXPECT_NE(prompt.find("read-only"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+TEST(PromptBuilder, SkillLayer) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_pb_skill";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    auto reg = xlings::capabilities::build_registry();
+    xlings::agent::ToolBridge bridge(reg);
+
+    xlings::libs::soul::Soul soul;
+    soul.id = "test";
+    soul.trust_level = "confirm";
+    soul.allowed_capabilities = {"*"};
+
+    xlings::agent::PromptBuilder pb(bridge, soul, afs);
+    pb.add_skill("You are an expert at C++ debugging.");
+    auto prompt = pb.build();
+
+    EXPECT_NE(prompt.find("Active Skills"), std::string::npos);
+    EXPECT_NE(prompt.find("C++ debugging"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SkillManager
+// ═══════════════════════════════════════════════════════════════
+
+TEST(SkillManager, RegisterAndMatch) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_skill";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::agent_skill::SkillManager mgr(afs);
+
+    xlings::libs::agent_skill::Skill s;
+    s.name = "debug-helper";
+    s.description = "Helps debug issues";
+    s.prompt = "When debugging, check logs first.";
+    s.triggers = {"debug", "error", "crash"};
+    s.source = "builtin";
+    mgr.register_skill(s);
+
+    auto matches = mgr.match("I have a debug issue");
+    ASSERT_EQ(matches.size(), 1u);
+    EXPECT_EQ(matches[0]->name, "debug-helper");
+
+    auto no_match = mgr.match("install gcc please");
+    EXPECT_TRUE(no_match.empty());
+}
+
+TEST(SkillManager, LoadFromJson) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_skill_json";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    // Write a skill JSON file
+    nlohmann::json j;
+    j["name"] = "install-helper";
+    j["description"] = "Helps with installation";
+    j["prompt"] = "Guide user through installation steps.";
+    j["triggers"] = {"install", "setup"};
+    xlings::libs::agentfs::AgentFS::write_json(afs.skills_path() / "user" / "install.json", j);
+
+    xlings::libs::agent_skill::SkillManager mgr(afs);
+    mgr.load_all();
+
+    auto matches = mgr.match("how to install node?");
+    ASSERT_EQ(matches.size(), 1u);
+    EXPECT_EQ(matches[0]->name, "install-helper");
+    EXPECT_EQ(matches[0]->source, "user");
+
+    fs::remove_all(tmp);
+}
+
+TEST(SkillManager, BuildPrompt) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_skill_prompt";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::agent_skill::SkillManager mgr(afs);
+
+    xlings::libs::agent_skill::Skill s1;
+    s1.name = "skill-a";
+    s1.prompt = "Prompt A content.";
+    s1.triggers = {"a"};
+    mgr.register_skill(s1);
+
+    xlings::libs::agent_skill::Skill s2;
+    s2.name = "skill-b";
+    s2.prompt = "Prompt B content.";
+    s2.triggers = {"b"};
+    mgr.register_skill(s2);
+
+    auto matches = mgr.match("do a and b");
+    std::vector<const xlings::libs::agent_skill::Skill*> ptrs(matches.begin(), matches.end());
+    auto prompt = mgr.build_prompt(ptrs);
+
+    EXPECT_NE(prompt.find("skill-a"), std::string::npos);
+    EXPECT_NE(prompt.find("skill-b"), std::string::npos);
+    EXPECT_NE(prompt.find("Prompt A"), std::string::npos);
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Session
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Session, CreateAndLoadMeta) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_session";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::agent::SessionManager mgr(afs);
+
+    auto meta = mgr.create("claude-sonnet-4-20250514", "test session");
+    EXPECT_FALSE(meta.id.empty());
+    EXPECT_EQ(meta.title, "test session");
+    EXPECT_EQ(meta.model, "claude-sonnet-4-20250514");
+    EXPECT_EQ(meta.turn_count, 0);
+
+    auto loaded = mgr.load_meta(meta.id);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->id, meta.id);
+    EXPECT_EQ(loaded->title, "test session");
+
+    fs::remove_all(tmp);
+}
+
+TEST(Session, SaveAndLoadConversation) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_session_conv";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::agent::SessionManager mgr(afs);
+
+    auto meta = mgr.create("test-model");
+
+    // Add messages to conversation
+    mcpplibs::llmapi::Conversation conv;
+    conv.push(mcpplibs::llmapi::Message::user("hello"));
+    conv.push(mcpplibs::llmapi::Message::assistant("hi there"));
+    mgr.save_conversation(meta.id, conv);
+
+    auto loaded = mgr.load_conversation(meta.id);
+    ASSERT_EQ(loaded.messages.size(), 2u);
+    EXPECT_EQ(loaded.messages[0].role, mcpplibs::llmapi::Role::User);
+    EXPECT_EQ(loaded.messages[1].role, mcpplibs::llmapi::Role::Assistant);
+
+    fs::remove_all(tmp);
+}
+
+TEST(Session, ListAndRemove) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_session_list";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::agent::SessionManager mgr(afs);
+
+    auto s1 = mgr.create("model1", "first");
+    auto s2 = mgr.create("model2", "second");
+
+    auto list = mgr.list();
+    EXPECT_EQ(list.size(), 2u);
+
+    EXPECT_TRUE(mgr.remove(s1.id));
+    auto list2 = mgr.list();
+    EXPECT_EQ(list2.size(), 1u);
+    EXPECT_EQ(list2[0].id, s2.id);
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Journal
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Journal, WriteAndReadBack) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_journal";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::journal::Journal journal(afs);
+
+    journal.log_llm_turn("user", "hello");
+    journal.log_tool_call("search_packages", R"({"keyword":"gcc"})");
+    journal.log_tool_result("search_packages", "found gcc", false);
+
+    auto entries = journal.read_today();
+    ASSERT_EQ(entries.size(), 3u);
+    EXPECT_EQ(entries[0]["type"], "llm_turn");
+    EXPECT_EQ(entries[0]["role"], "user");
+    EXPECT_EQ(entries[0]["content"], "hello");
+    EXPECT_TRUE(entries[0].contains("timestamp_ms"));
+
+    EXPECT_EQ(entries[1]["type"], "tool_call");
+    EXPECT_EQ(entries[1]["tool"], "search_packages");
+
+    EXPECT_EQ(entries[2]["type"], "tool_result");
+    EXPECT_EQ(entries[2]["is_error"], false);
+
+    fs::remove_all(tmp);
+}
+
+TEST(Journal, MultipleAppendsDoNotOverwrite) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_journal2";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::journal::Journal journal(afs);
+
+    journal.log_llm_turn("user", "first");
+    auto entries1 = journal.read_today();
+    ASSERT_EQ(entries1.size(), 1u);
+
+    journal.log_llm_turn("assistant", "second");
+    auto entries2 = journal.read_today();
+    ASSERT_EQ(entries2.size(), 2u);
+    EXPECT_EQ(entries2[0]["content"], "first");
+    EXPECT_EQ(entries2[1]["content"], "second");
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Approval
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Approval, TrustAutoApprovesAll) {
+    xlings::libs::soul::Soul s;
+    s.id = "test";
+    s.trust_level = "auto";
+    s.allowed_capabilities = {"*"};
+
+    xlings::agent::ApprovalPolicy policy(s);
+
+    xlings::capability::CapabilitySpec spec;
+    spec.name = "install_packages";
+    spec.destructive = true;
+
+    EXPECT_EQ(policy.check(spec), xlings::agent::ApprovalResult::Approved);
+}
+
+TEST(Approval, ConfirmDestructiveNeedsConfirm) {
+    xlings::libs::soul::Soul s;
+    s.id = "test";
+    s.trust_level = "confirm";
+    s.allowed_capabilities = {"*"};
+
+    xlings::agent::ApprovalPolicy policy(s);
+
+    xlings::capability::CapabilitySpec spec;
+    spec.name = "remove_package";
+    spec.destructive = true;
+
+    EXPECT_EQ(policy.check(spec), xlings::agent::ApprovalResult::NeedConfirm);
+}
+
+TEST(Approval, ReadonlyDeniesDestructive) {
+    xlings::libs::soul::Soul s;
+    s.id = "test";
+    s.trust_level = "readonly";
+    s.allowed_capabilities = {"*"};
+
+    xlings::agent::ApprovalPolicy policy(s);
+
+    xlings::capability::CapabilitySpec spec;
+    spec.name = "remove_package";
+    spec.destructive = true;
+
+    EXPECT_EQ(policy.check(spec), xlings::agent::ApprovalResult::Denied);
+
+    // Non-destructive should be approved
+    spec.destructive = false;
+    EXPECT_EQ(policy.check(spec), xlings::agent::ApprovalResult::Approved);
+}
+
+TEST(Approval, DeniedCapabilityAlwaysDenied) {
+    xlings::libs::soul::Soul s;
+    s.id = "test";
+    s.trust_level = "auto";
+    s.allowed_capabilities = {"*"};
+    s.denied_capabilities = {"install_packages"};
+
+    xlings::agent::ApprovalPolicy policy(s);
+
+    xlings::capability::CapabilitySpec spec;
+    spec.name = "install_packages";
+    spec.destructive = false;
+
+    EXPECT_EQ(policy.check(spec), xlings::agent::ApprovalResult::Denied);
+}
+
+TEST(Approval, ForbiddenActionInParams) {
+    xlings::libs::soul::Soul s;
+    s.id = "test";
+    s.trust_level = "auto";
+    s.allowed_capabilities = {"*"};
+    s.forbidden_actions = {"rm -rf"};
+
+    xlings::agent::ApprovalPolicy policy(s);
+
+    xlings::capability::CapabilitySpec spec;
+    spec.name = "run_command";
+    spec.destructive = false;
+
+    EXPECT_EQ(policy.check(spec, "rm -rf /"), xlings::agent::ApprovalResult::Denied);
+    EXPECT_EQ(policy.check(spec, "ls -la"), xlings::agent::ApprovalResult::Approved);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Soul
+// ═══════════════════════════════════════════════════════════════
+
+TEST(Soul, CreateDefaultHasNonEmptyId) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_soul";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::soul::SoulManager mgr(afs);
+
+    auto s = mgr.create_default();
+    EXPECT_FALSE(s.id.empty());
+    EXPECT_EQ(s.trust_level, "confirm");
+    EXPECT_EQ(s.allowed_capabilities.size(), 1u);
+    EXPECT_EQ(s.allowed_capabilities[0], "*");
+
+    fs::remove_all(tmp);
+}
+
+TEST(Soul, AllowedWildcard) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_soul_allow";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::soul::SoulManager mgr(afs);
+
+    auto s = mgr.create_default();
+    EXPECT_TRUE(mgr.is_capability_allowed(s, "install_packages"));
+    EXPECT_TRUE(mgr.is_capability_allowed(s, "search_packages"));
+
+    fs::remove_all(tmp);
+}
+
+TEST(Soul, DeniedCapability) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_soul_deny";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::soul::SoulManager mgr(afs);
+
+    auto s = mgr.create_default();
+    s.denied_capabilities.push_back("install_packages");
+    EXPECT_FALSE(mgr.is_capability_allowed(s, "install_packages"));
+    EXPECT_TRUE(mgr.is_capability_allowed(s, "search_packages"));
+
+    fs::remove_all(tmp);
+}
+
+TEST(Soul, ForbiddenAction) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_soul_forbidden";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::soul::SoulManager mgr(afs);
+
+    auto s = mgr.create_default();
+    s.forbidden_actions.push_back("rm -rf");
+    EXPECT_TRUE(mgr.is_action_forbidden(s, "rm -rf /"));
+    EXPECT_FALSE(mgr.is_action_forbidden(s, "ls -la"));
+
+    fs::remove_all(tmp);
+}
+
+TEST(Soul, LoadOrCreate) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_soul_loc";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    xlings::libs::soul::SoulManager mgr(afs);
+
+    auto s1 = mgr.load_or_create();
+    EXPECT_FALSE(s1.id.empty());
+
+    // Second call should load same soul
+    auto s2 = mgr.load_or_create();
+    EXPECT_EQ(s1.id, s2.id);
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AgentFS
+// ═══════════════════════════════════════════════════════════════
+
+TEST(AgentFS, EnsureInitializedCreatesTree) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_agentfs";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+
+    EXPECT_TRUE(fs::is_directory(tmp / "config"));
+    EXPECT_TRUE(fs::is_directory(tmp / "soul"));
+    EXPECT_TRUE(fs::is_directory(tmp / "sessions"));
+    EXPECT_TRUE(fs::is_directory(tmp / "journal"));
+    EXPECT_TRUE(fs::is_directory(tmp / "cache" / "embeddings"));
+    EXPECT_TRUE(fs::is_directory(tmp / "memory" / "entries"));
+    EXPECT_TRUE(fs::is_directory(tmp / "skills" / "builtin"));
+    EXPECT_TRUE(fs::is_directory(tmp / "skills" / "user"));
+    EXPECT_TRUE(fs::is_directory(tmp / "tmp"));
+    EXPECT_TRUE(fs::exists(tmp / "version.json"));
+    EXPECT_EQ(afs.schema_version(), 1);
+
+    fs::remove_all(tmp);
+}
+
+TEST(AgentFS, IdempotentInitialization) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_agentfs_idem";
+    fs::remove_all(tmp);
+
+    xlings::libs::agentfs::AgentFS afs(tmp);
+    afs.ensure_initialized();
+    afs.ensure_initialized(); // second call should not fail
+    EXPECT_EQ(afs.schema_version(), 1);
+
+    fs::remove_all(tmp);
+}
+
+TEST(AgentFS, ReadWriteJson) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_agentfs_json";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    auto path = tmp / "test.json";
+    nlohmann::json data = {{"key", "value"}, {"num", 42}};
+    xlings::libs::agentfs::AgentFS::write_json(path, data);
+
+    auto loaded = xlings::libs::agentfs::AgentFS::read_json(path);
+    EXPECT_EQ(loaded["key"], "value");
+    EXPECT_EQ(loaded["num"], 42);
+
+    // Read non-existent → null json
+    auto missing = xlings::libs::agentfs::AgentFS::read_json(tmp / "nope.json");
+    EXPECT_TRUE(missing.is_null());
+
+    fs::remove_all(tmp);
+}
+
+TEST(AgentFS, AppendAndReadJsonl) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_agentfs_jsonl";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
+
+    auto path = tmp / "log.jsonl";
+    xlings::libs::agentfs::AgentFS::append_jsonl(path, {{"msg", "hello"}});
+    xlings::libs::agentfs::AgentFS::append_jsonl(path, {{"msg", "world"}});
+
+    auto lines = xlings::libs::agentfs::AgentFS::read_jsonl(path);
+    ASSERT_EQ(lines.size(), 2u);
+    EXPECT_EQ(lines[0]["msg"], "hello");
+    EXPECT_EQ(lines[1]["msg"], "world");
+
+    fs::remove_all(tmp);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FileLock
+// ═══════════════════════════════════════════════════════════════
+
+TEST(FileLock, ExclusiveLockAndUnlock) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_flock_excl.lock";
+    {
+        xlings::libs::flock::FileLock lk(tmp.string());
+        EXPECT_TRUE(lk.is_locked());
+    }
+    fs::remove(tmp);
+}
+
+TEST(FileLock, TwoExclusiveLocksConflict) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_flock_conflict.lock";
+    xlings::libs::flock::FileLock lk1(tmp.string());
+    EXPECT_TRUE(lk1.is_locked());
+
+    auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string());
+    EXPECT_FALSE(lk2.is_locked());
+
+    lk1.unlock();
+    auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string());
+    EXPECT_TRUE(lk3.is_locked());
+    lk3.unlock();
+    fs::remove(tmp);
+}
+
+TEST(FileLock, SharedLocksConcurrent) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_flock_shared.lock";
+    xlings::libs::flock::FileLock lk1(tmp.string(), xlings::libs::flock::LockType::Shared);
+    EXPECT_TRUE(lk1.is_locked());
+
+    auto lk2 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Shared);
+    EXPECT_TRUE(lk2.is_locked());
+
+    // Exclusive should fail while shared are held
+    auto lk3 = xlings::libs::flock::FileLock::try_lock(tmp.string(), xlings::libs::flock::LockType::Exclusive);
+    EXPECT_FALSE(lk3.is_locked());
+
+    lk1.unlock();
+    lk2.unlock();
+    fs::remove(tmp);
+}
+
+TEST(FileLock, TryLockNonBlocking) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xlings_test_flock_trylock.lock";
+    auto lk = xlings::libs::flock::FileLock::try_lock(tmp.string());
+    EXPECT_TRUE(lk.is_locked());
+    lk.unlock();
+    fs::remove(tmp);
 }
 
 // ============================================================
