@@ -79,6 +79,14 @@ namespace platform_impl {
         return !static_cast<bool>(ec);
     }
 
+    // No-op on Linux — terminal generally supports ANSI natively.
+    export void init_console_output() {}
+
+    // Check if stdout is a TTY (supports cursor save/restore).
+    export bool supports_rewrite_output() {
+        return ::isatty(STDOUT_FILENO) != 0;
+    }
+
     export template<typename... Args>
     void println(std::format_string<Args...> fmt, Args&&... args) {
         std::println(fmt, std::forward<Args>(args)...);

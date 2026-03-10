@@ -6,6 +6,7 @@ module;
 #include <mach-o/dyld.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 export module xlings.platform:macos;
@@ -81,6 +82,14 @@ namespace platform_impl {
         ec.clear();
         std::filesystem::create_directory_symlink(linkTarget, link, ec);
         return !static_cast<bool>(ec);
+    }
+
+    // No-op on macOS — terminal generally supports ANSI natively.
+    export void init_console_output() {}
+
+    // Check if stdout is a TTY (supports cursor save/restore).
+    export bool supports_rewrite_output() {
+        return ::isatty(STDOUT_FILENO) != 0;
     }
 
     export template<typename... Args>

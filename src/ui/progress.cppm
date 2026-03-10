@@ -213,10 +213,14 @@ std::string format_speed(double bytesPerSec) {
 
 // Render download progress using FTXUI themed elements.
 // Called from a TUI refresh thread. Outputs to stdout.
-void render_download_progress(std::span<const DownloadProgressEntry> progState,
-                              std::size_t nameWidth,
-                              double elapsedSec,
-                              bool sizesReady) {
+// Render download progress. prevLines > 0 means move cursor up and overwrite.
+// All output is batched into a single write to eliminate flicker.
+// Returns the number of terminal lines rendered.
+int render_download_progress(std::span<const DownloadProgressEntry> progState,
+                             std::size_t nameWidth,
+                             double elapsedSec,
+                             bool sizesReady,
+                             int prevLines = 0) {
     using namespace ftxui;
     constexpr std::size_t statusWidth = 8;
 
@@ -320,9 +324,18 @@ void render_download_progress(std::span<const DownloadProgressEntry> progState,
     auto doc = vbox(std::move(rows));
     auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
     Render(screen, doc);
-    screen.Print();
-    std::print("\n");
-    std::fflush(stdout);
+
+    // Build single output buffer: cursor-up + content + clear trailing + newline
+    std::string output;
+    if (prevLines > 0) {
+        output += "\033[" + std::to_string(prevLines) + "A\r";
+    }
+    output += screen.ToString();
+    output += "\033[J\n";  // clear any leftover lines below, then newline
+
+    std::cout << output << std::flush;
+
+    return screen.dimy();
 }
 
 } // namespace xlings::ui

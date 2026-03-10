@@ -146,11 +146,7 @@ void print_install_plan(std::span<const std::pair<std::string, std::string>> pac
     headerScreen.Print();
     std::print("\n");
 
-    // Save cursor here — download progress will restore to this point
-    std::print("\033[s");
-    std::fflush(stdout);
-
-    // Print package lines (will be replaced by progress)
+    // Print package lines (will be replaced by download progress via cursor-up)
     Elements pkgRows;
     for (auto& [nameVer, desc] : packages) {
         pkgRows.push_back(hbox({

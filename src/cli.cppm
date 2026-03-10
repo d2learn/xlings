@@ -173,7 +173,8 @@ static void dispatch_data_event(const DataEvent& e) {
                 });
             }
         }
-        ui::render_download_progress(entries, nameWidth, elapsedSec, sizesReady);
+        auto prevLines = json.value("prevLines", 0);
+        ui::render_download_progress(entries, nameWidth, elapsedSec, sizesReady, prevLines);
     }
     else {
         log::debug("unhandled DataEvent kind: {}", e.kind);

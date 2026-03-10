@@ -236,10 +236,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
 
-    // Download progress renderer: emit via EventStream so CLI consumer renders
+    // Download progress renderer: emit via EventStream so CLI consumer renders.
+    // Returns line count from the UI renderer for cursor-up rewriting.
     DownloadProgressRenderer dlRenderer =
         [&stream](std::span<const TaskProgress> state, std::size_t nameWidth,
-                  double elapsedSec, bool sizesReady) {
+                  double elapsedSec, bool sizesReady, int prevLines) -> int {
             nlohmann::json files = nlohmann::json::array();
             for (auto& p : state) {
                 files.push_back({
@@ -256,7 +257,10 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
             payload["nameWidth"] = nameWidth;
             payload["elapsedSec"] = elapsedSec;
             payload["sizesReady"] = sizesReady;
+            payload["prevLines"] = prevLines;
             stream.emit(DataEvent{"download_progress", payload.dump()});
+            // Estimated line count: entries + blank line + overall bar
+            return static_cast<int>(state.size()) + 2;
         };
 
     int successCount = 0;

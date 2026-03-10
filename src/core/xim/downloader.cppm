@@ -173,11 +173,16 @@ struct TaskProgress {
 
 // Callback for rendering download progress.
 // Called from the TUI refresh thread (under mutex) every ~200ms.
-using DownloadProgressRenderer = std::function<void(
+// prevLines: number of lines from the previous frame (0 on first call or when
+//            rewriting is unsupported). The renderer should move cursor up by
+//            prevLines and overwrite in a single write to avoid flicker.
+// Returns the number of terminal lines rendered (for the next cursor-up).
+using DownloadProgressRenderer = std::function<int(
     std::span<const TaskProgress> state,
     std::size_t nameWidth,
     double elapsedSec,
-    bool sizesReady)>;
+    bool sizesReady,
+    int prevLines)>;
 
 // Download all tasks with limited concurrency, real-time per-task progress
 std::vector<DownloadResult>
@@ -234,42 +239,46 @@ download_all(std::span<const DownloadTask> tasks,
     });
 
     // TUI refresh thread: redraws progress every 200ms using FTXUI.
-    // Cursor was saved by print_install_plan (\033[s) before package lines.
-    // Progress rendering replaces those lines in-place.
+    // Uses relative cursor movement (\033[<N>A) to overwrite previous frame in-place.
     auto startTime = std::chrono::steady_clock::now();
+
+    bool canRewrite = platform::supports_rewrite_output();
+    int lastLines = 0;  // lines rendered in previous frame (for cursor-up)
 
     std::jthread tuiThread([&](std::stop_token stoken) {
         if (!onRender) return;  // No renderer — skip TUI
 
-        // Hide cursor during download
-        std::print("\033[?25l");
-        std::fflush(stdout);
+        if (canRewrite) {
+            // Hide cursor during download
+            std::print("\033[?25l");
+            std::fflush(stdout);
+        }
 
         while (!stoken.stop_requested() && !allDone.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-            // Restore to cursor saved by print_install_plan, clear from there
-            std::print("\033[u\033[J");
 
             auto elapsed = std::chrono::steady_clock::now() - startTime;
             auto elapsedSec = std::chrono::duration<double>(elapsed).count();
             {
                 std::lock_guard lock(mutex);
-                onRender(progState, nameWidth, elapsedSec, sizesReady.load());
+                lastLines = onRender(progState, nameWidth, elapsedSec,
+                                     sizesReady.load(), canRewrite ? lastLines : 0);
             }
         }
 
         // Final render
-        std::print("\033[u\033[J");
         {
             auto elapsed = std::chrono::steady_clock::now() - startTime;
             auto elapsedSec = std::chrono::duration<double>(elapsed).count();
             std::lock_guard lock(mutex);
-            onRender(progState, nameWidth, elapsedSec, sizesReady.load());
+            onRender(progState, nameWidth, elapsedSec,
+                     sizesReady.load(), canRewrite ? lastLines : 0);
         }
-        // Show cursor again
-        std::print("\033[?25h");
-        std::fflush(stdout);
+        if (canRewrite) {
+            // Show cursor again
+            std::print("\033[?25h");
+            std::fflush(stdout);
+        }
     });
 
     std::vector<std::jthread> threads;

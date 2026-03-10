@@ -27,6 +27,8 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    xlings::platform::init_console_output();
+
     auto& p = xlings::Config::paths();
     xlings::platform::set_env_variable("XLINGS_HOME", p.homeDir.string());
 

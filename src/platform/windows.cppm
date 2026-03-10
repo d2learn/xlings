@@ -72,6 +72,31 @@ namespace platform_impl {
         return std::system(cmd.c_str()) == 0;
     }
 
+    // Enable UTF-8 code pages and VT processing for ANSI escape sequences.
+    // Call once at program startup.
+    export void init_console_output() {
+        ::SetConsoleOutputCP(CP_UTF8);
+        ::SetConsoleCP(CP_UTF8);
+
+        HANDLE hOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut != INVALID_HANDLE_VALUE) {
+            DWORD mode = 0;
+            if (::GetConsoleMode(hOut, &mode)) {
+                mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+                ::SetConsoleMode(hOut, mode);
+            }
+        }
+    }
+
+    // Check if stdout supports cursor save/restore for in-place rewriting.
+    export bool supports_rewrite_output() {
+        HANDLE hOut = ::GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut == INVALID_HANDLE_VALUE) return false;
+        DWORD mode = 0;
+        if (!::GetConsoleMode(hOut, &mode)) return false;
+        return (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+    }
+
     export template<typename... Args>
     void println(std::format_string<Args...> fmt, Args&&... args) {
         std::println(fmt, std::forward<Args>(args)...);

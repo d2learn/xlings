@@ -27,6 +27,8 @@ namespace platform {
     export using platform_impl::make_files_executable;
     export using platform_impl::create_directory_link;
     export using platform_impl::println;
+    export using platform_impl::init_console_output;
+    export using platform_impl::supports_rewrite_output;
 
     export [[nodiscard]] std::string get_rundir() {
         return gRundir;
