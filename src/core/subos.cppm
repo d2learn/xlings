@@ -7,7 +7,6 @@ import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
 import xlings.runtime;
-import xlings.ui;
 import xlings.core.utils;
 import xlings.core.xself;
 
@@ -210,7 +209,13 @@ int run_list_(EventStream& stream) {
     for (auto& s : all) {
         entries.emplace_back(s.name, s.dir.string(), s.toolCount, s.isActive);
     }
-    ui::print_subos_list(entries);
+    nlohmann::json entriesJson = nlohmann::json::array();
+    for (auto& [n, d, tc, active] : entries) {
+        entriesJson.push_back({{"name", n}, {"dir", d}, {"pkgCount", tc}, {"active", active}});
+    }
+    nlohmann::json payload;
+    payload["entries"] = std::move(entriesJson);
+    stream.emit(DataEvent{"subos_list", payload.dump()});
     return 0;
 }
 
@@ -222,11 +227,14 @@ int run_info_(const std::string& name, EventStream& stream) {
         log::error("[xlings:subos] '{}' not found", target);
         return 1;
     }
-    std::vector<ui::InfoField> fields;
-    fields.push_back({"active", si->isActive ? "yes" : "no", si->isActive});
-    fields.push_back({"dir", si->dir.string()});
-    fields.push_back({"tools", std::to_string(si->toolCount)});
-    ui::print_info_panel(si->name, fields);
+    nlohmann::json fieldsJson = nlohmann::json::array();
+    fieldsJson.push_back({{"label", "active"}, {"value", si->isActive ? "yes" : "no"}, {"highlight", si->isActive}});
+    fieldsJson.push_back({{"label", "dir"}, {"value", si->dir.string()}, {"highlight", false}});
+    fieldsJson.push_back({{"label", "tools"}, {"value", std::to_string(si->toolCount)}, {"highlight", false}});
+    nlohmann::json payload;
+    payload["title"] = si->name;
+    payload["fields"] = std::move(fieldsJson);
+    stream.emit(DataEvent{"info_panel", payload.dump()});
     return 0;
 }
 
