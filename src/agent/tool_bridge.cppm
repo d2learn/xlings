@@ -4,7 +4,9 @@ import std;
 import xlings.runtime.event;
 import xlings.runtime.capability;
 import xlings.runtime.event_stream;
+import xlings.runtime.cancellation;
 import xlings.libs.json;
+import xlings.core.utf8;
 
 namespace xlings::agent {
 
@@ -53,7 +55,8 @@ public:
     auto execute(
         std::string_view name,
         std::string_view arguments,
-        EventStream& stream
+        EventStream& stream,
+        CancellationToken* cancel = nullptr
     ) -> ToolResult {
         auto* cap = registry_.get(name);
         if (!cap) {
@@ -63,10 +66,14 @@ public:
             };
         }
         try {
+            if (cancel) cancel->throw_if_cancelled();
+
             // Clear buffer before execution so we only capture this tool's events
             event_buffer_.clear();
 
-            auto result = cap->execute(std::string(arguments), stream);
+            auto result = cap->execute(std::string(arguments), stream, cancel);
+
+            if (cancel) cancel->throw_if_cancelled();
 
             // If events were captured, inject them into the result JSON
             if (!event_buffer_.empty()) {
@@ -86,7 +93,7 @@ public:
                 }
                 json["events"] = std::move(events);
                 event_buffer_.clear();
-                return ToolResult{.content = json.dump()};
+                return ToolResult{.content = utf8::safe_dump(json)};
             }
 
             return ToolResult{.content = result};

@@ -1,11 +1,3 @@
-module;
-
-#include "ftxui/component/component.hpp"
-#include "ftxui/component/screen_interactive.hpp"
-#include "ftxui/dom/elements.hpp"
-#include "ftxui/screen/color.hpp"
-#include "ftxui/screen/terminal.hpp"
-
 export module xlings.cli;
 
 import std;
@@ -29,11 +21,13 @@ import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
 import xlings.agent;
 import xlings.agent.commands;
+import xlings.core.utf8;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
 import xlings.libs.agentfs;
 import xlings.libs.soul;
 import xlings.libs.journal;
+import xlings.libs.tinytui;
 import mcpplibs.llmapi;
 
 namespace lua = mcpplibs::capi::lua;
@@ -1023,7 +1017,7 @@ export int run(int argc, char* argv[]) {
                 }
             });
 
-            // Consumer 2: CLI TUI rendering — disabled in agent mode (ftxui owns terminal)
+            // Consumer 2: CLI TUI rendering — disabled in agent mode (tinytui owns terminal)
             stream.set_enabled(tui_listener, false);
 
             // Token tracker + context manager
@@ -1032,18 +1026,16 @@ export int run(int argc, char* argv[]) {
             auto cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
             ctx_mgr.set_cache_dir(cache_dir);
 
-            // ─── ftxui screen (FitComponent = natural terminal scrolling) ───
-            auto screen = ftxui::ScreenInteractive::FitComponent();
-            screen.TrackMouse(false);  // allow terminal scroll wheel
+            // ─── tinytui screen + line editor ───
+            tinytui::Screen screen;
+            tinytui::LineEditor editor;
 
             agent::tui::AgentTuiState tui_state;
             tui_state.model_name = cfg.model;
             tui_state.ctx_limit = agent::TokenTracker::context_limit(cfg.model);
 
-            // ─── Consumer 3: ftxui-compatible data event listener ───
-            // Handles download progress (always) + verbose data display (toggled)
-            bool verbose_data = false;
-
+            // ─── Consumer 3: data event listener ───
+            // Handles download progress + data display in tree
             auto format_speed = [](double bps) -> std::string {
                 if (bps < 1024.0)
                     return std::to_string(static_cast<int>(bps)) + " B/s";
@@ -1055,9 +1047,9 @@ export int run(int argc, char* argv[]) {
                 return std::to_string(mb / 10) + "." + std::to_string(mb % 10) + " MB/s";
             };
 
-            int ftxui_data_listener = stream.on_event([&](const Event& e) {
+            int data_listener = stream.on_event([&](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
-                    // Download progress → update active_progress in tui_state
+                    // Download progress → update download node in active tree
                     if (d->kind == "download_progress") {
                         auto j = nlohmann::json::parse(d->json, nullptr, false);
                         if (j.is_discarded()) return;
@@ -1092,14 +1084,49 @@ export int run(int argc, char* argv[]) {
                             }
                         }
 
-                        screen.Post([&, pct, name = std::move(active_name),
+                        screen.post([&, pct, name = std::move(active_name),
                                      spd = std::move(speed), et = std::move(eta_str)] {
-                            tui_state.active_progress = pct;
-                            tui_state.active_progress_name = name;
-                            tui_state.active_progress_speed = spd;
-                            tui_state.active_progress_eta = et;
+                            // Update download node in active tree (under active parent's last tool call)
+                            if (tui_state.active_turn) {
+                                auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                if (!parent->children.empty()) {
+                                    auto& tool_node = parent->children.back();
+                                    bool found_dl = false;
+                                    for (auto& child : tool_node.children) {
+                                        if (child.kind == agent::tui::TreeNode::Download) {
+                                            child.progress = pct;
+                                            child.title = name.empty() ? "downloading..." : name;
+                                            child.speed = spd;
+                                            child.eta = et;
+                                            found_dl = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!found_dl) {
+                                        tool_node.children.push_back({
+                                            .kind = agent::tui::TreeNode::Download,
+                                            .state = agent::tui::TreeNode::Running,
+                                            .title = name.empty() ? "downloading..." : name,
+                                            .start_ms = agent::tui::steady_now_ms(),
+                                            .progress = pct,
+                                            .speed = spd,
+                                            .eta = et,
+                                        });
+                                    }
+                                    if (pct >= 0.99f) {
+                                        for (auto& child : tool_node.children) {
+                                            if (child.kind == agent::tui::TreeNode::Download &&
+                                                child.state == agent::tui::TreeNode::Running) {
+                                                child.state = agent::tui::TreeNode::Done;
+                                                child.end_ms = agent::tui::steady_now_ms();
+                                                child.progress = 1.0f;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         });
-                        screen.PostEvent(ftxui::Event::Custom);
+                        screen.refresh();
                         return;
                     }
 
@@ -1122,37 +1149,86 @@ export int run(int argc, char* argv[]) {
                             summary = "[" + d->kind + "]";
                         }
                         if (!summary.empty()) {
-                            screen.Post([&, s = std::move(summary)] {
-                                tui_state.active_details.push_back(s);
+                            screen.post([&, s = std::move(summary)] {
+                                // Add as Detail child under last tool call in active parent
+                                if (tui_state.active_turn) {
+                                    auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                    if (!parent->children.empty()) {
+                                        auto& tool_node = parent->children.back();
+                                        tool_node.children.push_back({
+                                            .kind = agent::tui::TreeNode::Detail,
+                                            .state = agent::tui::TreeNode::Done,
+                                            .title = s,
+                                            .start_ms = agent::tui::steady_now_ms(),
+                                        });
+                                    }
+                                }
                             });
-                            screen.PostEvent(ftxui::Event::Custom);
+                            screen.refresh();
                         }
                     }
                 }
             });
 
-            // Helper: add output lines (thread-safe via Post)
+            // Helper: flash messages (thread-safe via Post)
             auto add_hint = [&](std::string text) {
-                screen.Post([&, t = std::move(text)] {
-                    tui_state.lines.push_back({
-                        .type = agent::tui::ChatLine::Hint,
-                        .text = std::move(t),
-                    });
+                screen.post([&, t = std::move(text)] {
+                    tui_state.flash_text = std::move(t);
+                    tui_state.flash_until_ms = agent::tui::steady_now_ms() + 5000;
                 });
-                screen.PostEvent(ftxui::Event::Custom);
+                screen.refresh();
             };
             auto add_error = [&](std::string text) {
-                screen.Post([&, t = std::move(text)] {
-                    tui_state.lines.push_back({
-                        .type = agent::tui::ChatLine::Error,
-                        .text = std::move(t),
-                    });
+                screen.post([&, t = std::move(text)] {
+                    tui_state.flash_text = "\xe2\x9c\x97 " + std::move(t);
+                    tui_state.flash_until_ms = agent::tui::steady_now_ms() + 8000;
                 });
-                screen.PostEvent(ftxui::Event::Custom);
+                screen.refresh();
             };
 
-            // ─── Cancellation flag (ESC to abort current turn) ───
-            std::atomic<bool> cancel_requested{false};
+            // ─── Helper: print conversation history to scrollback ───
+            auto print_conversation_history = [&]() {
+                namespace llm = mcpplibs::llmapi;
+                for (auto& msg : conversation.messages) {
+                    if (msg.role == llm::Role::User) {
+                        std::string text;
+                        if (auto* s = std::get_if<std::string>(&msg.content)) {
+                            text = *s;
+                        } else if (auto* parts = std::get_if<std::vector<llm::ContentPart>>(&msg.content)) {
+                            for (auto& part : *parts) {
+                                if (auto* t = std::get_if<llm::TextContent>(&part)) {
+                                    text += t->text;
+                                }
+                            }
+                        }
+                        if (!text.empty()) {
+                            agent::tui::print_chat_line({
+                                .type = agent::tui::ChatLine::UserMsg, .text = std::move(text)});
+                        }
+                    } else if (msg.role == llm::Role::Assistant) {
+                        std::string text;
+                        if (auto* s = std::get_if<std::string>(&msg.content)) {
+                            text = *s;
+                        } else if (auto* parts = std::get_if<std::vector<llm::ContentPart>>(&msg.content)) {
+                            for (auto& part : *parts) {
+                                if (auto* t = std::get_if<llm::TextContent>(&part)) {
+                                    text += t->text;
+                                }
+                            }
+                        }
+                        if (!text.empty()) {
+                            agent::tui::print_chat_line({
+                                .type = agent::tui::ChatLine::AssistantText, .text = std::move(text)});
+                        }
+                    }
+                }
+                tinytui::flush();
+            };
+
+            // ─── Cancellation token (ESC to abort current turn) ───
+            CancellationToken cancel_token;
+            int ctrl_c_count = 0;
+            std::int64_t last_ctrl_c_ms = 0;
 
             // ─── Message queue (main thread → agent thread) ───
             std::mutex msg_mtx;
@@ -1167,30 +1243,98 @@ export int run(int argc, char* argv[]) {
             agent::ConfirmCallback confirm_cb;
             if (!flag_auto_approve) {
                 confirm_cb = [&](std::string_view tool_name, std::string_view arguments) -> bool {
-                    // Show approval prompt in TUI
-                    screen.Post([&, tn = std::string(tool_name), a = std::string(arguments)] {
-                        tui_state.approval_pending = true;
-                        tui_state.approval_tool_name = tn;
-                        tui_state.approval_args = a;
-                    });
-                    screen.PostEvent(ftxui::Event::Custom);
-
-                    // Block agent thread until user responds
+                    // 1. Reset approval_result before showing prompt
                     {
                         std::lock_guard lk(approval_mtx);
                         approval_result = std::nullopt;
                     }
-                    std::unique_lock lk(approval_mtx);
-                    approval_cv.wait(lk, [&] { return approval_result.has_value(); });
-                    bool approved = *approval_result;
 
-                    // Clear approval prompt
-                    screen.Post([&] { tui_state.approval_pending = false; });
-                    screen.PostEvent(ftxui::Event::Custom);
+                    // 2. Show approval prompt + add Approval tree node
+                    screen.post([&, tn = std::string(tool_name), a = std::string(arguments)] {
+                        tui_state.approval_pending = true;
+                        tui_state.approval_tool_name = tn;
+                        tui_state.approval_args = a;
+                        // Add Approval leaf node under current ToolCall
+                        if (tui_state.active_turn) {
+                            auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                            if (!parent->children.empty() &&
+                                parent->children.back().kind == agent::tui::TreeNode::ToolCall &&
+                                parent->children.back().state == agent::tui::TreeNode::Running) {
+                                parent->children.back().children.push_back({
+                                    .kind = agent::tui::TreeNode::Approval,
+                                    .state = agent::tui::TreeNode::Running,
+                                    .title = "approve " + tn + "(" + utf8::safe_truncate(a, 40) + ")?",
+                                    .start_ms = agent::tui::steady_now_ms(),
+                                });
+                            }
+                        }
+                    });
+                    screen.refresh();
+
+                    // 3. Wait with cancellation awareness (30s timeout)
+                    {
+                        std::unique_lock lk(approval_mtx);
+                        if (!cancel_token.wait_or_cancel(lk, approval_cv,
+                                [&] { return approval_result.has_value(); },
+                                std::chrono::seconds{30})) {
+                            // Timeout or ESC cancel → deny; update tree node
+                            screen.post([&] {
+                                tui_state.approval_pending = false;
+                                if (tui_state.active_turn) {
+                                    auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                    if (!parent->children.empty()) {
+                                        for (auto& ch : parent->children.back().children) {
+                                            if (ch.kind == agent::tui::TreeNode::Approval &&
+                                                ch.state == agent::tui::TreeNode::Running) {
+                                                ch.state = agent::tui::TreeNode::Failed;
+                                                ch.end_ms = agent::tui::steady_now_ms();
+                                                ch.title = "denied (timeout)";
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                            screen.refresh();
+                            return false;
+                        }
+                    }
+
+                    bool approved = *approval_result;
+                    approval_result = std::nullopt;
+
+                    // Clear approval prompt + update tree node
+                    screen.post([&, approved] {
+                        tui_state.approval_pending = false;
+                        if (tui_state.active_turn) {
+                            auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                            if (!parent->children.empty()) {
+                                for (auto& ch : parent->children.back().children) {
+                                    if (ch.kind == agent::tui::TreeNode::Approval &&
+                                        ch.state == agent::tui::TreeNode::Running) {
+                                        ch.state = approved ? agent::tui::TreeNode::Done
+                                                           : agent::tui::TreeNode::Failed;
+                                        ch.end_ms = agent::tui::steady_now_ms();
+                                        ch.title = approved ? "approved" : "denied";
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    screen.refresh();
 
                     return approved;
                 };
             }
+
+            // ─── Auto-responders for agent mode (install confirmation, package selection) ───
+            stream.register_auto_responder("confirm_install", [](const PromptEvent& req) {
+                return req.defaultValue.empty() ? "y" : req.defaultValue;
+            });
+            stream.register_auto_responder("select_package", [](const PromptEvent& req) {
+                return req.options.empty() ? "" : req.options.front();
+            });
 
             // ─── Slash command registry ───
             agent::CommandRegistry cmd_registry;
@@ -1226,14 +1370,26 @@ export int run(int argc, char* argv[]) {
                 }
                 session_meta = *meta;
                 conversation = session_mgr.load_conversation(std::string(args));
+
+                // Print conversation history to scrollback
+                screen.post([&] {
+                    screen.flush_to_scrollback([&] {
+                        print_conversation_history();
+                    });
+                });
+
+                // Sync context manager state
+                ctx_mgr.sync_from_conversation(conversation);
+
+                // Update context cache directory for new session
+                auto new_cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
+                ctx_mgr.set_cache_dir(new_cache_dir);
+
                 add_hint("resumed session: " + session_meta.title +
                     " (" + std::to_string(conversation.size()) + " messages)");
             }});
 
-            cmd_registry.register_command({"/verbose", "Toggle activity details display", [&](std::string_view) {
-                verbose_data = !verbose_data;
-                add_hint(verbose_data ? "activity details: ON" : "activity details: OFF");
-            }});
+            // /task-tree removed — tinytui always shows all tree nodes
 
             cmd_registry.register_command({"/model", "Switch or show current model", [&](std::string_view args) {
                 if (args.empty()) {
@@ -1243,7 +1399,7 @@ export int run(int argc, char* argv[]) {
                     cfg.provider = agent::infer_provider(cfg.model);
                     tools = agent::to_llmapi_tools(bridge);
                     ctx_mgr.set_model(cfg.model);
-                    screen.Post([&] { tui_state.model_name = cfg.model; });
+                    screen.post([&] { tui_state.model_name = cfg.model; });
                     add_hint("switched to: " + cfg.model + " (" + cfg.provider + ")");
                 }
             }});
@@ -1266,9 +1422,9 @@ export int run(int argc, char* argv[]) {
                 auto before = conversation.size();
                 ctx_mgr.compact(conversation, keep);
                 auto after = conversation.size();
-                add_hint("compacted: " + std::to_string(before) +
-                    " -> " + std::to_string(after) + " messages" +
-                    " (L2 cache: " + std::to_string(ctx_mgr.l2_count()) + " turns)");
+                add_hint("--- context compacted (" + std::to_string(before) +
+                    " -> " + std::to_string(after) + " messages, L2 cache: " +
+                    std::to_string(ctx_mgr.l2_count()) + " turns) ---");
             }});
 
             cmd_registry.register_command({"/context", "Show context cache stats", [&](std::string_view) {
@@ -1283,9 +1439,11 @@ export int run(int argc, char* argv[]) {
                     tracker.context_used()) + "/" + agent::TokenTracker::format_tokens(ctx_limit));
             }});
 
-            cmd_registry.register_command({"/clear", "Clear output", [&](std::string_view) {
-                screen.Post([&] { tui_state.lines.clear(); });
-                screen.PostEvent(ftxui::Event::Custom);
+            cmd_registry.register_command({"/clear", "Clear display", [&](std::string_view) {
+                screen.post([&] {
+                    tui_state.flash_text.clear();
+                });
+                screen.refresh();
             }});
 
             cmd_registry.register_command({"/help", "Show available commands", [&](std::string_view) {
@@ -1296,29 +1454,12 @@ export int run(int argc, char* argv[]) {
                 add_hint("  exit/quit  Exit agent");
             }});
 
-            // ─── Build ftxui component (minimal: active content + input + status) ───
-            // Start with a space so ftxui places a blinking cursor (workaround for
-            // Chinese IME positioning — empty input has no cursor anchor).
-            std::string input_content = " ";
-
-            auto input_opt = ftxui::InputOption();
-            input_opt.content = &input_content;
-            input_opt.multiline = false;
-            input_opt.placeholder = "";
-            // Strip default decoration (no white background)
-            input_opt.transform = [](ftxui::InputState state) {
-                return state.element;
-            };
-            input_opt.on_change = [&] {
-                // Ensure leading space cursor anchor is preserved
-                if (input_content.empty() || input_content[0] != ' ') {
-                    input_content = " " + input_content;
-                }
-                // Check for slash commands (after the leading space)
-                auto trimmed = input_content.substr(1);
-                if (!trimmed.empty() && trimmed[0] == '/' &&
-                    trimmed.find(' ') == std::string::npos) {
-                    auto matches = cmd_registry.match(trimmed);
+            // ─── tinytui: line editor callbacks ───
+            editor.on_change = [&] {
+                auto& input = editor.content();
+                if (!input.empty() && input[0] == '/' &&
+                    input.find(' ') == std::string::npos) {
+                    auto matches = cmd_registry.match(input);
                     tui_state.completions = std::move(matches);
                     tui_state.completion_selected = tui_state.completions.empty() ? -1 : 0;
                 } else {
@@ -1326,64 +1467,50 @@ export int run(int argc, char* argv[]) {
                     tui_state.completion_selected = -1;
                 }
             };
-            input_opt.on_enter = [&] {
-                if (tui_state.approval_pending) {
-                    std::lock_guard lk(approval_mtx);
-                    approval_result = true;
-                    approval_cv.notify_one();
-                    return;
-                }
-                // Trim leading space (cursor workaround)
-                auto msg = input_content;
-                if (!msg.empty() && msg[0] == ' ') msg.erase(0, 1);
-                if (msg.empty()) return;
-                input_content = " ";  // reset with cursor anchor space
-                tui_state.history_pos = -1;
-                tui_state.saved_input.clear();
-                tui_state.completions.clear();
-                tui_state.completion_selected = -1;
-                {
-                    std::lock_guard lk(msg_mtx);
-                    msg_queue.push_back(std::move(msg));
-                }
-                msg_cv.notify_one();
-            };
 
-            auto input_component = ftxui::Input(input_opt);
-
-            auto component = ftxui::CatchEvent(input_component, [&](ftxui::Event event) {
+            // ─── tinytui: key handler ───
+            screen.set_key_handler([&](const tinytui::KeyEvent& key) -> bool {
+                // Approval mode
                 if (tui_state.approval_pending) {
-                    if (event == ftxui::Event::Character('y') || event == ftxui::Event::Character('Y')) {
+                    if (key.type == tinytui::KeyEvent::Char &&
+                        (key.ch == "y" || key.ch == "Y")) {
                         std::lock_guard lk(approval_mtx);
                         approval_result = true;
                         approval_cv.notify_one();
                         return true;
                     }
-                    if (event == ftxui::Event::Character('n') || event == ftxui::Event::Character('N')) {
+                    if (key.type == tinytui::KeyEvent::Char &&
+                        (key.ch == "n" || key.ch == "N")) {
                         std::lock_guard lk(approval_mtx);
                         approval_result = false;
                         approval_cv.notify_one();
                         return true;
                     }
-                    if (event.is_character()) return true;
+                    if (key.type == tinytui::KeyEvent::Enter) {
+                        std::lock_guard lk(approval_mtx);
+                        approval_result = true;
+                        approval_cv.notify_one();
+                        return true;
+                    }
+                    return true;  // consume all keys in approval mode
                 }
 
                 // History: ↑
-                if (event == ftxui::Event::ArrowUp) {
+                if (key.type == tinytui::KeyEvent::Up) {
                     if (!tui_state.completions.empty()) {
                         if (tui_state.completion_selected > 0) --tui_state.completion_selected;
                     } else if (!tui_state.history.empty()) {
                         if (tui_state.history_pos < 0) {
-                            tui_state.saved_input = input_content;
+                            tui_state.saved_input = editor.content();
                             tui_state.history_pos = static_cast<int>(tui_state.history.size()) - 1;
                         } else if (tui_state.history_pos > 0) {
                             --tui_state.history_pos;
                         }
-                        input_content = " " + tui_state.history[tui_state.history_pos];
+                        editor.set_content(tui_state.history[tui_state.history_pos]);
                     }
                     return true;
                 }
-                if (event == ftxui::Event::ArrowDown) {
+                if (key.type == tinytui::KeyEvent::Down) {
                     if (!tui_state.completions.empty()) {
                         if (tui_state.completion_selected < static_cast<int>(tui_state.completions.size()) - 1)
                             ++tui_state.completion_selected;
@@ -1391,166 +1518,77 @@ export int run(int argc, char* argv[]) {
                         ++tui_state.history_pos;
                         if (tui_state.history_pos >= static_cast<int>(tui_state.history.size())) {
                             tui_state.history_pos = -1;
-                            input_content = tui_state.saved_input;
+                            editor.set_content(tui_state.saved_input);
                         } else {
-                            input_content = " " + tui_state.history[tui_state.history_pos];
+                            editor.set_content(tui_state.history[tui_state.history_pos]);
                         }
                     }
                     return true;
                 }
-                if (event == ftxui::Event::Tab) {
+                if (key.type == tinytui::KeyEvent::Tab) {
                     if (tui_state.completion_selected >= 0 &&
                         tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
-                        input_content = " " + tui_state.completions[tui_state.completion_selected].first + " ";
+                        editor.set_content(tui_state.completions[tui_state.completion_selected].first + " ");
                         tui_state.completions.clear();
                         tui_state.completion_selected = -1;
                     }
                     return true;
                 }
-                if (event == ftxui::Event::Escape) {
+                if (key.type == tinytui::KeyEvent::Escape) {
                     if (!tui_state.completions.empty()) {
                         tui_state.completions.clear();
                         tui_state.completion_selected = -1;
                         return true;
                     }
                     if (tui_state.is_streaming || !tui_state.current_action.empty()) {
-                        cancel_requested.store(true);
+                        cancel_token.pause();
+                        stream.cancel_all_prompts();
                         return true;
                     }
+                    return true;
                 }
-                return false;
+                // Ctrl+C × 3 to exit
+                if (key.type == tinytui::KeyEvent::CtrlC) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_ctrl_c_ms > 2000) ctrl_c_count = 0;
+                    ++ctrl_c_count;
+                    last_ctrl_c_ms = now;
+                    if (ctrl_c_count >= 3) {
+                        cancel_token.cancel();
+                        screen.exit();
+                        return true;
+                    }
+                    tui_state.flash_text = "  Ctrl+C " + std::to_string(ctrl_c_count)
+                        + "/3 \xe2\x80\x94 press " + std::to_string(3 - ctrl_c_count) + " more to exit";
+                    tui_state.flash_until_ms = agent::tui::steady_now_ms() + 3000;
+                    return true;
+                }
+                // Enter: submit input
+                if (key.type == tinytui::KeyEvent::Enter) {
+                    auto msg = editor.content();
+                    if (msg.empty()) return true;
+                    editor.set_content("");
+                    tui_state.history_pos = -1;
+                    tui_state.saved_input.clear();
+                    tui_state.completions.clear();
+                    tui_state.completion_selected = -1;
+                    {
+                        std::lock_guard lk(msg_mtx);
+                        msg_queue.push_back(std::move(msg));
+                    }
+                    msg_cv.notify_one();
+                    return true;
+                }
+                // All other keys → LineEditor
+                editor.handle_key(key);
+                return true;
             });
 
-            // Renderer: adaptive layout — expands downward until reaching
-            // terminal bottom, then pins input/status and scrolls content up.
-            auto renderer = ftxui::Renderer(component, [&] {
-                using namespace ftxui;
+            // ─── tinytui: render callback (active area only) ───
+            screen.set_renderer([&](tinytui::FrameBuffer& buf) {
                 auto now_ms = agent::tui::steady_now_ms();
-                auto term_sz = ftxui::Terminal::Size();
-                int term_h = term_sz.dimy;
-                int term_w = term_sz.dimx;
-
-                // ── Build content elements (history + streaming + active action) ──
-                // Trim history for performance (keep at most ~2x terminal height)
-                int max_history = std::max(term_h * 2, 40);
-                Elements content_elems;
-
-                int est_rows = 0;
-                int start_idx = static_cast<int>(tui_state.lines.size());
-                for (int i = static_cast<int>(tui_state.lines.size()) - 1; i >= 0; --i) {
-                    auto& line = tui_state.lines[i];
-                    int h = 1;
-                    if (line.type == agent::tui::ChatLine::ToolAction) {
-                        h += static_cast<int>(line.sub_steps.size())
-                           + static_cast<int>(line.details.size());
-                    } else if (line.type == agent::tui::ChatLine::AssistantText) {
-                        h = std::max(1, static_cast<int>(line.text.size()) / std::max(term_w - 4, 20) + 1);
-                    }
-                    if (est_rows + h > max_history) break;
-                    est_rows += h;
-                    start_idx = i;
-                }
-                for (int i = start_idx; i < static_cast<int>(tui_state.lines.size()); ++i) {
-                    content_elems.push_back(agent::tui::render_chat_line(tui_state.lines[i], now_ms));
-                }
-
-                // Active streaming / thinking
-                if (tui_state.is_streaming) {
-                    if (tui_state.is_thinking && tui_state.streaming_text.empty()) {
-                        auto elapsed_str = tui_state.turn_start_ms > 0
-                            ? agent::tui::format_duration(now_ms - tui_state.turn_start_ms) : "";
-                        content_elems.push_back(hbox({
-                            text("  thinking... ") | color(agent::tui::colors::dim()),
-                            text(elapsed_str) | color(agent::tui::colors::border()),
-                        }));
-                    } else if (!tui_state.streaming_text.empty()) {
-                        content_elems.push_back(hbox({
-                            text("\xe2\x97\x86 ") | color(agent::tui::colors::magenta()),
-                            paragraph(tui_state.streaming_text),
-                        }));
-                    }
-                }
-
-                // Active tool action
-                if (!tui_state.active_action_text.empty()) {
-                    content_elems.push_back(hbox({
-                        text("  \xe2\x9a\xa1 ") | color(agent::tui::colors::amber()),
-                        text(tui_state.active_action_text) | color(agent::tui::colors::amber()),
-                    }));
-                    for (auto& ss : tui_state.active_sub_steps) {
-                        content_elems.push_back(agent::tui::render_sub_step(ss, now_ms));
-                    }
-                    if (tui_state.active_progress > 0.01f) {
-                        int pct = static_cast<int>(tui_state.active_progress * 100.0f);
-                        content_elems.push_back(hbox({
-                            text("      \xe2\x96\xb8 ") | color(agent::tui::colors::cyan()),
-                            gauge(tui_state.active_progress)
-                                | size(WIDTH, EQUAL, 24) | color(agent::tui::colors::cyan()),
-                            text(" " + std::to_string(pct) + "%") | bold,
-                            text("  " + tui_state.active_progress_name)
-                                | color(agent::tui::colors::magenta()),
-                            text("  " + tui_state.active_progress_speed)
-                                | color(agent::tui::colors::cyan()),
-                            text("  " + tui_state.active_progress_eta)
-                                | color(agent::tui::colors::dim()),
-                        }));
-                    }
-                    for (auto& d : tui_state.active_details) {
-                        content_elems.push_back(text("      " + d) | color(agent::tui::colors::border()));
-                    }
-                }
-
-                // ── Bottom area: separator + input + separator + completions + status + margin ──
-                Elements bottom_elems;
-                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
-                if (tui_state.approval_pending) {
-                    bottom_elems.push_back(agent::tui::render_approval(tui_state));
-                } else {
-                    bottom_elems.push_back(hbox({
-                        text("> ") | bold | color(agent::tui::colors::cyan()),
-                        component->Render() | flex,
-                    }) | size(WIDTH, EQUAL, term_w));
-                }
-                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
-                if (!tui_state.completions.empty()) {
-                    bottom_elems.push_back(agent::tui::render_completions(tui_state));
-                }
-                bottom_elems.push_back(agent::tui::render_status_bar(tui_state, now_ms));
-                bottom_elems.push_back(text(""));
-
-                // Count bottom area height: sep(1) + input(1) + sep(1) + status(1) + margin(1) = 5
-                int bottom_h = 5;
-                if (!tui_state.completions.empty()) {
-                    bottom_h += std::min(static_cast<int>(tui_state.completions.size()), 8);
-                }
-                if (tui_state.approval_pending) bottom_h += 1;
-
-                // Estimate content height (rough: reuse est_rows from trimming + active elements)
-                int content_h = est_rows;
-                if (tui_state.is_streaming) content_h += 1;
-                if (!tui_state.active_action_text.empty()) {
-                    content_h += 1 + static_cast<int>(tui_state.active_sub_steps.size())
-                        + static_cast<int>(tui_state.active_details.size());
-                    if (tui_state.active_progress > 0.01f) content_h += 1;
-                }
-
-                int total_h = content_h + bottom_h;
-
-                if (total_h < term_h) {
-                    // ── Not yet at bottom: natural expansion, no pinning ──
-                    Elements all;
-                    for (auto& e : content_elems) all.push_back(std::move(e));
-                    for (auto& e : bottom_elems) all.push_back(std::move(e));
-                    return vbox(std::move(all));
-                } else {
-                    // ── Reached bottom: pin bottom area, scroll content up ──
-                    auto scroll_area = vbox(std::move(content_elems))
-                        | yframe | focusPositionRelative(0, 1) | flex;
-                    return vbox({
-                        scroll_area,
-                        vbox(std::move(bottom_elems)),
-                    }) | size(HEIGHT, EQUAL, term_h);
-                }
+                int term_w = tinytui::terminal_width();
+                agent::tui::render_active_area(tui_state, editor, now_ms, term_w, buf);
             });
 
             // ─── Agent worker thread ───
@@ -1569,7 +1607,7 @@ export int run(int argc, char* argv[]) {
                     }
 
                     if (user_input == "exit" || user_input == "quit") {
-                        screen.Post([&] { screen.Exit(); });
+                        screen.post([&] { screen.exit(); });
                         break;
                     }
 
@@ -1580,28 +1618,40 @@ export int run(int argc, char* argv[]) {
 
                     journal.log_llm_turn("user", user_input);
 
-                    // Add user message to lines, set streaming state
+                    // Initialize behavior tree BEFORE Post so run_one_turn
+                    // gets a valid tree_root pointer (Post is async).
                     auto now_ms = agent::tui::steady_now_ms();
-                    screen.Post([&, input = user_input, now_ms] {
-                        tui_state.lines.push_back({
-                            .type = agent::tui::ChatLine::UserMsg,
-                            .text = input,
+                    tui_state.active_turn = agent::tui::TreeNode{
+                        .kind = agent::tui::TreeNode::UserTask,
+                        .state = agent::tui::TreeNode::Running,
+                        .title = utf8::safe_truncate(user_input, 80),
+                        .node_id = 0,
+                        .start_ms = now_ms,
+                    };
+                    tui_state.task_tree.reset();
+                    tui_state.last_action_end_ms = now_ms;
+
+                    // Print user message to scrollback + update state
+                    screen.post([&, input = user_input, now_ms] {
+                        // Clear active area first, print to scrollback, then redraw
+                        screen.flush_to_scrollback([&] {
+                            agent::tui::print_chat_line({
+                                .type = agent::tui::ChatLine::UserMsg, .text = input});
                         });
+                        tui_state.flash_text.clear();
                         tui_state.is_streaming = true;
                         tui_state.is_thinking = true;
                         tui_state.streaming_text.clear();
                         tui_state.current_action = "thinking...";
                         tui_state.turn_start_ms = now_ms;
-                        tui_state.active_progress = 0.0f;
-                        tui_state.active_details.clear();
                         if (tui_state.history.empty() || tui_state.history.back() != input) {
                             tui_state.history.push_back(input);
                         }
                     });
-                    screen.PostEvent(ftxui::Event::Custom);
+                    screen.refresh();
 
-                    // Reset cancel flag
-                    cancel_requested.store(false);
+                    // Reset cancel token for new turn
+                    cancel_token.reset();
 
                     // Run LLM turn with streaming
                     agent::tui::ThinkFilter think_filter;
@@ -1612,104 +1662,143 @@ export int run(int argc, char* argv[]) {
                             conversation, user_input, system_prompt, tools, bridge, stream, cfg,
                             // Streaming callback
                             [&](std::string_view chunk) {
-                                if (cancel_requested.load()) {
-                                    throw std::runtime_error("cancelled");
-                                }
+                                cancel_token.throw_if_cancelled();
                                 auto filtered = think_filter.filter(chunk);
                                 bool thinking = think_filter.in_think;
-                                screen.Post([&, f = std::move(filtered), thinking] {
-                                    if (thinking && tui_state.streaming_text.empty()) {
-                                        tui_state.is_thinking = true;
-                                        tui_state.current_action = "thinking...";
+                                screen.post([&, f = std::move(filtered), thinking] {
+                                    if (thinking) {
+                                        if (tui_state.streaming_text.empty()) {
+                                            tui_state.is_thinking = true;
+                                            tui_state.current_action = "thinking...";
+                                        }
+                                        // Add/update live Thinking node in tree (under active parent)
+                                        if (tui_state.active_turn) {
+                                            auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                            if (parent->children.empty() ||
+                                                parent->children.back().state != agent::tui::TreeNode::Running ||
+                                                parent->children.back().kind != agent::tui::TreeNode::Thinking) {
+                                                parent->children.push_back({
+                                                    .kind = agent::tui::TreeNode::Thinking,
+                                                    .state = agent::tui::TreeNode::Running,
+                                                    .title = "thinking",
+                                                    .start_ms = tui_state.last_action_end_ms,
+                                                });
+                                            }
+                                        }
                                     }
                                     if (!f.empty()) {
                                         tui_state.is_thinking = false;
                                         tui_state.streaming_text += f;
                                         tui_state.current_action = "responding...";
+                                        // Close live Thinking node, open/update Response node
+                                        if (tui_state.active_turn) {
+                                            auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                            auto now = agent::tui::steady_now_ms();
+                                            // Close running Thinking if present
+                                            if (!parent->children.empty() &&
+                                                parent->children.back().state == agent::tui::TreeNode::Running &&
+                                                parent->children.back().kind == agent::tui::TreeNode::Thinking) {
+                                                parent->children.back().end_ms = now;
+                                                parent->children.back().state = agent::tui::TreeNode::Done;
+                                            }
+                                            // Extract title: first line of streaming text
+                                            auto nl_pos = tui_state.streaming_text.find('\n');
+                                            std::string resp_title = (nl_pos != std::string::npos)
+                                                ? tui_state.streaming_text.substr(0, nl_pos)
+                                                : tui_state.streaming_text;
+                                            if (resp_title.size() > 80) resp_title = utf8::safe_truncate(resp_title, 80);
+                                            // Add/update live Response node
+                                            if (!parent->children.empty() &&
+                                                parent->children.back().state == agent::tui::TreeNode::Running &&
+                                                parent->children.back().kind == agent::tui::TreeNode::Response) {
+                                                parent->children.back().title = tui_state.streaming_text;
+                                            } else {
+                                                parent->children.push_back({
+                                                    .kind = agent::tui::TreeNode::Response,
+                                                    .state = agent::tui::TreeNode::Running,
+                                                    .title = tui_state.streaming_text,
+                                                    .start_ms = now,
+                                                });
+                                            }
+                                        }
                                     }
                                 });
-                                screen.PostEvent(ftxui::Event::Custom);
+                                screen.refresh();
                             },
                             policy_ptr, confirm_cb,
-                            // Tool call callback — flush streaming, track active action
+                            // Tool call callback — flush streaming, build tree nodes
                             [&](int id, std::string_view name, std::string_view args) {
                                 auto call_start = agent::tui::steady_now_ms();
-                                std::string args_display(args);
-                                if (args_display.size() > 60) {
-                                    args_display = args_display.substr(0, 57) + "...";
-                                }
-                                // Flush any streaming text to lines
-                                screen.Post([&, n = std::string(name), a = std::move(args_display), call_start] {
-                                    if (!tui_state.streaming_text.empty()) {
-                                        tui_state.lines.push_back({
-                                            .type = agent::tui::ChatLine::AssistantText,
-                                            .text = std::move(tui_state.streaming_text),
-                                        });
-                                        tui_state.streaming_text.clear();
-                                    }
+                                std::string args_display = utf8::safe_truncate(args, 60);
+                                screen.post([&, id, n = std::string(name), a = std::move(args_display), call_start] {
+                                    // Clear streaming text — it's already in the tree as a Response node.
+                                    // Don't push to lines (avoids duplicate ◆ text above tree).
+                                    tui_state.streaming_text.clear();
                                     tui_state.is_streaming = false;
                                     tui_state.is_thinking = false;
                                     tui_state.current_action = "executing " + n + "...";
-                                    tui_state.active_action_text = n + " (" + a + ")";
-                                    tui_state.active_action_start = call_start;
-                                    tui_state.active_progress = 0.0f;
-                                    tui_state.active_details.clear();
-                                    // Build sub-steps: close thinking, start execution
-                                    tui_state.active_sub_steps.clear();
-                                    tui_state.active_sub_steps.push_back({
-                                        .label = "thinking",
-                                        .start_ms = tui_state.turn_start_ms,
-                                        .end_ms = call_start,
-                                        .done = true,
-                                    });
-                                    tui_state.active_sub_steps.push_back({
-                                        .label = "execution",
-                                        .start_ms = call_start,
-                                    });
+
+                                    // Close any running Thinking/Response, add ToolCall under active parent
+                                    if (tui_state.active_turn) {
+                                        auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                        // Close running Thinking or Response node
+                                        if (!parent->children.empty() &&
+                                            parent->children.back().state == agent::tui::TreeNode::Running) {
+                                            auto& last = parent->children.back();
+                                            if (last.kind == agent::tui::TreeNode::Thinking ||
+                                                last.kind == agent::tui::TreeNode::Response) {
+                                                last.end_ms = call_start;
+                                                last.state = agent::tui::TreeNode::Done;
+                                            }
+                                        }
+                                        // If no thinking node was present, add a completed one
+                                        if (parent->children.empty() ||
+                                            (parent->children.back().kind != agent::tui::TreeNode::Thinking &&
+                                             parent->children.back().kind != agent::tui::TreeNode::Response)) {
+                                            parent->children.push_back({
+                                                .kind = agent::tui::TreeNode::Thinking,
+                                                .state = agent::tui::TreeNode::Done,
+                                                .title = "thinking",
+                                                .start_ms = tui_state.last_action_end_ms,
+                                                .end_ms = call_start,
+                                            });
+                                        }
+                                        // Add tool call node (running)
+                                        parent->children.push_back({
+                                            .kind = agent::tui::TreeNode::ToolCall,
+                                            .state = agent::tui::TreeNode::Running,
+                                            .title = n + "(" + a + ")",
+                                            .action_id = id,
+                                            .start_ms = call_start,
+                                        });
+                                    }
                                 });
-                                screen.PostEvent(ftxui::Event::Custom);
+                                screen.refresh();
                             },
-                            // Tool result callback — add completed action to lines
+                            // Tool result callback — close tree node, back to streaming
                             [&](int id, std::string_view name, bool is_error) {
                                 auto end_ms = agent::tui::steady_now_ms();
-                                screen.Post([&, id, n = std::string(name), is_error, end_ms] {
-                                    // Close execution sub-step
-                                    if (!tui_state.active_sub_steps.empty()) {
-                                        auto& last = tui_state.active_sub_steps.back();
-                                        if (!last.done) {
+                                screen.post([&, id, n = std::string(name), is_error, end_ms] {
+                                    // Close last running tool call under active parent
+                                    if (tui_state.active_turn) {
+                                        auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                        if (!parent->children.empty() &&
+                                            parent->children.back().state == agent::tui::TreeNode::Running &&
+                                            parent->children.back().kind == agent::tui::TreeNode::ToolCall) {
+                                            auto& last = parent->children.back();
                                             last.end_ms = end_ms;
-                                            last.done = true;
-                                            last.failed = is_error;
+                                            last.state = is_error ? agent::tui::TreeNode::Failed
+                                                                  : agent::tui::TreeNode::Done;
                                         }
                                     }
-                                    // Total time = sum of all sub-step durations
-                                    int64_t total_ms = 0;
-                                    for (auto& ss : tui_state.active_sub_steps) {
-                                        if (ss.done) total_ms += (ss.end_ms - ss.start_ms);
-                                    }
-                                    // Build completed action line
-                                    agent::tui::ChatLine done_line;
-                                    done_line.type = agent::tui::ChatLine::ToolAction;
-                                    done_line.text = tui_state.active_action_text;
-                                    done_line.action_id = id;
-                                    done_line.status = is_error ? agent::tui::ChatLine::Failed
-                                                               : agent::tui::ChatLine::Done;
-                                    done_line.elapsed_ms = static_cast<int>(total_ms);
-                                    done_line.sub_steps = tui_state.active_sub_steps;
-                                    done_line.details = tui_state.active_details;
-                                    tui_state.lines.push_back(std::move(done_line));
+                                    tui_state.last_action_end_ms = end_ms;
 
-                                    // Reset active state, back to streaming
+                                    // Reset to streaming/thinking state
                                     tui_state.current_action = "thinking...";
-                                    tui_state.active_action_text.clear();
-                                    tui_state.active_action_start = 0;
-                                    tui_state.active_progress = 0.0f;
-                                    tui_state.active_details.clear();
-                                    tui_state.active_sub_steps.clear();
                                     tui_state.is_streaming = true;
                                     tui_state.is_thinking = true;
                                 });
-                                screen.PostEvent(ftxui::Event::Custom);
+                                screen.refresh();
                             },
                             &ctx_mgr, &tracker,
                             // Auto-compact callback
@@ -1717,30 +1806,105 @@ export int run(int argc, char* argv[]) {
                                 add_hint("\xe2\x97\x88 auto-compact: evicted "
                                     + std::to_string(evicted) + " turns, freed ~"
                                     + agent::TokenTracker::format_tokens(freed) + " tokens");
+                            },
+                            &cancel_token,
+                            &tui_state.task_tree,
+                            tui_state.active_turn ? &*tui_state.active_turn : nullptr,
+                            // Tree update callback
+                            [&](const std::string& action, int node_id, const std::string& title) {
+                                screen.post([&, action, node_id, title] {
+                                    // Tree updates are handled directly by TaskTree in loop.cppm
+                                    // Just trigger a UI refresh
+                                });
+                                screen.refresh();
+                            },
+                            // Token update callback — real-time status bar updates
+                            [&](int input_tokens, int output_tokens) {
+                                screen.post([&, input_tokens, output_tokens] {
+                                    tui_state.session_input = tracker.session_input() + input_tokens;
+                                    tui_state.session_output = tracker.session_output() + output_tokens;
+                                    tui_state.ctx_used = tracker.context_used() + input_tokens;
+                                });
+                                screen.refresh();
                             }
                         );
-                    } catch (const std::exception& e) {
-                        bool was_cancelled = cancel_requested.exchange(false);
-                        screen.Post([&, err = std::string(e.what()), was_cancelled] {
+                    } catch (const PausedException&) {
+                        cancel_token.reset();  // Reset to Active (wait for resume)
+                        screen.post([&] {
+                            tui_state.is_streaming = false;
+                            tui_state.is_thinking = false;
+                            tui_state.streaming_text.clear();
+                            tui_state.current_action = "paused";
+                            // Mark running nodes as Paused (don't move to history)
+                            if (tui_state.active_turn) {
+                                tui_state.active_turn->mark_running_as(agent::tui::TreeNode::Paused);
+                            }
+                            tui_state.flash_text = "  \xe2\x8f\xb8 paused \xe2\x80\x94 send new message to continue";
+                            tui_state.flash_until_ms = agent::tui::steady_now_ms() + 10000;
+                        });
+                        screen.refresh();
+                        // Don't pop conversation, don't reset active_turn
+                        continue;
+                    } catch (const CancelledException&) {
+                        cancel_token.reset();
+                        screen.post([&] {
                             tui_state.is_streaming = false;
                             tui_state.is_thinking = false;
                             tui_state.streaming_text.clear();
                             tui_state.current_action.clear();
                             tui_state.turn_start_ms = 0;
-                            if (was_cancelled) {
-                                tui_state.lines.push_back({
-                                    .type = agent::tui::ChatLine::Hint,
-                                    .text = "  cancelled by user",
+                            // Print cancelled tree to scrollback
+                            if (tui_state.active_turn) {
+                                auto cancel_ms = agent::tui::steady_now_ms();
+                                tui_state.active_turn->end_ms = cancel_ms;
+                                tui_state.active_turn->state = agent::tui::TreeNode::Cancelled;
+                                tui_state.active_turn->mark_running_as(agent::tui::TreeNode::Cancelled);
+                                screen.flush_to_scrollback([&] {
+                                    agent::tui::print_chat_line({
+                                        .type = agent::tui::ChatLine::TurnTree,
+                                        .tree = *tui_state.active_turn});
                                 });
-                            } else {
-                                tui_state.lines.push_back({
-                                    .type = agent::tui::ChatLine::Error,
-                                    .text = "LLM request failed: " + err,
-                                });
+                                tui_state.active_turn.reset();
                             }
-                            tui_state.lines.push_back({.type = agent::tui::ChatLine::Separator});
+                            tui_state.flash_text = "  cancelled by user";
+                            tui_state.flash_until_ms = agent::tui::steady_now_ms() + 5000;
                         });
-                        screen.PostEvent(ftxui::Event::Custom);
+                        // Remove the incomplete user message from conversation
+                        if (!conversation.messages.empty()) {
+                            conversation.messages.pop_back();
+                        }
+                        continue;
+                    } catch (const std::exception& e) {
+                        bool was_cancelled = cancel_token.is_cancelled();
+                        cancel_token.reset();
+                        screen.post([&, err = std::string(e.what()), was_cancelled] {
+                            tui_state.is_streaming = false;
+                            tui_state.is_thinking = false;
+                            tui_state.streaming_text.clear();
+                            tui_state.current_action.clear();
+                            tui_state.turn_start_ms = 0;
+                            // Print failed tree to scrollback
+                            if (tui_state.active_turn) {
+                                auto err_ms = agent::tui::steady_now_ms();
+                                tui_state.active_turn->end_ms = err_ms;
+                                tui_state.active_turn->state = agent::tui::TreeNode::Failed;
+                                tui_state.active_turn->mark_running_as(agent::tui::TreeNode::Failed);
+                                screen.flush_to_scrollback([&] {
+                                    agent::tui::print_chat_line({
+                                        .type = agent::tui::ChatLine::TurnTree,
+                                        .tree = *tui_state.active_turn});
+                                });
+                                tui_state.active_turn.reset();
+                            }
+                            if (was_cancelled) {
+                                tui_state.flash_text = "  cancelled by user";
+                                tui_state.flash_until_ms = agent::tui::steady_now_ms() + 5000;
+                            } else {
+                                tui_state.flash_text = "\xe2\x9c\x97 LLM request failed: " + err;
+                                tui_state.flash_until_ms = agent::tui::steady_now_ms() + 8000;
+                            }
+                        });
+                        screen.refresh();
                         // Remove the incomplete user message from conversation
                         if (was_cancelled && !conversation.messages.empty()) {
                             conversation.messages.pop_back();
@@ -1751,28 +1915,46 @@ export int run(int argc, char* argv[]) {
                     // Flush remaining think filter content
                     auto remaining = think_filter.flush();
 
-                    // Turn complete: finalize streaming, update status
+                    // Turn complete: finalize tree, print to scrollback
                     auto turn_end_ms = agent::tui::steady_now_ms();
-                    screen.Post([&, rem = std::move(remaining), tr = turn_result, turn_end_ms] {
-                        auto total_elapsed = tui_state.turn_start_ms > 0
-                            ? turn_end_ms - tui_state.turn_start_ms : 0LL;
-                        std::string final_text = tui_state.streaming_text;
-                        if (!rem.empty()) final_text += rem;
-                        if (!final_text.empty()) {
-                            tui_state.lines.push_back({
-                                .type = agent::tui::ChatLine::AssistantText,
-                                .text = std::move(final_text),
-                            });
+                    screen.post([&, rem = std::move(remaining), tr = turn_result, turn_end_ms] {
+                        // Append remaining filter text
+                        if (!rem.empty()) {
+                            tui_state.streaming_text += rem;
+                            if (tui_state.active_turn) {
+                                auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                if (!parent->children.empty() &&
+                                    parent->children.back().kind == agent::tui::TreeNode::Response) {
+                                    parent->children.back().title = tui_state.streaming_text;
+                                }
+                            }
                         }
                         tui_state.is_streaming = false;
                         tui_state.is_thinking = false;
                         tui_state.streaming_text.clear();
-                        // Show total turn time as hint
-                        tui_state.lines.push_back({
-                            .type = agent::tui::ChatLine::Hint,
-                            .text = "  total: " + agent::tui::format_duration(
-                                static_cast<int>(total_elapsed)),
-                        });
+
+                        // Finalize tree, print to scrollback
+                        if (tui_state.active_turn) {
+                            auto& turn = *tui_state.active_turn;
+                            turn.mark_running_as(agent::tui::TreeNode::Done);
+                            turn.complete_pending();
+                            turn.end_ms = turn_end_ms;
+                            turn.state = agent::tui::TreeNode::Done;
+                            turn.input_tokens = tr.input_tokens;
+                            turn.output_tokens = tr.output_tokens;
+
+                            // Clear active area, print completed turn to scrollback
+                            screen.flush_to_scrollback([&] {
+                                agent::tui::print_chat_line({
+                                    .type = agent::tui::ChatLine::TurnTree, .tree = turn});
+                                if (!tr.reply.empty()) {
+                                    agent::tui::print_chat_line({
+                                        .type = agent::tui::ChatLine::AssistantText, .text = tr.reply});
+                                }
+                            });
+
+                            tui_state.active_turn.reset();
+                        }
 
                         // Update status bar
                         tracker.record(tr.input_tokens, tr.output_tokens);
@@ -1784,7 +1966,7 @@ export int run(int argc, char* argv[]) {
                         tui_state.current_action.clear();
                         tui_state.turn_start_ms = 0;
                     });
-                    screen.PostEvent(ftxui::Event::Custom);
+                    screen.refresh();
 
                     journal.log_llm_turn("assistant", turn_result.reply);
                 }
@@ -1795,16 +1977,18 @@ export int run(int argc, char* argv[]) {
                 while (!st.stop_requested()) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(42));
                     if (!st.stop_requested()) {
-                        screen.PostEvent(ftxui::Event::Custom);
+                        screen.refresh();
                     }
                 }
             });
 
-            // ─── Ensure cursor is on input from the start ───
-            input_component->TakeFocus();
+            // ─── Print history if resuming a session ───
+            if (!conversation.messages.empty()) {
+                print_conversation_history();
+            }
 
-            // ─── ftxui main loop (blocks main thread) ───
-            screen.Loop(renderer);
+            // ─── tinytui main loop (blocks main thread) ───
+            screen.loop();
 
             // Stop timer
             timer_thread.request_stop();
@@ -1820,7 +2004,8 @@ export int run(int argc, char* argv[]) {
             // Restore TUI listener and remove agent listeners
             stream.set_enabled(tui_listener, true);
             stream.remove_listener(agent_listener);
-            stream.remove_listener(ftxui_data_listener);
+            stream.remove_listener(data_listener);
+            stream.clear_auto_responders();
 
             // Auto-save on exit
             session_mgr.save_conversation(session_meta.id, conversation);

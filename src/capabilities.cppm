@@ -12,6 +12,8 @@ import xlings.core.config;
 import xlings.core.log;
 import xlings.platform;
 import xlings.agent.output_buffer;
+import xlings.core.utf8;
+import xlings.runtime.cancellation;
 
 namespace xlings::capabilities {
 
@@ -60,6 +62,9 @@ public:
         };
     }
     auto execute(Params params, EventStream& stream) -> Result override {
+        return execute(std::move(params), stream, nullptr);
+    }
+    auto execute(Params params, EventStream& stream, CancellationToken* cancel) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
         std::vector<std::string> targets;
         if (json.contains("targets") && json["targets"].is_array()) {
@@ -68,7 +73,7 @@ public:
         bool yes = json.value("yes", false);
         bool noDeps = json.value("noDeps", false);
         bool global = json.value("global", false);
-        return exit_result(xim::cmd_install(targets, yes, noDeps, stream, global));
+        return exit_result(xim::cmd_install(targets, yes, noDeps, stream, global, cancel));
     }
 };
 
@@ -231,13 +236,36 @@ public:
         };
     }
     auto execute(Params params, EventStream& stream) -> Result override {
+        return execute(std::move(params), stream, nullptr);
+    }
+
+    auto execute(Params params, EventStream& stream, CancellationToken* cancel) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
         auto command = json.value("command", "");
         if (command.empty()) {
             return nlohmann::json({{"error", "empty command"}}).dump();
         }
 
-        auto [exit_code, output] = xlings::platform::run_command_capture(command);
+        int exit_code;
+        std::string output;
+        int timeout_ms = json.value("timeout_ms", 30000);
+
+        if (cancel) {
+            // Cancellable: use spawn + wait_or_kill
+            auto h = xlings::platform::spawn_command(command);
+            if (h.pid <= 0) {
+                return nlohmann::json({{"error", "failed to spawn command"}}).dump();
+            }
+            auto [code, out] = xlings::platform::wait_or_kill(
+                h, cancel, std::chrono::milliseconds{timeout_ms});
+            exit_code = code;
+            output = std::move(out);
+        } else {
+            // Non-cancellable fallback
+            auto [code, out] = xlings::platform::run_command_capture(command);
+            exit_code = code;
+            output = std::move(out);
+        }
 
         // Store in shared output buffer
         shared_output_buffer().set(output);
@@ -247,7 +275,7 @@ public:
         bool truncated = false;
         std::string display_output = output;
         if (display_output.size() > MAX_OUTPUT) {
-            display_output = display_output.substr(0, MAX_OUTPUT);
+            display_output = utf8::safe_truncate(output, MAX_OUTPUT, "...[truncated]");
             truncated = true;
         }
 
@@ -259,7 +287,7 @@ public:
             result["totalLines"] = shared_output_buffer().line_count();
             result["hint"] = "Output truncated. Use view_output to see specific line ranges.";
         }
-        return result.dump();
+        return utf8::safe_dump(result);
     }
 };
 
@@ -293,7 +321,7 @@ public:
             result["content"] = buf.lines(start, end);
             result["range"] = std::format("{}-{}", start, end);
         }
-        return result.dump();
+        return utf8::safe_dump(result);
     }
 };
 
@@ -348,7 +376,7 @@ public:
             result["matches"] = std::move(matches);
             result["count"] = count;
         }
-        return result.dump();
+        return utf8::safe_dump(result);
     }
 };
 

@@ -14,6 +14,7 @@ struct DownloadOptions {
     int connectTimeoutSec { 30 };
     int maxTimeSec        { 600 };
     std::function<void(double total, double now)> onProgress;
+    std::function<bool()> isCancelled;      // returns true to abort download
 };
 
 struct DownloadFileResult {
@@ -101,7 +102,9 @@ DownloadFileResult download_file(const DownloadOptions& opts) {
 
     std::string lastErr;
     for (auto& url : opts.urls) {
+        if (opts.isCancelled && opts.isCancelled()) return {false, "cancelled"};
         for (int att = 0; att <= opts.retryCount; ++att) {
+            if (opts.isCancelled && opts.isCancelled()) return {false, "cancelled"};
             auto r = detail_::download_once(url, opts.destFile,
                 opts.connectTimeoutSec, opts.maxTimeSec, opts.onProgress);
             if (r.success) return r;

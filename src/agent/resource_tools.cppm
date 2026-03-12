@@ -3,6 +3,7 @@ export module xlings.agent.resource_tools;
 import std;
 import xlings.libs.json;
 import xlings.agent.resource_cache;
+import xlings.core.utf8;
 
 namespace xlings::agent {
 
@@ -35,7 +36,7 @@ export auto tool_search_resources(ResourceCache& cache, std::string_view argumen
             {"summary", meta.summary},
         });
     }
-    return out.dump();
+    return utf8::safe_dump(out);
 }
 
 export auto tool_load_resource(ResourceCache& cache, std::string_view arguments) -> std::string {
@@ -55,7 +56,7 @@ export auto tool_load_resource(ResourceCache& cache, std::string_view arguments)
     out["data"] = entry->data;
     out["cache_hit"] = entry->hit;
     out["age_seconds"] = entry->age_seconds;
-    return out.dump();
+    return utf8::safe_dump(out);
 }
 
 // Tool definitions for registration

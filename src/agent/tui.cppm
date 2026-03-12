@@ -1,85 +1,238 @@
-module;
-
-#include "ftxui/component/component.hpp"
-#include "ftxui/component/screen_interactive.hpp"
-#include "ftxui/dom/elements.hpp"
-#include "ftxui/screen/color.hpp"
-
 export module xlings.agent.tui;
 
 import std;
 import xlings.agent.token_tracker;
+import xlings.core.utf8;
+import xlings.libs.tinytui;
 
 namespace xlings::agent::tui {
 
-// ─── Theme colors ───
-
-export namespace colors {
-    auto cyan()    -> ftxui::Color { return ftxui::Color::RGB(34, 211, 238); }
-    auto green()   -> ftxui::Color { return ftxui::Color::RGB(34, 197, 94); }
-    auto amber()   -> ftxui::Color { return ftxui::Color::RGB(245, 158, 11); }
-    auto red()     -> ftxui::Color { return ftxui::Color::RGB(239, 68, 68); }
-    auto magenta() -> ftxui::Color { return ftxui::Color::RGB(168, 85, 247); }
-    auto dim()     -> ftxui::Color { return ftxui::Color::RGB(148, 163, 184); }
-    auto txt()     -> ftxui::Color { return ftxui::Color::RGB(248, 250, 252); }
-    auto border()  -> ftxui::Color { return ftxui::Color::RGB(51, 65, 85); }
-    auto blue()    -> ftxui::Color { return ftxui::Color::RGB(96, 165, 250); }
-} // namespace colors
-
 // ─── Time helpers ───
 
-export auto steady_now_ms() -> int64_t {
+export auto steady_now_ms() -> std::int64_t {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-export auto format_duration(int64_t ms) -> std::string {
+export auto format_duration(std::int64_t ms) -> std::string {
     if (ms < 0) return "0ms";
     if (ms < 1000) return std::to_string(ms) + "ms";
     if (ms < 60000) return std::format("{:.1f}s", ms / 1000.0);
     return std::format("{:.0f}m{:.0f}s", ms / 60000.0, (ms % 60000) / 1000.0);
 }
 
-// ─── Sub-step: request / decision / execution detail ───
+// ─── Behavior tree node ───
+// State uses int constants (not enum class) to avoid GCC 15 module issues.
 
-export struct SubStep {
-    std::string label;      // "request", "decision", "execution"
-    int64_t start_ms {0};   // steady_clock ms
-    int64_t end_ms   {0};   // 0 = still running
-    bool done        {false};
-    bool failed      {false};
+export struct TreeNode {
+    // Node state
+    static constexpr int Pending   = 0;
+    static constexpr int Running   = 1;
+    static constexpr int Done      = 2;
+    static constexpr int Failed    = 3;
+    static constexpr int Cancelled = 4;
+    static constexpr int Paused    = 5;
+
+    // Node kind
+    static constexpr int UserTask   = 0;
+    static constexpr int SubTask    = 1;
+    static constexpr int Thinking   = 2;
+    static constexpr int ToolCall   = 3;
+    static constexpr int PlanUpdate = 4;
+    static constexpr int Detail     = 5;
+    static constexpr int Download   = 6;
+    static constexpr int Response   = 7;
+    static constexpr int Approval   = 8;
+
+    int kind;
+    int state {Pending};
+    std::string title;           // display text (1 line)
+    std::string details_json;    // hidden JSON details
+    int node_id {-1};            // manage_tree assigned ID (SubTask/UserTask)
+    int action_id {-1};          // global action counter
+    std::int64_t start_ms {0};
+    std::int64_t end_ms {0};
+    int input_tokens {0};
+    int output_tokens {0};
+
+    // Download-specific
+    float progress {0.0f};
+    std::string speed;
+    std::string eta;
+
+    bool expanded {false};       // details expand control
+
+    std::vector<TreeNode> children;
+
+    // Count total lines for rendering (1 per node, recursive)
+    auto line_count() const -> int {
+        // Completed Thinking/Response/Detail nodes are auto-hidden (0 lines)
+        bool hidden = (kind == Thinking || kind == Response || kind == Detail)
+                      && state != Running;
+        int n = hidden ? 0 : 1;
+        for (auto& c : children) n += c.line_count();
+        return n;
+    }
+
+    // Find node by node_id (recursive)
+    auto find_node(int id) -> TreeNode* {
+        if (node_id == id) return this;
+        for (auto& c : children) {
+            if (auto* found = c.find_node(id)) return found;
+        }
+        return nullptr;
+    }
+
+    auto find_node(int id) const -> const TreeNode* {
+        if (node_id == id) return this;
+        for (auto& c : children) {
+            if (auto* found = c.find_node(id)) return found;
+        }
+        return nullptr;
+    }
+
+    // Find parent of a node by node_id (recursive)
+    auto find_parent(int id) -> TreeNode* {
+        for (auto& c : children) {
+            if (c.node_id == id) return this;
+            if (auto* found = c.find_parent(id)) return found;
+        }
+        return nullptr;
+    }
+
+    // Mark all Pending descendants as Done (for turn completion)
+    void complete_pending() {
+        for (auto& c : children) {
+            if (c.state == Pending) {
+                c.state = Done;
+                c.end_ms = steady_now_ms();
+            }
+            c.complete_pending();
+        }
+    }
+
+    // Mark all Running descendants as given state (for pause/cancel)
+    void mark_running_as(int new_state) {
+        if (state == Running) {
+            state = new_state;
+            end_ms = steady_now_ms();
+        }
+        for (auto& c : children) c.mark_running_as(new_state);
+    }
 };
 
-// ─── Chat line ───
+// ─── TaskTree manager ───
+
+export class TaskTree {
+    int next_node_id_{1};
+    int active_node_id_{-1};  // currently executing task node
+
+public:
+    void reset() {
+        next_node_id_ = 1;
+        active_node_id_ = -1;
+    }
+
+    int active_node() const { return active_node_id_; }
+    void set_active(int id) { active_node_id_ = id; }
+
+    // Get the parent node for auto-nesting tool calls/thinking/response
+    auto active_parent(TreeNode& root) -> TreeNode* {
+        if (active_node_id_ > 0) {
+            if (auto* node = root.find_node(active_node_id_)) return node;
+        }
+        return &root;  // fallback: attach to root
+    }
+
+    // Create a subtask under parent_id, returns new node_id
+    auto add_task(TreeNode& root, int parent_id, const std::string& title,
+                  const std::string& details = "") -> int {
+        int id = next_node_id_++;
+        TreeNode* parent = (parent_id == 0) ? &root : root.find_node(parent_id);
+        if (!parent) parent = &root;
+
+        parent->children.push_back(TreeNode{
+            .kind = TreeNode::SubTask,
+            .state = TreeNode::Pending,
+            .title = title,
+            .details_json = details,
+            .node_id = id,
+        });
+        return id;
+    }
+
+    // Start executing a task
+    void start_task(TreeNode& root, int node_id) {
+        auto* node = root.find_node(node_id);
+        if (!node) return;
+        node->state = TreeNode::Running;
+        node->start_ms = steady_now_ms();
+        active_node_id_ = node_id;
+    }
+
+    // Complete a task (done/failed/cancelled)
+    void complete_task(TreeNode& root, int node_id, int state,
+                       const std::string& result = "") {
+        auto* node = root.find_node(node_id);
+        if (!node) return;
+        node->state = state;
+        node->end_ms = steady_now_ms();
+        if (!result.empty()) node->details_json = result;
+
+        // Auto-advance: find next Pending sibling or return to parent
+        auto* parent = root.find_parent(node_id);
+        if (parent) {
+            bool found_completed = false;
+            for (auto& sibling : parent->children) {
+                if (sibling.node_id == node_id) {
+                    found_completed = true;
+                    continue;
+                }
+                if (found_completed && sibling.state == TreeNode::Pending &&
+                    sibling.kind == TreeNode::SubTask) {
+                    // Don't auto-start, just set active for nesting
+                    active_node_id_ = parent->node_id >= 0 ? parent->node_id : -1;
+                    return;
+                }
+            }
+            // No more pending siblings — return to parent
+            active_node_id_ = parent->node_id >= 0 ? parent->node_id : -1;
+        } else {
+            active_node_id_ = -1;
+        }
+    }
+
+    // Update an unstarted task's title/details
+    void update_task(TreeNode& root, int node_id, const std::string& new_title,
+                     const std::string& new_details = "") {
+        auto* node = root.find_node(node_id);
+        if (!node || node->state != TreeNode::Pending) return;
+        if (!new_title.empty()) node->title = new_title;
+        if (!new_details.empty()) node->details_json = new_details;
+    }
+};
+
+// ─── ChatLine ───
 
 export struct ChatLine {
-    enum Type { UserMsg, AssistantText, ToolAction, Progress, Separator, Hint, Error };
-    enum Status { Running, Done, Failed };
+    enum Type { UserMsg, AssistantText, Hint, TurnTree };
 
     Type type;
     std::string text;
-    int action_id      {-1};
-    Status status      {Running};
-    std::vector<std::string> details;    // data event details
-    std::vector<SubStep> sub_steps;      // request/decision/execution
-    int64_t start_ms   {0};              // for real-time elapsed
-    int input_tokens   {0};
-    int output_tokens  {0};
-    int elapsed_ms     {0};              // final elapsed (when done)
-    float progress     {0.0f};
-    std::string speed;
-    std::string eta;
+    std::optional<TreeNode> tree;        // for TurnTree type
 };
 
 // ─── Agent TUI shared state ───
 
 export struct AgentTuiState {
-    // Output area
-    std::vector<ChatLine> lines;
+    // Output area (streaming only — no history accumulation)
     std::string streaming_text;
     bool is_streaming   {false};
     bool is_thinking    {false};
-    bool auto_scroll    {true};
+
+    // Flash message — temporary hint/error with auto-clear
+    std::string flash_text;
+    std::int64_t flash_until_ms {0};
 
     // Status bar
     std::string model_name;
@@ -91,21 +244,14 @@ export struct AgentTuiState {
 
     // Current activity
     std::string current_action;
-    int64_t turn_start_ms {0};
+    std::int64_t turn_start_ms {0};
 
-    // Active progress (download etc.)
-    float active_progress {0.0f};
-    std::string active_progress_name;
-    std::string active_progress_speed;
-    std::string active_progress_eta;
+    // Active behavior tree for current turn
+    std::optional<TreeNode> active_turn;
+    std::int64_t last_action_end_ms {0};  // for computing thinking intervals
 
-    // Active details (data events during tool execution)
-    std::vector<std::string> active_details;
-
-    // Active tool action tracking
-    std::string active_action_text;
-    int64_t active_action_start {0};
-    std::vector<SubStep> active_sub_steps;  // sub-steps being built for current action
+    // Task tree manager
+    TaskTree task_tree;
 
     // Slash command completion
     std::vector<std::pair<std::string, std::string>> completions;
@@ -122,211 +268,418 @@ export struct AgentTuiState {
     std::string approval_args;
 };
 
-// ─── Render sub-step ───
+// ─── State icon helpers (returns icon string + ANSI color) ───
 
-export auto render_sub_step(const SubStep& ss, int64_t now_ms) -> ftxui::Element {
-    using namespace ftxui;
-
-    std::string icon;
-    ftxui::Color icon_color = colors::dim();
-    int64_t elapsed = 0;
-
-    if (ss.done) {
-        icon = ss.failed ? "\xe2\x9c\x97" : "\xe2\x9c\x93";  // ✗ or ✓
-        icon_color = ss.failed ? colors::red() : colors::green();
-        elapsed = ss.end_ms - ss.start_ms;
-    } else {
-        icon = "\xe2\x80\xa6";  // …
-        icon_color = colors::amber();
-        elapsed = now_ms - ss.start_ms;
+auto state_icon(const TreeNode& node) -> std::pair<std::string, const char*> {
+    switch (node.state) {
+        case TreeNode::Pending:
+            return {"\xe2\x97\x8b ", tinytui::ansi::dim};       // ○
+        case TreeNode::Running:
+            switch (node.kind) {
+                case TreeNode::Thinking:
+                    return {"\xe2\x80\xa6 ", tinytui::ansi::amber};   // …
+                case TreeNode::ToolCall:
+                    return {"\xe2\x9a\xa1 ", tinytui::ansi::amber};   // ⚡
+                case TreeNode::Download:
+                    return {"\xe2\x96\xb8 ", tinytui::ansi::cyan};    // ▸
+                case TreeNode::SubTask:
+                    return {"\xe2\x80\xa6 ", tinytui::ansi::amber};   // …
+                case TreeNode::Approval:
+                    return {"\xe2\x9a\xa0 ", tinytui::ansi::amber};   // ⚠
+                default:
+                    return {"\xe2\x80\xa6 ", tinytui::ansi::amber};   // …
+            }
+        case TreeNode::Done:
+            return {"\xe2\x9c\x93 ", tinytui::ansi::green};     // ✓
+        case TreeNode::Failed:
+            return {"\xe2\x9c\x97 ", tinytui::ansi::red};       // ✗
+        case TreeNode::Cancelled:
+            return {"\xe2\x8a\x98 ", tinytui::ansi::dim};       // ⊘
+        case TreeNode::Paused:
+            return {"\xe2\x8f\xb8 ", tinytui::ansi::cyan};      // ⏸
+        default:
+            return {"\xe2\x80\xa6 ", tinytui::ansi::dim};
     }
-
-    return hbox({
-        text("      " + icon + " ") | color(icon_color),
-        text(ss.label) | color(colors::dim()),
-        text(" " + format_duration(elapsed)) | color(colors::border()),
-    });
 }
 
-// ─── Render a single ChatLine ───
+// ─── Print tree node to FrameBuffer (returns line count) ───
 
-export auto render_chat_line(const ChatLine& line, int64_t now_ms = 0) -> ftxui::Element {
-    using namespace ftxui;
+export auto print_tree_node(const TreeNode& node, std::int64_t now_ms,
+                             int term_w, tinytui::FrameBuffer& buf,
+                             std::string_view prefix = "",
+                             bool is_last = true) -> int {
+    namespace tt = tinytui;
+    int lines = 0;
+
+    std::string child_prefix;
+
+    if (node.kind == TreeNode::UserTask) {
+        // Root node: ⏵ title duration
+        std::int64_t elapsed = (node.state == TreeNode::Done || node.state == TreeNode::Failed)
+            ? (node.end_ms - node.start_ms)
+            : (now_ms - node.start_ms);
+        auto dur_str = format_duration(elapsed);
+
+        buf.print(tt::ansi::bold, "");
+        buf.print(tt::ansi::amber, "\xe2\x8f\xb5 ");  // ⏵
+        buf.print(tt::ansi::amber, node.title);
+        buf.print(tt::ansi::dim, " " + dur_str);
+        buf.newline();
+        ++lines;
+        child_prefix = std::string(prefix);
+    } else {
+        // Auto-hide completed Thinking/Response/Detail nodes
+        if ((node.kind == TreeNode::Thinking || node.kind == TreeNode::Response ||
+             node.kind == TreeNode::Detail) && node.state != TreeNode::Running) {
+            // Skip this node, but recurse into children at same depth
+            for (std::size_t i = 0; i < node.children.size(); ++i) {
+                bool child_is_last = (i == node.children.size() - 1) && is_last;
+                lines += print_tree_node(node.children[i], now_ms, term_w, buf, prefix, child_is_last);
+            }
+            return lines;
+        }
+
+        // Non-root nodes use tree connectors
+        std::string connector = is_last
+            ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
+            : "\xe2\x94\x9c\xe2\x94\x80 ";   // ├─
+
+        auto [icon, icon_color] = state_icon(node);
+
+        // Duration
+        std::int64_t elapsed = 0;
+        if (node.start_ms > 0) {
+            bool finished = (node.state == TreeNode::Done || node.state == TreeNode::Failed ||
+                             node.state == TreeNode::Cancelled || node.state == TreeNode::Paused);
+            elapsed = finished ? (node.end_ms - node.start_ms) : (now_ms - node.start_ms);
+        }
+        auto dur_str = elapsed > 0 ? format_duration(elapsed) : "";
+
+        // Truncate title if needed
+        int prefix_len = static_cast<int>(std::string(prefix).size()) + 5 + 2;
+        int dur_len = dur_str.empty() ? 0 : static_cast<int>(dur_str.size()) + 1;
+        int avail = std::max(10, term_w - prefix_len - dur_len);
+        auto display_text = node.title.size() > static_cast<std::size_t>(avail)
+            ? utf8::safe_truncate(node.title, avail)
+            : node.title;
+
+        // Response node (Running only)
+        if (node.kind == TreeNode::Response) {
+            buf.print(tt::ansi::border, std::string(prefix) + connector);
+            buf.print(icon_color, icon);
+            buf.print(tt::ansi::dim, "responding...");
+            if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            buf.newline();
+            ++lines;
+            child_prefix = std::string(prefix) + (is_last ? "   " : "\xe2\x94\x82  ");
+            for (std::size_t i = 0; i < node.children.size(); ++i) {
+                bool child_is_last = (i == node.children.size() - 1);
+                lines += print_tree_node(node.children[i], now_ms, term_w, buf, child_prefix, child_is_last);
+            }
+            return lines;
+        }
+
+        // PlanUpdate node
+        if (node.kind == TreeNode::PlanUpdate) {
+            buf.print(tt::ansi::border, std::string(prefix) + connector);
+            buf.print(tt::ansi::cyan, "\xe2\x86\xbb ");   // ↻
+            buf.print(tt::ansi::cyan, display_text);
+            if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            buf.newline();
+            ++lines;
+            child_prefix = std::string(prefix) + (is_last ? "   " : "\xe2\x94\x82  ");
+            for (std::size_t i = 0; i < node.children.size(); ++i) {
+                bool child_is_last = (i == node.children.size() - 1);
+                lines += print_tree_node(node.children[i], now_ms, term_w, buf, child_prefix, child_is_last);
+            }
+            return lines;
+        }
+
+        // Download node with inline progress bar
+        if (node.kind == TreeNode::Download && node.state == TreeNode::Running && node.progress > 0.01f) {
+            buf.print(tt::ansi::border, std::string(prefix) + connector);
+            buf.print(icon_color, icon);
+            buf.print(tt::ansi::magenta, display_text);
+            buf.print(tt::ansi::cyan, " " + tt::format_progress(node.progress, 16));
+            if (!node.speed.empty()) buf.print(tt::ansi::cyan, " " + node.speed);
+            if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            buf.newline();
+            ++lines;
+        } else {
+            // Default rendering
+            const char* text_color = tt::ansi::txt;
+            if (node.kind == TreeNode::Thinking) text_color = tt::ansi::dim;
+            else if (node.kind == TreeNode::Detail) text_color = tt::ansi::border;
+            else if (node.kind == TreeNode::Approval) text_color = tt::ansi::amber;
+            else if (node.kind == TreeNode::SubTask && node.state == TreeNode::Pending) text_color = tt::ansi::dim;
+            else if (node.state == TreeNode::Cancelled) text_color = tt::ansi::dim;
+
+            buf.print(tt::ansi::border, std::string(prefix) + connector);
+            buf.print(icon_color, icon);
+            buf.print(text_color, display_text);
+            if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            buf.newline();
+            ++lines;
+        }
+
+        child_prefix = std::string(prefix) + (is_last ? "   " : "\xe2\x94\x82  ");
+    }
+
+    // Render children
+    for (std::size_t i = 0; i < node.children.size(); ++i) {
+        bool child_is_last = (i == node.children.size() - 1);
+        lines += print_tree_node(node.children[i], now_ms, term_w, buf, child_prefix, child_is_last);
+    }
+
+    return lines;
+}
+
+// ─── Print tree node to stdout (for scrollback) ───
+
+export auto print_tree_node_stdout(const TreeNode& node, std::int64_t now_ms,
+                                    int term_w) -> int {
+    tinytui::FrameBuffer buf;
+    int lines = print_tree_node(node, now_ms, term_w, buf);
+    // Flush buffer lines to stdout
+    for (auto& line : buf.lines()) {
+        tinytui::println_raw(line);
+    }
+    return lines;
+}
+
+// ─── Print ChatLine to stdout (returns line count) ───
+
+export auto print_chat_line(const ChatLine& line, std::int64_t now_ms = 0) -> int {
+    namespace tt = tinytui;
 
     switch (line.type) {
-        case ChatLine::UserMsg:
-            return vbox({
-                separator() | color(colors::amber()),
-                hbox({
-                    text("> ") | bold | color(colors::amber()),
-                    paragraph(line.text) | color(colors::amber()),
-                }),
-                separator() | color(colors::amber()),
-            });
-
-        case ChatLine::AssistantText:
-            return hbox({
-                text("\xe2\x97\x86 ") | color(colors::magenta()),  // ◆
-                paragraph(line.text),
-            });
-
-        case ChatLine::ToolAction: {
-            Elements elems;
-            std::string icon;
-            ftxui::Color status_color = colors::amber();
-            switch (line.status) {
-                case ChatLine::Running:
-                    icon = "\xe2\x9a\xa1 ";  // ⚡
-                    status_color = colors::amber();
-                    break;
-                case ChatLine::Done:
-                    icon = "\xe2\x9c\x93 ";  // ✓
-                    status_color = colors::green();
-                    break;
-                case ChatLine::Failed:
-                    icon = "\xe2\x9c\x97 ";  // ✗
-                    status_color = colors::red();
-                    break;
+        case ChatLine::UserMsg: {
+            tt::print_separator(tt::ansi::amber);
+            tt::print(tt::ansi::bold, "");
+            tt::print(tt::ansi::amber, "> ");
+            // Word-wrap the text
+            int term_w = tt::terminal_width();
+            int avail = term_w - 2;
+            if (static_cast<int>(line.text.size()) <= avail) {
+                tt::println(tt::ansi::amber, line.text);
+            } else {
+                // Simple line wrap
+                std::size_t pos = 0;
+                while (pos < line.text.size()) {
+                    auto chunk = line.text.substr(pos, avail);
+                    tt::println(tt::ansi::amber, chunk);
+                    pos += avail;
+                    if (pos < line.text.size()) {
+                        tt::print_raw("  ");  // indent continuation
+                    }
+                }
             }
-            std::string prefix = "  " + icon;
-            if (line.action_id >= 0) {
-                prefix += "[" + std::to_string(line.action_id) + "] ";
-            }
-            elems.push_back(text(prefix + line.text) | color(status_color));
-
-            // Real-time or final timing
-            int64_t elapsed = line.elapsed_ms;
-            if (line.status == ChatLine::Running && line.start_ms > 0 && now_ms > 0) {
-                elapsed = now_ms - line.start_ms;
-            }
-            if (elapsed > 0) {
-                elems.push_back(text(" " + format_duration(elapsed))
-                    | color(colors::dim()));
-            }
-            if (line.input_tokens > 0 || line.output_tokens > 0) {
-                elems.push_back(
-                    text("  \xe2\x86\x91" + TokenTracker::format_tokens(line.input_tokens) +
-                         " \xe2\x86\x93" + TokenTracker::format_tokens(line.output_tokens))
-                    | color(colors::dim()));
-            }
-
-            // Build vbox: action line + sub-steps + detail lines
-            Elements rows;
-            rows.push_back(hbox(std::move(elems)));
-            for (auto& ss : line.sub_steps) {
-                rows.push_back(render_sub_step(ss, now_ms));
-            }
-            for (auto& detail : line.details) {
-                rows.push_back(text("      " + detail) | color(colors::border()));
-            }
-            return vbox(std::move(rows));
+            tt::print_separator(tt::ansi::amber);
+            return 3; // separator + text + separator (approximate)
         }
 
-        case ChatLine::Progress: {
-            int pct = static_cast<int>(line.progress * 100.0f);
-            Elements elems;
-            elems.push_back(text("  \xe2\x96\xb8 ") | color(colors::cyan()));  // ▸
-            elems.push_back(gauge(line.progress)
-                | size(WIDTH, EQUAL, 24) | color(colors::cyan()));
-            elems.push_back(text(" " + std::to_string(pct) + "%") | bold);
-            if (!line.text.empty()) {
-                elems.push_back(text("  " + line.text) | color(colors::magenta()));
+        case ChatLine::AssistantText: {
+            tt::print(tt::ansi::bold, "");
+            tt::print(tt::ansi::cyan, "\xe2\x97\x87 ");  // ◇
+            // Word-wrap
+            int term_w = tt::terminal_width();
+            int avail = term_w - 2;
+            // Split by newlines first, then wrap
+            int line_count = 0;
+            std::istringstream ss(line.text);
+            std::string paragraph;
+            bool first = true;
+            while (std::getline(ss, paragraph)) {
+                if (!first) {
+                    tt::print_raw("  ");  // indent continuation
+                }
+                first = false;
+                if (paragraph.empty()) {
+                    tt::print_raw("\n");
+                    ++line_count;
+                    continue;
+                }
+                std::size_t pos = 0;
+                while (pos < paragraph.size()) {
+                    auto chunk = paragraph.substr(pos, avail);
+                    tt::println_raw(chunk);
+                    ++line_count;
+                    pos += avail;
+                    if (pos < paragraph.size()) {
+                        tt::print_raw("  ");
+                    }
+                }
             }
-            if (!line.speed.empty()) {
-                elems.push_back(text("  " + line.speed) | color(colors::cyan()));
-            }
-            if (!line.eta.empty()) {
-                elems.push_back(text("  " + line.eta) | color(colors::dim()));
-            }
-            return hbox(std::move(elems));
+            tt::print_raw("\n");
+            return line_count + 1;
         }
-
-        case ChatLine::Separator:
-            return separator() | color(colors::border());
 
         case ChatLine::Hint:
-            return text(line.text) | color(colors::dim());
+            tt::println(tt::ansi::dim, line.text);
+            return 1;
 
-        case ChatLine::Error:
-            return text("\xe2\x9c\x97 " + line.text) | color(colors::red());  // ✗
-    }
-    return text("");
-}
-
-// ─── Render status bar (each item a different color, spaces between) ───
-
-export auto render_status_bar(const AgentTuiState& st, int64_t now_ms = 0) -> ftxui::Element {
-    using namespace ftxui;
-    auto fmt = [](int t) { return TokenTracker::format_tokens(t); };
-    auto bar = [](){ return text(" | ") | color(colors::border()); };
-
-    Elements elems;
-    elems.push_back(text(" " + st.model_name) | color(colors::cyan()));
-    elems.push_back(bar());
-    elems.push_back(text("ctx " + fmt(st.ctx_used) + " / " + fmt(st.ctx_limit))
-        | color(colors::blue()));
-    elems.push_back(bar());
-    elems.push_back(text("\xe2\x86\x91 " + fmt(st.session_input)) | color(colors::green()));
-    elems.push_back(bar());
-    elems.push_back(text("\xe2\x86\x93 " + fmt(st.session_output)) | color(colors::magenta()));
-    if (st.l2_cache_count > 0) {
-        elems.push_back(bar());
-        elems.push_back(text("cache " + std::to_string(st.l2_cache_count) + "t")
-            | color(colors::dim()));
-    }
-    if (!st.current_action.empty()) {
-        elems.push_back(bar());
-        elems.push_back(text(st.current_action) | color(colors::amber()));
-        if (st.turn_start_ms > 0 && now_ms > 0) {
-            auto elapsed = now_ms - st.turn_start_ms;
-            elems.push_back(text(" " + format_duration(elapsed)) | color(colors::dim()));
+        case ChatLine::TurnTree: {
+            if (!line.tree) return 0;
+            int term_w = tt::terminal_width();
+            return print_tree_node_stdout(*line.tree, now_ms, term_w);
         }
     }
-    return hbox(std::move(elems));
+    return 0;
 }
 
-// ─── Render completion popup ───
+// ─── Print status bar (single line) ───
 
-export auto render_completions(const AgentTuiState& st) -> ftxui::Element {
-    using namespace ftxui;
-    if (st.completions.empty()) return text("");
+export auto print_status_bar(const AgentTuiState& st, std::int64_t now_ms,
+                              tinytui::FrameBuffer& buf) -> int {
+    namespace tt = tinytui;
+    auto fmt = [](int t) { return TokenTracker::format_tokens(t); };
 
-    Elements elems;
+    buf.print(tt::ansi::cyan, " " + st.model_name);
+    buf.print(tt::ansi::border, " | ");
+    buf.print(tt::ansi::blue, "ctx " + fmt(st.ctx_used) + " / " + fmt(st.ctx_limit));
+    buf.print(tt::ansi::border, " | ");
+    buf.print(tt::ansi::green, "\xe2\x86\x91 " + fmt(st.session_input));
+    buf.print(tt::ansi::border, " | ");
+    buf.print(tt::ansi::magenta, "\xe2\x86\x93 " + fmt(st.session_output));
+    if (st.l2_cache_count > 0) {
+        buf.print(tt::ansi::border, " | ");
+        buf.print(tt::ansi::dim, "cache " + std::to_string(st.l2_cache_count) + "t");
+    }
+    if (!st.current_action.empty()) {
+        buf.print(tt::ansi::border, " | ");
+        buf.print(tt::ansi::amber, st.current_action);
+        if (st.turn_start_ms > 0 && now_ms > 0) {
+            auto elapsed = now_ms - st.turn_start_ms;
+            buf.print(tt::ansi::dim, " " + format_duration(elapsed));
+        }
+    }
+    buf.newline();
+    return 1;
+}
+
+// ─── Print completions ───
+
+export auto print_completions(const AgentTuiState& st, tinytui::FrameBuffer& buf) -> int {
+    namespace tt = tinytui;
+    if (st.completions.empty()) return 0;
+
     int max_show = std::min(static_cast<int>(st.completions.size()), 8);
     for (int i = 0; i < max_show; ++i) {
         auto& name = st.completions[i].first;
         auto& desc = st.completions[i].second;
         if (i == st.completion_selected) {
-            elems.push_back(hbox({
-                text("  \xe2\x80\xba " + name) | bold | color(colors::cyan()),
-                text("  " + desc) | color(colors::dim()),
-            }));
+            buf.print(tt::ansi::bold, "");
+            buf.print(tt::ansi::cyan, "  \xe2\x80\xba " + name);
+            buf.println(tt::ansi::dim, "  " + desc);
         } else {
-            elems.push_back(hbox({
-                text("    " + name) | color(colors::dim()),
-                text("  " + desc) | color(colors::border()),
-            }));
+            buf.print(tt::ansi::dim, "    " + name);
+            buf.println(tt::ansi::border, "  " + desc);
         }
     }
-    return vbox(std::move(elems));
+    return max_show;
 }
 
-// ─── Render approval prompt ───
+// ─── Print approval prompt ───
 
-export auto render_approval(const AgentTuiState& st) -> ftxui::Element {
-    using namespace ftxui;
-    if (!st.approval_pending) return text("");
+export auto print_approval(const AgentTuiState& st, tinytui::FrameBuffer& buf) -> int {
+    namespace tt = tinytui;
+    if (!st.approval_pending) return 0;
 
-    std::string args_display = st.approval_args;
-    if (args_display.size() > 50) {
-        args_display = args_display.substr(0, 47) + "...";
+    std::string args_display = utf8::safe_truncate(st.approval_args, 50);
+    buf.print(tt::ansi::amber, "  \xe2\x9a\xa0 approve ");
+    buf.print(tt::ansi::bold, "");
+    buf.print(tt::ansi::amber, st.approval_tool_name);
+    buf.print(tt::ansi::dim, " (" + args_display + ")? ");
+    buf.print(tt::ansi::bold, "");
+    buf.println(tt::ansi::amber, "[Y/n] ");
+    return 1;
+}
+
+// ─── Render input box (bordered input area) ───
+
+auto render_input_box(const AgentTuiState& st, tinytui::LineEditor& editor,
+                       int term_w, tinytui::FrameBuffer& buf) -> void {
+    namespace tt = tinytui;
+    using dw = tt::LineEditor;
+
+    const char* box_color = st.approval_pending ? tt::ansi::amber : tt::ansi::border;
+
+    // Top border: ╭──...──╮
+    {
+        std::string top;
+        top += "\xe2\x95\xad";
+        for (int i = 0; i < term_w - 2; ++i) top += "\xe2\x94\x80";
+        top += "\xe2\x95\xae";
+        buf.println(box_color, top);
     }
-    return hbox({
-        text("  \xe2\x9a\xa0 approve ") | color(colors::amber()),
-        text(st.approval_tool_name) | bold | color(colors::amber()),
-        text(" (" + args_display + ")? ") | color(colors::dim()),
-        text("[Y/n] ") | bold | color(colors::amber()),
-    });
+
+    // Content line: │ ... │
+    buf.print(box_color, "\xe2\x94\x82 ");
+
+    if (st.approval_pending) {
+        std::string args_display = utf8::safe_truncate(st.approval_args, 40);
+        int inner_w = term_w - 4;
+
+        buf.print(tt::ansi::amber, "\xe2\x9a\xa0 approve ");
+        buf.print(tt::ansi::amber, st.approval_tool_name);
+        buf.print(tt::ansi::dim, "(" + args_display + ")? ");
+        buf.print(tt::ansi::amber, "[Y/n]");
+
+        int used = 10 + dw::display_width(st.approval_tool_name)
+                 + 1 + dw::display_width(args_display) + 3 + 5;
+        if (used < inner_w) {
+            buf.print_raw(std::string(inner_w - used, ' '));
+        }
+    } else {
+        buf.print(tt::ansi::cyan, "> ");
+        editor.render(buf, term_w - 2, 4);
+    }
+
+    buf.print(box_color, " \xe2\x94\x82");
+    buf.newline();
+
+    // Bottom border: ╰──...──╯
+    {
+        std::string bottom;
+        bottom += "\xe2\x95\xb0";
+        for (int i = 0; i < term_w - 2; ++i) bottom += "\xe2\x94\x80";
+        bottom += "\xe2\x95\xaf";
+        buf.println(box_color, bottom);
+    }
+}
+
+// ─── Render active area to FrameBuffer ───
+
+export void render_active_area(AgentTuiState& st, tinytui::LineEditor& editor,
+                                std::int64_t now_ms, int term_w,
+                                tinytui::FrameBuffer& buf) {
+    namespace tt = tinytui;
+
+    // 1. Active turn tree
+    if (st.active_turn) {
+        print_tree_node(*st.active_turn, now_ms, term_w, buf);
+    }
+
+    // 2. Flash message
+    if (!st.flash_text.empty() && now_ms < st.flash_until_ms) {
+        buf.println(tt::ansi::dim, st.flash_text);
+    } else if (!st.flash_text.empty()) {
+        st.flash_text.clear();
+    }
+
+    // 3-5. Input box (bordered input area)
+    render_input_box(st, editor, term_w, buf);
+
+    // 6. Completions
+    if (!st.completions.empty()) {
+        print_completions(st, buf);
+    }
+
+    // 7. Status bar
+    print_status_bar(st, now_ms, buf);
+
+    // 8. Empty line (bottom padding)
+    buf.newline();
 }
 
 // ─── ThinkFilter: strips <think>...</think> from LLM streaming output ───
@@ -398,68 +751,6 @@ export struct ThinkFilter {
         return output;
     }
 };
-
-// ─── ANSI format helpers (for screen.Print() output) ───
-
-export auto ansi_separator() -> std::string {
-    return "\033[38;2;51;65;85m" + std::string(72, '-') + "\033[0m\n";
-}
-
-export auto ansi_user_msg(std::string_view text) -> std::string {
-    return "\033[1;38;2;34;211;238m> \033[0;38;2;248;250;252m" + std::string(text) + "\033[0m\n";
-}
-
-export auto ansi_assistant_text(std::string_view text) -> std::string {
-    return "\033[38;2;168;85;247m\xe2\x97\x86 \033[0m" + std::string(text) + "\n";
-}
-
-export auto ansi_tool_action(const ChatLine& line) -> std::string {
-    std::string icon, color_code;
-    switch (line.status) {
-        case ChatLine::Running:
-            icon = "\xe2\x9a\xa1";  // ⚡
-            color_code = "38;2;245;158;11";
-            break;
-        case ChatLine::Done:
-            icon = "\xe2\x9c\x93";  // ✓
-            color_code = "38;2;34;197;94";
-            break;
-        case ChatLine::Failed:
-            icon = "\xe2\x9c\x97";  // ✗
-            color_code = "38;2;239;68;68";
-            break;
-    }
-    std::string result = "  \033[" + color_code + "m" + icon + " ";
-    if (line.action_id >= 0) {
-        result += "[" + std::to_string(line.action_id) + "] ";
-    }
-    result += line.text;
-    if (line.elapsed_ms > 0) {
-        result += " \033[38;2;148;163;184m" + format_duration(line.elapsed_ms);
-    }
-    result += "\033[0m\n";
-    // Sub-steps
-    for (auto& ss : line.sub_steps) {
-        std::string ss_icon = ss.done ? (ss.failed ? "\xe2\x9c\x97" : "\xe2\x9c\x93") : "\xe2\x80\xa6";
-        std::string ss_color = ss.done ? (ss.failed ? "38;2;239;68;68" : "38;2;34;197;94") : "38;2;245;158;11";
-        int64_t ss_elapsed = ss.done ? (ss.end_ms - ss.start_ms) : 0;
-        result += "      \033[" + ss_color + "m" + ss_icon + "\033[38;2;148;163;184m " +
-            ss.label + " " + format_duration(ss_elapsed) + "\033[0m\n";
-    }
-    // Details
-    for (auto& d : line.details) {
-        result += "      \033[38;2;51;65;85m" + d + "\033[0m\n";
-    }
-    return result;
-}
-
-export auto ansi_hint(std::string_view text) -> std::string {
-    return "\033[38;2;148;163;184m" + std::string(text) + "\033[0m\n";
-}
-
-export auto ansi_error(std::string_view text) -> std::string {
-    return "\033[38;2;239;68;68m\xe2\x9c\x97 " + std::string(text) + "\033[0m\n";
-}
 
 // ─── Simple ANSI helpers for pre-REPL messages ───
 

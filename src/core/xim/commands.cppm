@@ -20,6 +20,7 @@ import xlings.libs.tinyhttps;
 import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
 import xlings.core.profile;
+import xlings.runtime.cancellation;
 
 namespace xpkg = mcpplibs::xpkg;
 
@@ -57,7 +58,8 @@ int cmd_remove(const std::string& target, EventStream& stream);
 
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
-                EventStream& stream, bool forceGlobal = false) {
+                EventStream& stream, bool forceGlobal = false,
+                CancellationToken* cancel = nullptr) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -267,7 +269,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     int failedCount = 0;
 
     auto result = installer.execute(plan, dlConfig,
-        [&](const InstallStatus& status) {
+        [&, cancel](const InstallStatus& status) {
             switch (status.phase) {
                 case InstallPhase::Downloading:
                     break;  // TUI progress bar handles this
@@ -303,7 +305,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                 }
             }
         },
-        dlRenderer);
+        dlRenderer, cancel);
 
     if (!result) {
         log::error("install failed: {}", result.error());
