@@ -1959,7 +1959,8 @@ export int run(int argc, char* argv[]) {
                         }
 
                         // Update status bar
-                        tracker.record(tr.input_tokens, tr.output_tokens);
+                        tracker.record(tr.input_tokens, tr.output_tokens,
+                                       tr.cache_read_tokens, tr.cache_write_tokens);
                         ctx_mgr.record_turn();
                         tui_state.ctx_used = tracker.context_used();
                         tui_state.session_input = tracker.session_input();

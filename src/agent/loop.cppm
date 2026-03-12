@@ -565,6 +565,8 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
         turn_result.actions.push_back(std::move(llm_action));
         turn_result.input_tokens += response.usage.inputTokens;
         turn_result.output_tokens += response.usage.outputTokens;
+        turn_result.cache_read_tokens += response.usage.cacheReadTokens;
+        turn_result.cache_write_tokens += response.usage.cacheCreationTokens;
 
         // Real-time token update callback
         if (tc.on_token_update) {

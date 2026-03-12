@@ -16,6 +16,8 @@ export struct TurnResult {
     std::string reply;
     int input_tokens {0};
     int output_tokens {0};
+    int cache_read_tokens {0};
+    int cache_write_tokens {0};
     std::vector<ActionNode> actions;
     bool auto_compacted {false};
 };
