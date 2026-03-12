@@ -521,7 +521,29 @@ export auto print_chat_line(const ChatLine& line, std::int64_t now_ms = 0) -> in
         case ChatLine::TurnTree: {
             if (!line.tree) return 0;
             int term_w = tt::terminal_width();
-            return print_tree_node_stdout(*line.tree, now_ms, term_w);
+            auto& root = *line.tree;
+
+            // Print duration on a dim line (root title already shown as UserMsg)
+            std::int64_t elapsed = (root.state == TreeNode::Done || root.state == TreeNode::Failed)
+                ? (root.end_ms - root.start_ms)
+                : (now_ms > 0 ? (now_ms - root.start_ms) : 0);
+            auto dur_str = format_duration(elapsed);
+
+            auto [icon, icon_color] = state_icon(root);
+            tt::print(icon_color, "  " + icon);
+            tt::println(tt::ansi::dim, dur_str);
+            int total_lines = 1;
+
+            // Print children directly (skip root title — already in scrollback as UserMsg)
+            tinytui::FrameBuffer buf;
+            for (std::size_t i = 0; i < root.children.size(); ++i) {
+                bool child_is_last = (i == root.children.size() - 1);
+                total_lines += print_tree_node(root.children[i], now_ms, term_w, buf, "", child_is_last);
+            }
+            for (auto& l : buf.lines()) {
+                tt::println_raw(l);
+            }
+            return total_lines;
         }
     }
     return 0;
