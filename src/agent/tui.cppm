@@ -66,9 +66,9 @@ export struct TreeNode {
 
     // Count total lines for rendering (1 per node, recursive)
     auto line_count() const -> int {
-        // Completed Thinking/Response/Detail nodes are auto-hidden (0 lines)
-        bool hidden = (kind == Thinking || kind == Response || kind == Detail)
-                      && state != Running;
+        // Completed Thinking/Detail nodes are auto-hidden (0 lines)
+        // Response nodes are visible when Done (show reply summary)
+        bool hidden = (kind == Thinking || kind == Detail) && state != Running;
         int n = hidden ? 0 : 1;
         for (auto& c : children) n += c.line_count();
         return n;
@@ -178,6 +178,8 @@ public:
         node->state = state;
         node->end_ms = steady_now_ms();
         if (!result.empty()) node->details_json = result;
+        // Close any still-running children (Response, Thinking, ToolCall, etc.)
+        node->mark_running_as(state);
 
         // Auto-advance: find next Pending sibling or return to parent
         auto* parent = root.find_parent(node_id);
@@ -328,9 +330,9 @@ export auto print_tree_node(const TreeNode& node, std::int64_t now_ms,
         ++lines;
         child_prefix = std::string(prefix);
     } else {
-        // Auto-hide completed Thinking/Response/Detail nodes
-        if ((node.kind == TreeNode::Thinking || node.kind == TreeNode::Response ||
-             node.kind == TreeNode::Detail) && node.state != TreeNode::Running) {
+        // Auto-hide completed Thinking/Detail nodes (Response stays visible when Done)
+        if ((node.kind == TreeNode::Thinking || node.kind == TreeNode::Detail)
+            && node.state != TreeNode::Running) {
             // Skip this node, but recurse into children at same depth
             for (std::size_t i = 0; i < node.children.size(); ++i) {
                 bool child_is_last = (i == node.children.size() - 1) && is_last;
@@ -363,12 +365,24 @@ export auto print_tree_node(const TreeNode& node, std::int64_t now_ms,
             ? utf8::safe_truncate(node.title, avail)
             : node.title;
 
-        // Response node (Running only)
+        // Response node
         if (node.kind == TreeNode::Response) {
             buf.print(tt::ansi::border, std::string(prefix) + connector);
-            buf.print(icon_color, icon);
-            buf.print(tt::ansi::dim, "responding...");
-            if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            if (node.state == TreeNode::Running) {
+                buf.print(icon_color, icon);
+                buf.print(tt::ansi::dim, "responding...");
+                if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            } else {
+                // Done: show first line of reply as summary
+                buf.print(tt::ansi::green, "\xe2\x97\x86 ");  // ◆
+                auto nl_pos = node.title.find('\n');
+                std::string first_line = (nl_pos != std::string::npos)
+                    ? node.title.substr(0, nl_pos) : node.title;
+                auto summary = first_line.size() > static_cast<std::size_t>(avail)
+                    ? utf8::safe_truncate(first_line, avail) : first_line;
+                buf.print(tt::ansi::reset, summary);
+                if (!dur_str.empty()) buf.print(tt::ansi::dim, " " + dur_str);
+            }
             buf.newline();
             ++lines;
             child_prefix = std::string(prefix) + (is_last ? "   " : "\xe2\x94\x82  ");
@@ -454,28 +468,11 @@ export auto print_chat_line(const ChatLine& line, std::int64_t now_ms = 0) -> in
 
     switch (line.type) {
         case ChatLine::UserMsg: {
+            // Used only for session resume history
             tt::print_separator(tt::ansi::amber);
-            tt::print(tt::ansi::bold, "");
             tt::print(tt::ansi::amber, "> ");
-            // Word-wrap the text
-            int term_w = tt::terminal_width();
-            int avail = term_w - 2;
-            if (static_cast<int>(line.text.size()) <= avail) {
-                tt::println(tt::ansi::amber, line.text);
-            } else {
-                // Simple line wrap
-                std::size_t pos = 0;
-                while (pos < line.text.size()) {
-                    auto chunk = line.text.substr(pos, avail);
-                    tt::println(tt::ansi::amber, chunk);
-                    pos += avail;
-                    if (pos < line.text.size()) {
-                        tt::print_raw("  ");  // indent continuation
-                    }
-                }
-            }
-            tt::print_separator(tt::ansi::amber);
-            return 3; // separator + text + separator (approximate)
+            tt::println(tt::ansi::amber, line.text);
+            return 2;
         }
 
         case ChatLine::AssistantText: {
@@ -521,29 +518,10 @@ export auto print_chat_line(const ChatLine& line, std::int64_t now_ms = 0) -> in
         case ChatLine::TurnTree: {
             if (!line.tree) return 0;
             int term_w = tt::terminal_width();
-            auto& root = *line.tree;
-
-            // Print duration on a dim line (root title already shown as UserMsg)
-            std::int64_t elapsed = (root.state == TreeNode::Done || root.state == TreeNode::Failed)
-                ? (root.end_ms - root.start_ms)
-                : (now_ms > 0 ? (now_ms - root.start_ms) : 0);
-            auto dur_str = format_duration(elapsed);
-
-            auto [icon, icon_color] = state_icon(root);
-            tt::print(icon_color, "  " + icon);
-            tt::println(tt::ansi::dim, dur_str);
-            int total_lines = 1;
-
-            // Print children directly (skip root title — already in scrollback as UserMsg)
-            tinytui::FrameBuffer buf;
-            for (std::size_t i = 0; i < root.children.size(); ++i) {
-                bool child_is_last = (i == root.children.size() - 1);
-                total_lines += print_tree_node(root.children[i], now_ms, term_w, buf, "", child_is_last);
-            }
-            for (auto& l : buf.lines()) {
-                tt::println_raw(l);
-            }
-            return total_lines;
+            // Amber separator before tree
+            tt::print_separator(tt::ansi::amber, term_w);
+            // Print full tree including root
+            return 1 + print_tree_node_stdout(*line.tree, now_ms, term_w);
         }
     }
     return 0;
@@ -617,59 +595,6 @@ export auto print_approval(const AgentTuiState& st, tinytui::FrameBuffer& buf) -
     return 1;
 }
 
-// ─── Render input box (bordered input area) ───
-
-auto render_input_box(const AgentTuiState& st, tinytui::LineEditor& editor,
-                       int term_w, tinytui::FrameBuffer& buf) -> void {
-    namespace tt = tinytui;
-    using dw = tt::LineEditor;
-
-    const char* box_color = st.approval_pending ? tt::ansi::amber : tt::ansi::border;
-
-    // Top border: ╭──...──╮
-    {
-        std::string top;
-        top += "\xe2\x95\xad";
-        for (int i = 0; i < term_w - 2; ++i) top += "\xe2\x94\x80";
-        top += "\xe2\x95\xae";
-        buf.println(box_color, top);
-    }
-
-    // Content line: │ ... │
-    buf.print(box_color, "\xe2\x94\x82 ");
-
-    if (st.approval_pending) {
-        std::string args_display = utf8::safe_truncate(st.approval_args, 40);
-        int inner_w = term_w - 4;
-
-        buf.print(tt::ansi::amber, "\xe2\x9a\xa0 approve ");
-        buf.print(tt::ansi::amber, st.approval_tool_name);
-        buf.print(tt::ansi::dim, "(" + args_display + ")? ");
-        buf.print(tt::ansi::amber, "[Y/n]");
-
-        int used = 10 + dw::display_width(st.approval_tool_name)
-                 + 1 + dw::display_width(args_display) + 3 + 5;
-        if (used < inner_w) {
-            buf.print_raw(std::string(inner_w - used, ' '));
-        }
-    } else {
-        buf.print(tt::ansi::cyan, "> ");
-        editor.render(buf, term_w - 2, 4);
-    }
-
-    buf.print(box_color, " \xe2\x94\x82");
-    buf.newline();
-
-    // Bottom border: ╰──...──╯
-    {
-        std::string bottom;
-        bottom += "\xe2\x95\xb0";
-        for (int i = 0; i < term_w - 2; ++i) bottom += "\xe2\x94\x80";
-        bottom += "\xe2\x95\xaf";
-        buf.println(box_color, bottom);
-    }
-}
-
 // ─── Render active area to FrameBuffer ───
 
 export void render_active_area(AgentTuiState& st, tinytui::LineEditor& editor,
@@ -689,8 +614,20 @@ export void render_active_area(AgentTuiState& st, tinytui::LineEditor& editor,
         st.flash_text.clear();
     }
 
-    // 3-5. Input box (bordered input area)
-    render_input_box(st, editor, term_w, buf);
+    // 3. Separator
+    buf.print_separator(tt::ansi::border, term_w);
+
+    // 4. Input / Approval
+    if (st.approval_pending) {
+        print_approval(st, buf);
+    } else {
+        buf.print(tt::ansi::cyan, "> ");
+        editor.render(buf, term_w, 2);
+        buf.newline();
+    }
+
+    // 5. Separator
+    buf.print_separator(tt::ansi::border, term_w);
 
     // 6. Completions
     if (!st.completions.empty()) {
