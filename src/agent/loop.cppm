@@ -491,7 +491,9 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
     TurnResult turn_result;
     int action_counter = 0;
 
-    constexpr int MAX_ITERATIONS = 40;
+    constexpr int MAX_ITERATIONS = 50;
+    constexpr int TOOL_ONLY_LIMIT = 40;
+    int consecutive_tool_only = 0;
     for (int i = 0; i < MAX_ITERATIONS; ++i) {
 
         // Check cancellation/pause before each LLM call
@@ -509,6 +511,17 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
                 int freed = tc.ctx_mgr->total_evicted_tokens() - tokens_before;
                 turn_result.auto_compacted = true;
                 if (tc.on_auto_compact && (evicted > 0 || freed > 0)) tc.on_auto_compact(evicted, freed);
+            }
+        }
+
+        // Context budget check: stop if approaching limit
+        if (tc.tracker) {
+            int ctx_limit = TokenTracker::context_limit(tc.cfg.model);
+            if (tc.tracker->context_used() > static_cast<int>(ctx_limit * 0.92)) {
+                turn_result.reply = "[approaching context limit (" +
+                    TokenTracker::format_tokens(tc.tracker->context_used()) + "/" +
+                    TokenTracker::format_tokens(ctx_limit) + "), stopping]";
+                return turn_result;
             }
         }
 
@@ -626,6 +639,17 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
             tool_msg.role = llm::Role::Tool;
             tool_msg.content = std::vector<llm::ContentPart>{result};
             tc.conversation.push(std::move(tool_msg));
+        }
+
+        // Runaway detection: consecutive tool-only iterations with no text output
+        if (response.text().empty()) {
+            ++consecutive_tool_only;
+        } else {
+            consecutive_tool_only = 0;
+        }
+        if (consecutive_tool_only > TOOL_ONLY_LIMIT) {
+            turn_result.reply = "[agent: too many tool-only iterations, stopping]";
+            return turn_result;
         }
 
         // Continue loop to let LLM see tool results
