@@ -419,6 +419,64 @@ auto handle_tool_call(
     };
 }
 
+// Cancellable LLM call worker template — eliminates per-provider duplication
+template<typename Provider, typename ProviderConfig>
+auto llm_call_worker(
+    ProviderConfig pcfg,
+    std::vector<llm::Message> msgs,
+    llm::ChatParams& params,
+    std::function<void(std::string_view)> on_chunk,
+    bool has_stream_cb,
+    CancellationToken* cancel
+) -> llm::ChatResponse {
+    auto abandoned  = std::make_shared<std::atomic<bool>>(false);
+    auto done_flag  = std::make_shared<std::atomic<bool>>(false);
+    auto resp_ptr   = std::make_shared<llm::ChatResponse>();
+    auto err_ptr    = std::make_shared<std::exception_ptr>();
+    auto cv_mtx     = std::make_shared<std::mutex>();
+    auto cv_done    = std::make_shared<std::condition_variable>();
+
+    // Wrap on_chunk with abandoned-flag guard
+    auto safe_chunk = [abandoned, on_chunk = std::move(on_chunk)](std::string_view chunk) {
+        if (abandoned->load(std::memory_order_acquire)) throw CancelledException{};
+        if (on_chunk) on_chunk(chunk);
+    };
+
+    std::thread worker([done_flag, resp_ptr, err_ptr, cv_mtx, cv_done,
+                        provider = Provider(std::move(pcfg)),
+                        call_msgs = std::move(msgs), &params,
+                        safe_chunk, has_stream_cb]() mutable {
+        try {
+            if (has_stream_cb) {
+                *resp_ptr = provider.chat_stream(call_msgs, params, safe_chunk);
+            } else {
+                *resp_ptr = provider.chat(call_msgs, params);
+            }
+        } catch (...) {
+            *err_ptr = std::current_exception();
+        }
+        done_flag->store(true, std::memory_order_release);
+        cv_done->notify_all();
+    });
+
+    {
+        std::unique_lock lk(*cv_mtx);
+        while (!done_flag->load(std::memory_order_acquire)) {
+            if (cancel && !cancel->is_active()) {
+                abandoned->store(true, std::memory_order_release);
+                worker.detach();
+                if (cancel->is_paused()) throw PausedException{};
+                throw CancelledException{};
+            }
+            cv_done->wait_for(lk, std::chrono::milliseconds{200});
+        }
+    }
+    worker.join();
+
+    if (*err_ptr) std::rethrow_exception(*err_ptr);
+    return std::move(*resp_ptr);
+}
+
 // Core loop: user input -> LLM -> Tool -> LLM -> ... -> final reply
 // Returns TurnResult with reply + token usage + action nodes
 export auto run_one_turn(TurnConfig& tc) -> TurnResult {
@@ -457,18 +515,7 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
         llm::ChatResponse response;
 
         // ── Cancellable LLM call via worker thread ──
-        auto abandoned = std::make_shared<std::atomic<bool>>(false);
-        auto done_flag = std::make_shared<std::atomic<bool>>(false);
-        auto resp_ptr = std::make_shared<llm::ChatResponse>();
-        auto err_ptr = std::make_shared<std::exception_ptr>();
-        auto cv_mtx = std::make_shared<std::mutex>();
-        auto cv_done = std::make_shared<std::condition_variable>();
-
         bool has_stream_cb = static_cast<bool>(tc.on_stream_chunk);
-        auto safe_chunk = [abandoned, &tc](std::string_view chunk) {
-            if (abandoned->load(std::memory_order_acquire)) throw CancelledException{};
-            if (tc.on_stream_chunk) tc.on_stream_chunk(chunk);
-        };
 
         // Build messages snapshot
         auto msgs = tc.conversation.messages;
@@ -482,78 +529,17 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
                 .model = tc.cfg.model,
             };
             if (!tc.cfg.base_url.empty()) acfg.baseUrl = tc.cfg.base_url;
-
-            std::thread worker([done_flag, resp_ptr, err_ptr, cv_mtx, cv_done,
-                                provider = llm::anthropic::Anthropic(std::move(acfg)),
-                                call_msgs = std::move(msgs), &params,
-                                safe_chunk, has_stream_cb]() mutable {
-                try {
-                    if (has_stream_cb) {
-                        *resp_ptr = provider.chat_stream(call_msgs, params, safe_chunk);
-                    } else {
-                        *resp_ptr = provider.chat(call_msgs, params);
-                    }
-                } catch (...) {
-                    *err_ptr = std::current_exception();
-                }
-                done_flag->store(true, std::memory_order_release);
-                cv_done->notify_all();
-            });
-
-            {
-                std::unique_lock lk(*cv_mtx);
-                while (!done_flag->load(std::memory_order_acquire)) {
-                    if (tc.cancel && !tc.cancel->is_active()) {
-                        abandoned->store(true, std::memory_order_release);
-                        worker.detach();
-                        if (tc.cancel->is_paused()) throw PausedException{};
-                        throw CancelledException{};
-                    }
-                    cv_done->wait_for(lk, std::chrono::milliseconds{200});
-                }
-            }
-            worker.join();
+            response = llm_call_worker<llm::anthropic::Anthropic>(
+                std::move(acfg), std::move(msgs), params, tc.on_stream_chunk, has_stream_cb, tc.cancel);
         } else {
             llm::openai::Config ocfg{
                 .apiKey = tc.cfg.api_key,
                 .model = tc.cfg.model,
             };
             if (!tc.cfg.base_url.empty()) ocfg.baseUrl = tc.cfg.base_url;
-
-            std::thread worker([done_flag, resp_ptr, err_ptr, cv_mtx, cv_done,
-                                provider = llm::openai::OpenAI(std::move(ocfg)),
-                                call_msgs = std::move(msgs), &params,
-                                safe_chunk, has_stream_cb]() mutable {
-                try {
-                    if (has_stream_cb) {
-                        *resp_ptr = provider.chat_stream(call_msgs, params, safe_chunk);
-                    } else {
-                        *resp_ptr = provider.chat(call_msgs, params);
-                    }
-                } catch (...) {
-                    *err_ptr = std::current_exception();
-                }
-                done_flag->store(true, std::memory_order_release);
-                cv_done->notify_all();
-            });
-
-            {
-                std::unique_lock lk(*cv_mtx);
-                while (!done_flag->load(std::memory_order_acquire)) {
-                    if (tc.cancel && !tc.cancel->is_active()) {
-                        abandoned->store(true, std::memory_order_release);
-                        worker.detach();
-                        if (tc.cancel->is_paused()) throw PausedException{};
-                        throw CancelledException{};
-                    }
-                    cv_done->wait_for(lk, std::chrono::milliseconds{200});
-                }
-            }
-            worker.join();
+            response = llm_call_worker<llm::openai::OpenAI>(
+                std::move(ocfg), std::move(msgs), params, tc.on_stream_chunk, has_stream_cb, tc.cancel);
         }
-
-        if (*err_ptr) std::rethrow_exception(*err_ptr);
-        response = std::move(*resp_ptr);
 
         // Track LLM call as an action node
         ++action_counter;
