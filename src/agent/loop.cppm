@@ -89,9 +89,17 @@ export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDe
     return tools;
 }
 
+export struct MemorySummary {
+    std::string content;
+    std::string category;
+};
+
 // Build system prompt (tool definitions NOT listed here — they are in params.tools)
-export auto build_system_prompt([[maybe_unused]] const ToolBridge& bridge) -> std::string {
-    return R"(You are xlings-agent, an AI assistant specialized in package management and environment setup.
+export auto build_system_prompt(
+    [[maybe_unused]] const ToolBridge& bridge,
+    const std::vector<MemorySummary>& memories = {}
+) -> std::string {
+    std::string prompt = R"(You are xlings-agent, an AI assistant specialized in package management and environment setup.
 
 ## CRITICAL Rules
 
@@ -143,6 +151,24 @@ You have a `manage_tree` tool to structure your work as a task tree.
 Start every reply with a one-line title summarizing your action or decision.
 Then provide details on subsequent lines.
 )";
+
+    if (!memories.empty()) {
+        prompt += "\n## Remembered Context\n\n";
+        prompt += "You have " + std::to_string(memories.size()) + " memories from previous sessions:\n";
+        int count = 0;
+        for (auto& m : memories) {
+            if (count >= 20) {
+                prompt += "... and " + std::to_string(static_cast<int>(memories.size()) - 20) + " more (use search_memory to find them)\n";
+                break;
+            }
+            std::string brief = m.content.size() > 100 ? m.content.substr(0, 100) + "..." : m.content;
+            prompt += "- [" + m.category + "] " + brief + "\n";
+            ++count;
+        }
+        prompt += "\nUse save_memory/search_memory/forget_memory to manage your long-term memory.\n";
+    }
+
+    return prompt;
 }
 
 // Callback types

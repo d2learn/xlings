@@ -1023,7 +1023,12 @@ export int run(int argc, char* argv[]) {
             // Build agent registry with memory + context tools (shadows outer registry)
             auto registry = capabilities::build_registry(&memory_store, &ctx_mgr);
             auto bridge = agent::ToolBridge(registry);
-            auto system_prompt = agent::build_system_prompt(bridge);
+            // Build memory summaries from MemoryStore
+            std::vector<agent::MemorySummary> mem_summaries;
+            for (auto& e : memory_store.all_entries()) {
+                mem_summaries.push_back({.content = e.content, .category = e.category});
+            }
+            auto system_prompt = agent::build_system_prompt(bridge, mem_summaries);
             auto tools = agent::to_llmapi_tools(bridge);
 
             // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
