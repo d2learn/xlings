@@ -25,6 +25,7 @@ import xlings.core.utf8;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
 import xlings.libs.agentfs;
+import xlings.libs.semantic_memory;
 import xlings.libs.soul;
 import xlings.libs.journal;
 import xlings.libs.tinytui;
@@ -1005,18 +1006,7 @@ export int run(int argc, char* argv[]) {
             agent::ApprovalPolicy approval(soul);
             agent::ApprovalPolicy* policy_ptr = flag_auto_approve ? nullptr : &approval;
 
-            auto bridge = agent::ToolBridge(registry);
-            auto system_prompt = agent::build_system_prompt(bridge);
-            auto tools = agent::to_llmapi_tools(bridge);
-
             // ─── Agent mode: dual consumer architecture ───
-            // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
-            int agent_listener = stream.on_event([&bridge](const Event& e) {
-                if (auto* d = std::get_if<DataEvent>(&e)) {
-                    bridge.on_data_event(*d);
-                }
-            });
-
             // Consumer 2: CLI TUI rendering — disabled in agent mode (tinytui owns terminal)
             stream.set_enabled(tui_listener, false);
 
@@ -1025,6 +1015,23 @@ export int run(int argc, char* argv[]) {
             agent::ContextManager ctx_mgr(cfg.model);
             auto cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
             ctx_mgr.set_cache_dir(cache_dir);
+
+            // Memory store
+            libs::semantic_memory::MemoryStore memory_store(afs);
+            memory_store.load();
+
+            // Build agent registry with memory + context tools (shadows outer registry)
+            auto registry = capabilities::build_registry(&memory_store, &ctx_mgr);
+            auto bridge = agent::ToolBridge(registry);
+            auto system_prompt = agent::build_system_prompt(bridge);
+            auto tools = agent::to_llmapi_tools(bridge);
+
+            // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
+            int agent_listener = stream.on_event([&bridge](const Event& e) {
+                if (auto* d = std::get_if<DataEvent>(&e)) {
+                    bridge.on_data_event(*d);
+                }
+            });
 
             // ─── tinytui screen + line editor ───
             tinytui::Screen screen;
@@ -1631,13 +1638,8 @@ export int run(int argc, char* argv[]) {
                     tui_state.task_tree.reset();
                     tui_state.last_action_end_ms = now_ms;
 
-                    // Print user message to scrollback + update state
+                    // Update state for new turn (tree root carries user message)
                     screen.post([&, input = user_input, now_ms] {
-                        // Clear active area first, print to scrollback, then redraw
-                        screen.flush_to_scrollback([&] {
-                            agent::tui::print_chat_line({
-                                .type = agent::tui::ChatLine::UserMsg, .text = input});
-                        });
                         tui_state.flash_text.clear();
                         tui_state.is_streaming = true;
                         tui_state.is_thinking = true;
