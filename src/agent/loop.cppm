@@ -23,14 +23,14 @@ auto manage_tree_tool_def() -> llm::ToolDef {
     return llm::ToolDef{
         .name = "manage_tree",
         .description = "Manage the task tree: decompose tasks into subtasks, track progress, update plans. "
-                       "Use this to structure your work before executing.",
+                       "Supports batch mode to execute multiple operations in one call.",
         .inputSchema = R"JSON({
   "type": "object",
   "properties": {
     "action": {
       "type": "string",
-      "enum": ["add_task", "start_task", "complete_task", "cancel_task", "update_task"],
-      "description": "The tree operation to perform."
+      "enum": ["add_task", "start_task", "complete_task", "cancel_task", "update_task", "batch"],
+      "description": "The tree operation to perform. Use 'batch' to execute multiple operations at once."
     },
     "parent_id": {
       "type": "integer",
@@ -51,6 +51,22 @@ auto manage_tree_tool_def() -> llm::ToolDef {
     "result": {
       "type": "string",
       "description": "Completion result summary (for complete_task)."
+    },
+    "operations": {
+      "type": "array",
+      "description": "Array of operations for batch mode. Each element has the same schema as a single manage_tree call.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string"},
+          "parent_id": {"type": "integer"},
+          "node_id": {"type": "integer"},
+          "title": {"type": "string"},
+          "details": {"type": "string"},
+          "result": {"type": "string"}
+        },
+        "required": ["action"]
+      }
     }
   },
   "required": ["action"]
@@ -73,35 +89,10 @@ export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDe
     return tools;
 }
 
-// Build system prompt
-export auto build_system_prompt(const ToolBridge& bridge) -> std::string {
-    std::string prompt = R"(You are xlings-agent, an AI assistant specialized in package management and environment setup.
+// Build system prompt (tool definitions NOT listed here — they are in params.tools)
+export auto build_system_prompt([[maybe_unused]] const ToolBridge& bridge) -> std::string {
+    return R"(You are xlings-agent, an AI assistant specialized in package management and environment setup.
 
-## Available Tools
-
-)";
-    // Separate built-in tools from utility tools
-    std::vector<std::string> builtin_lines;
-    std::vector<std::string> utility_lines;
-    for (const auto& td : bridge.tool_definitions()) {
-        auto line = "- **" + td.name + "**: " + td.description;
-        if (td.name == "run_command" || td.name == "view_output" ||
-            td.name == "search_content" || td.name == "set_log_level") {
-            utility_lines.push_back(std::move(line));
-        } else {
-            builtin_lines.push_back(std::move(line));
-        }
-    }
-
-    prompt += "### Built-in Tools (ALWAYS prefer these)\n";
-    for (auto& l : builtin_lines) prompt += l + "\n";
-
-    prompt += R"(
-### Utility Tools (use only as last resort)
-)";
-    for (auto& l : utility_lines) prompt += l + "\n";
-
-    prompt += R"(
 ## CRITICAL Rules
 
 1. **ALWAYS use built-in tools for package/version operations.** For example:
@@ -120,37 +111,38 @@ export auto build_system_prompt(const ToolBridge& bridge) -> std::string {
 
 You have a `manage_tree` tool to structure your work as a task tree.
 
-### Workflow:
-1. When receiving a user request, first decompose it into subtasks using `manage_tree(add_task)`.
-2. Start each subtask with `manage_tree(start_task)` before executing it.
-3. Complete each subtask with `manage_tree(complete_task)` when done.
-4. If a subtask needs further decomposition during execution, add child tasks under it.
-5. If you discover a planned task is no longer needed, cancel it with `manage_tree(cancel_task)`.
-6. If you need to modify an unstarted task, use `manage_tree(update_task)`.
+### Workflow — use batch mode to minimize tool calls:
+1. When receiving a user request, decompose into subtasks using a single `manage_tree(batch)` call:
+   ```json
+   {"action":"batch","operations":[
+     {"action":"add_task","parent_id":0,"title":"Search for packages"},
+     {"action":"add_task","parent_id":0,"title":"Install version"},
+     {"action":"add_task","parent_id":0,"title":"Verify installation"},
+     {"action":"start_task","node_id":1}
+   ]}
+   ```
+2. Execute the started task using the appropriate tools.
+3. Complete and start the next task (can also batch):
+   ```json
+   {"action":"batch","operations":[
+     {"action":"complete_task","node_id":1,"result":"found v0.4.40"},
+     {"action":"start_task","node_id":2}
+   ]}
+   ```
+4. If a subtask needs further decomposition, add child tasks under it.
+5. Cancel unneeded tasks with `cancel_task`, modify with `update_task`.
 
 ### Rules:
+- **Prefer batch mode** — combine add/start/complete operations into single calls.
 - Every tool call automatically nests under the currently active task.
 - A subtask can itself contain sub-subtasks (recursive decomposition).
 - Completing a task automatically activates the next sibling or returns to parent.
-- Plan changes are recorded in the tree — the user can see what was adjusted and why.
-
-### Example:
-User: "Install an old version of mdbook"
-1. add_task(parent_id=0, title="Search for mdbook packages")  → node_id=1
-2. add_task(parent_id=0, title="Install specific version")     → node_id=2
-3. add_task(parent_id=0, title="Verify installation")          → node_id=3
-4. start_task(node_id=1) → then call search_packages(...)
-5. complete_task(node_id=1, result="found v0.4.40")
-6. start_task(node_id=2) → then call install_packages(...)
-7. complete_task(node_id=2)
-8. start_task(node_id=3) → then call run_command(...)
-9. complete_task(node_id=3)
+- In batch mode, `node_id` can reference nodes created earlier in the same batch (IDs are assigned sequentially).
 
 ### Response Format:
 Start every reply with a one-line title summarizing your action or decision.
 Then provide details on subsequent lines.
 )";
-    return prompt;
 }
 
 // Callback types
@@ -252,6 +244,76 @@ auto handle_manage_tree(
         task_tree.update_task(root, node_id, new_title, new_details);
         result_json = {{"ok", true}, {"action", "update_task"}, {"node_id", node_id}};
         if (on_tree_update) on_tree_update("update_task", node_id, new_title);
+
+    } else if (action == "batch") {
+        if (!json.contains("operations") || !json["operations"].is_array()) {
+            return llm::ToolResultContent{
+                .toolUseId = call.id,
+                .content = R"({"error":"operations must be a JSON array for batch action"})",
+                .isError = true,
+            };
+        }
+        nlohmann::json results = nlohmann::json::array();
+        for (auto& op : json["operations"]) {
+            auto sub_action = op.value("action", "");
+            if (sub_action == "add_task") {
+                int parent_id = op.value("parent_id", 0);
+                auto title = op.value("title", "");
+                auto details = op.value("details", "");
+                if (title.empty()) {
+                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "title is required for add_task"}});
+                } else {
+                    int node_id = task_tree.add_task(root, parent_id, title, details);
+                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}, {"title", title}});
+                    if (on_tree_update) on_tree_update("add_task", node_id, title);
+                }
+            } else if (sub_action == "start_task") {
+                int node_id = op.value("node_id", -1);
+                if (node_id <= 0) {
+                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for start_task"}});
+                } else {
+                    task_tree.start_task(root, node_id);
+                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
+                    if (on_tree_update) {
+                        auto* node = root.find_node(node_id);
+                        on_tree_update("start_task", node_id, node ? node->title : "");
+                    }
+                }
+            } else if (sub_action == "complete_task") {
+                int node_id = op.value("node_id", -1);
+                auto task_result = op.value("result", "");
+                if (node_id <= 0) {
+                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for complete_task"}});
+                } else {
+                    task_tree.complete_task(root, node_id, tui::TreeNode::Done, task_result);
+                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
+                    if (on_tree_update) on_tree_update("complete_task", node_id, "");
+                }
+            } else if (sub_action == "cancel_task") {
+                int node_id = op.value("node_id", -1);
+                if (node_id <= 0) {
+                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for cancel_task"}});
+                } else {
+                    task_tree.complete_task(root, node_id, tui::TreeNode::Cancelled);
+                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
+                    if (on_tree_update) on_tree_update("cancel_task", node_id, "");
+                }
+            } else if (sub_action == "update_task") {
+                int node_id = op.value("node_id", -1);
+                auto new_title = op.value("title", "");
+                auto new_details = op.value("details", "");
+                if (node_id <= 0) {
+                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for update_task"}});
+                } else {
+                    task_tree.update_task(root, node_id, new_title, new_details);
+                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
+                    if (on_tree_update) on_tree_update("update_task", node_id, new_title);
+                }
+            } else {
+                results.push_back({{"ok", false}, {"action", sub_action}, {"error", "unknown sub-action: " + sub_action}});
+            }
+        }
+        result_json = {{"ok", true}, {"action", "batch"}, {"results", results}};
 
     } else {
         return llm::ToolResultContent{
@@ -369,7 +431,7 @@ export auto run_one_turn(
     TurnResult turn_result;
     int action_counter = 0;
 
-    constexpr int MAX_ITERATIONS = 20;
+    constexpr int MAX_ITERATIONS = 40;
     for (int i = 0; i < MAX_ITERATIONS; ++i) {
 
         // Check cancellation/pause before each LLM call
