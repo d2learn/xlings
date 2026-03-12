@@ -153,6 +153,29 @@ export using AutoCompactCallback = std::function<void(int evicted_turns, int fre
 export using TreeUpdateCallback = std::function<void(const std::string& action, int node_id, const std::string& title)>;
 export using TokenUpdateCallback = std::function<void(int input_tokens, int output_tokens)>;
 
+export struct TurnConfig {
+    llm::Conversation& conversation;
+    std::string_view user_input;
+    const std::string& system_prompt;
+    const std::vector<llm::ToolDef>& tools;
+    ToolBridge& bridge;
+    EventStream& stream;
+    const LlmConfig& cfg;
+    std::function<void(std::string_view)> on_stream_chunk;
+    ApprovalPolicy* policy {nullptr};
+    ConfirmCallback confirm_cb;
+    ToolCallCallback on_tool_call;
+    ToolResultCallback on_tool_result;
+    ContextManager* ctx_mgr {nullptr};
+    TokenTracker* tracker {nullptr};
+    AutoCompactCallback on_auto_compact;
+    CancellationToken* cancel {nullptr};
+    tui::TaskTree* task_tree {nullptr};
+    tui::TreeNode* tree_root {nullptr};
+    TreeUpdateCallback on_tree_update;
+    TokenUpdateCallback on_token_update;
+};
+
 // Handle manage_tree virtual tool call
 auto handle_manage_tree(
     const llm::ToolCall& call,
@@ -398,35 +421,14 @@ auto handle_tool_call(
 
 // Core loop: user input -> LLM -> Tool -> LLM -> ... -> final reply
 // Returns TurnResult with reply + token usage + action nodes
-export auto run_one_turn(
-    llm::Conversation& conversation,
-    std::string_view user_input,
-    const std::string& system_prompt,
-    const std::vector<llm::ToolDef>& tools,
-    ToolBridge& bridge,
-    EventStream& stream,
-    const LlmConfig& cfg,
-    std::function<void(std::string_view)> on_stream_chunk,
-    ApprovalPolicy* policy = nullptr,
-    ConfirmCallback confirm_cb = {},
-    ToolCallCallback on_tool_call = {},
-    ToolResultCallback on_tool_result = {},
-    ContextManager* ctx_mgr = nullptr,
-    TokenTracker* tracker = nullptr,
-    AutoCompactCallback on_auto_compact = {},
-    CancellationToken* cancel = nullptr,
-    tui::TaskTree* task_tree = nullptr,
-    tui::TreeNode* tree_root = nullptr,
-    TreeUpdateCallback on_tree_update = {},
-    TokenUpdateCallback on_token_update = {}
-) -> TurnResult {
+export auto run_one_turn(TurnConfig& tc) -> TurnResult {
 
-    conversation.push(llm::Message::user(user_input));
+    tc.conversation.push(llm::Message::user(tc.user_input));
 
     llm::ChatParams params;
-    params.tools = tools;
-    params.temperature = cfg.temperature;
-    params.maxTokens = cfg.max_tokens;
+    params.tools = tc.tools;
+    params.temperature = tc.cfg.temperature;
+    params.maxTokens = tc.cfg.max_tokens;
 
     TurnResult turn_result;
     int action_counter = 0;
@@ -435,20 +437,20 @@ export auto run_one_turn(
     for (int i = 0; i < MAX_ITERATIONS; ++i) {
 
         // Check cancellation/pause before each LLM call
-        if (cancel && !cancel->is_active()) {
-            if (cancel->is_paused()) throw PausedException{};
+        if (tc.cancel && !tc.cancel->is_active()) {
+            if (tc.cancel->is_paused()) throw PausedException{};
             throw CancelledException{};
         }
 
         // Auto-compact check before each LLM call
-        if (ctx_mgr && tracker) {
-            int l2_before = ctx_mgr->l2_count();
-            int tokens_before = ctx_mgr->total_evicted_tokens();
-            if (ctx_mgr->maybe_auto_compact(conversation, *tracker)) {
-                int evicted = ctx_mgr->l2_count() - l2_before;
-                int freed = ctx_mgr->total_evicted_tokens() - tokens_before;
+        if (tc.ctx_mgr && tc.tracker) {
+            int l2_before = tc.ctx_mgr->l2_count();
+            int tokens_before = tc.ctx_mgr->total_evicted_tokens();
+            if (tc.ctx_mgr->maybe_auto_compact(tc.conversation, *tc.tracker)) {
+                int evicted = tc.ctx_mgr->l2_count() - l2_before;
+                int freed = tc.ctx_mgr->total_evicted_tokens() - tokens_before;
                 turn_result.auto_compacted = true;
-                if (on_auto_compact && (evicted > 0 || freed > 0)) on_auto_compact(evicted, freed);
+                if (tc.on_auto_compact && (evicted > 0 || freed > 0)) tc.on_auto_compact(evicted, freed);
             }
         }
 
@@ -462,24 +464,24 @@ export auto run_one_turn(
         auto cv_mtx = std::make_shared<std::mutex>();
         auto cv_done = std::make_shared<std::condition_variable>();
 
-        bool has_stream_cb = static_cast<bool>(on_stream_chunk);
-        auto safe_chunk = [abandoned, &on_stream_chunk](std::string_view chunk) {
+        bool has_stream_cb = static_cast<bool>(tc.on_stream_chunk);
+        auto safe_chunk = [abandoned, &tc](std::string_view chunk) {
             if (abandoned->load(std::memory_order_acquire)) throw CancelledException{};
-            if (on_stream_chunk) on_stream_chunk(chunk);
+            if (tc.on_stream_chunk) tc.on_stream_chunk(chunk);
         };
 
         // Build messages snapshot
-        auto msgs = conversation.messages;
+        auto msgs = tc.conversation.messages;
         if (msgs.empty() || msgs[0].role != llm::Role::System) {
-            msgs.insert(msgs.begin(), llm::Message::system(system_prompt));
+            msgs.insert(msgs.begin(), llm::Message::system(tc.system_prompt));
         }
 
-        if (cfg.provider == "anthropic") {
+        if (tc.cfg.provider == "anthropic") {
             llm::anthropic::Config acfg{
-                .apiKey = cfg.api_key,
-                .model = cfg.model,
+                .apiKey = tc.cfg.api_key,
+                .model = tc.cfg.model,
             };
-            if (!cfg.base_url.empty()) acfg.baseUrl = cfg.base_url;
+            if (!tc.cfg.base_url.empty()) acfg.baseUrl = tc.cfg.base_url;
 
             std::thread worker([done_flag, resp_ptr, err_ptr, cv_mtx, cv_done,
                                 provider = llm::anthropic::Anthropic(std::move(acfg)),
@@ -501,10 +503,10 @@ export auto run_one_turn(
             {
                 std::unique_lock lk(*cv_mtx);
                 while (!done_flag->load(std::memory_order_acquire)) {
-                    if (cancel && !cancel->is_active()) {
+                    if (tc.cancel && !tc.cancel->is_active()) {
                         abandoned->store(true, std::memory_order_release);
                         worker.detach();
-                        if (cancel->is_paused()) throw PausedException{};
+                        if (tc.cancel->is_paused()) throw PausedException{};
                         throw CancelledException{};
                     }
                     cv_done->wait_for(lk, std::chrono::milliseconds{200});
@@ -513,10 +515,10 @@ export auto run_one_turn(
             worker.join();
         } else {
             llm::openai::Config ocfg{
-                .apiKey = cfg.api_key,
-                .model = cfg.model,
+                .apiKey = tc.cfg.api_key,
+                .model = tc.cfg.model,
             };
-            if (!cfg.base_url.empty()) ocfg.baseUrl = cfg.base_url;
+            if (!tc.cfg.base_url.empty()) ocfg.baseUrl = tc.cfg.base_url;
 
             std::thread worker([done_flag, resp_ptr, err_ptr, cv_mtx, cv_done,
                                 provider = llm::openai::OpenAI(std::move(ocfg)),
@@ -538,10 +540,10 @@ export auto run_one_turn(
             {
                 std::unique_lock lk(*cv_mtx);
                 while (!done_flag->load(std::memory_order_acquire)) {
-                    if (cancel && !cancel->is_active()) {
+                    if (tc.cancel && !tc.cancel->is_active()) {
                         abandoned->store(true, std::memory_order_release);
                         worker.detach();
-                        if (cancel->is_paused()) throw PausedException{};
+                        if (tc.cancel->is_paused()) throw PausedException{};
                         throw CancelledException{};
                     }
                     cv_done->wait_for(lk, std::chrono::milliseconds{200});
@@ -566,15 +568,15 @@ export auto run_one_turn(
         turn_result.output_tokens += response.usage.outputTokens;
 
         // Real-time token update callback
-        if (on_token_update) {
-            on_token_update(turn_result.input_tokens, turn_result.output_tokens);
+        if (tc.on_token_update) {
+            tc.on_token_update(turn_result.input_tokens, turn_result.output_tokens);
         }
 
         // Add assistant response to conversation
         llm::Message assistant_msg;
         assistant_msg.role = llm::Role::Assistant;
         assistant_msg.content = response.content;
-        conversation.push(std::move(assistant_msg));
+        tc.conversation.push(std::move(assistant_msg));
 
         // Check if tool calls needed
         if (response.stopReason != llm::StopReason::ToolUse) {
@@ -593,14 +595,14 @@ export auto run_one_turn(
             ++action_counter;
 
             // Check cancellation/pause before each tool call
-            if (cancel && !cancel->is_active()) {
-                if (cancel->is_paused()) throw PausedException{};
+            if (tc.cancel && !tc.cancel->is_active()) {
+                if (tc.cancel->is_paused()) throw PausedException{};
                 throw CancelledException{};
             }
 
             // Intercept manage_tree virtual tool
-            if (call.name == "manage_tree" && task_tree && tree_root) {
-                auto result = handle_manage_tree(call, *task_tree, *tree_root, on_tree_update);
+            if (call.name == "manage_tree" && tc.task_tree && tc.tree_root) {
+                auto result = handle_manage_tree(call, *tc.task_tree, *tc.tree_root, tc.on_tree_update);
 
                 ActionNode tool_action;
                 tool_action.id = action_counter;
@@ -611,16 +613,16 @@ export auto run_one_turn(
                 llm::Message tool_msg;
                 tool_msg.role = llm::Role::Tool;
                 tool_msg.content = std::vector<llm::ContentPart>{result};
-                conversation.push(std::move(tool_msg));
+                tc.conversation.push(std::move(tool_msg));
                 continue;
             }
 
             // Notify TUI of tool call
-            if (on_tool_call) {
-                on_tool_call(action_counter, call.name, call.arguments);
+            if (tc.on_tool_call) {
+                tc.on_tool_call(action_counter, call.name, call.arguments);
             }
 
-            auto result = handle_tool_call(call, bridge, stream, policy, confirm_cb, cancel);
+            auto result = handle_tool_call(call, tc.bridge, tc.stream, tc.policy, tc.confirm_cb, tc.cancel);
 
             // Track tool call as action node
             ActionNode tool_action;
@@ -630,14 +632,14 @@ export auto run_one_turn(
             turn_result.actions.push_back(std::move(tool_action));
 
             // Notify TUI of tool result
-            if (on_tool_result) {
-                on_tool_result(action_counter, call.name, result.isError);
+            if (tc.on_tool_result) {
+                tc.on_tool_result(action_counter, call.name, result.isError);
             }
 
             llm::Message tool_msg;
             tool_msg.role = llm::Role::Tool;
             tool_msg.content = std::vector<llm::ContentPart>{result};
-            conversation.push(std::move(tool_msg));
+            tc.conversation.push(std::move(tool_msg));
         }
 
         // Continue loop to let LLM see tool results
@@ -645,6 +647,54 @@ export auto run_one_turn(
 
     turn_result.reply = "[agent: max iterations reached]";
     return turn_result;
+}
+
+// Backward-compatible 18-parameter overload — constructs TurnConfig and delegates
+export auto run_one_turn(
+    llm::Conversation& conversation,
+    std::string_view user_input,
+    const std::string& system_prompt,
+    const std::vector<llm::ToolDef>& tools,
+    ToolBridge& bridge,
+    EventStream& stream,
+    const LlmConfig& cfg,
+    std::function<void(std::string_view)> on_stream_chunk,
+    ApprovalPolicy* policy = nullptr,
+    ConfirmCallback confirm_cb = {},
+    ToolCallCallback on_tool_call = {},
+    ToolResultCallback on_tool_result = {},
+    ContextManager* ctx_mgr = nullptr,
+    TokenTracker* tracker = nullptr,
+    AutoCompactCallback on_auto_compact = {},
+    CancellationToken* cancel = nullptr,
+    tui::TaskTree* task_tree = nullptr,
+    tui::TreeNode* tree_root = nullptr,
+    TreeUpdateCallback on_tree_update = {},
+    TokenUpdateCallback on_token_update = {}
+) -> TurnResult {
+    TurnConfig tc{
+        .conversation = conversation,
+        .user_input = user_input,
+        .system_prompt = system_prompt,
+        .tools = tools,
+        .bridge = bridge,
+        .stream = stream,
+        .cfg = cfg,
+        .on_stream_chunk = std::move(on_stream_chunk),
+        .policy = policy,
+        .confirm_cb = std::move(confirm_cb),
+        .on_tool_call = std::move(on_tool_call),
+        .on_tool_result = std::move(on_tool_result),
+        .ctx_mgr = ctx_mgr,
+        .tracker = tracker,
+        .on_auto_compact = std::move(on_auto_compact),
+        .cancel = cancel,
+        .task_tree = task_tree,
+        .tree_root = tree_root,
+        .on_tree_update = std::move(on_tree_update),
+        .on_token_update = std::move(on_token_update),
+    };
+    return run_one_turn(tc);
 }
 
 // Compact conversation: keep system prompt + last N messages
