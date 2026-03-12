@@ -23,22 +23,31 @@ export struct TurnResult {
 export class TokenTracker {
     int session_input_ {0};
     int session_output_ {0};
+    int session_cache_read_ {0};
+    int session_cache_write_ {0};
     int last_context_size_ {0};
 
 public:
-    void record(int input_tokens, int output_tokens) {
+    void record(int input_tokens, int output_tokens,
+                int cache_read = 0, int cache_write = 0) {
         session_input_ += input_tokens;
         session_output_ += output_tokens;
+        session_cache_read_ += cache_read;
+        session_cache_write_ += cache_write;
         last_context_size_ = input_tokens;
     }
 
     auto session_input() const -> int { return session_input_; }
     auto session_output() const -> int { return session_output_; }
+    auto session_cache_read() const -> int { return session_cache_read_; }
+    auto session_cache_write() const -> int { return session_cache_write_; }
     auto context_used() const -> int { return last_context_size_; }
 
     void reset() {
         session_input_ = 0;
         session_output_ = 0;
+        session_cache_read_ = 0;
+        session_cache_write_ = 0;
         last_context_size_ = 0;
     }
 
