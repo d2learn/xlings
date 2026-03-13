@@ -49,6 +49,19 @@ inline int terminal_width() {
     return 80;
 }
 
+inline int terminal_height() {
+#if defined(__linux__) || defined(__APPLE__)
+    struct winsize w{};
+    if (::ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0)
+        return static_cast<int>(w.ws_row);
+#elif defined(_WIN32)
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi))
+        return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+#endif
+    return 24;
+}
+
 // ─── Output primitives ───
 
 inline void print(const char* color, std::string_view text) {
@@ -386,6 +399,16 @@ public:
         cursor_col_ = 1;
     }
 
+    // Remove the first line (used to cap frame height from the top)
+    void remove_first() {
+        if (!lines_.empty()) {
+            lines_.erase(lines_.begin());
+            // Adjust cursor_line since a line above it was removed
+            if (cursor_line_ > 0) --cursor_line_;
+            else if (cursor_line_ == 0) cursor_line_ = -1;
+        }
+    }
+
 private:
     std::vector<std::string> lines_;
     std::string current_line_;
@@ -628,13 +651,25 @@ public:
                 if (renderer_) {
                     renderer_(frame_buf_);
                 }
+                // ── Frame sizing ──
+                int term_h = terminal_height();
+                // Cap: active area height ≤ terminal height
+                while (frame_buf_.line_count() > term_h) {
+                    frame_buf_.remove_first();
+                }
+                // Pad: prevent shrink/grow oscillation (capped to term_h)
+                int pad_target = std::min(
+                    static_cast<int>(prev_frame_.size()), term_h);
+                while (frame_buf_.line_count() < pad_target) {
+                    frame_buf_.newline();
+                }
+
                 auto& new_lines = frame_buf_.lines();
                 int new_count = static_cast<int>(new_lines.size());
                 int old_count = static_cast<int>(prev_frame_.size());
                 int new_width = terminal_width();
 
-                // Move cursor to top of active area
-                // (cursor was left at prev_cursor_line_ from last frame)
+                // ── Move cursor to top of active area ──
                 if (old_count > 0) {
                     int cursor_at = (prev_cursor_line_ >= 0)
                         ? prev_cursor_line_ : (old_count - 1);
@@ -642,45 +677,60 @@ public:
                     if (cursor_at > 0) cursor_up(cursor_at);
                 }
 
-                bool full_repaint = (new_width != prev_width_) || (new_count != old_count);
+                // ── Repaint ──
+                // Growth integrated into repaint (no separate pre-scroll):
+                //   - Lines within old frame: cursor_down (no scroll)
+                //   - Lines beyond old frame: \n (natural grow/scroll)
+                bool full_repaint = (new_width != prev_width_)
+                    || (new_count != old_count);
 
                 if (full_repaint) {
-                    // Full repaint: write all new lines, clear leftover old lines
                     int max_lines = std::max(old_count, new_count);
                     for (int i = 0; i < max_lines; ++i) {
                         clear_line();
                         if (i < new_count) {
-                            std::fwrite(new_lines[i].data(), 1, new_lines[i].size(), stdout);
+                            std::fwrite(new_lines[i].data(),
+                                        1, new_lines[i].size(), stdout);
                         }
                         if (i < max_lines - 1) {
-                            std::fwrite("\n", 1, 1, stdout);
+                            if (old_count > 0 && i < old_count - 1) {
+                                // Within old frame: cursor_down (no scroll)
+                                cursor_down(1);
+                                std::fwrite("\r", 1, 1, stdout);
+                            } else {
+                                // Initial frame or beyond old frame: \n
+                                // Below viewport bottom → scrolls, pushing
+                                // committed content into scrollback
+                                std::fwrite("\n", 1, 1, stdout);
+                            }
                         }
                     }
                     // If old was taller, cursor is past new_count; move back
                     if (old_count > new_count && old_count > 0) {
-                        // We're at line (max_lines-1), need to be at (new_count-1)
                         int excess = old_count - new_count;
                         cursor_up(excess);
                     }
                 } else {
-                    // Diff: only update changed lines
+                    // Diff: only update changed lines (cursor_down only)
                     for (int i = 0; i < new_count; ++i) {
                         if (i < old_count && new_lines[i] == prev_frame_[i]) {
-                            // Line unchanged, just move down
                             if (i < new_count - 1) {
-                                std::fwrite("\n", 1, 1, stdout);
+                                cursor_down(1);
+                                std::fwrite("\r", 1, 1, stdout);
                             }
                         } else {
                             clear_line();
-                            std::fwrite(new_lines[i].data(), 1, new_lines[i].size(), stdout);
+                            std::fwrite(new_lines[i].data(),
+                                        1, new_lines[i].size(), stdout);
                             if (i < new_count - 1) {
-                                std::fwrite("\n", 1, 1, stdout);
+                                cursor_down(1);
+                                std::fwrite("\r", 1, 1, stdout);
                             }
                         }
                     }
                 }
 
-                // Save frame state
+                // ── Save frame state ──
                 prev_frame_.assign(new_lines.begin(), new_lines.end());
                 prev_width_ = new_width;
                 last_active_lines_ = new_count;

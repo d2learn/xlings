@@ -66,9 +66,9 @@ export struct TreeNode {
 
     // Count total lines for rendering (1 per node, recursive)
     auto line_count() const -> int {
-        // Completed Thinking/Detail nodes are auto-hidden (0 lines)
-        // Response nodes are visible when Done (show reply summary)
-        bool hidden = (kind == Thinking || kind == Detail) && state != Running;
+        // Completed Thinking/Detail/Response nodes are auto-hidden (0 lines)
+        // Response is printed separately as AssistantText in scrollback
+        bool hidden = (kind == Thinking || kind == Detail || kind == Response) && state != Running;
         int n = hidden ? 0 : 1;
         for (auto& c : children) n += c.line_count();
         return n;
@@ -330,8 +330,9 @@ export auto print_tree_node(const TreeNode& node, std::int64_t now_ms,
         ++lines;
         child_prefix = std::string(prefix);
     } else {
-        // Auto-hide completed Thinking/Detail nodes (Response stays visible when Done)
-        if ((node.kind == TreeNode::Thinking || node.kind == TreeNode::Detail)
+        // Auto-hide completed Thinking/Detail/Response nodes
+        // Response is printed separately as AssistantText in scrollback
+        if ((node.kind == TreeNode::Thinking || node.kind == TreeNode::Detail || node.kind == TreeNode::Response)
             && node.state != TreeNode::Running) {
             // Skip this node, but recurse into children at same depth
             for (std::size_t i = 0; i < node.children.size(); ++i) {
