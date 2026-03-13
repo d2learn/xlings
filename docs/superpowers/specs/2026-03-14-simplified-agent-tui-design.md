@@ -42,21 +42,32 @@ loop:
 - `renderer_`, `frame_buf_`, `prev_frame_`, `prev_width_`, `prev_cursor_line_`, `max_active_lines_`
 - `reserve_screen_height()`, `flush_to_scrollback()`, `set_renderer()`
 
+### Initialization
+
+At `loop()` start, after enabling raw mode:
+1. Print spinner line (empty or status bar) + `\n`
+2. Print input prompt `> `
+3. Set `initialized_ = true`
+
+This establishes the 2-line area. All subsequent `print_line` calls can safely `cursor_up(1)`.
+
 ### print_line Method
 
 All stdout output goes through `screen.print_line(text)`, which interleaves with the fixed 2-line area:
 
 ```
+0. if !initialized_: just fwrite(text + \n) and return
 1. cursor_up(1)          // move to spinner line
 2. \r\033[2K             // clear spinner
-3. print text + \n       // text enters scrollback, cursor at old spinner position
+3. for each line in text.split(\n):
+     fwrite(line + \n)   // each line enters scrollback
 4. write spinner_text_   // redraw spinner
 5. \n                    // move to input line position
 6. \r\033[2K + redraw input line
 7. flush
 ```
 
-This is deterministic — always exactly 2 fixed lines, no variable height, no frame diffing.
+Multi-line text is handled by splitting on `\n` — each sub-line gets its own scrollback entry. This is deterministic — always exactly 2 fixed lines at the bottom, no variable height, no frame diffing.
 
 ### Fixed 2-Line Area
 
@@ -104,6 +115,39 @@ Tree events print to scrollback as they happen:
 
 Indentation is simple (2-space per level), no recursive tree connector building.
 
+### Completions and Approval
+
+**Slash command completions**: Print as ephemeral lines above the fixed area. When the user types `/` and gets completions, use `print_line` to show up to 8 suggestions. On selection or cancel, the suggestions are already in scrollback (no need to clear — they scroll away naturally).
+
+**Approval prompt**: Replace spinner line with approval text (e.g., `[Y/n] Install package d2x?`). Input line captures Y/N. After response, restore spinner.
+
+### Download Progress
+
+Download progress updates display on the **spinner line** (e.g., `⟳ downloading vim ████░░░░ 52% 1.2MB/s ETA 3s`). Since the spinner is already a single line with `\r\033[2K` refresh, progress updates are just spinner text changes — no new mechanism needed.
+
+### Flash Messages
+
+Flash messages (hints, errors) print to scrollback via `print_line` with a timeout-based prefix icon. No ephemeral overlay needed — they become permanent scrollback entries, which is simpler and more useful (user can scroll back to see them).
+
+### manage_tree and Task State
+
+`manage_tree` remains as a virtual tool for the LLM. Task state is tracked as a **flat list** (not a tree):
+
+```cpp
+struct TaskEntry {
+    int id;
+    std::string title;
+    int state;  // Pending/Running/Done/Failed/Cancelled
+};
+std::vector<TaskEntry> tasks_;  // managed on main thread only
+```
+
+**Node ID allocation**: `handle_manage_tree` is called on the agent thread but must return a node_id synchronously. Solution: use an `atomic<int>` counter for ID allocation (lock-free), and queue the print + state mutation via `screen.post()`. The ID is allocated immediately, the printing happens asynchronously. This works because the LLM only needs the ID for subsequent `start_task`/`complete_task` calls, which also go through `screen.post()` and execute in order.
+
+### Terminal Resize
+
+Terminal resize is a non-issue: scrollback content is immutable (terminal handles reflow), and the 2 fixed lines just get redrawn on next refresh cycle. No special handling needed.
+
 ## Thread Safety
 
 **Rule**: All stdout writes happen on the main thread only.
@@ -142,7 +186,8 @@ data_listener → screen.post(λ)  →  drain queue → λ calls print_line()
 - `Screen`: post(), refresh(), loop() (simplified), raw mode, key handler
 - `LineEditor`: complete
 - `read_key()`, cursor helpers, ANSI constants
-- `print_chat_line()` for reply formatting
-- `TreeNode` slimmed to pure data (kind, title, duration) for print formatting
+- `print_chat_line()` for reply formatting (remove TurnTree variant that uses recursive print_tree_node)
+- `ThinkFilter` — streaming text processing, no rendering dependency
+- `TreeNode` slimmed to pure data (kind, title, duration) for print formatting, OR replaced by `TaskEntry` flat struct
 
 **Net change**: ~760 lines removed, ~60-80 lines added.
