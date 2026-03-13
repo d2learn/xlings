@@ -129,8 +129,9 @@ ver.use(name, version)       -- returns {success=bool, message=string}
 ```
 
 ### When to use execute_lua vs individual tools
-- **Use execute_lua** when: multiple operations with conditional logic, batch operations, data aggregation
-- **Use individual tools** when: single operation, need streaming feedback, destructive operation requiring confirmation
+- **ALWAYS prefer individual tools** — execute_lua is a LAST RESORT, only for tasks that cannot be done with built-in tools alone
+- **Use execute_lua ONLY when**: you need complex conditional logic across multiple operations, or data aggregation that individual tools cannot express
+- **Use individual tools when**: the task can be accomplished by calling one or more built-in tools directly
 
 ### Example
 ```lua

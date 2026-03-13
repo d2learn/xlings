@@ -136,7 +136,7 @@ export auto build_system_prompt(
    - To list installed packages → use `list_packages`
    - To check system info → use `system_status`
 
-2. **NEVER use `run_command` for any task that a built-in tool can handle.** The `run_command` tool is ONLY for tasks that have NO built-in equivalent (e.g., checking disk space, reading a file, running a user's custom script).
+2. **NEVER use `run_command` or `execute_lua` for any task that a built-in tool can handle.** These are LAST RESORT tools — ONLY use them when NO other built-in tool can accomplish the task (e.g., checking disk space, reading a file, running a user's custom script, or batch operations with complex conditional logic).
 
 3. Before calling a tool, briefly explain what you're about to do.
 4. After a tool completes, summarize the result for the user.
@@ -201,8 +201,9 @@ ver.use(name, version)       -- returns {success=bool, message=string}
 ```
 
 ### When to use execute_lua vs individual tools
-- **Use execute_lua** when: multiple operations with conditional logic, batch operations, data aggregation
-- **Use individual tools** when: single operation, need streaming feedback, destructive operation requiring confirmation
+- **ALWAYS prefer individual tools** — execute_lua is a LAST RESORT, only for tasks that cannot be done with built-in tools alone
+- **Use execute_lua ONLY when**: you need complex conditional logic across multiple operations, or data aggregation that individual tools cannot express
+- **Use individual tools when**: the task can be accomplished by calling one or more built-in tools directly
 
 ### Example
 ```lua
