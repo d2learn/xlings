@@ -340,82 +340,6 @@ inline std::optional<KeyEvent> read_key(int timeout_ms = -1) {
 #endif
 }
 
-// ─── FrameBuffer (off-screen line buffer for diff rendering) ───
-
-class FrameBuffer {
-public:
-    void print(const char* color, std::string_view text) {
-        current_line_ += color;
-        current_line_ += text;
-        current_line_ += ansi::reset;
-    }
-
-    void println(const char* color, std::string_view text) {
-        print(color, text);
-        newline();
-    }
-
-    void println_bold(const char* color, std::string_view text) {
-        current_line_ += ansi::bold;
-        print(color, text);
-        newline();
-    }
-
-    void print_raw(std::string_view text) {
-        current_line_ += text;
-    }
-
-    void println_raw(std::string_view text) {
-        current_line_ += text;
-        newline();
-    }
-
-    void print_separator(const char* color, int width = 0) {
-        if (width <= 0) width = terminal_width();
-        std::string line;
-        for (int i = 0; i < width; ++i) line += "\xe2\x94\x80";
-        println(color, line);
-    }
-
-    void newline() {
-        lines_.push_back(std::move(current_line_));
-        current_line_.clear();
-    }
-
-    void set_cursor(int line, int col) {
-        cursor_line_ = line;
-        cursor_col_ = col;
-    }
-
-    auto lines() const -> const std::vector<std::string>& { return lines_; }
-    auto line_count() const -> int { return static_cast<int>(lines_.size()); }
-    auto cursor_line() const -> int { return cursor_line_; }
-    auto cursor_col() const -> int { return cursor_col_; }
-
-    void clear() {
-        lines_.clear();
-        current_line_.clear();
-        cursor_line_ = -1;
-        cursor_col_ = 1;
-    }
-
-    // Remove the first line (used to cap frame height from the top)
-    void remove_first() {
-        if (!lines_.empty()) {
-            lines_.erase(lines_.begin());
-            // Adjust cursor_line since a line above it was removed
-            if (cursor_line_ > 0) --cursor_line_;
-            else if (cursor_line_ == 0) cursor_line_ = -1;
-        }
-    }
-
-private:
-    std::vector<std::string> lines_;
-    std::string current_line_;
-    int cursor_line_{-1};
-    int cursor_col_{1};
-};
-
 // ─── LineEditor (input line editor) ───
 
 class LineEditor {
@@ -505,19 +429,6 @@ public:
         cursor_column(prefix_cols + cursor_display + 1);
     }
 
-    // Render input line to a FrameBuffer (for diff rendering)
-    void render(FrameBuffer& buf, int width, int prefix_cols = 0) {
-        buf.print_raw(content_);
-        int content_display = display_width(content_);
-        int avail = width - prefix_cols;
-        if (content_display < avail) {
-            std::string pad(avail - content_display, ' ');
-            buf.print_raw(pad);
-        }
-        int cursor_display = display_width(std::string_view(content_.data(), cursor_));
-        buf.set_cursor(buf.line_count(), prefix_cols + cursor_display + 1);
-    }
-
     // Calculate display width of a UTF-8 string (ASCII=1, CJK/emoji=2, other=1)
     static int display_width(std::string_view s) {
         int w = 0;
@@ -577,59 +488,95 @@ private:
     std::size_t cursor_{0};
 };
 
-// ─── Screen (event loop + active area management) ───
+// ─── Screen (event loop + print-stream + 2-line fixed area) ───
+//
+// Architecture: All output goes to scrollback via print_line(). The bottom
+// 2 lines (spinner + input) are a fixed area refreshed with \r\033[2K.
+// No FrameBuffer, no diff rendering, no reserve_screen_height.
 
 class Screen {
 public:
-    // Set render callback: writes to FrameBuffer instead of stdout
-    void set_renderer(std::function<void(FrameBuffer&)> renderer) {
-        renderer_ = std::move(renderer);
-    }
-
     // Set key handler: returns true if consumed
     void set_key_handler(std::function<bool(const KeyEvent&)> handler) {
         key_handler_ = std::move(handler);
+    }
+
+    // Set input render callback: called to redraw the input line
+    // Signature: void(int term_width) — should print prompt + content on current line
+    void set_input_renderer(std::function<void(int)> renderer) {
+        input_renderer_ = std::move(renderer);
     }
 
     // Thread-safe: post lambda to main loop
     void post(std::function<void()> fn) {
         std::lock_guard lk(mtx_);
         queue_.push_back(std::move(fn));
-        dirty_ = true;
     }
 
-    // Trigger next frame redraw
+    // Trigger refresh of the 2-line fixed area
     void refresh() {
         dirty_ = true;
     }
 
-    // Get last active line count (for external clear)
-    int last_active_lines() const { return last_active_lines_; }
-
-    // Flush active area to scrollback: clear active area, run print_fn (stdout),
-    // then reset frame state so next render starts fresh.
-    // Must be called from main thread (inside post() lambda).
-    void flush_to_scrollback(std::function<void()> print_fn) {
-        hide_cursor();
-        if (last_active_lines_ > 0) {
-            int cursor_at = (prev_cursor_line_ >= 0)
-                ? prev_cursor_line_ : (last_active_lines_ - 1);
-            std::fwrite("\r", 1, 1, stdout);
-            if (cursor_at > 0) cursor_up(cursor_at);
-            clear_to_end();
+    // Print text to scrollback (thread-safe: call from post() lambda on main thread).
+    // Clears the fixed 2-line area, prints text, then redraws spinner + input.
+    void print_line(std::string_view text) {
+        if (!initialized_) {
+            std::fwrite(text.data(), 1, text.size(), stdout);
+            std::fwrite("\n", 1, 1, stdout);
+            tinytui::flush();
+            return;
         }
+
+        hide_cursor();
+
+        // Move to spinner line (1 up from input line)
+        cursor_up(1);
+        clear_line();  // clear spinner
+
+        // Print text (handle multi-line by splitting on \n)
+        std::size_t pos = 0;
+        while (pos < text.size()) {
+            auto nl = text.find('\n', pos);
+            if (nl == std::string_view::npos) {
+                std::fwrite(text.data() + pos, 1, text.size() - pos, stdout);
+                std::fwrite("\n", 1, 1, stdout);
+                break;
+            }
+            std::fwrite(text.data() + pos, 1, nl - pos, stdout);
+            std::fwrite("\n", 1, 1, stdout);
+            pos = nl + 1;
+        }
+
+        // Redraw spinner line
+        redraw_spinner_();
+        std::fwrite("\n", 1, 1, stdout);
+
+        // Redraw input line
+        redraw_input_();
+
         show_cursor();
-        if (print_fn) print_fn();
         tinytui::flush();
-        prev_frame_.clear();
-        last_active_lines_ = 0;
-        prev_cursor_line_ = -1;
+    }
+
+    // Update spinner text (call from post() lambda)
+    void set_spinner(std::string_view text) {
+        spinner_text_ = std::string(text);
         dirty_ = true;
     }
 
-    // Blocking event loop with diff rendering
+    auto spinner() const -> const std::string& { return spinner_text_; }
+
+    // Blocking event loop
     void loop() {
         enable_raw_mode();
+
+        // Initialize the 2-line fixed area: spinner + input
+        redraw_spinner_();
+        std::fwrite("\n", 1, 1, stdout);
+        redraw_input_();
+        tinytui::flush();
+        initialized_ = true;
 
         while (!quit_) {
             // 1. Drain queue
@@ -642,111 +589,15 @@ public:
                 for (auto& fn : batch) fn();
             }
 
-            // 2. Redraw if dirty (diff rendering)
+            // 2. Refresh fixed area if dirty
             if (dirty_.exchange(false)) {
                 hide_cursor();
-
-                // Render to off-screen buffer
-                frame_buf_.clear();
-                if (renderer_) {
-                    renderer_(frame_buf_);
-                }
-                // ── Frame sizing ──
-                int term_h = terminal_height();
-                // Cap: active area height ≤ terminal height
-                while (frame_buf_.line_count() > term_h) {
-                    frame_buf_.remove_first();
-                }
-                // Pad: prevent shrink/grow oscillation (capped to term_h)
-                int pad_target = std::min(
-                    static_cast<int>(prev_frame_.size()), term_h);
-                while (frame_buf_.line_count() < pad_target) {
-                    frame_buf_.newline();
-                }
-
-                auto& new_lines = frame_buf_.lines();
-                int new_count = static_cast<int>(new_lines.size());
-                int old_count = static_cast<int>(prev_frame_.size());
-                int new_width = terminal_width();
-
-                // ── Move cursor to top of active area ──
-                if (old_count > 0) {
-                    int cursor_at = (prev_cursor_line_ >= 0)
-                        ? prev_cursor_line_ : (old_count - 1);
-                    std::fwrite("\r", 1, 1, stdout);
-                    if (cursor_at > 0) cursor_up(cursor_at);
-                }
-
-                // ── Repaint ──
-                // Growth integrated into repaint (no separate pre-scroll):
-                //   - Lines within old frame: cursor_down (no scroll)
-                //   - Lines beyond old frame: \n (natural grow/scroll)
-                bool full_repaint = (new_width != prev_width_)
-                    || (new_count != old_count);
-
-                if (full_repaint) {
-                    int max_lines = std::max(old_count, new_count);
-                    for (int i = 0; i < max_lines; ++i) {
-                        clear_line();
-                        if (i < new_count) {
-                            std::fwrite(new_lines[i].data(),
-                                        1, new_lines[i].size(), stdout);
-                        }
-                        if (i < max_lines - 1) {
-                            if (old_count > 0 && i < old_count - 1) {
-                                // Within old frame: cursor_down (no scroll)
-                                cursor_down(1);
-                                std::fwrite("\r", 1, 1, stdout);
-                            } else {
-                                // Initial frame or beyond old frame: \n
-                                // Below viewport bottom → scrolls, pushing
-                                // committed content into scrollback
-                                std::fwrite("\n", 1, 1, stdout);
-                            }
-                        }
-                    }
-                    // If old was taller, cursor is past new_count; move back
-                    if (old_count > new_count && old_count > 0) {
-                        int excess = old_count - new_count;
-                        cursor_up(excess);
-                    }
-                } else {
-                    // Diff: only update changed lines (cursor_down only)
-                    for (int i = 0; i < new_count; ++i) {
-                        if (i < old_count && new_lines[i] == prev_frame_[i]) {
-                            if (i < new_count - 1) {
-                                cursor_down(1);
-                                std::fwrite("\r", 1, 1, stdout);
-                            }
-                        } else {
-                            clear_line();
-                            std::fwrite(new_lines[i].data(),
-                                        1, new_lines[i].size(), stdout);
-                            if (i < new_count - 1) {
-                                cursor_down(1);
-                                std::fwrite("\r", 1, 1, stdout);
-                            }
-                        }
-                    }
-                }
-
-                // ── Save frame state ──
-                prev_frame_.assign(new_lines.begin(), new_lines.end());
-                prev_width_ = new_width;
-                last_active_lines_ = new_count;
-
-                // Position cursor at input line
-                int cl = frame_buf_.cursor_line();
-                int cc = frame_buf_.cursor_col();
-                if (cl >= 0 && new_count > 0) {
-                    int lines_up = (new_count - 1) - cl;
-                    if (lines_up > 0) cursor_up(lines_up);
-                    cursor_column(cc);
-                    prev_cursor_line_ = cl;
-                    show_cursor();
-                } else {
-                    prev_cursor_line_ = new_count > 0 ? new_count - 1 : 0;
-                }
+                // Cursor is on input line — move up to spinner
+                cursor_up(1);
+                redraw_spinner_();
+                std::fwrite("\n", 1, 1, stdout);  // move to input line
+                redraw_input_();
+                show_cursor();
                 tinytui::flush();
             }
 
@@ -758,16 +609,10 @@ public:
             }
         }
 
-        // Cleanup: clear active area
-        if (last_active_lines_ > 0) {
-            hide_cursor();
-            int cursor_at = (prev_cursor_line_ >= 0)
-                ? prev_cursor_line_ : (last_active_lines_ - 1);
-            std::fwrite("\r", 1, 1, stdout);
-            if (cursor_at > 0) cursor_up(cursor_at);
-            clear_to_end();
-            last_active_lines_ = 0;
-        }
+        // Cleanup: clear the 2-line area
+        hide_cursor();
+        cursor_up(1);
+        clear_to_end();
         show_cursor();
         tinytui::flush();
         restore_mode();
@@ -779,20 +624,30 @@ public:
     }
 
 private:
+    void redraw_spinner_() {
+        clear_line();
+        if (!spinner_text_.empty()) {
+            std::fwrite(spinner_text_.data(), 1, spinner_text_.size(), stdout);
+        }
+    }
+
+    void redraw_input_() {
+        clear_line();
+        if (input_renderer_) {
+            input_renderer_(terminal_width());
+        }
+    }
+
     std::mutex mtx_;
     std::deque<std::function<void()>> queue_;
     std::atomic<bool> quit_{false};
     std::atomic<bool> dirty_{true};
-    int last_active_lines_{0};
+    bool initialized_{false};
 
-    // Diff rendering state
-    std::vector<std::string> prev_frame_;
-    int prev_width_{0};
-    int prev_cursor_line_{-1};
-    FrameBuffer frame_buf_;
+    std::string spinner_text_;
 
-    std::function<void(FrameBuffer&)> renderer_;
     std::function<bool(const KeyEvent&)> key_handler_;
+    std::function<void(int)> input_renderer_;
 
 #if defined(__linux__) || defined(__APPLE__)
     struct termios orig_termios_{};
@@ -828,7 +683,6 @@ private:
         mode &= ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT);
         mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
         SetConsoleMode(hIn, mode);
-        // Enable VT processing on stdout
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
         DWORD outMode;
         GetConsoleMode(hOut, &outMode);

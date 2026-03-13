@@ -172,6 +172,11 @@ You have a `manage_tree` tool to structure your work as a task tree.
 - A subtask can itself contain sub-subtasks (recursive decomposition).
 - Completing a task automatically activates the next sibling or returns to parent.
 - In batch mode, `node_id` can reference nodes created earlier in the same batch (IDs are assigned sequentially).
+- **The task tree is dynamic, NOT a fixed plan.** After each task completes, re-evaluate remaining tasks based on results:
+  - If a result makes subsequent tasks unnecessary, **cancel them immediately** with `cancel_task`.
+  - If new information changes what needs to be done, **update or replace** pending tasks.
+  - Example: if "check installed packages" reveals a package is not installed, cancel the "uninstall" task and skip straight to reporting.
+- **Never blindly execute all planned tasks** — earlier results may invalidate later steps.
 
 ### Response Format:
 Start every reply with a one-line title summarizing your action or decision.
@@ -244,7 +249,7 @@ export using ConfirmCallback = std::function<bool(std::string_view tool_name, st
 export using ToolCallCallback = std::function<void(int action_id, std::string_view name, std::string_view args)>;
 export using ToolResultCallback = std::function<void(int action_id, std::string_view name, bool is_error)>;
 export using AutoCompactCallback = std::function<void(int evicted_turns, int freed_tokens)>;
-export using TreeUpdateCallback = std::function<void(const std::string& action, int node_id, const std::string& title)>;
+export using TreeUpdateCallback = std::function<void(const std::string& action, int node_id, int parent_id, const std::string& title)>;
 export using TokenUpdateCallback = std::function<void(int input_tokens, int output_tokens)>;
 
 export struct TurnConfig {
@@ -264,18 +269,62 @@ export struct TurnConfig {
     TokenTracker* tracker {nullptr};
     AutoCompactCallback on_auto_compact;
     CancellationToken* cancel {nullptr};
-    tui::TaskTree* task_tree {nullptr};
     tui::TreeNode* tree_root {nullptr};
+    tui::IdAllocator* id_alloc {nullptr};
     TreeUpdateCallback on_tree_update;
     TokenUpdateCallback on_token_update;
     LuaSandbox* lua_sandbox {nullptr};
 };
 
-// Handle manage_tree virtual tool call
+// Handle a single manage_tree operation (recursive TreeNode version)
+auto handle_tree_op(
+    const nlohmann::json& op,
+    tui::TreeNode* tree_root,
+    tui::IdAllocator* id_alloc,
+    TreeUpdateCallback& on_tree_update
+) -> nlohmann::json {
+    auto action = op.value("action", "");
+
+    if (action == "add_task") {
+        auto title = op.value("title", "");
+        if (title.empty()) return {{"ok", false}, {"action", action}, {"error", "title required"}};
+        int parent_id = op.value("parent_id", 0);
+        int id = id_alloc ? id_alloc->alloc() : 0;
+        if (on_tree_update) on_tree_update("add_task", id, parent_id, title);
+        return {{"ok", true}, {"action", action}, {"node_id", id}, {"title", title}};
+    }
+    if (action == "start_task") {
+        int node_id = op.value("node_id", -1);
+        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
+        if (on_tree_update) on_tree_update("start_task", node_id, 0, "");
+        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
+    }
+    if (action == "complete_task") {
+        int node_id = op.value("node_id", -1);
+        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
+        if (on_tree_update) on_tree_update("complete_task", node_id, 0, op.value("result", ""));
+        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
+    }
+    if (action == "cancel_task") {
+        int node_id = op.value("node_id", -1);
+        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
+        if (on_tree_update) on_tree_update("cancel_task", node_id, 0, "");
+        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
+    }
+    if (action == "update_task") {
+        int node_id = op.value("node_id", -1);
+        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
+        if (on_tree_update) on_tree_update("update_task", node_id, 0, op.value("title", ""));
+        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
+    }
+    return {{"ok", false}, {"action", action}, {"error", "unknown action"}};
+}
+
+// Handle manage_tree virtual tool call (recursive TreeNode version)
 auto handle_manage_tree(
     const llm::ToolCall& call,
-    tui::TaskTree& task_tree,
-    tui::TreeNode& root,
+    tui::TreeNode* tree_root,
+    tui::IdAllocator* id_alloc,
     TreeUpdateCallback on_tree_update
 ) -> llm::ToolResultContent {
     auto json = nlohmann::json::parse(call.arguments, nullptr, false);
@@ -288,163 +337,31 @@ auto handle_manage_tree(
     }
 
     auto action = json.value("action", "");
-    nlohmann::json result_json;
 
-    if (action == "add_task") {
-        int parent_id = json.value("parent_id", 0);
-        auto title = json.value("title", "");
-        auto details = json.value("details", "");
-        if (title.empty()) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"title is required for add_task"})",
-                .isError = true,
-            };
-        }
-        int node_id = task_tree.add_task(root, parent_id, title, details);
-        result_json = {{"ok", true}, {"node_id", node_id}, {"action", "add_task"}, {"title", title}};
-        if (on_tree_update) on_tree_update("add_task", node_id, title);
-
-    } else if (action == "start_task") {
-        int node_id = json.value("node_id", -1);
-        if (node_id <= 0) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"node_id is required for start_task"})",
-                .isError = true,
-            };
-        }
-        task_tree.start_task(root, node_id);
-        result_json = {{"ok", true}, {"action", "start_task"}, {"node_id", node_id}};
-        if (on_tree_update) {
-            auto* node = root.find_node(node_id);
-            on_tree_update("start_task", node_id, node ? node->title : "");
-        }
-
-    } else if (action == "complete_task") {
-        int node_id = json.value("node_id", -1);
-        auto task_result = json.value("result", "");
-        if (node_id <= 0) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"node_id is required for complete_task"})",
-                .isError = true,
-            };
-        }
-        task_tree.complete_task(root, node_id, tui::TreeNode::Done, task_result);
-        result_json = {{"ok", true}, {"action", "complete_task"}, {"node_id", node_id}};
-        if (on_tree_update) on_tree_update("complete_task", node_id, "");
-
-    } else if (action == "cancel_task") {
-        int node_id = json.value("node_id", -1);
-        if (node_id <= 0) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"node_id is required for cancel_task"})",
-                .isError = true,
-            };
-        }
-        task_tree.complete_task(root, node_id, tui::TreeNode::Cancelled);
-        result_json = {{"ok", true}, {"action", "cancel_task"}, {"node_id", node_id}};
-        if (on_tree_update) on_tree_update("cancel_task", node_id, "");
-
-    } else if (action == "update_task") {
-        int node_id = json.value("node_id", -1);
-        auto new_title = json.value("title", "");
-        auto new_details = json.value("details", "");
-        if (node_id <= 0) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"node_id is required for update_task"})",
-                .isError = true,
-            };
-        }
-        task_tree.update_task(root, node_id, new_title, new_details);
-        result_json = {{"ok", true}, {"action", "update_task"}, {"node_id", node_id}};
-        if (on_tree_update) on_tree_update("update_task", node_id, new_title);
-
-    } else if (action == "batch") {
+    if (action == "batch") {
         if (!json.contains("operations") || !json["operations"].is_array()) {
             return llm::ToolResultContent{
                 .toolUseId = call.id,
-                .content = R"({"error":"operations must be a JSON array for batch action"})",
+                .content = R"({"error":"operations must be a JSON array"})",
                 .isError = true,
             };
         }
         nlohmann::json results = nlohmann::json::array();
         for (auto& op : json["operations"]) {
-            auto sub_action = op.value("action", "");
-            if (sub_action == "add_task") {
-                int parent_id = op.value("parent_id", 0);
-                auto title = op.value("title", "");
-                auto details = op.value("details", "");
-                if (title.empty()) {
-                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "title is required for add_task"}});
-                } else {
-                    int node_id = task_tree.add_task(root, parent_id, title, details);
-                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}, {"title", title}});
-                    if (on_tree_update) on_tree_update("add_task", node_id, title);
-                }
-            } else if (sub_action == "start_task") {
-                int node_id = op.value("node_id", -1);
-                if (node_id <= 0) {
-                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for start_task"}});
-                } else {
-                    task_tree.start_task(root, node_id);
-                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
-                    if (on_tree_update) {
-                        auto* node = root.find_node(node_id);
-                        on_tree_update("start_task", node_id, node ? node->title : "");
-                    }
-                }
-            } else if (sub_action == "complete_task") {
-                int node_id = op.value("node_id", -1);
-                auto task_result = op.value("result", "");
-                if (node_id <= 0) {
-                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for complete_task"}});
-                } else {
-                    task_tree.complete_task(root, node_id, tui::TreeNode::Done, task_result);
-                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
-                    if (on_tree_update) on_tree_update("complete_task", node_id, "");
-                }
-            } else if (sub_action == "cancel_task") {
-                int node_id = op.value("node_id", -1);
-                if (node_id <= 0) {
-                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for cancel_task"}});
-                } else {
-                    task_tree.complete_task(root, node_id, tui::TreeNode::Cancelled);
-                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
-                    if (on_tree_update) on_tree_update("cancel_task", node_id, "");
-                }
-            } else if (sub_action == "update_task") {
-                int node_id = op.value("node_id", -1);
-                auto new_title = op.value("title", "");
-                auto new_details = op.value("details", "");
-                if (node_id <= 0) {
-                    results.push_back({{"ok", false}, {"action", sub_action}, {"error", "node_id is required for update_task"}});
-                } else {
-                    task_tree.update_task(root, node_id, new_title, new_details);
-                    results.push_back({{"ok", true}, {"action", sub_action}, {"node_id", node_id}});
-                    if (on_tree_update) on_tree_update("update_task", node_id, new_title);
-                }
-            } else {
-                results.push_back({{"ok", false}, {"action", sub_action}, {"error", "unknown sub-action: " + sub_action}});
-            }
+            results.push_back(handle_tree_op(op, tree_root, id_alloc, on_tree_update));
         }
-        result_json = {{"ok", true}, {"action", "batch"}, {"results", results}};
-
-    } else {
         return llm::ToolResultContent{
             .toolUseId = call.id,
-            .content = R"({"error":"unknown action: )" + action + R"("})",
-            .isError = true,
+            .content = nlohmann::json{{"ok", true}, {"action", "batch"}, {"results", results}}.dump(),
+            .isError = false,
         };
     }
 
+    auto result = handle_tree_op(json, tree_root, id_alloc, on_tree_update);
     return llm::ToolResultContent{
         .toolUseId = call.id,
-        .content = result_json.dump(),
-        .isError = false,
+        .content = result.dump(),
+        .isError = !result.value("ok", false),
     };
 }
 
@@ -697,13 +614,13 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
             }
 
             // Intercept manage_tree virtual tool
-            if (call.name == "manage_tree" && tc.task_tree && tc.tree_root) {
+            if (call.name == "manage_tree" && tc.tree_root) {
                 // Notify TUI to clear streaming state before tree structure changes
                 if (tc.on_tool_call) {
                     tc.on_tool_call(action_counter, call.name, call.arguments);
                 }
 
-                auto result = handle_manage_tree(call, *tc.task_tree, *tc.tree_root, tc.on_tree_update);
+                auto result = handle_manage_tree(call, tc.tree_root, tc.id_alloc, tc.on_tree_update);
 
                 ActionNode tool_action;
                 tool_action.id = action_counter;
@@ -831,8 +748,8 @@ export auto run_one_turn(
     TokenTracker* tracker = nullptr,
     AutoCompactCallback on_auto_compact = {},
     CancellationToken* cancel = nullptr,
-    tui::TaskTree* task_tree = nullptr,
     tui::TreeNode* tree_root = nullptr,
+    tui::IdAllocator* id_alloc = nullptr,
     TreeUpdateCallback on_tree_update = {},
     TokenUpdateCallback on_token_update = {},
     LuaSandbox* lua_sandbox = nullptr
@@ -854,8 +771,8 @@ export auto run_one_turn(
         .tracker = tracker,
         .on_auto_compact = std::move(on_auto_compact),
         .cancel = cancel,
-        .task_tree = task_tree,
         .tree_root = tree_root,
+        .id_alloc = id_alloc,
         .on_tree_update = std::move(on_tree_update),
         .on_token_update = std::move(on_token_update),
         .lua_sandbox = lua_sandbox,
