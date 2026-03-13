@@ -1748,18 +1748,25 @@ export int run(int argc, char* argv[]) {
                                     tui_state.is_streaming = false;
                                     tui_state.is_thinking = false;
 
-                                    // Close any running Thinking/Response under active parent
+                                    // Close any running Thinking/Response nodes
+                                    // Check both active_parent and root — manage_tree may have
+                                    // changed active_parent, leaving a Response orphaned at root.
                                     if (tui_state.active_turn) {
-                                        auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
-                                        // Close running Thinking or Response node
-                                        if (!parent->children.empty() &&
-                                            parent->children.back().state == agent::tui::TreeNode::Running) {
-                                            auto& last = parent->children.back();
-                                            if (last.kind == agent::tui::TreeNode::Thinking ||
-                                                last.kind == agent::tui::TreeNode::Response) {
+                                        auto close_running = [&](agent::tui::TreeNode* node) {
+                                            if (!node || node->children.empty()) return;
+                                            auto& last = node->children.back();
+                                            if (last.state == agent::tui::TreeNode::Running &&
+                                                (last.kind == agent::tui::TreeNode::Thinking ||
+                                                 last.kind == agent::tui::TreeNode::Response)) {
                                                 last.end_ms = call_start;
                                                 last.state = agent::tui::TreeNode::Done;
                                             }
+                                        };
+                                        auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
+                                        close_running(parent);
+                                        // Also check root if parent differs
+                                        if (parent != &*tui_state.active_turn) {
+                                            close_running(&*tui_state.active_turn);
                                         }
                                     }
 
