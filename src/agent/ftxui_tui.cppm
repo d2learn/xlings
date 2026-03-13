@@ -203,6 +203,45 @@ auto render_approval(const tui::AgentTuiState& st) -> Element {
     });
 }
 
+// ─── Input box with cursor and two separator lines ───
+
+auto render_input_box(const tinytui::LineEditor& editor) -> Element {
+    auto& content = editor.content();
+    auto cursor = editor.cursor_pos();
+
+    // Split content at cursor position
+    std::string before = content.substr(0, cursor);
+    std::string after = cursor < content.size() ? content.substr(cursor) : "";
+
+    // The character under the cursor (or space if at end)
+    std::string cursor_char = " ";
+    if (!after.empty()) {
+        // Extract first UTF-8 character
+        std::size_t char_len = 1;
+        auto c = static_cast<unsigned char>(after[0]);
+        if ((c & 0xE0) == 0xC0) char_len = 2;
+        else if ((c & 0xF0) == 0xE0) char_len = 3;
+        else if ((c & 0xF8) == 0xF0) char_len = 4;
+        if (char_len <= after.size()) {
+            cursor_char = after.substr(0, char_len);
+            after = after.substr(char_len);
+        }
+    }
+
+    auto sep = separator() | color(ui::theme::border_color());
+
+    return vbox({
+        sep,
+        hbox({
+            text("> ") | color(ui::theme::cyan()),
+            text(before),
+            text(cursor_char) | inverted | color(ui::theme::cyan()),
+            text(after),
+        }),
+        sep,
+    });
+}
+
 // ─── AgentScreen ───
 
 export class AgentScreen {
@@ -217,12 +256,6 @@ public:
 
     void loop() {
         auto main_renderer = Renderer([this] {
-            // Input line: "> " + editor content
-            auto input_line = hbox({
-                text("> ") | color(ui::theme::cyan()),
-                text(editor_.content()),
-            });
-
             // Build main layout
             Elements layout;
 
@@ -241,14 +274,12 @@ public:
             if (state_.approval_pending) {
                 layout.push_back(render_approval(state_));
             } else {
-                layout.push_back(input_line);
+                // Input box: two separator lines + cursor
+                layout.push_back(render_input_box(editor_));
             }
 
             // Status bar
             layout.push_back(render_status_bar(state_));
-
-            // Empty line at bottom
-            layout.push_back(text(""));
 
             return vbox(std::move(layout));
         });
