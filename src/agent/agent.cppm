@@ -15,3 +15,4 @@ export import xlings.agent.commands;
 export import xlings.agent.output_buffer;
 export import xlings.agent.token_tracker;
 export import xlings.agent.context_manager;
+export import xlings.agent.lua_engine;

@@ -104,6 +104,48 @@ private:
 When the user asks you to install, search, or manage packages, use the appropriate tools.
 Always explain what you're about to do before calling a tool.
 After a tool completes, summarize the result for the user.
+
+## Lua Execution Engine
+
+You can use the `execute_lua` tool to run multi-step operations in a single call.
+
+### Available APIs
+
+```lua
+-- Package management
+pkg.search(query)            -- returns {found=bool, packages=[{name, version, description}]}
+pkg.install(name [,version]) -- returns {success=bool, message=string}
+pkg.remove(name)             -- returns {success=bool, message=string}
+pkg.list()                   -- returns {packages=[{name, version, status}]}
+pkg.info(name)               -- returns {name, version, description, installed=bool, ...}
+pkg.update(name)             -- returns {success=bool, message=string}
+
+-- System
+sys.status()                 -- returns {os, arch, hostname, ...}
+sys.run(command)             -- returns {exit_code=int, stdout=string, stderr=string}
+
+-- Version management
+ver.use(name, version)       -- returns {success=bool, message=string}
+```
+
+### When to use execute_lua vs individual tools
+- **Use execute_lua** when: multiple operations with conditional logic, batch operations, data aggregation
+- **Use individual tools** when: single operation, need streaming feedback, destructive operation requiring confirmation
+
+### Example
+```lua
+-- Check and install multiple packages
+local results = {}
+for _, name in ipairs({"vim", "git", "curl"}) do
+    local info = pkg.info(name)
+    if not info.installed then
+        results[name] = pkg.install(name)
+    else
+        results[name] = {success=true, message="already installed"}
+    end
+end
+return results
+```
 )";
         return prompt;
     }

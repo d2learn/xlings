@@ -1031,6 +1031,9 @@ export int run(int argc, char* argv[]) {
             auto system_prompt = agent::build_system_prompt(bridge, mem_summaries);
             auto tools = agent::to_llmapi_tools(bridge);
 
+            // Create Lua sandbox for execute_lua tool
+            agent::LuaSandbox lua_sandbox(registry, stream);
+
             // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
             int agent_listener = stream.on_event([&bridge](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
@@ -1659,6 +1662,7 @@ export int run(int argc, char* argv[]) {
 
                     // Reset cancel token for new turn
                     cancel_token.reset();
+                    lua_sandbox.set_cancel(&cancel_token);
 
                     // Run LLM turn with streaming
                     agent::tui::ThinkFilter think_filter;
@@ -1743,9 +1747,8 @@ export int run(int argc, char* argv[]) {
                                     tui_state.streaming_text.clear();
                                     tui_state.is_streaming = false;
                                     tui_state.is_thinking = false;
-                                    tui_state.current_action = "executing " + n + "...";
 
-                                    // Close any running Thinking/Response, add ToolCall under active parent
+                                    // Close any running Thinking/Response under active parent
                                     if (tui_state.active_turn) {
                                         auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
                                         // Close running Thinking or Response node
@@ -1758,6 +1761,20 @@ export int run(int argc, char* argv[]) {
                                                 last.state = agent::tui::TreeNode::Done;
                                             }
                                         }
+                                    }
+
+                                    // manage_tree is a virtual tool — tree structure is handled by
+                                    // handle_manage_tree directly. Skip ToolCall node creation.
+                                    if (n == "manage_tree") {
+                                        tui_state.current_action = "planning...";
+                                        return;
+                                    }
+
+                                    tui_state.current_action = "executing " + n + "...";
+
+                                    // Add ToolCall node under active parent
+                                    if (tui_state.active_turn) {
+                                        auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
                                         // If no thinking node was present, add a completed one
                                         if (parent->children.empty() ||
                                             (parent->children.back().kind != agent::tui::TreeNode::Thinking &&
@@ -1786,6 +1803,16 @@ export int run(int argc, char* argv[]) {
                             [&](int id, std::string_view name, bool is_error) {
                                 auto end_ms = agent::tui::steady_now_ms();
                                 screen.post([&, id, n = std::string(name), is_error, end_ms] {
+                                    tui_state.last_action_end_ms = end_ms;
+
+                                    // manage_tree has no ToolCall node — just reset to thinking state
+                                    if (n == "manage_tree") {
+                                        tui_state.current_action = "thinking...";
+                                        tui_state.is_streaming = true;
+                                        tui_state.is_thinking = true;
+                                        return;
+                                    }
+
                                     // Close last running tool call under active parent
                                     if (tui_state.active_turn) {
                                         auto* parent = tui_state.task_tree.active_parent(*tui_state.active_turn);
@@ -1798,7 +1825,6 @@ export int run(int argc, char* argv[]) {
                                                                   : agent::tui::TreeNode::Done;
                                         }
                                     }
-                                    tui_state.last_action_end_ms = end_ms;
 
                                     // Reset to streaming/thinking state
                                     tui_state.current_action = "thinking...";
@@ -1833,7 +1859,8 @@ export int run(int argc, char* argv[]) {
                                     tui_state.ctx_used = tracker.context_used() + input_tokens;
                                 });
                                 screen.refresh();
-                            }
+                            },
+                            &lua_sandbox
                         );
                     } catch (const PausedException&) {
                         cancel_token.reset();  // Reset to Active (wait for resume)

@@ -8,6 +8,7 @@ import xlings.agent.approval;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
 import xlings.agent.tui;
+import xlings.agent.lua_engine;
 import xlings.libs.soul;
 import xlings.libs.json;
 import xlings.runtime.event_stream;
@@ -74,6 +75,29 @@ auto manage_tree_tool_def() -> llm::ToolDef {
     };
 }
 
+// execute_lua tool definition (virtual — executed by LuaSandbox, not CapabilityRegistry)
+auto execute_lua_tool_def() -> llm::ToolDef {
+    return llm::ToolDef{
+        .name = "execute_lua",
+        .description = "Execute a Lua code snippet in a sandboxed environment. "
+                       "Use this to perform multi-step operations efficiently in a single call. "
+                       "Available APIs: pkg.search(query), pkg.install(name [,version]), "
+                       "pkg.remove(name), pkg.list(), pkg.info(name), pkg.update(name), "
+                       "sys.status(), sys.run(command), ver.use(name, version). "
+                       "Return a table with results.",
+        .inputSchema = R"JSON({
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Lua code to execute in the sandbox. Use the pkg/sys/ver APIs to interact with the system. Return a table with results."
+    }
+  },
+  "required": ["code"]
+})JSON",
+    };
+}
+
 // Convert ToolBridge ToolDefs to llmapi ToolDefs, plus manage_tree
 export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDef> {
     std::vector<llm::ToolDef> tools;
@@ -86,6 +110,8 @@ export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDe
     }
     // Add virtual manage_tree tool
     tools.push_back(manage_tree_tool_def());
+    // Add virtual execute_lua tool
+    tools.push_back(execute_lua_tool_def());
     return tools;
 }
 
@@ -150,6 +176,47 @@ You have a `manage_tree` tool to structure your work as a task tree.
 ### Response Format:
 Start every reply with a one-line title summarizing your action or decision.
 Then provide details on subsequent lines.
+
+## Lua Execution Engine
+
+You can use the `execute_lua` tool to run multi-step operations in a single call.
+
+### Available APIs
+
+```lua
+-- Package management
+pkg.search(query)            -- returns {found=bool, packages=[{name, version, description}]}
+pkg.install(name [,version]) -- returns {success=bool, message=string}
+pkg.remove(name)             -- returns {success=bool, message=string}
+pkg.list()                   -- returns {packages=[{name, version, status}]}
+pkg.info(name)               -- returns {name, version, description, installed=bool, ...}
+pkg.update(name)             -- returns {success=bool, message=string}
+
+-- System
+sys.status()                 -- returns {os, arch, hostname, ...}
+sys.run(command)             -- returns {exit_code=int, stdout=string, stderr=string}
+
+-- Version management
+ver.use(name, version)       -- returns {success=bool, message=string}
+```
+
+### When to use execute_lua vs individual tools
+- **Use execute_lua** when: multiple operations with conditional logic, batch operations, data aggregation
+- **Use individual tools** when: single operation, need streaming feedback, destructive operation requiring confirmation
+
+### Example
+```lua
+local results = {}
+for _, name in ipairs({"vim", "git", "curl"}) do
+    local info = pkg.info(name)
+    if not info.installed then
+        results[name] = pkg.install(name)
+    else
+        results[name] = {success=true, message="already installed"}
+    end
+end
+return results
+```
 )";
 
     if (!memories.empty()) {
@@ -200,6 +267,7 @@ export struct TurnConfig {
     tui::TreeNode* tree_root {nullptr};
     TreeUpdateCallback on_tree_update;
     TokenUpdateCallback on_token_update;
+    LuaSandbox* lua_sandbox {nullptr};
 };
 
 // Handle manage_tree virtual tool call
@@ -629,6 +697,11 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
 
             // Intercept manage_tree virtual tool
             if (call.name == "manage_tree" && tc.task_tree && tc.tree_root) {
+                // Notify TUI to clear streaming state before tree structure changes
+                if (tc.on_tool_call) {
+                    tc.on_tool_call(action_counter, call.name, call.arguments);
+                }
+
                 auto result = handle_manage_tree(call, *tc.task_tree, *tc.tree_root, tc.on_tree_update);
 
                 ActionNode tool_action;
@@ -637,9 +710,61 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
                 tool_action.name = "manage_tree";
                 turn_result.actions.push_back(std::move(tool_action));
 
+                // Notify TUI that manage_tree completed
+                if (tc.on_tool_result) {
+                    tc.on_tool_result(action_counter, call.name, result.isError);
+                }
+
                 llm::Message tool_msg;
                 tool_msg.role = llm::Role::Tool;
                 tool_msg.content = std::vector<llm::ContentPart>{result};
+                tc.conversation.push(std::move(tool_msg));
+                continue;
+            }
+
+            // Intercept execute_lua virtual tool
+            if (call.name == "execute_lua" && tc.lua_sandbox) {
+                if (tc.on_tool_call) {
+                    tc.on_tool_call(action_counter, call.name, call.arguments);
+                }
+
+                auto json = nlohmann::json::parse(call.arguments, nullptr, false);
+                auto code = json.is_discarded() ? "" : json.value("code", "");
+
+                llm::ToolResultContent lua_result;
+                if (code.empty()) {
+                    lua_result = llm::ToolResultContent{
+                        .toolUseId = call.id,
+                        .content = R"({"error":"'code' parameter is required"})",
+                        .isError = true,
+                    };
+                } else {
+                    Action decision_action;
+                    decision_action.layer = LayerDecision;
+                    decision_action.name = "execute_lua";
+                    decision_action.detail = code;
+
+                    auto exec_log = tc.lua_sandbox->execute(code, decision_action);
+                    lua_result = llm::ToolResultContent{
+                        .toolUseId = call.id,
+                        .content = exec_log.to_json(),
+                        .isError = (exec_log.status != "completed"),
+                    };
+                }
+
+                ActionNode tool_action;
+                tool_action.id = action_counter;
+                tool_action.type = "tool_call";
+                tool_action.name = "execute_lua";
+                turn_result.actions.push_back(std::move(tool_action));
+
+                if (tc.on_tool_result) {
+                    tc.on_tool_result(action_counter, call.name, lua_result.isError);
+                }
+
+                llm::Message tool_msg;
+                tool_msg.role = llm::Role::Tool;
+                tool_msg.content = std::vector<llm::ContentPart>{lua_result};
                 tc.conversation.push(std::move(tool_msg));
                 continue;
             }
@@ -708,7 +833,8 @@ export auto run_one_turn(
     tui::TaskTree* task_tree = nullptr,
     tui::TreeNode* tree_root = nullptr,
     TreeUpdateCallback on_tree_update = {},
-    TokenUpdateCallback on_token_update = {}
+    TokenUpdateCallback on_token_update = {},
+    LuaSandbox* lua_sandbox = nullptr
 ) -> TurnResult {
     TurnConfig tc{
         .conversation = conversation,
@@ -731,6 +857,7 @@ export auto run_one_turn(
         .tree_root = tree_root,
         .on_tree_update = std::move(on_tree_update),
         .on_token_update = std::move(on_token_update),
+        .lua_sandbox = lua_sandbox,
     };
     return run_one_turn(tc);
 }
