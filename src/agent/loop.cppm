@@ -31,6 +31,10 @@ auto decide_tool_def() -> llm::ToolDef {
         .inputSchema = R"JSON({
   "type": "object",
   "properties": {
+    "thinking": {
+      "type": "string",
+      "description": "Your reasoning process: what you analyzed, what you decided, and why. This is shown to the user."
+    },
     "action": {
       "type": "string",
       "enum": ["decompose", "done"],
@@ -55,7 +59,7 @@ auto decide_tool_def() -> llm::ToolDef {
       }
     }
   },
-  "required": ["action"]
+  "required": ["thinking", "action"]
 })JSON",
     };
 }
@@ -479,24 +483,26 @@ auto ask_decision(
         tc.on_token_update(accum.input_tokens, accum.output_tokens);
     }
 
-    // Capture LLM reasoning text (before decide tool call)
-    auto reasoning = response.text();
-    if (reasoning.size() > 200) reasoning = reasoning.substr(0, 200);
-
     // Parse decide tool call
     auto calls = response.tool_calls();
     if (calls.empty() || calls[0].name != "decide") {
+        auto text = response.text();
+        if (text.size() > 200) text = text.substr(0, 200);
         return Decision{
             .action = "done",
-            .summary = reasoning.empty() ? "completed" : reasoning,
-            .reasoning = reasoning,
+            .summary = text.empty() ? "completed" : text,
+            .reasoning = text,
         };
     }
 
     auto json = nlohmann::json::parse(calls[0].arguments, nullptr, false);
     if (json.is_discarded()) {
-        return Decision{.action = "done", .summary = "completed", .reasoning = reasoning};
+        return Decision{.action = "done", .summary = "completed"};
     }
+
+    // Extract thinking from tool args (always present, required field)
+    auto thinking = json.value("thinking", "");
+    if (thinking.size() > 200) thinking = thinking.substr(0, 200);
 
     auto action = json.value("action", "done");
 
@@ -504,12 +510,12 @@ auto ask_decision(
         return Decision{
             .action = "done",
             .summary = json.value("summary", "completed"),
-            .reasoning = reasoning,
+            .reasoning = thinking,
         };
     }
 
     if (action == "decompose" && json.contains("subtasks") && json["subtasks"].is_array()) {
-        Decision d{.action = "decompose", .reasoning = reasoning};
+        Decision d{.action = "decompose", .reasoning = thinking};
         for (auto& s : json["subtasks"]) {
             SubtaskDef sub;
             sub.title = s.value("title", "untitled");
@@ -535,7 +541,7 @@ auto ask_decision(
         return d;
     }
 
-    return Decision{.action = "done", .summary = "completed", .reasoning = reasoning};
+    return Decision{.action = "done", .summary = "completed", .reasoning = thinking};
 }
 
 // ─── Helper: create children from subtask defs ───
