@@ -64,6 +64,58 @@ public:
         return result;
     }
 
+    // Build scoped prompt for a task tree node
+    auto build_scoped(
+        const std::string& node_name,
+        const std::string& node_detail,
+        const std::vector<std::string>& ancestor_path,
+        const std::vector<std::pair<std::string, std::string>>& sibling_results,
+        bool decision_mode
+    ) const -> std::string {
+        std::string result;
+
+        // L1: Core + Soul + Tools
+        result += build_core_layer_();
+
+        // L4: User prompt
+        auto user_prompt = load_user_prompt_();
+        if (!user_prompt.empty()) {
+            result += "\n## User Instructions\n\n" + user_prompt + "\n";
+        }
+
+        // Task context
+        result += "\n## Task Context\n";
+        if (!ancestor_path.empty()) {
+            result += "Task path: ";
+            for (std::size_t i = 0; i < ancestor_path.size(); ++i) {
+                if (i > 0) result += " > ";
+                result += ancestor_path[i];
+            }
+            result += " > " + node_name + "\n";
+        }
+
+        if (!sibling_results.empty()) {
+            result += "\n## Completed Sibling Tasks\n";
+            for (auto& [name, summary] : sibling_results) {
+                result += "- " + name + ": " + summary + "\n";
+            }
+        }
+
+        result += "\n## Current Task\n" + node_name + "\n";
+        if (!node_detail.empty()) {
+            result += node_detail + "\n";
+        }
+
+        if (decision_mode) {
+            result += "\nDecide: execute directly or decompose into subtasks.\n"
+                      "Call the decide tool with your decision.\n";
+        } else {
+            result += "\nUse tools to complete this task. Give a brief result summary when done.\n";
+        }
+
+        return result;
+    }
+
 private:
     auto build_core_layer_() const -> std::string {
         std::string prompt;
@@ -104,6 +156,11 @@ private:
 When the user asks you to install, search, or manage packages, use the appropriate tools.
 Always explain what you're about to do before calling a tool.
 After a tool completes, summarize the result for the user.
+
+## Output Format
+- Do NOT use markdown formatting (no headers, bold, lists, code blocks, etc.)
+- Keep responses as short as possible — one or two sentences when sufficient
+- Use plain text only
 
 ## Lua Execution Engine
 

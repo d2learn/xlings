@@ -10,68 +10,102 @@ module;
 export module xlings.agent.ftxui_tui;
 
 import std;
+import xlings.agent.behavior_tree;
 import xlings.agent.tui;
 import xlings.agent.token_tracker;
 import xlings.core.utf8;
 import xlings.ui;
-import xlings.libs.tinytui;
-
 namespace xlings::agent {
 
 namespace tui_icons {
-    constexpr auto pending = "\xe2\x97\x8b";   // ○
-    constexpr auto running = "\xe2\x9f\xb3";   // ⟳
-    constexpr auto done    = "\xe2\x9c\x93";   // ✓
-    constexpr auto failed  = "\xe2\x9c\x97";   // ✗
-    constexpr auto turn    = "\xe2\x8f\xb5";   // ⏵
-    constexpr auto reply   = "\xe2\x97\x86";   // ◆
+    constexpr auto pending    = "\xe2\x97\x8b";   // ○
+    constexpr auto running    = "\xe2\x9f\xb3";   // ⟳
+    constexpr auto done       = "\xe2\x9c\x93";   // ✓
+    constexpr auto failed     = "\xe2\x9c\x97";   // ✗
+    constexpr auto skipped    = "\xe2\x96\xb7";   // ▷
+    constexpr auto turn       = "\xe2\x8f\xb5";   // ⏵
+    constexpr auto reply      = "\xe2\x97\x86";   // ◆
+    constexpr auto direct_exec = "\xe2\x9a\x99";  // ⚙
 }
 
 // ─── Render helpers ───
 
 using namespace ftxui;
 
-auto node_icon(int state) -> std::string {
-    switch (state) {
-        case tui::TreeNode::Pending: return tui_icons::pending;
-        case tui::TreeNode::Running: return tui_icons::running;
-        case tui::TreeNode::Done:    return tui_icons::done;
-        case tui::TreeNode::Failed:  return tui_icons::failed;
+auto node_icon(const BehaviorNode& node) -> std::string {
+    // Response nodes use done icon
+    if (node.type == BehaviorNode::TypeResponse && node.state == BehaviorNode::Done) {
+        return tui_icons::done;
+    }
+    // DirectExec nodes use gear icon
+    if (node.type == BehaviorNode::TypeDirectExec) {
+        switch (node.state) {
+            case BehaviorNode::Running: return tui_icons::direct_exec;
+            case BehaviorNode::Done:    return tui_icons::done;
+            case BehaviorNode::Failed:  return tui_icons::failed;
+            default: return tui_icons::direct_exec;
+        }
+    }
+    switch (node.state) {
+        case BehaviorNode::Pending: return tui_icons::pending;
+        case BehaviorNode::Running: return tui_icons::running;
+        case BehaviorNode::Done:    return tui_icons::done;
+        case BehaviorNode::Failed:  return tui_icons::failed;
+        case BehaviorNode::Skipped: return tui_icons::skipped;
         default: return tui_icons::pending;
     }
 }
 
-auto node_color(int state) -> Color {
-    switch (state) {
-        case tui::TreeNode::Pending: return ui::theme::dim_color();
-        case tui::TreeNode::Running: return ui::theme::amber();
-        case tui::TreeNode::Done:    return ui::theme::green();
-        case tui::TreeNode::Failed:  return ui::theme::red();
+auto node_color(const BehaviorNode& node) -> Color {
+    // Response nodes are always cyan
+    if (node.type == BehaviorNode::TypeResponse) {
+        return ui::theme::cyan();
+    }
+    // DirectExec uses amber/green/red
+    if (node.type == BehaviorNode::TypeDirectExec) {
+        switch (node.state) {
+            case BehaviorNode::Running: return ui::theme::amber();
+            case BehaviorNode::Done:    return ui::theme::green();
+            case BehaviorNode::Failed:  return ui::theme::red();
+            default: return ui::theme::dim_color();
+        }
+    }
+    switch (node.state) {
+        case BehaviorNode::Pending: return ui::theme::dim_color();
+        case BehaviorNode::Running: return ui::theme::amber();
+        case BehaviorNode::Done:    return ui::theme::green();
+        case BehaviorNode::Failed:  return ui::theme::red();
+        case BehaviorNode::Skipped: return ui::theme::dim_color();
         default: return ui::theme::dim_color();
     }
 }
 
-auto time_text(const tui::TreeNode& node) -> std::string {
-    if (node.state == tui::TreeNode::Pending) return "";
-    if (node.state == tui::TreeNode::Running && node.start_ms > 0) {
-        return "  " + tui::format_duration(tui::steady_now_ms() - node.start_ms);
+auto title_color_for(const BehaviorNode& node) -> Color {
+    if (node.type == BehaviorNode::TypeResponse) return ui::theme::cyan();
+    if (node.state == BehaviorNode::Pending) return ui::theme::dim_color();
+    return ui::theme::text_color();
+}
+
+auto time_text(const BehaviorNode& node) -> std::string {
+    if (node.state == BehaviorNode::Pending) return "";
+    if (node.state == BehaviorNode::Running && node.start_ms > 0) {
+        return "  " + format_duration(steady_now_ms() - node.start_ms);
     }
     if (node.end_ms > 0 && node.start_ms > 0) {
-        return "  " + tui::format_duration(node.end_ms - node.start_ms);
+        return "  " + format_duration(node.end_ms - node.start_ms);
     }
     return "";
 }
 
-auto render_tree_node(const tui::TreeNode& node,
+auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
                       bool is_last) -> Element {
     // Current node line
     std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
-    auto icon_el = text(node_icon(node.state)) | color(node_color(node.state));
-    auto title_el = text(" " + node.title) | color(
-        node.state == tui::TreeNode::Pending ? ui::theme::dim_color() : ui::theme::text_color());
+    auto icon_el = text(node_icon(node)) | color(node_color(node));
+    auto title_el = text(" " + node.name) | color(title_color_for(node));
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
     auto line = hbox({
@@ -97,56 +131,100 @@ auto render_tree_node(const tui::TreeNode& node,
     return vbox(std::move(rows));
 }
 
-auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state) -> Element {
+auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
+                 const BehaviorNode* tree_snap, const std::string& streaming_snap) -> Element {
     Elements rows;
+    // Use snapshot for active turn, tn.root for completed turns
+    auto& tree_root = tree_snap ? *tree_snap : tn.root;
 
-    // User message header: ⏵ message
-    rows.push_back(
-        text(std::string(tui_icons::turn) + " " + tn.user_message)
-            | bold | color(ui::theme::amber()));
+    // User message header: ⏵ message  total_time
+    {
+        auto header = text(std::string(tui_icons::turn) + " " + tn.user_message)
+            | bold | color(ui::theme::amber());
+
+        // Total elapsed time for this turn
+        std::string total_time;
+        if (&tn == state.active_turn && tn.start_ms > 0) {
+            // Active turn: real-time elapsed
+            total_time = "  " + format_duration(steady_now_ms() - tn.start_ms);
+        } else if (tn.start_ms > 0 && !tree_root.children.empty()) {
+            // Completed turn: find max end_ms among all descendants
+            std::int64_t max_end = 0;
+            std::function<void(const BehaviorNode&)> find_max = [&](const BehaviorNode& n) {
+                if (n.end_ms > max_end) max_end = n.end_ms;
+                for (auto& c : n.children) find_max(c);
+            };
+            find_max(tree_root);
+            if (max_end > tn.start_ms) {
+                total_time = "  " + format_duration(max_end - tn.start_ms);
+            }
+        }
+
+        if (total_time.empty()) {
+            rows.push_back(header);
+        } else {
+            rows.push_back(hbox({
+                header,
+                text(total_time) | color(ui::theme::dim_color()),
+            }));
+        }
+    }
 
     // Tree nodes (children of root)
-    for (std::size_t i = 0; i < tn.root.children.size(); ++i) {
-        bool is_last = (i == tn.root.children.size() - 1);
-        rows.push_back(render_tree_node(tn.root.children[i], "", is_last));
+    for (std::size_t i = 0; i < tree_root.children.size(); ++i) {
+        bool is_last = (i == tree_root.children.size() - 1);
+        rows.push_back(render_tree_node(tree_root.children[i], "", is_last));
+    }
+
+    // Separator between tree and reply (amber)
+    bool has_reply = (&tn == state.active_turn && !streaming_snap.empty())
+                  || (!tn.reply.empty() && &tn != state.active_turn);
+    if (has_reply) {
+        rows.push_back(separator() | color(ui::theme::amber()));
     }
 
     // Streaming text (only for active turn)
-    if (&tn == state.active_turn && !state.streaming_text.empty()) {
-        rows.push_back(text(""));
+    if (&tn == state.active_turn && !streaming_snap.empty()) {
         rows.push_back(
-            text(std::string(tui_icons::reply) + " " + state.streaming_text)
+            text(std::string(tui_icons::reply) + " " + streaming_snap)
                 | color(ui::theme::cyan()));
     }
 
-    // Final reply
+    // Final reply (multiline support)
     if (!tn.reply.empty() && &tn != state.active_turn) {
-        rows.push_back(text(""));
-        rows.push_back(hbox({
-            text(std::string(tui_icons::reply) + " ") | bold | color(ui::theme::cyan()),
-            text(tn.reply),
-        }));
+        std::istringstream ss(tn.reply);
+        std::string line;
+        bool first = true;
+        while (std::getline(ss, line)) {
+            if (first) {
+                rows.push_back(hbox({
+                    text(std::string(tui_icons::reply) + " ") | bold | color(ui::theme::cyan()),
+                    text(line),
+                }));
+                first = false;
+            } else {
+                rows.push_back(text("  " + line));
+            }
+        }
     }
 
-    // Separator
-    rows.push_back(separator() | color(ui::theme::border_color()));
+    // Trailing empty line between turns
+    rows.push_back(text(""));
 
     return vbox(std::move(rows));
 }
 
 auto render_all_turns(const tui::AgentTuiState& state) -> Element {
+    // Take snapshot of active turn's tree and streaming text (thread-safe)
+    auto tree_snap = state.behavior_tree.snapshot();
+    auto streaming_snap = state.behavior_tree.streaming_text();
+
     Elements rows;
     for (auto& tn : state.turns) {
-        rows.push_back(render_turn(tn, state));
-    }
-
-    // If active turn is streaming/thinking, show spinner line
-    if (state.active_turn && !state.current_action.empty()) {
-        std::string spinner_text = std::string(tui_icons::running) + " " + state.current_action;
-        if (state.turn_start_ms > 0) {
-            spinner_text += "  " + tui::format_duration(tui::steady_now_ms() - state.turn_start_ms);
-        }
-        rows.push_back(text(spinner_text) | color(ui::theme::amber()));
+        bool is_active = (&tn == state.active_turn);
+        rows.push_back(render_turn(tn, state,
+            is_active ? &tree_snap : nullptr,
+            is_active ? streaming_snap : std::string{}));
     }
 
     if (rows.empty()) {
@@ -173,7 +251,18 @@ auto render_status_bar(const tui::AgentTuiState& st) -> Element {
             | color(ui::theme::dim_color()));
     }
 
-    return hbox(std::move(parts));
+    auto left = hbox(std::move(parts));
+
+    // Right side: activity indicator (thinking/responding + timer)
+    if (!st.current_action.empty()) {
+        std::string activity = std::string(tui_icons::running) + " " + st.current_action;
+        if (st.turn_start_ms > 0) {
+            activity += " " + format_duration(steady_now_ms() - st.turn_start_ms);
+        }
+        return hbox({left, filler(), text(activity + " ") | color(ui::theme::amber())});
+    }
+
+    return left;
 }
 
 auto render_completion_menu(const tui::AgentTuiState& st) -> Element {
@@ -203,60 +292,32 @@ auto render_approval(const tui::AgentTuiState& st) -> Element {
     });
 }
 
-// ─── Input box with cursor and two separator lines ───
-
-auto render_input_box(const tinytui::LineEditor& editor) -> Element {
-    auto& content = editor.content();
-    auto cursor = editor.cursor_pos();
-
-    // Split content at cursor position
-    std::string before = content.substr(0, cursor);
-    std::string after = cursor < content.size() ? content.substr(cursor) : "";
-
-    // The character under the cursor (or space if at end)
-    std::string cursor_char = " ";
-    if (!after.empty()) {
-        // Extract first UTF-8 character
-        std::size_t char_len = 1;
-        auto c = static_cast<unsigned char>(after[0]);
-        if ((c & 0xE0) == 0xC0) char_len = 2;
-        else if ((c & 0xF0) == 0xE0) char_len = 3;
-        else if ((c & 0xF8) == 0xF0) char_len = 4;
-        if (char_len <= after.size()) {
-            cursor_char = after.substr(0, char_len);
-            after = after.substr(char_len);
-        }
-    }
-
-    auto sep = separator() | color(ui::theme::border_color());
-
-    return vbox({
-        sep,
-        hbox({
-            text("> ") | color(ui::theme::cyan()),
-            text(before),
-            text(cursor_char) | inverted | color(ui::theme::cyan()),
-            text(after),
-        }),
-        sep,
-    });
-}
-
-// ─── AgentScreen ───
+// ─── AgentScreen (uses ftxui::Input for real system cursor + IME support) ───
 
 export class AgentScreen {
 public:
     AgentScreen(tui::AgentTuiState& state,
-                tinytui::LineEditor& editor,
+                std::string& input_content,
+                std::function<void()> on_input_change,
                 std::function<bool(const ftxui::Event&)> key_handler)
-        : state_(state), editor_(editor), key_handler_(std::move(key_handler))
+        : state_(state), input_content_(input_content),
+          on_input_change_(std::move(on_input_change)),
+          key_handler_(std::move(key_handler))
     {
         screen_.TrackMouse(true);
+
+        // Create ftxui Input component — provides real terminal cursor for IME
+        InputOption opt;
+        opt.multiline = false;
+        opt.on_change = [this] { if (on_input_change_) on_input_change_(); };
+        // Strip default background decoration — just return the raw element
+        opt.transform = [](InputState state) { return state.element; };
+        input_comp_ = Input(&input_content_, opt);
     }
 
     void loop() {
-        auto main_renderer = Renderer([this] {
-            // Build main layout
+        // Renderer with input_comp_ as child — Input gets focus and drives cursor
+        auto main_renderer = Renderer(input_comp_, [this] {
             Elements layout;
 
             // History area (flex, scrollable)
@@ -274,12 +335,18 @@ public:
             if (state_.approval_pending) {
                 layout.push_back(render_approval(state_));
             } else {
-                // Input box: two separator lines + cursor
-                layout.push_back(render_input_box(editor_));
+                // Input box: top separator + "> " prefix + ftxui Input (real cursor) + bottom separator
+                layout.push_back(separator() | color(ui::theme::border_color()));
+                layout.push_back(hbox({
+                    text("> ") | color(ui::theme::cyan()),
+                    input_comp_->Render() | flex,
+                }));
+                layout.push_back(separator() | color(ui::theme::border_color()));
             }
 
-            // Status bar
+            // Status bar + trailing empty line
             layout.push_back(render_status_bar(state_));
+            layout.push_back(text(""));
 
             return vbox(std::move(layout));
         });
@@ -300,7 +367,8 @@ public:
                 }
             }
 
-            // Delegate to external key handler
+            // Delegate to external key handler (Enter, Up/Down, Tab, Esc, Ctrl+C)
+            // Unhandled events fall through to input_comp_ (chars, backspace, etc.)
             if (key_handler_ && key_handler_(event)) {
                 return true;
             }
@@ -317,6 +385,9 @@ public:
                 }
             }
         });
+
+        // Focus input component so cursor appears at "> " prompt
+        screen_.Post([this] { input_comp_->TakeFocus(); });
 
         screen_.Loop(main_component);
         timer.request_stop();
@@ -342,9 +413,11 @@ public:
 
 private:
     tui::AgentTuiState& state_;
-    tinytui::LineEditor& editor_;
+    std::string& input_content_;
+    std::function<void()> on_input_change_;
     std::function<bool(const ftxui::Event&)> key_handler_;
 
+    Component input_comp_;
     ScreenInteractive screen_ = ScreenInteractive::FullscreenPrimaryScreen();
     float scroll_y_ {1.0f};
     bool at_bottom_ {true};

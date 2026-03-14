@@ -7,6 +7,7 @@ import xlings.agent.llm_config;
 import xlings.agent.approval;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
+import xlings.agent.behavior_tree;
 import xlings.agent.tui;
 import xlings.agent.lua_engine;
 import xlings.libs.soul;
@@ -19,63 +20,8 @@ namespace xlings::agent {
 
 namespace llm = mcpplibs::llmapi;
 
-// manage_tree tool definition (virtual — not registered in CapabilityRegistry)
-auto manage_tree_tool_def() -> llm::ToolDef {
-    return llm::ToolDef{
-        .name = "manage_tree",
-        .description = "Manage the task tree: decompose tasks into subtasks, track progress, update plans. "
-                       "Supports batch mode to execute multiple operations in one call.",
-        .inputSchema = R"JSON({
-  "type": "object",
-  "properties": {
-    "action": {
-      "type": "string",
-      "enum": ["add_task", "start_task", "complete_task", "cancel_task", "update_task", "batch"],
-      "description": "The tree operation to perform. Use 'batch' to execute multiple operations at once."
-    },
-    "parent_id": {
-      "type": "integer",
-      "description": "Parent node ID (for add_task). Use 0 for root level."
-    },
-    "node_id": {
-      "type": "integer",
-      "description": "Target node ID (for start/complete/cancel/update)."
-    },
-    "title": {
-      "type": "string",
-      "description": "Task title (for add_task/update_task)."
-    },
-    "details": {
-      "type": "string",
-      "description": "Optional JSON details or notes."
-    },
-    "result": {
-      "type": "string",
-      "description": "Completion result summary (for complete_task)."
-    },
-    "operations": {
-      "type": "array",
-      "description": "Array of operations for batch mode. Each element has the same schema as a single manage_tree call.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "action": {"type": "string"},
-          "parent_id": {"type": "integer"},
-          "node_id": {"type": "integer"},
-          "title": {"type": "string"},
-          "details": {"type": "string"},
-          "result": {"type": "string"}
-        },
-        "required": ["action"]
-      }
-    }
-  },
-  "required": ["action"]
-})JSON",
-    };
-}
+// ─── execute_lua tool definition (virtual — executed by LuaSandbox) ───
 
-// execute_lua tool definition (virtual — executed by LuaSandbox, not CapabilityRegistry)
 auto execute_lua_tool_def() -> llm::ToolDef {
     return llm::ToolDef{
         .name = "execute_lua",
@@ -98,7 +44,43 @@ auto execute_lua_tool_def() -> llm::ToolDef {
     };
 }
 
-// Convert ToolBridge ToolDefs to llmapi ToolDefs, plus manage_tree
+// ─── decide tool definition (virtual — used in ask_decision) ───
+
+auto decide_tool_def() -> llm::ToolDef {
+    return llm::ToolDef{
+        .name = "decide",
+        .description = "Decide how to handle the current task: execute it directly with tools, "
+                       "or decompose it into subtasks. For atomic operations with known tool and args, "
+                       "specify tool+args in subtasks so the system executes them directly without LLM overhead.",
+        .inputSchema = R"JSON({
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": ["execute", "decompose"],
+      "description": "execute: handle this task directly with tool calls. decompose: split into subtasks."
+    },
+    "subtasks": {
+      "type": "array",
+      "description": "Required when action=decompose. List subtasks in execution order.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Subtask title" },
+          "description": { "type": "string", "description": "Subtask detailed description" },
+          "tool": { "type": "string", "description": "Optional: tool name for direct execution. System calls it automatically." },
+          "args": { "type": "object", "description": "Optional: tool arguments JSON. Required when tool is specified." }
+        },
+        "required": ["title"]
+      }
+    }
+  },
+  "required": ["action"]
+})JSON",
+    };
+}
+
+// Convert ToolBridge ToolDefs to llmapi ToolDefs (real tools only, no virtual tools)
 export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDef> {
     std::vector<llm::ToolDef> tools;
     for (const auto& td : bridge.tool_definitions()) {
@@ -108,10 +90,6 @@ export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDe
             .inputSchema = td.inputSchema,
         });
     }
-    // Add virtual manage_tree tool
-    tools.push_back(manage_tree_tool_def());
-    // Add virtual execute_lua tool
-    tools.push_back(execute_lua_tool_def());
     return tools;
 }
 
@@ -120,7 +98,7 @@ export struct MemorySummary {
     std::string category;
 };
 
-// Build system prompt (tool definitions NOT listed here — they are in params.tools)
+// Build base system prompt (L1 + memories)
 export auto build_system_prompt(
     [[maybe_unused]] const ToolBridge& bridge,
     const std::vector<MemorySummary>& memories = {}
@@ -141,46 +119,10 @@ export auto build_system_prompt(
 3. Before calling a tool, briefly explain what you're about to do.
 4. After a tool completes, summarize the result for the user.
 
-## Task Management
-
-You have a `manage_tree` tool to structure your work as a task tree.
-
-### Workflow — use batch mode to minimize tool calls:
-1. When receiving a user request, decompose into subtasks using a single `manage_tree(batch)` call:
-   ```json
-   {"action":"batch","operations":[
-     {"action":"add_task","parent_id":0,"title":"Search for packages"},
-     {"action":"add_task","parent_id":0,"title":"Install version"},
-     {"action":"add_task","parent_id":0,"title":"Verify installation"},
-     {"action":"start_task","node_id":1}
-   ]}
-   ```
-2. Execute the started task using the appropriate tools.
-3. Complete and start the next task (can also batch):
-   ```json
-   {"action":"batch","operations":[
-     {"action":"complete_task","node_id":1,"result":"found v0.4.40"},
-     {"action":"start_task","node_id":2}
-   ]}
-   ```
-4. If a subtask needs further decomposition, add child tasks under it.
-5. Cancel unneeded tasks with `cancel_task`, modify with `update_task`.
-
-### Rules:
-- **Prefer batch mode** — combine add/start/complete operations into single calls.
-- Every tool call automatically nests under the currently active task.
-- A subtask can itself contain sub-subtasks (recursive decomposition).
-- Completing a task automatically activates the next sibling or returns to parent.
-- In batch mode, `node_id` can reference nodes created earlier in the same batch (IDs are assigned sequentially).
-- **The task tree is dynamic, NOT a fixed plan.** After each task completes, re-evaluate remaining tasks based on results:
-  - If a result makes subsequent tasks unnecessary, **cancel them immediately** with `cancel_task`.
-  - If new information changes what needs to be done, **update or replace** pending tasks.
-  - Example: if "check installed packages" reveals a package is not installed, cancel the "uninstall" task and skip straight to reporting.
-- **Never blindly execute all planned tasks** — earlier results may invalidate later steps.
-
-### Response Format:
-Start every reply with a one-line title summarizing your action or decision.
-Then provide details on subsequent lines.
+## Output Format
+- Do NOT use markdown formatting (no headers, bold, lists, code blocks, etc.)
+- Keep responses as short as possible — one or two sentences when sufficient
+- Use plain text only
 
 ## Lua Execution Engine
 
@@ -222,8 +164,7 @@ for _, name in ipairs({"vim", "git", "curl"}) do
     end
 end
 return results
-```
-)";
+```)";
 
     if (!memories.empty()) {
         prompt += "\n## Remembered Context\n\n";
@@ -244,13 +185,84 @@ return results
     return prompt;
 }
 
-// Callback types
+// ─── Callback types ───
+
 export using ConfirmCallback = std::function<bool(std::string_view tool_name, std::string_view arguments)>;
 export using ToolCallCallback = std::function<void(int action_id, std::string_view name, std::string_view args)>;
 export using ToolResultCallback = std::function<void(int action_id, std::string_view name, bool is_error)>;
 export using AutoCompactCallback = std::function<void(int evicted_turns, int freed_tokens)>;
-export using TreeUpdateCallback = std::function<void(const std::string& action, int node_id, int parent_id, const std::string& title)>;
 export using TokenUpdateCallback = std::function<void(int input_tokens, int output_tokens)>;
+
+// ─── Subtask definition from LLM decide response ───
+
+struct SubtaskDef {
+    std::string title;
+    std::string description;
+    std::string tool;       // non-empty = DirectExec
+    std::string tool_args;  // JSON string
+};
+
+struct Decision {
+    bool is_execute {true};
+    std::vector<SubtaskDef> subtasks;
+};
+
+// ─── Node context for scoped prompts ───
+
+struct NodeContext {
+    std::string root_name;  // original user request
+    std::vector<std::string> ancestor_path;  // names from root to parent
+    std::vector<std::pair<std::string, std::string>> sibling_results;  // {name, summary}
+};
+
+// ─── Node result from run_execute / run_tool_loop ───
+
+struct NodeResult {
+    std::string reply;
+    int input_tokens {0};
+    int output_tokens {0};
+    int cache_read_tokens {0};
+    int cache_write_tokens {0};
+    bool failed {false};
+};
+
+// ─── TreeConfig — input to run_task_tree ───
+
+export struct TreeConfig {
+    std::string user_input;
+    const std::string& base_system_prompt;  // L1 + L4
+    const std::vector<llm::ToolDef>& tools; // real tools (no decide/manage_tree)
+    ToolBridge& bridge;
+    EventStream& stream;
+    const LlmConfig& cfg;
+    llm::Conversation* conversation {nullptr};  // shared conversation for cross-turn context
+    ApprovalPolicy* policy {nullptr};
+    ConfirmCallback confirm_cb;
+    CancellationToken* cancel {nullptr};
+    ABehaviorTree* tree {nullptr};
+    IdAllocator* id_alloc {nullptr};
+    TokenTracker* tracker {nullptr};
+    ContextManager* ctx_mgr {nullptr};
+    LuaSandbox* lua_sandbox {nullptr};
+    // TUI callbacks
+    std::function<void(std::string_view)> on_stream_chunk;
+    ToolCallCallback on_tool_call;
+    ToolResultCallback on_tool_result;
+    TokenUpdateCallback on_token_update;
+    AutoCompactCallback on_auto_compact;
+};
+
+// ─── TreeResult — output from run_task_tree ───
+
+export struct TreeResult {
+    std::string reply;
+    int input_tokens {0};
+    int output_tokens {0};
+    int cache_read_tokens {0};
+    int cache_write_tokens {0};
+};
+
+// ─── Keep TurnConfig + TurnResult for backward compat ───
 
 export struct TurnConfig {
     llm::Conversation& conversation;
@@ -269,103 +281,14 @@ export struct TurnConfig {
     TokenTracker* tracker {nullptr};
     AutoCompactCallback on_auto_compact;
     CancellationToken* cancel {nullptr};
-    tui::TreeNode* tree_root {nullptr};
-    tui::IdAllocator* id_alloc {nullptr};
-    TreeUpdateCallback on_tree_update;
+    ABehaviorTree* behavior_tree {nullptr};
+    IdAllocator* id_alloc {nullptr};
     TokenUpdateCallback on_token_update;
     LuaSandbox* lua_sandbox {nullptr};
 };
 
-// Handle a single manage_tree operation (recursive TreeNode version)
-auto handle_tree_op(
-    const nlohmann::json& op,
-    tui::TreeNode* tree_root,
-    tui::IdAllocator* id_alloc,
-    TreeUpdateCallback& on_tree_update
-) -> nlohmann::json {
-    auto action = op.value("action", "");
+// ─── Handle a single tool call with optional approval ───
 
-    if (action == "add_task") {
-        auto title = op.value("title", "");
-        if (title.empty()) return {{"ok", false}, {"action", action}, {"error", "title required"}};
-        int parent_id = op.value("parent_id", 0);
-        int id = id_alloc ? id_alloc->alloc() : 0;
-        if (on_tree_update) on_tree_update("add_task", id, parent_id, title);
-        return {{"ok", true}, {"action", action}, {"node_id", id}, {"title", title}};
-    }
-    if (action == "start_task") {
-        int node_id = op.value("node_id", -1);
-        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
-        if (on_tree_update) on_tree_update("start_task", node_id, 0, "");
-        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
-    }
-    if (action == "complete_task") {
-        int node_id = op.value("node_id", -1);
-        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
-        if (on_tree_update) on_tree_update("complete_task", node_id, 0, op.value("result", ""));
-        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
-    }
-    if (action == "cancel_task") {
-        int node_id = op.value("node_id", -1);
-        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
-        if (on_tree_update) on_tree_update("cancel_task", node_id, 0, "");
-        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
-    }
-    if (action == "update_task") {
-        int node_id = op.value("node_id", -1);
-        if (node_id <= 0) return {{"ok", false}, {"action", action}, {"error", "node_id required"}};
-        if (on_tree_update) on_tree_update("update_task", node_id, 0, op.value("title", ""));
-        return {{"ok", true}, {"action", action}, {"node_id", node_id}};
-    }
-    return {{"ok", false}, {"action", action}, {"error", "unknown action"}};
-}
-
-// Handle manage_tree virtual tool call (recursive TreeNode version)
-auto handle_manage_tree(
-    const llm::ToolCall& call,
-    tui::TreeNode* tree_root,
-    tui::IdAllocator* id_alloc,
-    TreeUpdateCallback on_tree_update
-) -> llm::ToolResultContent {
-    auto json = nlohmann::json::parse(call.arguments, nullptr, false);
-    if (json.is_discarded()) {
-        return llm::ToolResultContent{
-            .toolUseId = call.id,
-            .content = R"({"error":"invalid JSON arguments"})",
-            .isError = true,
-        };
-    }
-
-    auto action = json.value("action", "");
-
-    if (action == "batch") {
-        if (!json.contains("operations") || !json["operations"].is_array()) {
-            return llm::ToolResultContent{
-                .toolUseId = call.id,
-                .content = R"({"error":"operations must be a JSON array"})",
-                .isError = true,
-            };
-        }
-        nlohmann::json results = nlohmann::json::array();
-        for (auto& op : json["operations"]) {
-            results.push_back(handle_tree_op(op, tree_root, id_alloc, on_tree_update));
-        }
-        return llm::ToolResultContent{
-            .toolUseId = call.id,
-            .content = nlohmann::json{{"ok", true}, {"action", "batch"}, {"results", results}}.dump(),
-            .isError = false,
-        };
-    }
-
-    auto result = handle_tree_op(json, tree_root, id_alloc, on_tree_update);
-    return llm::ToolResultContent{
-        .toolUseId = call.id,
-        .content = result.dump(),
-        .isError = !result.value("ok", false),
-    };
-}
-
-// Handle a single tool call with optional approval
 auto handle_tool_call(
     const llm::ToolCall& call,
     ToolBridge& bridge,
@@ -431,7 +354,8 @@ auto handle_tool_call(
     };
 }
 
-// Cancellable LLM call worker template — eliminates per-provider duplication
+// ─── Cancellable LLM call worker template ───
+
 template<typename Provider, typename ProviderConfig>
 auto llm_call_worker(
     ProviderConfig pcfg,
@@ -489,161 +413,268 @@ auto llm_call_worker(
     return std::move(*resp_ptr);
 }
 
-// Core loop: user input -> LLM -> Tool -> LLM -> ... -> final reply
-// Returns TurnResult with reply + token usage + action nodes
-export auto run_one_turn(TurnConfig& tc) -> TurnResult {
+// ─── Make LLM call (provider dispatch) ───
 
-    tc.conversation.push(llm::Message::user(tc.user_input));
+auto do_llm_call(
+    const std::vector<llm::Message>& msgs,
+    llm::ChatParams& params,
+    const LlmConfig& cfg,
+    std::function<void(std::string_view)> on_chunk,
+    CancellationToken* cancel
+) -> llm::ChatResponse {
+    bool has_stream_cb = static_cast<bool>(on_chunk);
+    if (cfg.provider == "anthropic") {
+        llm::anthropic::Config acfg{
+            .apiKey = cfg.api_key,
+            .model = cfg.model,
+        };
+        if (!cfg.base_url.empty()) acfg.baseUrl = cfg.base_url;
+        return llm_call_worker<llm::anthropic::Anthropic>(
+            std::move(acfg), msgs, params, std::move(on_chunk), has_stream_cb, cancel);
+    } else {
+        llm::openai::Config ocfg{
+            .apiKey = cfg.api_key,
+            .model = cfg.model,
+        };
+        if (!cfg.base_url.empty()) ocfg.baseUrl = cfg.base_url;
+        return llm_call_worker<llm::openai::OpenAI>(
+            std::move(ocfg), msgs, params, std::move(on_chunk), has_stream_cb, cancel);
+    }
+}
 
+// ─── Build scoped prompt for a node ───
+
+auto build_scoped_prompt(
+    const BehaviorNode& node,
+    const NodeContext& ctx,
+    const std::string& base_prompt,
+    const std::vector<llm::ToolDef>& tools,
+    bool decision_mode
+) -> std::string {
+    std::string prompt = base_prompt;
+
+    prompt += "\n\n## Task Context\n";
+    prompt += "User request: " + ctx.root_name + "\n";
+
+    if (!ctx.ancestor_path.empty()) {
+        prompt += "Task path: ";
+        for (std::size_t i = 0; i < ctx.ancestor_path.size(); ++i) {
+            if (i > 0) prompt += " > ";
+            prompt += ctx.ancestor_path[i];
+        }
+        prompt += " > " + node.name + "\n";
+    }
+
+    if (!ctx.sibling_results.empty()) {
+        prompt += "\n## Completed Sibling Tasks\n";
+        prompt += "IMPORTANT: Review these results before acting — do NOT repeat work already done.\n";
+        for (auto& [name, summary] : ctx.sibling_results) {
+            prompt += "- " + name + ": " + summary + "\n";
+        }
+    }
+
+    prompt += "\n## Current Task\n";
+    prompt += node.name + "\n";
+    if (!node.detail.empty()) {
+        prompt += node.detail + "\n";
+    }
+
+    if (decision_mode) {
+        // List available tool names so LLM can specify correct DirectExec tools
+        prompt += "\n## Available Tools\n";
+        for (auto& t : tools) {
+            prompt += "- " + t.name + "\n";
+        }
+        prompt += R"(
+Decide how to handle this task. Call the decide tool:
+
+**execute** — Handle this task yourself with tool calls and reasoning. Best when:
+  - The task is simple (1-3 tool calls)
+  - Steps depend on previous results (conditional logic, e.g. "check then act")
+  - You need to interpret results before deciding next action
+
+**decompose** — Split into subtasks. Best when:
+  - The task has multiple independent parts
+  - Subtasks can include:
+    - tool+args: system executes directly, zero LLM cost (use EXACT tool name from list above)
+    - title only: LLM handles with reasoning (for steps needing judgment or conditional logic)
+  - Mix both types freely. Use title-only for steps that depend on earlier results.
+)";
+    } else {
+        if (!ctx.sibling_results.empty()) {
+            prompt += R"(
+Use sibling task results above as context — do NOT re-check what is already known.
+Use tools to complete this task efficiently with minimal calls.
+Give a brief result summary (1-2 sentences) when done.
+)";
+        } else {
+            prompt += R"(
+Use the available tools to complete this task efficiently with minimal calls.
+Give a brief result summary (1-2 sentences) when done.
+)";
+        }
+    }
+
+    return prompt;
+}
+
+// ─── Synthesize children results into parent summary ───
+
+auto synthesize_children(const BehaviorNode& node) -> std::string {
+    // Build a human-readable summary from child names + status
+    std::string summary;
+    int done_count = 0;
+    int failed_count = 0;
+    int total = 0;
+    for (auto& child : node.children) {
+        if (child.type == BehaviorNode::TypeToolCall ||
+            child.type == BehaviorNode::TypeResponse) continue;
+        ++total;
+        if (child.state == BehaviorNode::Done) ++done_count;
+        if (child.state == BehaviorNode::Failed) ++failed_count;
+    }
+
+    // For Execute nodes (LLM-generated reply), use their result_summary
+    // For DirectExec/Decompose nodes, use name + status (raw tool output is not user-friendly)
+    for (auto& child : node.children) {
+        if (child.type == BehaviorNode::TypeToolCall ||
+            child.type == BehaviorNode::TypeResponse) continue;
+        if (child.type == BehaviorNode::TypeExecute && !child.result_summary.empty()) {
+            // Execute nodes have LLM-generated summaries — use them
+            if (!summary.empty()) summary += "; ";
+            summary += child.result_summary;
+        }
+    }
+
+    if (!summary.empty()) {
+        return summary.size() > 200 ? summary.substr(0, 200) : summary;
+    }
+
+    // Fallback: count-based summary
+    if (failed_count > 0) {
+        summary = std::to_string(done_count) + " completed, " +
+                  std::to_string(failed_count) + " failed out of " +
+                  std::to_string(total) + " tasks";
+    } else {
+        summary = std::to_string(done_count) + "/" + std::to_string(total) + " tasks completed";
+    }
+    return summary;
+}
+
+// ─── run_tool_loop — extracted LLM ↔ tool inner loop ───
+// Used by both run_execute (new) and run_one_turn (compat)
+
+struct ToolLoopConfig {
+    llm::Conversation& conversation;
+    const std::string& system_prompt;
+    const std::vector<llm::ToolDef>& tools;
+    ToolBridge& bridge;
+    EventStream& stream;
+    const LlmConfig& cfg;
+    std::function<void(std::string_view)> on_stream_chunk;
+    ApprovalPolicy* policy {nullptr};
+    ConfirmCallback confirm_cb;
+    ToolCallCallback on_tool_call;
+    ToolResultCallback on_tool_result;
+    CancellationToken* cancel {nullptr};
+    int parent_node_id {0};  // for begin_tool/end_tool
+    ABehaviorTree* tree {nullptr};
+    IdAllocator* id_alloc {nullptr};
+    LuaSandbox* lua_sandbox {nullptr};
+    TokenUpdateCallback on_token_update;
+    ContextManager* ctx_mgr {nullptr};
+    TokenTracker* tracker {nullptr};
+    AutoCompactCallback on_auto_compact;
+};
+
+auto run_tool_loop(ToolLoopConfig& lc) -> NodeResult {
     llm::ChatParams params;
-    params.tools = tc.tools;
-    params.temperature = tc.cfg.temperature;
-    params.maxTokens = tc.cfg.max_tokens;
+    params.tools = lc.tools;
+    params.temperature = lc.cfg.temperature;
+    params.maxTokens = lc.cfg.max_tokens;
 
-    TurnResult turn_result;
+    NodeResult result;
     int action_counter = 0;
+    int last_input_tokens = 0;  // tracks this loop's latest LLM input tokens
 
     constexpr int MAX_ITERATIONS = 50;
     constexpr int TOOL_ONLY_LIMIT = 40;
     int consecutive_tool_only = 0;
+
     for (int i = 0; i < MAX_ITERATIONS; ++i) {
 
         // Check cancellation/pause before each LLM call
-        if (tc.cancel && !tc.cancel->is_active()) {
-            if (tc.cancel->is_paused()) throw PausedException{};
+        if (lc.cancel && !lc.cancel->is_active()) {
+            if (lc.cancel->is_paused()) throw PausedException{};
             throw CancelledException{};
         }
 
-        // Auto-compact check before each LLM call
-        if (tc.ctx_mgr && tc.tracker) {
-            int l2_before = tc.ctx_mgr->l2_count();
-            int tokens_before = tc.ctx_mgr->total_evicted_tokens();
-            if (tc.ctx_mgr->maybe_auto_compact(tc.conversation, *tc.tracker)) {
-                int evicted = tc.ctx_mgr->l2_count() - l2_before;
-                int freed = tc.ctx_mgr->total_evicted_tokens() - tokens_before;
-                turn_result.auto_compacted = true;
-                if (tc.on_auto_compact && (evicted > 0 || freed > 0)) tc.on_auto_compact(evicted, freed);
+        // Context budget check — use this node's last input tokens (not stale session tracker)
+        if (last_input_tokens > 0) {
+            int ctx_limit = TokenTracker::context_limit(lc.cfg.model);
+            if (last_input_tokens > static_cast<int>(ctx_limit * 0.92)) {
+                // Auto-compact this node's conversation before giving up
+                if (lc.ctx_mgr && lc.tracker) {
+                    if (lc.ctx_mgr->maybe_auto_compact(lc.conversation, *lc.tracker)) {
+                        if (lc.on_auto_compact) lc.on_auto_compact(0, 0);
+                        continue;  // retry after compact
+                    }
+                }
+                result.reply = "[approaching context limit, stopping]";
+                return result;
             }
         }
-
-        // Context budget check: stop if approaching limit
-        if (tc.tracker) {
-            int ctx_limit = TokenTracker::context_limit(tc.cfg.model);
-            if (tc.tracker->context_used() > static_cast<int>(ctx_limit * 0.92)) {
-                turn_result.reply = "[approaching context limit (" +
-                    TokenTracker::format_tokens(tc.tracker->context_used()) + "/" +
-                    TokenTracker::format_tokens(ctx_limit) + "), stopping]";
-                return turn_result;
-            }
-        }
-
-        llm::ChatResponse response;
-
-        // ── Cancellable LLM call via worker thread ──
-        bool has_stream_cb = static_cast<bool>(tc.on_stream_chunk);
 
         // Build messages snapshot
-        auto msgs = tc.conversation.messages;
+        auto msgs = lc.conversation.messages;
         if (msgs.empty() || msgs[0].role != llm::Role::System) {
-            msgs.insert(msgs.begin(), llm::Message::system(tc.system_prompt));
+            msgs.insert(msgs.begin(), llm::Message::system(lc.system_prompt));
         }
 
-        if (tc.cfg.provider == "anthropic") {
-            llm::anthropic::Config acfg{
-                .apiKey = tc.cfg.api_key,
-                .model = tc.cfg.model,
-            };
-            if (!tc.cfg.base_url.empty()) acfg.baseUrl = tc.cfg.base_url;
-            response = llm_call_worker<llm::anthropic::Anthropic>(
-                std::move(acfg), std::move(msgs), params, tc.on_stream_chunk, has_stream_cb, tc.cancel);
-        } else {
-            llm::openai::Config ocfg{
-                .apiKey = tc.cfg.api_key,
-                .model = tc.cfg.model,
-            };
-            if (!tc.cfg.base_url.empty()) ocfg.baseUrl = tc.cfg.base_url;
-            response = llm_call_worker<llm::openai::OpenAI>(
-                std::move(ocfg), std::move(msgs), params, tc.on_stream_chunk, has_stream_cb, tc.cancel);
-        }
+        auto response = do_llm_call(msgs, params, lc.cfg, lc.on_stream_chunk, lc.cancel);
 
-        // Track LLM call as an action node
-        ++action_counter;
-        ActionNode llm_action;
-        llm_action.id = action_counter;
-        llm_action.type = "llm_call";
-        llm_action.name = "llm";
-        llm_action.input_tokens = response.usage.inputTokens;
-        llm_action.output_tokens = response.usage.outputTokens;
-        turn_result.actions.push_back(std::move(llm_action));
-        turn_result.input_tokens += response.usage.inputTokens;
-        turn_result.output_tokens += response.usage.outputTokens;
-        turn_result.cache_read_tokens += response.usage.cacheReadTokens;
-        turn_result.cache_write_tokens += response.usage.cacheCreationTokens;
+        // Accumulate tokens
+        last_input_tokens = response.usage.inputTokens;
+        result.input_tokens += response.usage.inputTokens;
+        result.output_tokens += response.usage.outputTokens;
+        result.cache_read_tokens += response.usage.cacheReadTokens;
+        result.cache_write_tokens += response.usage.cacheCreationTokens;
 
-        // Real-time token update callback
-        if (tc.on_token_update) {
-            tc.on_token_update(turn_result.input_tokens, turn_result.output_tokens);
+        if (lc.on_token_update) {
+            lc.on_token_update(result.input_tokens, result.output_tokens);
         }
 
         // Add assistant response to conversation
         llm::Message assistant_msg;
         assistant_msg.role = llm::Role::Assistant;
         assistant_msg.content = response.content;
-        tc.conversation.push(std::move(assistant_msg));
+        lc.conversation.push(std::move(assistant_msg));
 
-        // Check if tool calls needed
+        // No tool use → done
         if (response.stopReason != llm::StopReason::ToolUse) {
-            turn_result.reply = response.text();
-            return turn_result;
+            result.reply = response.text();
+            return result;
         }
 
         auto calls = response.tool_calls();
         if (calls.empty()) {
-            turn_result.reply = response.text();
-            return turn_result;
+            result.reply = response.text();
+            return result;
         }
 
         // Execute each tool call
         for (const auto& call : calls) {
             ++action_counter;
 
-            // Check cancellation/pause before each tool call
-            if (tc.cancel && !tc.cancel->is_active()) {
-                if (tc.cancel->is_paused()) throw PausedException{};
+            if (lc.cancel && !lc.cancel->is_active()) {
+                if (lc.cancel->is_paused()) throw PausedException{};
                 throw CancelledException{};
             }
 
-            // Intercept manage_tree virtual tool
-            if (call.name == "manage_tree" && tc.tree_root) {
-                // Notify TUI to clear streaming state before tree structure changes
-                if (tc.on_tool_call) {
-                    tc.on_tool_call(action_counter, call.name, call.arguments);
-                }
-
-                auto result = handle_manage_tree(call, tc.tree_root, tc.id_alloc, tc.on_tree_update);
-
-                ActionNode tool_action;
-                tool_action.id = action_counter;
-                tool_action.type = "tool_call";
-                tool_action.name = "manage_tree";
-                turn_result.actions.push_back(std::move(tool_action));
-
-                // Notify TUI that manage_tree completed
-                if (tc.on_tool_result) {
-                    tc.on_tool_result(action_counter, call.name, result.isError);
-                }
-
-                llm::Message tool_msg;
-                tool_msg.role = llm::Role::Tool;
-                tool_msg.content = std::vector<llm::ContentPart>{result};
-                tc.conversation.push(std::move(tool_msg));
-                continue;
-            }
-
             // Intercept execute_lua virtual tool
-            if (call.name == "execute_lua" && tc.lua_sandbox) {
-                if (tc.on_tool_call) {
-                    tc.on_tool_call(action_counter, call.name, call.arguments);
+            if (call.name == "execute_lua" && lc.lua_sandbox) {
+                if (lc.on_tool_call) {
+                    lc.on_tool_call(action_counter, call.name, call.arguments);
                 }
 
                 auto json = nlohmann::json::parse(call.arguments, nullptr, false);
@@ -662,7 +693,7 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
                     decision_action.name = "execute_lua";
                     decision_action.detail = code;
 
-                    auto exec_log = tc.lua_sandbox->execute(code, decision_action);
+                    auto exec_log = lc.lua_sandbox->execute(code, decision_action);
                     lua_result = llm::ToolResultContent{
                         .toolUseId = call.id,
                         .content = exec_log.to_json(),
@@ -670,114 +701,447 @@ export auto run_one_turn(TurnConfig& tc) -> TurnResult {
                     };
                 }
 
-                ActionNode tool_action;
-                tool_action.id = action_counter;
-                tool_action.type = "tool_call";
-                tool_action.name = "execute_lua";
-                turn_result.actions.push_back(std::move(tool_action));
-
-                if (tc.on_tool_result) {
-                    tc.on_tool_result(action_counter, call.name, lua_result.isError);
+                if (lc.on_tool_result) {
+                    lc.on_tool_result(action_counter, call.name, lua_result.isError);
                 }
 
                 llm::Message tool_msg;
                 tool_msg.role = llm::Role::Tool;
                 tool_msg.content = std::vector<llm::ContentPart>{lua_result};
-                tc.conversation.push(std::move(tool_msg));
+                lc.conversation.push(std::move(tool_msg));
                 continue;
             }
 
             // Notify TUI of tool call
-            if (tc.on_tool_call) {
-                tc.on_tool_call(action_counter, call.name, call.arguments);
+            if (lc.on_tool_call) {
+                lc.on_tool_call(action_counter, call.name, call.arguments);
             }
 
-            auto result = handle_tool_call(call, tc.bridge, tc.stream, tc.policy, tc.confirm_cb, tc.cancel);
-
-            // Track tool call as action node
-            ActionNode tool_action;
-            tool_action.id = action_counter;
-            tool_action.type = "tool_call";
-            tool_action.name = call.name;
-            turn_result.actions.push_back(std::move(tool_action));
+            auto tool_result = handle_tool_call(call, lc.bridge, lc.stream,
+                                                 lc.policy, lc.confirm_cb, lc.cancel);
 
             // Notify TUI of tool result
-            if (tc.on_tool_result) {
-                tc.on_tool_result(action_counter, call.name, result.isError);
+            if (lc.on_tool_result) {
+                lc.on_tool_result(action_counter, call.name, tool_result.isError);
             }
 
             llm::Message tool_msg;
             tool_msg.role = llm::Role::Tool;
-            tool_msg.content = std::vector<llm::ContentPart>{result};
-            tc.conversation.push(std::move(tool_msg));
+            tool_msg.content = std::vector<llm::ContentPart>{tool_result};
+            lc.conversation.push(std::move(tool_msg));
         }
 
-        // Runaway detection: consecutive tool-only iterations with no text output
+        // Runaway detection
         if (response.text().empty()) {
             ++consecutive_tool_only;
         } else {
             consecutive_tool_only = 0;
         }
         if (consecutive_tool_only > TOOL_ONLY_LIMIT) {
-            turn_result.reply = "[agent: too many tool-only iterations, stopping]";
-            return turn_result;
+            result.reply = "[agent: too many tool-only iterations, stopping]";
+            return result;
         }
-
-        // Continue loop to let LLM see tool results
     }
 
-    turn_result.reply = "[agent: max iterations reached]";
-    return turn_result;
+    result.reply = "[agent: max iterations reached]";
+    return result;
 }
 
-// Backward-compatible 18-parameter overload — constructs TurnConfig and delegates
-export auto run_one_turn(
-    llm::Conversation& conversation,
-    std::string_view user_input,
-    const std::string& system_prompt,
-    const std::vector<llm::ToolDef>& tools,
-    ToolBridge& bridge,
-    EventStream& stream,
-    const LlmConfig& cfg,
-    std::function<void(std::string_view)> on_stream_chunk,
-    ApprovalPolicy* policy = nullptr,
-    ConfirmCallback confirm_cb = {},
-    ToolCallCallback on_tool_call = {},
-    ToolResultCallback on_tool_result = {},
-    ContextManager* ctx_mgr = nullptr,
-    TokenTracker* tracker = nullptr,
-    AutoCompactCallback on_auto_compact = {},
-    CancellationToken* cancel = nullptr,
-    tui::TreeNode* tree_root = nullptr,
-    tui::IdAllocator* id_alloc = nullptr,
-    TreeUpdateCallback on_tree_update = {},
-    TokenUpdateCallback on_token_update = {},
-    LuaSandbox* lua_sandbox = nullptr
-) -> TurnResult {
-    TurnConfig tc{
-        .conversation = conversation,
-        .user_input = user_input,
-        .system_prompt = system_prompt,
-        .tools = tools,
-        .bridge = bridge,
-        .stream = stream,
-        .cfg = cfg,
-        .on_stream_chunk = std::move(on_stream_chunk),
-        .policy = policy,
-        .confirm_cb = std::move(confirm_cb),
-        .on_tool_call = std::move(on_tool_call),
-        .on_tool_result = std::move(on_tool_result),
-        .ctx_mgr = ctx_mgr,
-        .tracker = tracker,
-        .on_auto_compact = std::move(on_auto_compact),
-        .cancel = cancel,
-        .tree_root = tree_root,
-        .id_alloc = id_alloc,
-        .on_tree_update = std::move(on_tree_update),
-        .on_token_update = std::move(on_token_update),
-        .lua_sandbox = lua_sandbox,
+// ─── ask_decision — LLM decides execute or decompose ───
+
+inline constexpr int MAX_DEPTH = 5;
+
+auto ask_decision(
+    BehaviorNode& node,
+    TreeConfig& tc,
+    int depth,
+    const NodeContext& ctx,
+    TreeResult& accum
+) -> Decision {
+    if (depth >= MAX_DEPTH) return Decision{.is_execute = true};
+
+    auto prompt = build_scoped_prompt(node, ctx, tc.base_system_prompt, tc.tools, /*decision_mode=*/true);
+    auto tools = std::vector<llm::ToolDef>{ decide_tool_def() };
+
+    llm::ChatParams params;
+    params.tools = tools;
+    params.temperature = tc.cfg.temperature;
+    params.maxTokens = tc.cfg.max_tokens;
+
+    llm::Conversation conv;
+    conv.push(llm::Message::system(prompt));
+
+    // Inject shared conversation history only at root level (depth 0)
+    // Nested nodes use sibling_results + ancestor_path for context
+    if (depth == 0 && tc.conversation) {
+        for (auto& msg : tc.conversation->messages) {
+            if (msg.role == llm::Role::System) continue;
+            conv.push(msg);
+        }
+    }
+
+    conv.push(llm::Message::user("Task: " + node.name +
+        (node.detail.empty() ? "" : "\n" + node.detail)));
+
+    if (tc.cancel && !tc.cancel->is_active()) {
+        if (tc.cancel->is_paused()) throw PausedException{};
+        throw CancelledException{};
+    }
+
+    auto msgs = conv.messages;
+    auto response = do_llm_call(msgs, params, tc.cfg, nullptr, tc.cancel);
+
+    // Accumulate tokens
+    accum.input_tokens += response.usage.inputTokens;
+    accum.output_tokens += response.usage.outputTokens;
+    accum.cache_read_tokens += response.usage.cacheReadTokens;
+    accum.cache_write_tokens += response.usage.cacheCreationTokens;
+
+    if (tc.on_token_update) {
+        tc.on_token_update(accum.input_tokens, accum.output_tokens);
+    }
+
+    // Parse decide tool call
+    auto calls = response.tool_calls();
+    if (calls.empty() || calls[0].name != "decide") {
+        return Decision{.is_execute = true};  // implicit execute
+    }
+
+    auto json = nlohmann::json::parse(calls[0].arguments, nullptr, false);
+    if (json.is_discarded()) return Decision{.is_execute = true};
+
+    auto action = json.value("action", "execute");
+    if (action == "decompose" && json.contains("subtasks") && json["subtasks"].is_array()) {
+        Decision d{.is_execute = false};
+        for (auto& s : json["subtasks"]) {
+            SubtaskDef sub;
+            sub.title = s.value("title", "untitled");
+            sub.description = s.value("description", "");
+            if (s.contains("tool") && s["tool"].is_string() && !s["tool"].get<std::string>().empty()) {
+                auto tool_name = s["tool"].get<std::string>();
+                // Validate tool name against registered tools
+                bool valid = (tc.bridge.tool_info(tool_name).source != "unknown");
+                if (valid) {
+                    sub.tool = tool_name;
+                    sub.tool_args = s.contains("args") ? s["args"].dump() : "{}";
+                }
+                // Invalid tool name → fall back to Execute (LLM will reason about it)
+            }
+            d.subtasks.push_back(std::move(sub));
+        }
+        if (d.subtasks.empty()) return Decision{.is_execute = true};
+        return d;
+    }
+    return Decision{.is_execute = true};
+}
+
+// ─── run_execute — LLM tool-use loop for an Execute node ───
+
+auto run_execute(
+    BehaviorNode& node,
+    TreeConfig& tc,
+    const NodeContext& ctx,
+    TreeResult& accum,
+    int depth
+) -> NodeResult {
+    auto prompt = build_scoped_prompt(node, ctx, tc.base_system_prompt, tc.tools, /*decision_mode=*/false);
+
+    llm::Conversation conv;
+    conv.push(llm::Message::system(prompt));
+
+    // Inject shared conversation history only at root level (depth 0)
+    if (depth == 0 && tc.conversation) {
+        for (auto& msg : tc.conversation->messages) {
+            if (msg.role == llm::Role::System) continue;
+            conv.push(msg);
+        }
+    }
+
+    conv.push(llm::Message::user(node.name +
+        (node.detail.empty() ? "" : "\n" + node.detail)));
+
+    // Build tool list: real tools + execute_lua
+    auto exec_tools = tc.tools;
+    exec_tools.push_back(execute_lua_tool_def());
+
+    ToolLoopConfig lc{
+        .conversation = conv,
+        .system_prompt = prompt,
+        .tools = exec_tools,
+        .bridge = tc.bridge,
+        .stream = tc.stream,
+        .cfg = tc.cfg,
+        .on_stream_chunk = tc.on_stream_chunk,
+        .policy = tc.policy,
+        .confirm_cb = tc.confirm_cb,
+        .on_tool_call = [&](int id, std::string_view name, std::string_view args) {
+            // Update behavior tree for TUI
+            if (tc.tree) {
+                auto call_start = steady_now_ms();
+                int term_w = 80;  // reasonable default
+                tc.tree->flush_as_response(node.id, term_w);
+                auto n = std::string(name);
+                auto a = std::string(args);
+                if (a.size() > 60) a = a.substr(0, 60) + "...";
+                tc.tree->begin_tool(node.id, id, n, a, call_start);
+            }
+            if (tc.on_tool_call) tc.on_tool_call(id, name, args);
+        },
+        .on_tool_result = [&](int id, std::string_view name, bool is_error) {
+            if (tc.tree) {
+                tc.tree->end_tool(id, is_error, steady_now_ms());
+            }
+            if (tc.on_tool_result) tc.on_tool_result(id, name, is_error);
+        },
+        .cancel = tc.cancel,
+        .parent_node_id = node.id,
+        .tree = tc.tree,
+        .id_alloc = tc.id_alloc,
+        .lua_sandbox = tc.lua_sandbox,
+        .on_token_update = [&](int in_tok, int out_tok) {
+            accum.input_tokens += in_tok;
+            accum.output_tokens += out_tok;
+            if (tc.on_token_update) tc.on_token_update(accum.input_tokens, accum.output_tokens);
+        },
+        .ctx_mgr = tc.ctx_mgr,
+        .tracker = tc.tracker,
+        .on_auto_compact = tc.on_auto_compact,
     };
-    return run_one_turn(tc);
+
+    return run_tool_loop(lc);
+}
+
+// ─── process_node — recursive DFS traversal ───
+
+void process_node(
+    BehaviorNode& node,
+    TreeConfig& tc,
+    int depth,
+    TreeResult& accum,
+    const NodeContext& ctx
+) {
+    if (tc.cancel && !tc.cancel->is_active()) {
+        if (tc.cancel->is_paused()) throw PausedException{};
+        throw CancelledException{};
+    }
+
+    auto now = steady_now_ms();
+    node.start_ms = now;
+    if (tc.tree) {
+        tc.tree->set_state(node.id, BehaviorNode::Running, now);
+        tc.tree->set_active(node.id);
+    }
+
+    // ── DirectExec: system direct tool call, zero LLM ──
+    if (node.is_direct_exec()) {
+        node.type = BehaviorNode::TypeDirectExec;
+
+        // Notify TUI
+        if (tc.on_tool_call) {
+            auto args_preview = node.tool_args.size() > 60
+                ? node.tool_args.substr(0, 60) + "..." : node.tool_args;
+            tc.on_tool_call(node.id, node.tool, args_preview);
+        }
+
+        auto exec_result = tc.bridge.execute(node.tool, node.tool_args, tc.stream, tc.cancel);
+        node.state = exec_result.isError ? BehaviorNode::Failed : BehaviorNode::Done;
+        node.result_summary = exec_result.content.size() > 200
+            ? exec_result.content.substr(0, 200) : exec_result.content;
+        node.end_ms = steady_now_ms();
+
+        if (tc.on_tool_result) {
+            tc.on_tool_result(node.id, node.tool, exec_result.isError);
+        }
+
+        if (tc.tree) {
+            tc.tree->set_state(node.id, node.state, node.end_ms);
+            tc.tree->set_result(node.id, node.result_summary);
+        }
+        return;
+    }
+
+    // ── Decision: LLM decides execute or decompose ──
+    auto decision = ask_decision(node, tc, depth, ctx, accum);
+
+    if (decision.is_execute || depth >= MAX_DEPTH) {
+        // ── Execute: LLM tool-use loop ──
+        node.type = BehaviorNode::TypeExecute;
+        if (tc.tree) tc.tree->set_state(node.id, BehaviorNode::Running, steady_now_ms());
+
+        auto nr = run_execute(node, tc, ctx, accum, depth);
+        node.state = nr.failed ? BehaviorNode::Failed : BehaviorNode::Done;
+        node.result_summary = nr.reply.size() > 200 ? nr.reply.substr(0, 200) : nr.reply;
+        node.end_ms = steady_now_ms();
+
+        if (tc.tree) {
+            tc.tree->set_state(node.id, node.state, node.end_ms);
+            tc.tree->set_result(node.id, node.result_summary);
+        }
+    } else {
+        // ── Decompose: create children, DFS traverse ──
+        node.type = BehaviorNode::TypeDecompose;
+
+        for (auto& sub : decision.subtasks) {
+            BehaviorNode child;
+            child.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
+            child.name = sub.title;
+            child.detail = sub.description;
+            child.tool = sub.tool;
+            child.tool_args = sub.tool_args;
+            if (tc.tree) tc.tree->add_child(node.id, child);
+            node.children.push_back(std::move(child));
+        }
+
+        // DFS sequential execution of children — continue on failure
+        bool has_failures = false;
+        for (std::size_t ci = 0; ci < node.children.size(); ++ci) {
+            auto& child = node.children[ci];
+            // Skip record nodes
+            if (child.type == BehaviorNode::TypeToolCall ||
+                child.type == BehaviorNode::TypeResponse) continue;
+
+            // Build child context with sibling results (including failed ones)
+            NodeContext child_ctx;
+            child_ctx.root_name = ctx.root_name;
+            child_ctx.ancestor_path = ctx.ancestor_path;
+            child_ctx.ancestor_path.push_back(node.name);
+            for (std::size_t si = 0; si < ci; ++si) {
+                auto& sib = node.children[si];
+                if (sib.is_terminal() && !sib.result_summary.empty()) {
+                    std::string prefix = (sib.state == BehaviorNode::Failed) ? "[FAILED] " : "";
+                    child_ctx.sibling_results.push_back({sib.name, prefix + sib.result_summary});
+                }
+            }
+
+            process_node(child, tc, depth + 1, accum, child_ctx);
+
+            if (child.state == BehaviorNode::Failed) {
+                has_failures = true;
+            }
+        }
+
+        if (has_failures) {
+            // ── Verification: add LLM node to review results and decide outcome ──
+            BehaviorNode verify;
+            verify.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
+            verify.name = "verify results";
+            verify.type = BehaviorNode::TypeExecute;
+
+            // Build detail with all children results for LLM context
+            std::string detail = "Review the results of all subtasks and give a final summary.\n";
+            for (auto& child : node.children) {
+                if (child.type == BehaviorNode::TypeToolCall ||
+                    child.type == BehaviorNode::TypeResponse) continue;
+                std::string status = (child.state == BehaviorNode::Done) ? "OK"
+                    : (child.state == BehaviorNode::Failed) ? "FAILED" : "SKIPPED";
+                detail += "- [" + status + "] " + child.name + ": " + child.result_summary + "\n";
+            }
+            verify.detail = detail;
+
+            if (tc.tree) tc.tree->add_child(node.id, verify);
+            node.children.push_back(verify);
+
+            // Build context for verification node
+            NodeContext verify_ctx;
+            verify_ctx.root_name = ctx.root_name;
+            verify_ctx.ancestor_path = ctx.ancestor_path;
+            verify_ctx.ancestor_path.push_back(node.name);
+            for (auto& child : node.children) {
+                if (&child == &node.children.back()) break;  // skip verify node itself
+                if (child.is_terminal() && !child.result_summary.empty()) {
+                    std::string prefix = (child.state == BehaviorNode::Failed) ? "[FAILED] " : "";
+                    verify_ctx.sibling_results.push_back({child.name, prefix + child.result_summary});
+                }
+            }
+
+            process_node(node.children.back(), tc, depth + 1, accum, verify_ctx);
+
+            // Use verification result as parent outcome
+            auto& vnode = node.children.back();
+            node.state = vnode.state;
+            node.result_summary = vnode.result_summary;
+        } else {
+            node.state = BehaviorNode::Done;
+            node.result_summary = synthesize_children(node);
+        }
+
+        node.end_ms = steady_now_ms();
+        if (tc.tree) {
+            tc.tree->set_state(node.id, node.state, node.end_ms);
+            tc.tree->set_result(node.id, node.result_summary);
+        }
+    }
+}
+
+// ─── run_task_tree — main entry point for system-driven recursive task tree ───
+
+export auto run_task_tree(TreeConfig& tc) -> TreeResult {
+    TreeResult result;
+
+    // Create root node
+    BehaviorNode root;
+    root.id = tc.id_alloc ? tc.id_alloc->alloc() : 1;
+    root.type = BehaviorNode::TypeRoot;
+    root.name = std::string(tc.user_input);
+    root.start_ms = steady_now_ms();
+
+    if (tc.tree) {
+        tc.tree->set_root(root.id, root.name, "");
+    }
+
+    NodeContext root_ctx;
+    root_ctx.root_name = root.name;
+
+    process_node(root, tc, 0, result, root_ctx);
+
+    result.reply = root.result_summary;
+
+    // Append this turn to shared conversation for cross-turn context
+    if (tc.conversation) {
+        tc.conversation->push(llm::Message::user(tc.user_input));
+        if (!result.reply.empty()) {
+            tc.conversation->push(llm::Message::assistant(result.reply));
+        }
+    }
+
+    return result;
+}
+
+// ─── run_one_turn — backward compatibility wrapper around run_task_tree ───
+
+export auto run_one_turn(TurnConfig& tc) -> TurnResult {
+    TreeConfig tree_cfg{
+        .user_input = std::string(tc.user_input),
+        .base_system_prompt = tc.system_prompt,
+        .tools = tc.tools,
+        .bridge = tc.bridge,
+        .stream = tc.stream,
+        .cfg = tc.cfg,
+        .conversation = &tc.conversation,
+        .policy = tc.policy,
+        .confirm_cb = tc.confirm_cb,
+        .cancel = tc.cancel,
+        .tree = tc.behavior_tree,
+        .id_alloc = tc.id_alloc,
+        .tracker = tc.tracker,
+        .ctx_mgr = tc.ctx_mgr,
+        .lua_sandbox = tc.lua_sandbox,
+        .on_stream_chunk = tc.on_stream_chunk,
+        .on_tool_call = tc.on_tool_call,
+        .on_tool_result = tc.on_tool_result,
+        .on_token_update = tc.on_token_update,
+        .on_auto_compact = tc.on_auto_compact,
+    };
+
+    auto tree_result = run_task_tree(tree_cfg);
+
+    TurnResult tr;
+    tr.reply = tree_result.reply;
+    tr.input_tokens = tree_result.input_tokens;
+    tr.output_tokens = tree_result.output_tokens;
+    tr.cache_read_tokens = tree_result.cache_read_tokens;
+    tr.cache_write_tokens = tree_result.cache_write_tokens;
+    return tr;
 }
 
 // Compact conversation: keep system prompt + last N messages

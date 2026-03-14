@@ -2,6 +2,7 @@ export module xlings.agent;
 
 export import xlings.agent.llm_config;
 export import xlings.agent.tool_bridge;
+export import xlings.agent.behavior_tree;
 export import xlings.agent.loop;
 export import xlings.agent.approval;
 export import xlings.agent.session;

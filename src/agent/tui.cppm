@@ -1,82 +1,26 @@
 export module xlings.agent.tui;
 
 import std;
+import xlings.agent.behavior_tree;
 import xlings.agent.token_tracker;
-import xlings.core.utf8;
 import xlings.libs.tinytui;
 
 namespace xlings::agent::tui {
 
-// ─── Time helpers ───
-
-export auto steady_now_ms() -> std::int64_t {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
-}
-
-export auto format_duration(std::int64_t ms) -> std::string {
-    if (ms < 0) return "0ms";
-    if (ms < 1000) return std::to_string(ms) + "ms";
-    if (ms < 60000) return std::format("{:.1f}s", ms / 1000.0);
-    return std::format("{:.0f}m{:.0f}s", ms / 60000.0, (ms % 60000) / 1000.0);
-}
-
-// ─── Recursive tree node ───
-
-export struct TreeNode {
-    static constexpr int Pending = 0;
-    static constexpr int Running = 1;
-    static constexpr int Done    = 2;
-    static constexpr int Failed  = 3;
-
-    int id {0};
-    int state {Pending};
-    std::string title;
-    std::int64_t start_ms {0};
-    std::int64_t end_ms {0};
-    std::vector<TreeNode> children;
-};
+// Re-export from behavior_tree for backward compatibility
+export using agent::steady_now_ms;
+export using agent::format_duration;
+export using agent::BehaviorNode;
+export using agent::ABehaviorTree;
+export using agent::IdAllocator;
 
 // ─── Turn node (one user→agent round) ───
 
 export struct TurnNode {
     std::string user_message;
-    TreeNode root;                // task tree root for this turn
-    std::string reply;            // final assistant reply
+    BehaviorNode root;                // behavior tree root for this turn
+    std::string reply;                // final assistant reply
     std::int64_t start_ms {0};
-};
-
-// ─── Tree helpers (main-thread only) ───
-
-export auto find_node_by_id(TreeNode& root, int id) -> TreeNode* {
-    if (root.id == id) return &root;
-    for (auto& child : root.children) {
-        if (auto* found = find_node_by_id(child, id)) return found;
-    }
-    return nullptr;
-}
-
-// Find the deepest Running node (for nesting tool calls under active task)
-export auto find_active_node(TreeNode& root) -> TreeNode* {
-    // Depth-first: find deepest running node
-    for (auto& child : root.children) {
-        if (auto* found = find_active_node(child)) return found;
-    }
-    if (root.state == TreeNode::Running) return &root;
-    return nullptr;
-}
-
-// ─── ID allocator (thread-safe, lock-free) ───
-
-export class IdAllocator {
-    std::atomic<int> next_id_{1};
-public:
-    auto alloc() -> int {
-        return next_id_.fetch_add(1, std::memory_order_relaxed);
-    }
-    void reset() {
-        next_id_.store(1, std::memory_order_relaxed);
-    }
 };
 
 // ─── ChatLine (for session resume history) ───
@@ -93,8 +37,7 @@ export struct ChatLine {
 // ─── Agent TUI shared state ───
 
 export struct AgentTuiState {
-    // Streaming state
-    std::string streaming_text;
+    // Streaming state (streaming_text in ABehaviorTree)
     bool is_streaming   {false};
     bool is_thinking    {false};
 
@@ -113,6 +56,7 @@ export struct AgentTuiState {
     // Conversation turns (recursive tree per turn)
     std::vector<TurnNode> turns;
     TurnNode* active_turn {nullptr};
+    ABehaviorTree behavior_tree;
     IdAllocator id_alloc;
 
     // Slash command completion

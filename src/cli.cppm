@@ -1046,8 +1046,8 @@ export int run(int argc, char* argv[]) {
                 }
             });
 
-            // ─── Line editor + TUI state ───
-            tinytui::LineEditor editor;
+            // ─── Input content + TUI state ───
+            std::string input_content;
 
             agent::tui::AgentTuiState tui_state;
             tui_state.model_name = cfg.model;
@@ -1241,12 +1241,11 @@ export int run(int argc, char* argv[]) {
             cmd_registry.register_command({"/help", "Show available commands", [&](std::string_view) {
             }});
 
-            // ─── Line editor: slash completion ───
-            editor.on_change = [&] {
-                auto& input = editor.content();
-                if (!input.empty() && input[0] == '/' &&
-                    input.find(' ') == std::string::npos) {
-                    auto matches = cmd_registry.match(input);
+            // ─── Input change handler: slash completion ───
+            auto on_input_change = [&] {
+                if (!input_content.empty() && input_content[0] == '/' &&
+                    input_content.find(' ') == std::string::npos) {
+                    auto matches = cmd_registry.match(input_content);
                     tui_state.completions = std::move(matches);
                     tui_state.completion_selected = tui_state.completions.empty() ? -1 : 0;
                 } else {
@@ -1287,12 +1286,12 @@ export int run(int argc, char* argv[]) {
                         if (tui_state.completion_selected > 0) --tui_state.completion_selected;
                     } else if (!tui_state.history.empty()) {
                         if (tui_state.history_pos < 0) {
-                            tui_state.saved_input = editor.content();
+                            tui_state.saved_input = input_content;
                             tui_state.history_pos = static_cast<int>(tui_state.history.size()) - 1;
                         } else if (tui_state.history_pos > 0) {
                             --tui_state.history_pos;
                         }
-                        editor.set_content(tui_state.history[tui_state.history_pos]);
+                        input_content = tui_state.history[tui_state.history_pos];
                     }
                     return true;
                 }
@@ -1305,9 +1304,9 @@ export int run(int argc, char* argv[]) {
                         ++tui_state.history_pos;
                         if (tui_state.history_pos >= static_cast<int>(tui_state.history.size())) {
                             tui_state.history_pos = -1;
-                            editor.set_content(tui_state.saved_input);
+                            input_content = tui_state.saved_input;
                         } else {
-                            editor.set_content(tui_state.history[tui_state.history_pos]);
+                            input_content = tui_state.history[tui_state.history_pos];
                         }
                     }
                     return true;
@@ -1316,7 +1315,7 @@ export int run(int argc, char* argv[]) {
                 if (event == ftxui::Event::Tab) {
                     if (tui_state.completion_selected >= 0 &&
                         tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
-                        editor.set_content(tui_state.completions[tui_state.completion_selected].first + " ");
+                        input_content = tui_state.completions[tui_state.completion_selected].first + " ";
                         tui_state.completions.clear();
                         tui_state.completion_selected = -1;
                     }
@@ -1351,9 +1350,9 @@ export int run(int argc, char* argv[]) {
                 }
                 // Enter: submit input
                 if (event == ftxui::Event::Return) {
-                    auto msg = editor.content();
+                    auto msg = input_content;
                     if (msg.empty()) return true;
-                    editor.set_content("");
+                    input_content.clear();
                     tui_state.history_pos = -1;
                     tui_state.saved_input.clear();
                     tui_state.completions.clear();
@@ -1365,45 +1364,14 @@ export int run(int argc, char* argv[]) {
                     msg_cv.notify_one();
                     return true;
                 }
-                // Backspace
-                if (event == ftxui::Event::Backspace) {
-                    editor.handle_key({tinytui::KeyEvent::Backspace});
-                    return true;
-                }
-                // Delete
-                if (event == ftxui::Event::Delete) {
-                    editor.handle_key({tinytui::KeyEvent::Delete});
-                    return true;
-                }
-                // Arrow Left/Right
-                if (event == ftxui::Event::ArrowLeft) {
-                    editor.handle_key({tinytui::KeyEvent::Left});
-                    return true;
-                }
-                if (event == ftxui::Event::ArrowRight) {
-                    editor.handle_key({tinytui::KeyEvent::Right});
-                    return true;
-                }
-                // Home/End
-                if (event == ftxui::Event::Home) {
-                    editor.handle_key({tinytui::KeyEvent::Home});
-                    return true;
-                }
-                if (event == ftxui::Event::End) {
-                    editor.handle_key({tinytui::KeyEvent::End});
-                    return true;
-                }
-                // Character input
-                if (event.is_character()) {
-                    editor.handle_key({tinytui::KeyEvent::Char, event.character()});
-                    return true;
-                }
+                // All other events (chars, backspace, delete, arrows, home/end)
+                // fall through to ftxui::Input component
                 return false;
             };
 
             // ─── Create AgentScreen ───
             auto agent_screen_owner = std::make_unique<agent::AgentScreen>(
-                tui_state, editor, ftxui_key_handler);
+                tui_state, input_content, on_input_change, ftxui_key_handler);
             agent_screen = agent_screen_owner.get();
 
             // ─── Agent worker thread ───
@@ -1435,6 +1403,7 @@ export int run(int argc, char* argv[]) {
                     auto now_ms = agent::tui::steady_now_ms();
 
                     // Create new TurnNode
+                    tui_state.behavior_tree.reset();
                     agent_screen->post([&, input = user_input, now_ms] {
                         agent::tui::TurnNode tn;
                         tn.user_message = input;
@@ -1444,7 +1413,6 @@ export int run(int argc, char* argv[]) {
 
                         tui_state.is_streaming = true;
                         tui_state.is_thinking = true;
-                        tui_state.streaming_text.clear();
                         tui_state.current_action = "thinking...";
                         tui_state.turn_start_ms = now_ms;
                         if (tui_state.history.empty() || tui_state.history.back() != input) {
@@ -1459,158 +1427,63 @@ export int run(int argc, char* argv[]) {
                     lua_sandbox.set_cancel(&cancel_token);
 
                     agent::tui::ThinkFilter think_filter;
-                    agent::TurnResult turn_result;
-                    std::unordered_map<int, std::int64_t> tool_start_times;
-
-                    // Get tree root pointer (set after post completes)
-                    agent::tui::TreeNode* tree_root = nullptr;
-                    agent_screen->post([&] {
-                        if (tui_state.active_turn) {
-                            tree_root = &tui_state.active_turn->root;
-                        }
-                    });
-                    // Small sync wait for post to execute
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    agent::TreeResult turn_result;
 
                     try {
-                        turn_result = agent::run_one_turn(
-                            conversation, user_input, system_prompt, tools, bridge, stream, cfg,
-                            // Streaming callback
-                            [&](std::string_view chunk) {
+                        agent::TreeConfig tc{
+                            .user_input = user_input,
+                            .base_system_prompt = system_prompt,
+                            .tools = tools,
+                            .bridge = bridge,
+                            .stream = stream,
+                            .cfg = cfg,
+                            .conversation = &conversation,
+                            .policy = policy_ptr,
+                            .confirm_cb = confirm_cb,
+                            .cancel = &cancel_token,
+                            .tree = &tui_state.behavior_tree,
+                            .id_alloc = &tui_state.id_alloc,
+                            .tracker = &tracker,
+                            .ctx_mgr = &ctx_mgr,
+                            .lua_sandbox = &lua_sandbox,
+                            .on_stream_chunk = [&](std::string_view chunk) {
                                 cancel_token.throw_if_cancelled();
                                 auto filtered = think_filter.filter(chunk);
                                 bool thinking = think_filter.in_think;
-                                agent_screen->post([&, f = std::move(filtered), thinking] {
+                                if (!filtered.empty()) {
+                                    tui_state.behavior_tree.append_streaming(filtered);
+                                }
+                                agent_screen->post([&, has_text = !filtered.empty(), thinking] {
                                     if (thinking) {
                                         tui_state.current_action = "thinking...";
                                     }
-                                    if (!f.empty()) {
+                                    if (has_text) {
                                         tui_state.is_thinking = false;
-                                        tui_state.streaming_text += f;
                                         tui_state.current_action = "responding...";
                                     }
                                 });
                                 agent_screen->refresh();
                             },
-                            policy_ptr, confirm_cb,
-                            // Tool call callback — add tree node
-                            [&](int id, std::string_view name, std::string_view args) {
-                                auto call_start = agent::tui::steady_now_ms();
-                                tool_start_times[id] = call_start;
-                                agent_screen->post([&, id, n = std::string(name),
-                                                    a = utf8::safe_truncate(args, 60),
-                                                    call_start] {
-                                    if (!tui_state.active_turn) return;
-
-                                    // Flush streaming text to reply
-                                    if (!tui_state.streaming_text.empty()) {
-                                        tui_state.active_turn->reply += tui_state.streaming_text;
-                                        tui_state.streaming_text.clear();
-                                    }
+                            .on_tool_call = [&](int id, std::string_view name, std::string_view args) {
+                                (void)id; (void)args;
+                                auto n = std::string(name);
+                                agent_screen->post([&, n] {
                                     tui_state.is_streaming = false;
                                     tui_state.is_thinking = false;
-
-                                    if (n == "manage_tree") {
-                                        tui_state.current_action = "planning...";
-                                        return;
-                                    }
-
-                                    // Add tool call as child of active task node
-                                    auto* parent = agent::tui::find_active_node(
-                                        tui_state.active_turn->root);
-                                    if (!parent) parent = &tui_state.active_turn->root;
-                                    parent->children.push_back({
-                                        .id = id,
-                                        .state = agent::tui::TreeNode::Running,
-                                        .title = n + "(" + a + ")",
-                                        .start_ms = call_start,
-                                    });
                                     tui_state.current_action = "executing " + n + "...";
                                     agent_screen->scroll_to_bottom();
                                 });
                                 agent_screen->refresh();
                             },
-                            // Tool result callback — update tree node
-                            [&](int id, std::string_view name, bool is_error) {
-                                auto end_ms = agent::tui::steady_now_ms();
-                                agent_screen->post([&, id, n = std::string(name), is_error, end_ms] {
-                                    if (!tui_state.active_turn) return;
-                                    if (n == "manage_tree") return;
-                                    auto* node = agent::tui::find_node_by_id(
-                                        tui_state.active_turn->root, id);
-                                    if (node) {
-                                        node->state = is_error
-                                            ? agent::tui::TreeNode::Failed
-                                            : agent::tui::TreeNode::Done;
-                                        node->end_ms = end_ms;
-                                    }
+                            .on_tool_result = [&]([[maybe_unused]] int id, [[maybe_unused]] std::string_view name, [[maybe_unused]] bool is_error) {
+                                agent_screen->post([&] {
                                     tui_state.current_action = "thinking...";
                                     tui_state.is_streaming = true;
                                     tui_state.is_thinking = true;
                                 });
                                 agent_screen->refresh();
                             },
-                            &ctx_mgr, &tracker,
-                            // Auto-compact callback
-                            [&](int evicted, int freed) {
-                                (void)evicted; (void)freed;
-                            },
-                            &cancel_token,
-                            tree_root,
-                            &tui_state.id_alloc,
-                            // Tree update callback — operate on recursive tree
-                            [&](const std::string& action, int node_id, int parent_id,
-                                const std::string& title) {
-                                agent_screen->post([&, action, node_id, parent_id, title] {
-                                    if (!tui_state.active_turn) return;
-                                    auto& root = tui_state.active_turn->root;
-                                    auto now = agent::tui::steady_now_ms();
-
-                                    if (action == "add_task") {
-                                        agent::tui::TreeNode new_node;
-                                        new_node.id = node_id;
-                                        new_node.title = title;
-                                        new_node.state = agent::tui::TreeNode::Pending;
-                                        if (parent_id == 0) {
-                                            root.children.push_back(std::move(new_node));
-                                        } else {
-                                            auto* parent = agent::tui::find_node_by_id(root, parent_id);
-                                            if (parent) {
-                                                parent->children.push_back(std::move(new_node));
-                                            } else {
-                                                root.children.push_back(std::move(new_node));
-                                            }
-                                        }
-                                    } else if (action == "start_task") {
-                                        auto* node = agent::tui::find_node_by_id(root, node_id);
-                                        if (node) {
-                                            node->state = agent::tui::TreeNode::Running;
-                                            node->start_ms = now;
-                                        }
-                                    } else if (action == "complete_task") {
-                                        auto* node = agent::tui::find_node_by_id(root, node_id);
-                                        if (node) {
-                                            node->state = agent::tui::TreeNode::Done;
-                                            node->end_ms = now;
-                                        }
-                                    } else if (action == "cancel_task") {
-                                        auto* node = agent::tui::find_node_by_id(root, node_id);
-                                        if (node) {
-                                            node->state = agent::tui::TreeNode::Failed;
-                                            node->end_ms = now;
-                                        }
-                                    } else if (action == "update_task") {
-                                        auto* node = agent::tui::find_node_by_id(root, node_id);
-                                        if (node && !title.empty()) {
-                                            node->title = title;
-                                        }
-                                    }
-                                    agent_screen->scroll_to_bottom();
-                                });
-                                agent_screen->refresh();
-                            },
-                            // Token update callback
-                            [&](int input_tokens, int output_tokens) {
+                            .on_token_update = [&](int input_tokens, int output_tokens) {
                                 agent_screen->post([&, input_tokens, output_tokens] {
                                     tui_state.session_input = tracker.session_input() + input_tokens;
                                     tui_state.session_output = tracker.session_output() + output_tokens;
@@ -1618,14 +1491,14 @@ export int run(int argc, char* argv[]) {
                                 });
                                 agent_screen->refresh();
                             },
-                            &lua_sandbox
-                        );
+                        };
+                        turn_result = agent::run_task_tree(tc);
                     } catch (const PausedException&) {
                         cancel_token.reset();
+                        tui_state.behavior_tree.clear_streaming();
                         agent_screen->post([&] {
                             tui_state.is_streaming = false;
                             tui_state.is_thinking = false;
-                            tui_state.streaming_text.clear();
                             tui_state.current_action = "paused";
                             tui_state.active_turn = nullptr;
                         });
@@ -1633,10 +1506,10 @@ export int run(int argc, char* argv[]) {
                         continue;
                     } catch (const CancelledException&) {
                         cancel_token.reset();
+                        tui_state.behavior_tree.clear_streaming();
                         agent_screen->post([&] {
                             tui_state.is_streaming = false;
                             tui_state.is_thinking = false;
-                            tui_state.streaming_text.clear();
                             tui_state.current_action.clear();
                             tui_state.turn_start_ms = 0;
                             if (tui_state.active_turn) {
@@ -1652,10 +1525,10 @@ export int run(int argc, char* argv[]) {
                     } catch (const std::exception& e) {
                         bool was_cancelled = cancel_token.is_cancelled();
                         cancel_token.reset();
+                        tui_state.behavior_tree.clear_streaming();
                         agent_screen->post([&, err = std::string(e.what()), was_cancelled] {
                             tui_state.is_streaming = false;
                             tui_state.is_thinking = false;
-                            tui_state.streaming_text.clear();
                             tui_state.current_action.clear();
                             tui_state.turn_start_ms = 0;
                             if (tui_state.active_turn) {
@@ -1674,23 +1547,32 @@ export int run(int argc, char* argv[]) {
 
                     // Flush remaining think filter content
                     auto remaining = think_filter.flush();
+                    if (!remaining.empty()) {
+                        tui_state.behavior_tree.append_streaming(remaining);
+                    }
+
+                    // Finalize tree and get final snapshot (worker thread, synchronous)
+                    auto now_fin = agent::tui::steady_now_ms();
+                    tui_state.behavior_tree.finalize(now_fin);
 
                     // Turn complete
-                    agent_screen->post([&, rem = std::move(remaining), tr = turn_result] {
-                        if (!rem.empty()) {
-                            tui_state.streaming_text += rem;
-                        }
+                    agent_screen->post([&, tr = turn_result] {
                         tui_state.is_streaming = false;
                         tui_state.is_thinking = false;
 
                         if (tui_state.active_turn) {
                             if (!tr.reply.empty()) {
                                 tui_state.active_turn->reply = tr.reply;
-                            } else if (!tui_state.streaming_text.empty()) {
-                                tui_state.active_turn->reply = tui_state.streaming_text;
+                            } else {
+                                auto st = tui_state.behavior_tree.get_streaming_as_reply();
+                                if (!st.empty()) {
+                                    tui_state.active_turn->reply = st;
+                                }
                             }
+                            // Copy finalized tree into TurnNode for history
+                            tui_state.active_turn->root = tui_state.behavior_tree.snapshot();
                         }
-                        tui_state.streaming_text.clear();
+                        tui_state.behavior_tree.clear_streaming();
 
                         tracker.record(tr.input_tokens, tr.output_tokens,
                                        tr.cache_read_tokens, tr.cache_write_tokens);
