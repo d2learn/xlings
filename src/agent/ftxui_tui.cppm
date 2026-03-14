@@ -34,12 +34,8 @@ namespace tui_icons {
 using namespace ftxui;
 
 auto node_icon(const BehaviorNode& node) -> std::string {
-    // Response nodes use done icon
-    if (node.type == BehaviorNode::TypeResponse && node.state == BehaviorNode::Done) {
-        return tui_icons::done;
-    }
-    // DirectExec nodes use gear icon
-    if (node.type == BehaviorNode::TypeDirectExec) {
+    // Atom nodes use gear icon
+    if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return tui_icons::direct_exec;
             case BehaviorNode::Done:    return tui_icons::done;
@@ -47,6 +43,7 @@ auto node_icon(const BehaviorNode& node) -> std::string {
             default: return tui_icons::direct_exec;
         }
     }
+    // Plan nodes use standard state icons
     switch (node.state) {
         case BehaviorNode::Pending: return tui_icons::pending;
         case BehaviorNode::Running: return tui_icons::running;
@@ -58,12 +55,8 @@ auto node_icon(const BehaviorNode& node) -> std::string {
 }
 
 auto node_color(const BehaviorNode& node) -> Color {
-    // Response nodes are always cyan
-    if (node.type == BehaviorNode::TypeResponse) {
-        return ui::theme::cyan();
-    }
-    // DirectExec uses amber/green/red
-    if (node.type == BehaviorNode::TypeDirectExec) {
+    // Atom: amber running, green done, red failed
+    if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return ui::theme::amber();
             case BehaviorNode::Done:    return ui::theme::green();
@@ -71,6 +64,7 @@ auto node_color(const BehaviorNode& node) -> Color {
             default: return ui::theme::dim_color();
         }
     }
+    // Plan: standard state colors
     switch (node.state) {
         case BehaviorNode::Pending: return ui::theme::dim_color();
         case BehaviorNode::Running: return ui::theme::amber();
@@ -82,7 +76,6 @@ auto node_color(const BehaviorNode& node) -> Color {
 }
 
 auto title_color_for(const BehaviorNode& node) -> Color {
-    if (node.type == BehaviorNode::TypeResponse) return ui::theme::cyan();
     if (node.state == BehaviorNode::Pending) return ui::theme::dim_color();
     return ui::theme::text_color();
 }
@@ -128,9 +121,9 @@ auto render_tree_node(const BehaviorNode& node,
 
     auto icon_el = text(node_icon(node)) | color(node_color(node));
 
-    // DirectExec nodes show tool(args) instead of task title
+    // Atom nodes show tool(args), Plan nodes show task title
     std::string title_str;
-    if (node.type == BehaviorNode::TypeDirectExec && !node.tool.empty()) {
+    if (node.type == BehaviorNode::TypeAtom && !node.tool.empty()) {
         title_str = " " + node.tool + "(" + compact_tool_args(node.tool_args) + ")";
     } else {
         title_str = " " + node.name;

@@ -1426,7 +1426,6 @@ export int run(int argc, char* argv[]) {
                     cancel_token.reset();
                     lua_sandbox.set_cancel(&cancel_token);
 
-                    agent::tui::ThinkFilter think_filter;
                     agent::TreeResult turn_result;
 
                     try {
@@ -1446,24 +1445,6 @@ export int run(int argc, char* argv[]) {
                             .tracker = &tracker,
                             .ctx_mgr = &ctx_mgr,
                             .lua_sandbox = &lua_sandbox,
-                            .on_stream_chunk = [&](std::string_view chunk) {
-                                cancel_token.throw_if_cancelled();
-                                auto filtered = think_filter.filter(chunk);
-                                bool thinking = think_filter.in_think;
-                                if (!filtered.empty()) {
-                                    tui_state.behavior_tree.append_streaming(filtered);
-                                }
-                                agent_screen->post([&, has_text = !filtered.empty(), thinking] {
-                                    if (thinking) {
-                                        tui_state.current_action = "thinking...";
-                                    }
-                                    if (has_text) {
-                                        tui_state.is_thinking = false;
-                                        tui_state.current_action = "responding...";
-                                    }
-                                });
-                                agent_screen->refresh();
-                            },
                             .on_tool_call = [&](int id, std::string_view name, std::string_view args) {
                                 (void)id; (void)args;
                                 auto n = std::string(name);
@@ -1543,12 +1524,6 @@ export int run(int argc, char* argv[]) {
                             conversation.messages.pop_back();
                         }
                         continue;
-                    }
-
-                    // Flush remaining think filter content
-                    auto remaining = think_filter.flush();
-                    if (!remaining.empty()) {
-                        tui_state.behavior_tree.append_streaming(remaining);
                     }
 
                     // Finalize tree and get final snapshot (worker thread, synchronous)

@@ -18,19 +18,15 @@ export auto format_duration(std::int64_t ms) -> std::string {
     return std::format("{:.0f}m{:.0f}s", ms / 60000.0, (ms % 60000) / 1000.0);
 }
 
-// ─── BehaviorNode — unified behavior node with type system ───
+// ─── BehaviorNode — two-type system: Atom + Plan ───
 
 export struct BehaviorNode {
     int id {0};
 
-    // Node type
-    inline static constexpr int TypeRoot       = 0;  // synthetic root node
-    inline static constexpr int TypeDecompose  = 1;  // decomposed into subtasks
-    inline static constexpr int TypeExecute    = 2;  // LLM tool-use loop
-    inline static constexpr int TypeDirectExec = 3;  // system direct tool call
-    inline static constexpr int TypeToolCall   = 4;  // tool call record (child of Execute)
-    inline static constexpr int TypeResponse   = 5;  // LLM text record (child of Execute)
-    int type {TypeRoot};
+    // Only 2 types
+    inline static constexpr int TypeAtom = 0;  // direct tool call, zero LLM
+    inline static constexpr int TypePlan = 1;  // LLM decision node
+    int type {TypePlan};
 
     // Lifecycle state
     inline static constexpr int Pending  = 0;
@@ -42,12 +38,12 @@ export struct BehaviorNode {
 
     // Content
     std::string name;            // task title / tool name
-    std::string detail;          // task description / args summary
-    std::string result_summary;  // result summary after completion (sibling context)
+    std::string detail;          // description / args summary
+    std::string result_summary;  // result after completion
 
-    // DirectExec: tool + args specified at decompose time
-    std::string tool;            // tool name (non-empty = DirectExec)
-    std::string tool_args;       // JSON-formatted arguments
+    // Atom: tool + args (non-empty = Atom)
+    std::string tool;
+    std::string tool_args;
 
     // Time
     std::int64_t start_ms {0};
@@ -60,7 +56,7 @@ export struct BehaviorNode {
         return state == Done || state == Failed || state == Skipped;
     }
 
-    auto is_direct_exec() const -> bool {
+    auto is_atom() const -> bool {
         return !tool.empty();
     }
 };
@@ -71,14 +67,6 @@ auto find_node_impl(BehaviorNode& root, int id) -> BehaviorNode* {
     if (root.id == id) return &root;
     for (auto& child : root.children) {
         if (auto* found = find_node_impl(child, id)) return found;
-    }
-    return nullptr;
-}
-
-auto find_node_const_impl(const BehaviorNode& root, int id) -> const BehaviorNode* {
-    if (root.id == id) return &root;
-    for (auto& child : root.children) {
-        if (auto* found = find_node_const_impl(child, id)) return found;
     }
     return nullptr;
 }
@@ -118,13 +106,13 @@ export class ABehaviorTree {
     std::string streaming_text_;
 
 public:
-    // ── Node operations (system-driven, not LLM) ──
+    // ── Node operations ──
 
     void set_root(int id, const std::string& name, const std::string& detail) {
         std::lock_guard lk(mtx_);
         root_ = BehaviorNode{};
         root_.id = id;
-        root_.type = BehaviorNode::TypeRoot;
+        root_.type = BehaviorNode::TypePlan;
         root_.name = name;
         root_.detail = detail;
         root_.state = BehaviorNode::Running;
@@ -177,79 +165,11 @@ public:
         }
     }
 
-    // ── Tool call recording (inside Execute nodes) ──
-
-    void begin_tool(int parent_id, int tool_id,
-                    const std::string& name, const std::string& args,
-                    std::int64_t start_ms) {
-        std::lock_guard lk(mtx_);
-        auto* parent = (parent_id > 0)
-            ? find_node_impl(root_, parent_id) : nullptr;
-        if (!parent && active_node_id_ > 0) {
-            parent = find_node_impl(root_, active_node_id_);
-        }
-        if (!parent) parent = &root_;
-
-        parent->children.push_back({
-            .id = tool_id,
-            .type = BehaviorNode::TypeToolCall,
-            .state = BehaviorNode::Running,
-            .name = name,
-            .detail = args,
-            .start_ms = start_ms,
-        });
-    }
-
-    void end_tool(int tool_id, bool is_error, std::int64_t end_ms) {
-        std::lock_guard lk(mtx_);
-        auto* node = find_node_impl(root_, tool_id);
-        if (node) {
-            node->state = is_error ? BehaviorNode::Failed : BehaviorNode::Done;
-            node->end_ms = end_ms;
-        }
-    }
-
-    // ── Streaming / Response ──
+    // ── Streaming (for TUI thinking animation) ──
 
     void append_streaming(std::string_view text) {
         std::lock_guard lk(mtx_);
         streaming_text_ += text;
-    }
-
-    void flush_as_response(int parent_id, int max_chars) {
-        std::lock_guard lk(mtx_);
-        if (streaming_text_.empty()) return;
-
-        auto now = steady_now_ms();
-
-        // Truncate to first line, max_chars width
-        auto nl = streaming_text_.find('\n');
-        auto first_line = (nl != std::string::npos)
-            ? streaming_text_.substr(0, nl) : streaming_text_;
-
-        std::string resp_name;
-        if (static_cast<int>(first_line.size()) > max_chars) {
-            resp_name = first_line.substr(0, max_chars) + "...";
-        } else {
-            resp_name = first_line;
-        }
-
-        auto* parent = (parent_id > 0)
-            ? find_node_impl(root_, parent_id) : nullptr;
-        if (!parent && active_node_id_ > 0) {
-            parent = find_node_impl(root_, active_node_id_);
-        }
-        if (!parent) parent = &root_;
-
-        parent->children.push_back({
-            .id = -1,
-            .type = BehaviorNode::TypeResponse,
-            .state = BehaviorNode::Done,
-            .name = resp_name,
-            .start_ms = now,
-            .end_ms = now,
-        });
-        streaming_text_.clear();
     }
 
     void clear_streaming() {
@@ -276,7 +196,7 @@ public:
 
     auto snapshot() const -> BehaviorNode {
         std::lock_guard lk(mtx_);
-        return root_;  // deep copy
+        return root_;
     }
 
     auto has_streaming() const -> bool {
