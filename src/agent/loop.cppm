@@ -336,9 +336,10 @@ auto build_scoped_prompt(
         for (auto& [status_name, summary] : completed_results) {
             prompt += "- " + status_name + ": " + summary + "\n";
         }
-        prompt += "\nSome subtasks failed. You can:\n"
-                  "- \"done\": accept the current results (if failures are expected/harmless)\n"
-                  "- \"decompose\": add NEW subtasks to retry or take alternative approach\n";
+        prompt += "\nSome subtasks failed. Evaluate whether the PARENT TASK is actually complete:\n"
+                  "- \"done\": the parent task IS complete despite some failures (e.g. remove failed because package wasn't installed = task done)\n"
+                  "- \"decompose\": the parent task is NOT complete, add new subtasks to achieve it\n"
+                  "\nPrefer \"done\" when failures indicate the goal is already met. Only \"decompose\" when real work remains.\n";
     }
 
     prompt += "\n## Current Task\n";
@@ -347,10 +348,10 @@ auto build_scoped_prompt(
         prompt += node.detail + "\n";
     }
 
-    // Available tool names
-    prompt += "\n## Available Tools\n";
+    // Available tools with parameter schemas
+    prompt += "\n## Available Tools (use EXACT parameter names)\n";
     for (auto& t : tools) {
-        prompt += "- " + t.name + "\n";
+        prompt += "- **" + t.name + "** " + t.inputSchema + "\n";
     }
 
     if (!is_replan) {
@@ -372,7 +373,7 @@ Decide how to handle this task. Call the decide tool:
     ]
   NOT a flat list of atoms — that loses the ability to reason about each group.
 
-**done** — If the task is already complete or requires no action, provide a summary.
+**done** — If the task is already complete, requires no action, or sibling results show the goal is already met, provide a summary. For example, if a previous sibling checked that a package is NOT installed, then "uninstall that package" should return done immediately.
 
 Call decide with your decision.
 )";
