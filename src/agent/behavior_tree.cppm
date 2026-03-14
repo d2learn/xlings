@@ -23,9 +23,9 @@ export auto format_duration(std::int64_t ms) -> std::string {
 export struct BehaviorNode {
     int id {0};
 
-    // Only 2 types
-    inline static constexpr int TypeAtom = 0;  // direct tool call, zero LLM
-    inline static constexpr int TypePlan = 1;  // LLM decision node
+    inline static constexpr int TypeAtom     = 0;  // tool call
+    inline static constexpr int TypePlan     = 1;  // plan/root node
+    inline static constexpr int TypeThinking = 2;  // LLM reasoning text
     int type {TypePlan};
 
     // Lifecycle state
@@ -146,6 +146,21 @@ public:
         std::lock_guard lk(mtx_);
         auto* node = find_node_impl(root_, id);
         if (node) node->result_summary = summary;
+    }
+
+    void add_thinking(int parent_id, int id, const std::string& text,
+                       std::int64_t start_ms = 0, std::int64_t end_ms = 0) {
+        std::lock_guard lk(mtx_);
+        auto* parent = find_node_impl(root_, parent_id);
+        if (!parent) parent = &root_;
+        BehaviorNode node;
+        node.id = id;
+        node.type = BehaviorNode::TypeThinking;
+        node.name = text;
+        node.state = BehaviorNode::Done;
+        node.start_ms = start_ms > 0 ? start_ms : steady_now_ms();
+        node.end_ms = end_ms > 0 ? end_ms : node.start_ms;
+        parent->children.push_back(std::move(node));
     }
 
     void set_active(int id) {

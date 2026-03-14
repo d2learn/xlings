@@ -7,11 +7,11 @@ module;
 #include "ftxui/component/event.hpp"
 #include "ftxui/component/mouse.hpp"
 
-export module xlings.agent.ftxui_tui;
+export module xlings.agent.tui.screen;
 
 import std;
 import xlings.agent.behavior_tree;
-import xlings.agent.tui;
+import xlings.agent.tui.state;
 import xlings.agent.token_tracker;
 import xlings.core.utf8;
 import xlings.ui;
@@ -34,14 +34,8 @@ namespace tui_icons {
 
 using namespace ftxui;
 
-auto is_thinking_node(const BehaviorNode& node) -> bool {
-    return node.type == BehaviorNode::TypePlan && node.detail == "__thinking__";
-}
-
 auto node_icon(const BehaviorNode& node) -> std::string {
-    // Thinking nodes use ◇ icon
-    if (is_thinking_node(node)) return tui_icons::thinking;
-    // Atom nodes use gear icon
+    if (node.type == BehaviorNode::TypeThinking) return tui_icons::thinking;
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return tui_icons::direct_exec;
@@ -50,7 +44,6 @@ auto node_icon(const BehaviorNode& node) -> std::string {
             default: return tui_icons::direct_exec;
         }
     }
-    // Plan nodes use standard state icons
     switch (node.state) {
         case BehaviorNode::Pending: return tui_icons::pending;
         case BehaviorNode::Running: return tui_icons::running;
@@ -62,9 +55,9 @@ auto node_icon(const BehaviorNode& node) -> std::string {
 }
 
 auto node_color(const BehaviorNode& node) -> Color {
-    // Thinking nodes: cyan
-    if (is_thinking_node(node)) return ui::theme::cyan();
-    // Atom: amber running, green done, red failed
+    // Thinking: dim cyan (LLM reasoning)
+    if (node.type == BehaviorNode::TypeThinking) return ui::theme::dim_color();
+    // Atom: tool call status
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return ui::theme::amber();
@@ -73,7 +66,7 @@ auto node_color(const BehaviorNode& node) -> Color {
             default: return ui::theme::dim_color();
         }
     }
-    // Plan: standard state colors
+    // Plan/root
     switch (node.state) {
         case BehaviorNode::Pending: return ui::theme::dim_color();
         case BehaviorNode::Running: return ui::theme::amber();
@@ -85,7 +78,7 @@ auto node_color(const BehaviorNode& node) -> Color {
 }
 
 auto title_color_for(const BehaviorNode& node) -> Color {
-    if (is_thinking_node(node)) return ui::theme::cyan();
+    if (node.type == BehaviorNode::TypeThinking) return ui::theme::cyan();
     if (node.state == BehaviorNode::Pending) return ui::theme::dim_color();
     return ui::theme::text_color();
 }
@@ -124,17 +117,22 @@ auto compact_tool_args(const std::string& args_json) -> std::string {
 
 auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
-                      bool is_last) -> Element {
-    // Current node line
+                      bool is_last,
+                      int approval_node_id = 0) -> Element {
     std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
-    auto icon_el = text(node_icon(node)) | color(node_color(node));
+    // Approval-pending node: special icon and color
+    bool is_awaiting = (approval_node_id > 0 && node.id == approval_node_id
+                        && node.state == BehaviorNode::Running);
 
-    // Atom: tool(args), Thinking: truncated reasoning, Plan: task title
+    auto icon_el = is_awaiting
+        ? (text("\xe2\x9a\xa0") | bold | color(ui::theme::amber()) | blink)   // ⚠ blinking amber
+        : (text(node_icon(node)) | color(node_color(node)));
+
+    // Thinking: truncated reasoning, Atom: tool(args), Plan: task title
     std::string title_str;
-    if (is_thinking_node(node)) {
-        // Show full first line, truncate at terminal width (~120 chars)
+    if (node.type == BehaviorNode::TypeThinking) {
         auto& raw = node.name;
         auto nl = raw.find('\n');
         auto first_line = (nl != std::string::npos) ? raw.substr(0, nl) : raw;
@@ -145,7 +143,11 @@ auto render_tree_node(const BehaviorNode& node,
     } else {
         title_str = " " + node.name;
     }
-    auto title_el = text(title_str) | color(title_color_for(node));
+
+    auto title_color = is_awaiting ? ui::theme::amber() : title_color_for(node);
+    auto title_el = text(title_str) | color(title_color);
+    if (is_awaiting) title_el = title_el | bold;
+
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
     auto line = hbox({
@@ -155,19 +157,16 @@ auto render_tree_node(const BehaviorNode& node,
         time_el,
     });
 
-    // Collect children
     Elements rows;
     rows.push_back(line);
 
-    // Thinking nodes don't render children (they are leaf decorations)
-
     std::string child_prefix = prefix + (is_last
-        ? "   "                                                      // 3 spaces
-        : "\xe2\x94\x82  ");                                        // │  (│ + 2 spaces)
+        ? "   "
+        : "\xe2\x94\x82  ");                                        // │
 
     for (std::size_t i = 0; i < node.children.size(); ++i) {
         bool child_is_last = (i == node.children.size() - 1);
-        rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last));
+        rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last, approval_node_id));
     }
 
     return vbox(std::move(rows));
@@ -213,16 +212,17 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
     }
 
     // Tree nodes (children of root)
+    int appr_id = state.approval_pending ? state.approval_node_id : 0;
     for (std::size_t i = 0; i < tree_root.children.size(); ++i) {
         bool is_last = (i == tree_root.children.size() - 1);
-        rows.push_back(render_tree_node(tree_root.children[i], "", is_last));
+        rows.push_back(render_tree_node(tree_root.children[i], "", is_last, appr_id));
     }
 
-    // Separator between tree and reply (amber)
+    // Empty line between tree and reply
     bool has_reply = (&tn == state.active_turn && !streaming_snap.empty())
                   || (!tn.reply.empty() && &tn != state.active_turn);
     if (has_reply) {
-        rows.push_back(separator() | color(ui::theme::amber()));
+        rows.push_back(text(""));
     }
 
     // Streaming text (only for active turn)
@@ -250,9 +250,6 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
         }
     }
 
-    // Trailing empty line between turns
-    rows.push_back(text(""));
-
     return vbox(std::move(rows));
 }
 
@@ -262,8 +259,16 @@ auto render_all_turns(const tui::AgentTuiState& state) -> Element {
     auto streaming_snap = state.behavior_tree.streaming_text();
 
     Elements rows;
+    bool first_turn = true;
     for (auto& tn : state.turns) {
         bool is_active = (&tn == state.active_turn);
+        // Solid separator between turns (not before first)
+        if (!first_turn) {
+            rows.push_back(text(""));
+            rows.push_back(separatorLight() | color(ui::theme::amber()));
+            rows.push_back(text(""));
+        }
+        first_turn = false;
         rows.push_back(render_turn(tn, state,
             is_active ? &tree_snap : nullptr,
             is_active ? streaming_snap : std::string{}));
@@ -374,17 +379,17 @@ public:
             }
 
             // Approval prompt (replaces input when pending)
+            // Input box: top separator + content + bottom separator
+            layout.push_back(separator() | color(ui::theme::border_color()));
             if (state_.approval_pending) {
                 layout.push_back(render_approval(state_));
             } else {
-                // Input box: top separator + "> " prefix + ftxui Input (real cursor) + bottom separator
-                layout.push_back(separator() | color(ui::theme::border_color()));
                 layout.push_back(hbox({
                     text("> ") | color(ui::theme::cyan()),
                     input_comp_->Render() | flex,
                 }));
-                layout.push_back(separator() | color(ui::theme::border_color()));
             }
+            layout.push_back(separator() | color(ui::theme::border_color()));
 
             // Status bar + trailing empty line
             layout.push_back(render_status_bar(state_));

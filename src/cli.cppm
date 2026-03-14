@@ -30,7 +30,6 @@ import xlings.core.utf8;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
 import xlings.libs.agentfs;
-import xlings.libs.semantic_memory;
 import xlings.libs.soul;
 import xlings.libs.journal;
 import xlings.libs.tinytui;
@@ -816,29 +815,10 @@ export int run(int argc, char* argv[]) {
                 return 0;
             }
 
-            // ---- sub-subcommand: mcp ----
-            if (subcmd == "mcp") {
-                auto mcps_dir = afs.root() / "mcps";
-                auto configs = agent::mcp::load_mcp_configs(mcps_dir);
-                if (configs.empty()) {
-                    agent::tui::print_hint("no MCP servers configured");
-                    agent::tui::print_hint("add JSON configs to: " + mcps_dir.string());
-                } else {
-                    std::vector<ui::InfoField> mcp_fields;
-                    for (auto& c : configs) {
-                        std::string val = c.command;
-                        for (auto& a : c.args) { val += " " + a; }
-                        mcp_fields.push_back({c.name, val});
-                    }
-                    ui::print_info_panel("MCP Servers", mcp_fields);
-                }
-                return 0;
-            }
-
             // ---- sub-subcommands that need LLM: chat / resume ----
             if (subcmd != "chat" && subcmd != "resume") {
                 agent::tui::print_error("unknown agent subcommand: " + subcmd);
-                agent::tui::print_hint("available: chat, resume, sessions, config, mcp");
+                agent::tui::print_hint("available: chat, resume, sessions, config");
                 return 1;
             }
 
@@ -1011,38 +991,18 @@ export int run(int argc, char* argv[]) {
             agent::ApprovalPolicy approval(soul);
             agent::ApprovalPolicy* policy_ptr = flag_auto_approve ? nullptr : &approval;
 
-            // ─── Agent mode: dual consumer architecture ───
-            // Consumer 2: CLI TUI rendering — disabled in agent mode (tinytui owns terminal)
+            // ─── Agent mode: TUI owns terminal, suppress all other output ───
             stream.set_enabled(tui_listener, false);
+            platform::set_tui_mode(true);
 
-            // Token tracker + context manager
-            agent::TokenTracker tracker;
-            agent::ContextManager ctx_mgr(cfg.model);
-            auto cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
-            ctx_mgr.set_cache_dir(cache_dir);
+            // Create agent runtime (owns all subsystems)
+            agent::AgentRuntime runtime(afs, cfg, session_meta);
+            runtime.init(soul, conversation, stream);
 
-            // Memory store
-            libs::semantic_memory::MemoryStore memory_store(afs);
-            memory_store.load();
-
-            // Build agent registry with memory + context tools (shadows outer registry)
-            auto registry = capabilities::build_registry(&memory_store, &ctx_mgr);
-            auto bridge = agent::ToolBridge(registry);
-            // Build memory summaries from MemoryStore
-            std::vector<agent::MemorySummary> mem_summaries;
-            for (auto& e : memory_store.all_entries()) {
-                mem_summaries.push_back({.content = e.content, .category = e.category});
-            }
-            auto system_prompt = agent::build_system_prompt(bridge, mem_summaries);
-            auto tools = agent::to_llmapi_tools(bridge);
-
-            // Create Lua sandbox for execute_lua tool
-            agent::LuaSandbox lua_sandbox(registry, stream);
-
-            // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
-            int agent_listener = stream.on_event([&bridge](const Event& e) {
+            // Consumer 1: Agent data capture (always active)
+            int agent_listener = stream.on_event([&runtime](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
-                    bridge.on_data_event(*d);
+                    runtime.bridge.on_data_event(*d);
                 }
             });
 
@@ -1070,11 +1030,6 @@ export int run(int argc, char* argv[]) {
             CancellationToken cancel_token;
             int ctrl_c_count = 0;
             std::int64_t last_ctrl_c_ms = 0;
-
-            // ─── Message queue (main thread → agent thread) ───
-            std::mutex msg_mtx;
-            std::condition_variable msg_cv;
-            std::deque<std::string> msg_queue;
 
             // ─── Approval synchronization (agent thread ↔ main thread) ───
             std::mutex approval_mtx;
@@ -1205,18 +1160,18 @@ export int run(int argc, char* argv[]) {
                 });
                 agent_screen->refresh();
 
-                ctx_mgr.sync_from_conversation(conversation);
+                runtime.ctx_mgr.sync_from_conversation(conversation);
                 auto new_cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
-                ctx_mgr.set_cache_dir(new_cache_dir);
+                runtime.ctx_mgr.set_cache_dir(new_cache_dir);
             }});
 
             cmd_registry.register_command({"/model", "Switch or show current model", [&](std::string_view args) {
                 if (!args.empty()) {
-                    cfg.model = std::string(args);
-                    cfg.provider = agent::infer_provider(cfg.model);
-                    tools = agent::to_llmapi_tools(bridge);
-                    ctx_mgr.set_model(cfg.model);
-                    agent_screen->post([&] { tui_state.model_name = cfg.model; });
+                    runtime.cfg.model = std::string(args);
+                    runtime.cfg.provider = agent::infer_provider(runtime.cfg.model);
+                    runtime.set_tools(agent::to_llmapi_tools(runtime.bridge));
+                    runtime.ctx_mgr.set_model(runtime.cfg.model);
+                    agent_screen->post([&] { tui_state.model_name = runtime.cfg.model; });
                     agent_screen->refresh();
                 }
             }});
@@ -1229,7 +1184,7 @@ export int run(int argc, char* argv[]) {
                 if (!args.empty()) {
                     try { keep = std::stoi(std::string(args)); } catch (...) {}
                 }
-                ctx_mgr.compact(conversation, keep);
+                runtime.ctx_mgr.compact(conversation, keep);
             }});
 
             cmd_registry.register_command({"/context", "Show context cache stats", [&](std::string_view) {
@@ -1357,11 +1312,7 @@ export int run(int argc, char* argv[]) {
                     tui_state.saved_input.clear();
                     tui_state.completions.clear();
                     tui_state.completion_selected = -1;
-                    {
-                        std::lock_guard lk(msg_mtx);
-                        msg_queue.push_back(std::move(msg));
-                    }
-                    msg_cv.notify_one();
+                    runtime.send_input(std::move(msg));
                     return true;
                 }
                 // All other events (chars, backspace, delete, arrows, home/end)
@@ -1374,209 +1325,20 @@ export int run(int argc, char* argv[]) {
                 tui_state, input_content, on_input_change, ftxui_key_handler);
             agent_screen = agent_screen_owner.get();
 
+            // Wire session to TUI + threading components
+            runtime.policy = policy_ptr;
+            runtime.confirm_cb = confirm_cb;
+            runtime.cancel = &cancel_token;
+            runtime.screen = agent_screen;
+            runtime.tui_state = &tui_state;
+            runtime.commands = &cmd_registry;
+            runtime.on_log = [&](std::string_view role, std::string_view content) {
+                journal.log_llm_turn(std::string(role), std::string(content));
+            };
+
             // ─── Agent worker thread ───
             std::jthread agent_thread([&](std::stop_token st) {
-                while (!st.stop_requested()) {
-                    std::string user_input;
-                    {
-                        std::unique_lock lk(msg_mtx);
-                        msg_cv.wait(lk, [&] {
-                            return !msg_queue.empty() || st.stop_requested();
-                        });
-                        if (st.stop_requested() && msg_queue.empty()) break;
-                        if (msg_queue.empty()) continue;
-                        user_input = std::move(msg_queue.front());
-                        msg_queue.pop_front();
-                    }
-
-                    if (user_input == "exit" || user_input == "quit") {
-                        agent_screen->post([&] { agent_screen->exit(); });
-                        break;
-                    }
-
-                    if (!user_input.empty() && user_input[0] == '/' && cmd_registry.execute(user_input)) {
-                        continue;
-                    }
-
-                    journal.log_llm_turn("user", user_input);
-
-                    auto now_ms = agent::tui::steady_now_ms();
-
-                    // Create new TurnNode
-                    tui_state.behavior_tree.reset();
-                    agent_screen->post([&, input = user_input, now_ms] {
-                        agent::tui::TurnNode tn;
-                        tn.user_message = input;
-                        tn.start_ms = now_ms;
-                        tui_state.turns.push_back(std::move(tn));
-                        tui_state.active_turn = &tui_state.turns.back();
-
-                        tui_state.is_streaming = true;
-                        tui_state.is_thinking = true;
-                        tui_state.current_action = "thinking...";
-                        tui_state.turn_start_ms = now_ms;
-                        if (tui_state.history.empty() || tui_state.history.back() != input) {
-                            tui_state.history.push_back(input);
-                        }
-                        agent_screen->scroll_to_bottom();
-                    });
-                    agent_screen->refresh();
-
-                    tui_state.id_alloc.reset();
-                    cancel_token.reset();
-                    lua_sandbox.set_cancel(&cancel_token);
-
-                    agent::TreeResult turn_result;
-
-                    try {
-                        agent::TreeConfig tc{
-                            .user_input = user_input,
-                            .base_system_prompt = system_prompt,
-                            .tools = tools,
-                            .bridge = bridge,
-                            .stream = stream,
-                            .cfg = cfg,
-                            .conversation = &conversation,
-                            .policy = policy_ptr,
-                            .confirm_cb = confirm_cb,
-                            .cancel = &cancel_token,
-                            .tree = &tui_state.behavior_tree,
-                            .id_alloc = &tui_state.id_alloc,
-                            .tracker = &tracker,
-                            .ctx_mgr = &ctx_mgr,
-                            .lua_sandbox = &lua_sandbox,
-                            .on_stream_chunk = [&](std::string_view chunk) {
-                                cancel_token.throw_if_cancelled();
-                                if (!chunk.empty()) {
-                                    tui_state.behavior_tree.append_streaming(std::string(chunk));
-                                }
-                                agent_screen->post([&] {
-                                    tui_state.is_streaming = true;
-                                    tui_state.is_thinking = false;
-                                    tui_state.current_action = "thinking...";
-                                });
-                                agent_screen->refresh();
-                            },
-                            .on_tool_call = [&](int id, std::string_view name, std::string_view args) {
-                                (void)id; (void)args;
-                                auto n = std::string(name);
-                                agent_screen->post([&, n] {
-                                    tui_state.is_streaming = false;
-                                    tui_state.is_thinking = false;
-                                    tui_state.current_action = "executing " + n + "...";
-                                    agent_screen->scroll_to_bottom();
-                                });
-                                agent_screen->refresh();
-                            },
-                            .on_tool_result = [&]([[maybe_unused]] int id, [[maybe_unused]] std::string_view name, [[maybe_unused]] bool is_error) {
-                                agent_screen->post([&] {
-                                    tui_state.current_action = "thinking...";
-                                    tui_state.is_streaming = true;
-                                    tui_state.is_thinking = true;
-                                });
-                                agent_screen->refresh();
-                            },
-                            .on_token_update = [&](int input_tokens, int output_tokens) {
-                                agent_screen->post([&, input_tokens, output_tokens] {
-                                    tui_state.session_input = tracker.session_input() + input_tokens;
-                                    tui_state.session_output = tracker.session_output() + output_tokens;
-                                    tui_state.ctx_used = tracker.context_used() + input_tokens;
-                                });
-                                agent_screen->refresh();
-                            },
-                        };
-                        turn_result = agent::run_task_tree(tc);
-                    } catch (const PausedException&) {
-                        cancel_token.reset();
-                        tui_state.behavior_tree.clear_streaming();
-                        agent_screen->post([&] {
-                            tui_state.is_streaming = false;
-                            tui_state.is_thinking = false;
-                            tui_state.current_action = "paused";
-                            tui_state.active_turn = nullptr;
-                        });
-                        agent_screen->refresh();
-                        continue;
-                    } catch (const CancelledException&) {
-                        cancel_token.reset();
-                        tui_state.behavior_tree.clear_streaming();
-                        agent_screen->post([&] {
-                            tui_state.is_streaming = false;
-                            tui_state.is_thinking = false;
-                            tui_state.current_action.clear();
-                            tui_state.turn_start_ms = 0;
-                            if (tui_state.active_turn) {
-                                tui_state.active_turn->reply = "[cancelled]";
-                            }
-                            tui_state.active_turn = nullptr;
-                        });
-                        agent_screen->refresh();
-                        if (!conversation.messages.empty()) {
-                            conversation.messages.pop_back();
-                        }
-                        continue;
-                    } catch (const std::exception& e) {
-                        bool was_cancelled = cancel_token.is_cancelled();
-                        cancel_token.reset();
-                        tui_state.behavior_tree.clear_streaming();
-                        agent_screen->post([&, err = std::string(e.what()), was_cancelled] {
-                            tui_state.is_streaming = false;
-                            tui_state.is_thinking = false;
-                            tui_state.current_action.clear();
-                            tui_state.turn_start_ms = 0;
-                            if (tui_state.active_turn) {
-                                tui_state.active_turn->reply = was_cancelled
-                                    ? "[cancelled]"
-                                    : "[error: " + err + "]";
-                            }
-                            tui_state.active_turn = nullptr;
-                        });
-                        agent_screen->refresh();
-                        if (was_cancelled && !conversation.messages.empty()) {
-                            conversation.messages.pop_back();
-                        }
-                        continue;
-                    }
-
-                    // Finalize tree and get final snapshot (worker thread, synchronous)
-                    auto now_fin = agent::tui::steady_now_ms();
-                    tui_state.behavior_tree.finalize(now_fin);
-
-                    // Turn complete
-                    agent_screen->post([&, tr = turn_result] {
-                        tui_state.is_streaming = false;
-                        tui_state.is_thinking = false;
-
-                        if (tui_state.active_turn) {
-                            if (!tr.reply.empty()) {
-                                tui_state.active_turn->reply = tr.reply;
-                            } else {
-                                auto st = tui_state.behavior_tree.get_streaming_as_reply();
-                                if (!st.empty()) {
-                                    tui_state.active_turn->reply = st;
-                                }
-                            }
-                            // Copy finalized tree into TurnNode for history
-                            tui_state.active_turn->root = tui_state.behavior_tree.snapshot();
-                        }
-                        tui_state.behavior_tree.clear_streaming();
-
-                        tracker.record(tr.input_tokens, tr.output_tokens,
-                                       tr.cache_read_tokens, tr.cache_write_tokens);
-                        ctx_mgr.record_turn();
-                        tui_state.ctx_used = tracker.context_used();
-                        tui_state.session_input = tracker.session_input();
-                        tui_state.session_output = tracker.session_output();
-                        tui_state.l2_cache_count = ctx_mgr.l2_count();
-                        tui_state.current_action.clear();
-                        tui_state.turn_start_ms = 0;
-                        tui_state.active_turn = nullptr;
-                        agent_screen->scroll_to_bottom();
-                    });
-                    agent_screen->refresh();
-
-                    journal.log_llm_turn("assistant", turn_result.reply);
-                }
+                runtime.run_session(st);
             });
 
             // ─── Restore history if resuming a session ───
@@ -1589,11 +1351,12 @@ export int run(int argc, char* argv[]) {
 
             // ─── Cleanup ───
             agent_thread.request_stop();
-            msg_cv.notify_all();
+            runtime.notify();
 
-            ctx_mgr.save_cache();
+            runtime.ctx_mgr.save_cache();
 
             stream.set_enabled(tui_listener, true);
+            platform::set_tui_mode(false);
             stream.remove_listener(agent_listener);
             stream.remove_listener(data_listener);
             stream.clear_auto_responders();

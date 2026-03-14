@@ -5,6 +5,7 @@ module;
 export module xlings.core.log;
 
 import std;
+import xlings.platform;
 
 namespace xlings::log {
 
@@ -19,6 +20,7 @@ Level gLevel_ { Level::Info };
 std::string gContext_;
 std::ofstream gFile_;
 bool gColor_ { true };
+// Terminal output is suppressed when platform::is_tui_mode() is true
 
 export void set_level(Level level) {
     gLevel_ = level;
@@ -111,9 +113,11 @@ export template<typename... Args>
 void debug(std::format_string<Args...> fmt, Args&&... args) {
     if (gLevel_ <= Level::Debug) {
         auto msg = std::format(fmt, std::forward<Args>(args)...);
-        std::print("{} ", colored_(ansi_::gray, "[debug]"));
-        if (!gContext_.empty()) std::print("{} ", colored_(ansi_::gray, std::format("[{}]", gContext_).c_str()));
-        std::println("{}", msg);
+        if (!platform::is_tui_mode()) {
+            std::print("{} ", colored_(ansi_::gray, "[debug]"));
+            if (!gContext_.empty()) std::print("{} ", colored_(ansi_::gray, std::format("[{}]", gContext_).c_str()));
+            std::println("{}", msg);
+        }
         write_to_file_("[debug] ", msg);
     }
 }
@@ -122,9 +126,11 @@ export template<typename... Args>
 void info(std::format_string<Args...> fmt, Args&&... args) {
     if (gLevel_ <= Level::Info) {
         auto msg = std::format(fmt, std::forward<Args>(args)...);
-        std::print("{} ", colored_(ansi_::cyan, "[xlings]"));
-        if (!gContext_.empty()) std::print("{} ", colored_(ansi_::cyan, std::format("[{}]", gContext_).c_str()));
-        std::println("{}", msg);
+        if (!platform::is_tui_mode()) {
+            std::print("{} ", colored_(ansi_::cyan, "[xlings]"));
+            if (!gContext_.empty()) std::print("{} ", colored_(ansi_::cyan, std::format("[{}]", gContext_).c_str()));
+            std::println("{}", msg);
+        }
         write_to_file_("[xlings] ", msg);
     }
 }
@@ -133,9 +139,11 @@ export template<typename... Args>
 void warn(std::format_string<Args...> fmt, Args&&... args) {
     if (gLevel_ <= Level::Warn) {
         auto msg = std::format(fmt, std::forward<Args>(args)...);
-        std::print(stderr, "{} ", colored_(ansi_::amber, "[warn]"));
-        if (!gContext_.empty()) std::print(stderr, "{} ", colored_(ansi_::amber, std::format("[{}]", gContext_).c_str()));
-        std::println(stderr, "{}", msg);
+        if (!platform::is_tui_mode()) {
+            std::print(stderr, "{} ", colored_(ansi_::amber, "[warn]"));
+            if (!gContext_.empty()) std::print(stderr, "{} ", colored_(ansi_::amber, std::format("[{}]", gContext_).c_str()));
+            std::println(stderr, "{}", msg);
+        }
         write_to_file_("[warn] ", msg);
     }
 }
@@ -143,13 +151,15 @@ void warn(std::format_string<Args...> fmt, Args&&... args) {
 export template<typename... Args>
 void error(std::format_string<Args...> fmt, Args&&... args) {
     auto msg = std::format(fmt, std::forward<Args>(args)...);
-    if (gColor_) {
-        std::print(stderr, "{}{}[error]{} ", ansi_::bold, ansi_::red, ansi_::reset);
-    } else {
-        std::print(stderr, "[error] ");
+    if (!platform::is_tui_mode()) {
+        if (gColor_) {
+            std::print(stderr, "{}{}[error]{} ", ansi_::bold, ansi_::red, ansi_::reset);
+        } else {
+            std::print(stderr, "[error] ");
+        }
+        if (!gContext_.empty()) std::print(stderr, "{} ", colored_(ansi_::red, std::format("[{}]", gContext_).c_str()));
+        std::println(stderr, "{}", msg);
     }
-    if (!gContext_.empty()) std::print(stderr, "{} ", colored_(ansi_::red, std::format("[{}]", gContext_).c_str()));
-    std::println(stderr, "{}", msg);
     write_to_file_("[error] ", msg);
 }
 
@@ -157,7 +167,7 @@ export template<typename... Args>
 void println(std::format_string<Args...> fmt, Args&&... args) {
     if (gLevel_ <= Level::Info) {
         auto msg = std::format(fmt, std::forward<Args>(args)...);
-        std::println("{}", msg);
+        if (!platform::is_tui_mode()) std::println("{}", msg);
         write_to_file_("[status] ", msg);
     }
 }

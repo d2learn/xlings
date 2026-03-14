@@ -9,11 +9,8 @@ import xlings.libs.json;
 import xlings.core.xim.commands;
 import xlings.core.xvm.commands;
 import xlings.core.config;
-import xlings.core.log;
-import xlings.platform;
-import xlings.agent.output_buffer;
-import xlings.core.utf8;
 import xlings.runtime.cancellation;
+import xlings.core.utf8;
 import xlings.libs.semantic_memory;
 import xlings.agent.context_manager;
 
@@ -28,21 +25,12 @@ Result exit_result(int code) {
     return nlohmann::json({{"exitCode", code}}).dump();
 }
 
-// Shared output buffer for RunCommand / ViewOutput / SearchContent
-agent::OutputBuffer& shared_output_buffer() {
-    static agent::OutputBuffer buf;
-    return buf;
-}
-
-libs::semantic_memory::MemoryStore* shared_memory_store_{nullptr};
-agent::ContextManager* shared_ctx_mgr_{nullptr};
-
 class SearchPackages : public Capability {
 public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "search_packages",
-            .description = "Search for packages by keyword",
+            .description = "Search for available packages by keyword. Returns only package names and brief descriptions. Use package_info to get full details (versions, metadata, install status).",
             .inputSchema = R"({"type":"object","properties":{"keyword":{"type":"string"}},"required":["keyword"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = false,
@@ -138,7 +126,7 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "package_info",
-            .description = "Show detailed information about a package",
+            .description = "Get complete package information including name, all available versions, install status, and metadata. Use this when you need version details or package state.",
             .inputSchema = R"({"type":"object","properties":{"target":{"type":"string"}},"required":["target"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = false,
@@ -208,184 +196,10 @@ public:
     }
 };
 
-// ─── Phase 4: Agent Extension Tools ───
+// ─── Memory & Context Tools ───
 
-class SetLogLevel : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "set_log_level",
-            .description = "Switch log verbosity: debug, info, warn, error",
-            .inputSchema = R"({"type":"object","properties":{"level":{"type":"string","enum":["debug","info","warn","error"]}},"required":["level"]})",
-            .outputSchema = R"({"type":"object","properties":{"success":{"type":"boolean"},"level":{"type":"string"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto level = json.value("level", "info");
-        log::set_level(level);
-        return nlohmann::json({{"success", true}, {"level", level}}).dump();
-    }
-};
-
-class RunCommand : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "run_command",
-            .description = "Execute a shell command and capture stdout/stderr as text",
-            .inputSchema = R"({"type":"object","properties":{"command":{"type":"string"},"timeout_ms":{"type":"integer","default":30000}},"required":["command"]})",
-            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"},"stdout":{"type":"string"},"stderr":{"type":"string"}}})",
-            .destructive = true,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        return execute(std::move(params), stream, nullptr);
-    }
-
-    auto execute(Params params, EventStream& stream, CancellationToken* cancel) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto command = json.value("command", "");
-        if (command.empty()) {
-            return nlohmann::json({{"error", "empty command"}}).dump();
-        }
-
-        int exit_code;
-        std::string output;
-        int timeout_ms = json.value("timeout_ms", 30000);
-
-        if (cancel) {
-            // Cancellable: use spawn + wait_or_kill
-            auto h = xlings::platform::spawn_command(command);
-            if (h.pid <= 0) {
-                return nlohmann::json({{"error", "failed to spawn command"}}).dump();
-            }
-            auto [code, out] = xlings::platform::wait_or_kill(
-                h, cancel, std::chrono::milliseconds{timeout_ms});
-            exit_code = code;
-            output = std::move(out);
-        } else {
-            // Non-cancellable fallback
-            auto [code, out] = xlings::platform::run_command_capture(command);
-            exit_code = code;
-            output = std::move(out);
-        }
-
-        // Store in shared output buffer
-        shared_output_buffer().set(output);
-
-        // Truncate for LLM if too long
-        constexpr std::size_t MAX_OUTPUT = 8000;
-        bool truncated = false;
-        std::string display_output = output;
-        if (display_output.size() > MAX_OUTPUT) {
-            display_output = utf8::safe_truncate(output, MAX_OUTPUT, "...[truncated]");
-            truncated = true;
-        }
-
-        nlohmann::json result;
-        result["exitCode"] = exit_code;
-        result["stdout"] = std::move(display_output);
-        if (truncated) {
-            result["truncated"] = true;
-            result["totalLines"] = shared_output_buffer().line_count();
-            result["hint"] = "Output truncated. Use view_output to see specific line ranges.";
-        }
-        return utf8::safe_dump(result);
-    }
-};
-
-class ViewOutput : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "view_output",
-            .description = "View a range of lines from the last command output",
-            .inputSchema = R"({"type":"object","properties":{"start_line":{"type":"integer","default":1},"end_line":{"type":"integer","default":50},"search":{"type":"string","description":"Optional: filter lines containing this text"}}})",
-            .outputSchema = R"({"type":"object","properties":{"content":{"type":"string"},"totalLines":{"type":"integer"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto& buf = shared_output_buffer();
-        auto total = buf.line_count();
-
-        nlohmann::json result;
-        result["totalLines"] = total;
-
-        if (json.contains("search") && json["search"].is_string()) {
-            auto pattern = json["search"].get<std::string>();
-            int max_results = json.value("max_results", 20);
-            result["content"] = buf.search(pattern, max_results);
-            result["filter"] = pattern;
-        } else {
-            int start = json.value("start_line", 1);
-            int end = json.value("end_line", 50);
-            result["content"] = buf.lines(start, end);
-            result["range"] = std::format("{}-{}", start, end);
-        }
-        return utf8::safe_dump(result);
-    }
-};
-
-class SearchContent : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "search_content",
-            .description = "Search for text patterns in files or last command output",
-            .inputSchema = R"JSON({"type":"object","properties":{"pattern":{"type":"string"},"source":{"type":"string","enum":["last_output","file"],"default":"last_output"},"path":{"type":"string","description":"File path when source is file"},"max_results":{"type":"integer","default":20}},"required":["pattern"]})JSON",
-            .outputSchema = R"({"type":"object","properties":{"matches":{"type":"string"},"count":{"type":"integer"}}})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto pattern = json.value("pattern", "");
-        auto source = json.value("source", "last_output");
-        int max_results = json.value("max_results", 20);
-
-        nlohmann::json result;
-
-        if (source == "file") {
-            auto path = json.value("path", "");
-            if (path.empty()) {
-                return nlohmann::json({{"error", "path required when source=file"}}).dump();
-            }
-            std::ifstream file(path);
-            if (!file) {
-                return nlohmann::json({{"error", "cannot open file: " + path}}).dump();
-            }
-            std::string matches;
-            int count = 0;
-            std::string line;
-            int line_num = 0;
-            while (std::getline(file, line) && count < max_results) {
-                ++line_num;
-                if (line.find(pattern) != std::string::npos) {
-                    matches += std::to_string(line_num) + ": " + line + "\n";
-                    ++count;
-                }
-            }
-            result["matches"] = std::move(matches);
-            result["count"] = count;
-        } else {
-            // Search last output buffer
-            auto matches = shared_output_buffer().search(pattern, max_results);
-            int count = 0;
-            for (char c : matches) {
-                if (c == '\n') ++count;
-            }
-            result["matches"] = std::move(matches);
-            result["count"] = count;
-        }
-        return utf8::safe_dump(result);
-    }
-};
-
-// ─── Phase 5: Memory & Context Tools ───
+libs::semantic_memory::MemoryStore* shared_memory_store_{nullptr};
+agent::ContextManager* shared_ctx_mgr_{nullptr};
 
 class SaveMemory : public Capability {
 public:
@@ -493,6 +307,7 @@ export capability::Registry build_registry(
     agent::ContextManager* ctx_mgr = nullptr
 ) {
     capability::Registry reg;
+    // xlings core capabilities
     reg.register_capability(std::make_unique<SearchPackages>());
     reg.register_capability(std::make_unique<InstallPackages>());
     reg.register_capability(std::make_unique<RemovePackage>());
@@ -501,11 +316,6 @@ export capability::Registry build_registry(
     reg.register_capability(std::make_unique<PackageInfo>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
-    // Agent extension tools
-    reg.register_capability(std::make_unique<SetLogLevel>());
-    reg.register_capability(std::make_unique<RunCommand>());
-    reg.register_capability(std::make_unique<ViewOutput>());
-    reg.register_capability(std::make_unique<SearchContent>());
     // Memory tools
     if (memory_store) {
         shared_memory_store_ = memory_store;

@@ -66,8 +66,28 @@ namespace platform {
         return platform_impl::run_command_capture(cmd);
     }
 
+    // When true, a TUI exclusively owns the terminal — suppress all stdout/stderr
+    // from child processes, log output, download renderers, etc.
+    inline std::atomic<bool> tui_mode_{false};
+
+    export void set_tui_mode(bool enabled) {
+        tui_mode_.store(enabled, std::memory_order_relaxed);
+    }
+
+    export bool is_tui_mode() {
+        return tui_mode_.load(std::memory_order_relaxed);
+    }
+
     export int exec(const std::string& cmd) {
-        int status = std::system(cmd.c_str());
+        std::string actual_cmd = cmd;
+        if (tui_mode_.load(std::memory_order_relaxed)) {
+#if defined(_WIN32)
+            actual_cmd += " >NUL 2>&1";
+#else
+            actual_cmd += " >/dev/null 2>&1";
+#endif
+        }
+        int status = std::system(actual_cmd.c_str());
 #if !defined(_WIN32)
         if (WIFEXITED(status))
             return WEXITSTATUS(status);

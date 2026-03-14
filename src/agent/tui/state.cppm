@@ -1,4 +1,4 @@
-export module xlings.agent.tui;
+export module xlings.agent.tui.state;
 
 import std;
 import xlings.agent.behavior_tree;
@@ -72,6 +72,7 @@ export struct AgentTuiState {
     bool approval_pending {false};
     std::string approval_tool_name;
     std::string approval_args;
+    int approval_node_id {0};  // tree node awaiting confirmation
 };
 
 // ─── Print ChatLine to stdout (for session resume) ───
