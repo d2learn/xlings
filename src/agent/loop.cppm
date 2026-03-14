@@ -1021,45 +1021,70 @@ void process_node(
         }
 
         if (has_failures) {
-            // ── Verification: add LLM node to review results and decide outcome ──
+            // ── Verification: tool-less LLM call to review results ──
             BehaviorNode verify;
             verify.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
             verify.name = "verify results";
-            verify.type = BehaviorNode::TypeExecute;
+            verify.type = BehaviorNode::TypeResponse;
+            verify.start_ms = steady_now_ms();
 
-            // Build detail with all children results for LLM context
-            std::string detail = "Review the results of all subtasks and give a final summary.\n";
+            if (tc.tree) {
+                tc.tree->add_child(node.id, verify);
+                tc.tree->set_state(verify.id, BehaviorNode::Running, verify.start_ms);
+            }
+
+            // Build verification prompt — no tools, just review
+            std::string vprompt = tc.base_system_prompt;
+            vprompt += "\n\n## Task Verification\n";
+            vprompt += "User request: " + ctx.root_name + "\n\n";
+            vprompt += "Subtask results:\n";
+            int fail_count = 0;
             for (auto& child : node.children) {
                 if (child.type == BehaviorNode::TypeToolCall ||
                     child.type == BehaviorNode::TypeResponse) continue;
-                std::string status = (child.state == BehaviorNode::Done) ? "OK"
-                    : (child.state == BehaviorNode::Failed) ? "FAILED" : "SKIPPED";
-                detail += "- [" + status + "] " + child.name + ": " + child.result_summary + "\n";
+                std::string status = (child.state == BehaviorNode::Done) ? "OK" : "FAILED";
+                if (child.state == BehaviorNode::Failed) ++fail_count;
+                vprompt += "- [" + status + "] " + child.name + ": " + child.result_summary + "\n";
             }
-            verify.detail = detail;
+            vprompt += "\nBased on the results above, give a brief summary of what succeeded and what failed. "
+                       "Do NOT attempt to fix anything — just summarize the outcome.";
 
-            if (tc.tree) tc.tree->add_child(node.id, verify);
+            // Single LLM call with no tools
+            llm::Conversation vconv;
+            vconv.push(llm::Message::system(vprompt));
+            vconv.push(llm::Message::user("Summarize the task results."));
+
+            llm::ChatParams vparams;
+            vparams.temperature = tc.cfg.temperature;
+            vparams.maxTokens = tc.cfg.max_tokens;
+
+            try {
+                auto vmsgs = vconv.messages;
+                auto vresp = do_llm_call(vmsgs, vparams, tc.cfg, tc.on_stream_chunk, tc.cancel);
+                accum.input_tokens += vresp.usage.inputTokens;
+                accum.output_tokens += vresp.usage.outputTokens;
+                if (tc.on_token_update) {
+                    tc.on_token_update(accum.input_tokens, accum.output_tokens);
+                }
+                verify.result_summary = vresp.text().size() > 200
+                    ? vresp.text().substr(0, 200) : vresp.text();
+            } catch (...) {
+                verify.result_summary = std::to_string(fail_count) + " subtask(s) failed";
+            }
+
+            // Verify node state reflects whether failures are acceptable
+            verify.state = BehaviorNode::Done;
+            verify.end_ms = steady_now_ms();
+
+            if (tc.tree) {
+                tc.tree->set_state(verify.id, verify.state, verify.end_ms);
+                tc.tree->set_result(verify.id, verify.result_summary);
+            }
             node.children.push_back(verify);
 
-            // Build context for verification node
-            NodeContext verify_ctx;
-            verify_ctx.root_name = ctx.root_name;
-            verify_ctx.ancestor_path = ctx.ancestor_path;
-            verify_ctx.ancestor_path.push_back(node.name);
-            for (auto& child : node.children) {
-                if (&child == &node.children.back()) break;  // skip verify node itself
-                if (child.is_terminal() && !child.result_summary.empty()) {
-                    std::string prefix = (child.state == BehaviorNode::Failed) ? "[FAILED] " : "";
-                    verify_ctx.sibling_results.push_back({child.name, prefix + child.result_summary});
-                }
-            }
-
-            process_node(node.children.back(), tc, depth + 1, accum, verify_ctx);
-
-            // Use verification result as parent outcome
-            auto& vnode = node.children.back();
-            node.state = vnode.state;
-            node.result_summary = vnode.result_summary;
+            // Parent state: if all "real" failures exist, mark as failed
+            node.state = (fail_count > 0) ? BehaviorNode::Failed : BehaviorNode::Done;
+            node.result_summary = verify.result_summary;
         } else {
             node.state = BehaviorNode::Done;
             node.result_summary = synthesize_children(node);
