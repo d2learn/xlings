@@ -467,7 +467,7 @@ auto ask_decision(
     }
 
     auto msgs = conv.messages;
-    auto response = do_llm_call(msgs, params, tc.cfg, nullptr, tc.cancel);
+    auto response = do_llm_call(msgs, params, tc.cfg, tc.on_stream_chunk, tc.cancel);
 
     // Accumulate tokens
     accum.input_tokens += response.usage.inputTokens;
@@ -766,7 +766,23 @@ void process_node(
         return;
     }
 
-    // ── action: decompose → create children + DFS + re-plan loop ──
+    // ── action: decompose → create thinking node + children + DFS + re-plan loop ──
+
+    // Insert thinking node as first child (shows LLM decision reasoning)
+    if (!decision.reasoning.empty()) {
+        BehaviorNode thinking;
+        thinking.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
+        thinking.type = BehaviorNode::TypePlan;
+        thinking.name = decision.reasoning;
+        thinking.state = BehaviorNode::Done;
+        thinking.start_ms = steady_now_ms();
+        thinking.end_ms = thinking.start_ms;
+        // Mark as thinking node via detail field
+        thinking.detail = "__thinking__";
+        if (tc.tree) tc.tree->add_child(node.id, thinking);
+        node.children.push_back(std::move(thinking));
+    }
+
     create_children(node, decision.subtasks, tc);
 
     for (int replan = 0; replan <= MAX_REPLAN; ++replan) {

@@ -27,13 +27,20 @@ namespace tui_icons {
     constexpr auto turn       = "\xe2\x8f\xb5";   // ⏵
     constexpr auto reply      = "\xe2\x97\x86";   // ◆
     constexpr auto direct_exec = "\xe2\x9a\x99";  // ⚙
+    constexpr auto thinking    = "\xe2\x97\x87";  // ◇
 }
 
 // ─── Render helpers ───
 
 using namespace ftxui;
 
+auto is_thinking_node(const BehaviorNode& node) -> bool {
+    return node.type == BehaviorNode::TypePlan && node.detail == "__thinking__";
+}
+
 auto node_icon(const BehaviorNode& node) -> std::string {
+    // Thinking nodes use ◇ icon
+    if (is_thinking_node(node)) return tui_icons::thinking;
     // Atom nodes use gear icon
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
@@ -55,6 +62,8 @@ auto node_icon(const BehaviorNode& node) -> std::string {
 }
 
 auto node_color(const BehaviorNode& node) -> Color {
+    // Thinking nodes: cyan
+    if (is_thinking_node(node)) return ui::theme::cyan();
     // Atom: amber running, green done, red failed
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
@@ -76,6 +85,7 @@ auto node_color(const BehaviorNode& node) -> Color {
 }
 
 auto title_color_for(const BehaviorNode& node) -> Color {
+    if (is_thinking_node(node)) return ui::theme::cyan();
     if (node.state == BehaviorNode::Pending) return ui::theme::dim_color();
     return ui::theme::text_color();
 }
@@ -121,9 +131,16 @@ auto render_tree_node(const BehaviorNode& node,
 
     auto icon_el = text(node_icon(node)) | color(node_color(node));
 
-    // Atom nodes show tool(args), Plan nodes show task title
+    // Atom: tool(args), Thinking: truncated reasoning, Plan: task title
     std::string title_str;
-    if (node.type == BehaviorNode::TypeAtom && !node.tool.empty()) {
+    if (is_thinking_node(node)) {
+        // Truncate to first line, max ~80 chars
+        auto& raw = node.name;
+        auto nl = raw.find('\n');
+        auto first_line = (nl != std::string::npos) ? raw.substr(0, nl) : raw;
+        if (first_line.size() > 80) first_line = first_line.substr(0, 80) + "...";
+        title_str = " " + first_line;
+    } else if (node.type == BehaviorNode::TypeAtom && !node.tool.empty()) {
         title_str = " " + node.tool + "(" + compact_tool_args(node.tool_args) + ")";
     } else {
         title_str = " " + node.name;
@@ -142,15 +159,7 @@ auto render_tree_node(const BehaviorNode& node,
     Elements rows;
     rows.push_back(line);
 
-    // Show Plan node detail/reasoning as secondary line (when completed, no children)
-    if (node.type == BehaviorNode::TypePlan && node.is_terminal()
-        && node.children.empty() && !node.detail.empty()) {
-        std::string detail_prefix = prefix + (is_last ? "   " : "\xe2\x94\x82  ");
-        auto detail_text = node.detail;
-        if (detail_text.size() > 80) detail_text = detail_text.substr(0, 80) + "...";
-        rows.push_back(
-            text(detail_prefix + "  " + detail_text) | color(ui::theme::dim_color()));
-    }
+    // Thinking nodes don't render children (they are leaf decorations)
 
     std::string child_prefix = prefix + (is_last
         ? "   "                                                      // 3 spaces

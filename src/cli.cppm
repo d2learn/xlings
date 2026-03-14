@@ -1445,6 +1445,18 @@ export int run(int argc, char* argv[]) {
                             .tracker = &tracker,
                             .ctx_mgr = &ctx_mgr,
                             .lua_sandbox = &lua_sandbox,
+                            .on_stream_chunk = [&](std::string_view chunk) {
+                                cancel_token.throw_if_cancelled();
+                                if (!chunk.empty()) {
+                                    tui_state.behavior_tree.append_streaming(std::string(chunk));
+                                }
+                                agent_screen->post([&] {
+                                    tui_state.is_streaming = true;
+                                    tui_state.is_thinking = false;
+                                    tui_state.current_action = "thinking...";
+                                });
+                                agent_screen->refresh();
+                            },
                             .on_tool_call = [&](int id, std::string_view name, std::string_view args) {
                                 (void)id; (void)args;
                                 auto n = std::string(name);
