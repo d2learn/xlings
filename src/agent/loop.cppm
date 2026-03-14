@@ -594,14 +594,22 @@ void execute_pending_children(
         auto& child = node.children[ci];
         if (child.state != BehaviorNode::Pending) continue;
 
-        // Build child context with sibling results
+        // Build child context: inherit parent context + own sibling results
         NodeContext child_ctx;
         child_ctx.root_name = ctx.root_name;
         child_ctx.ancestor_path = ctx.ancestor_path;
         child_ctx.ancestor_path.push_back(node.name);
+        // Carry forward parent's sibling results (ancestor context)
+        child_ctx.sibling_results = ctx.sibling_results;
+        // Add parent node's own result if available
+        if (!node.result_summary.empty()) {
+            child_ctx.sibling_results.push_back({"[parent] " + node.name, node.result_summary});
+        }
+        // Add own siblings
         for (std::size_t si = 0; si < ci; ++si) {
             auto& sib = node.children[si];
-            if (sib.is_terminal() && !sib.result_summary.empty()) {
+            if (sib.is_terminal() && !sib.result_summary.empty()
+                && sib.detail != "__thinking__") {
                 std::string prefix = (sib.state == BehaviorNode::Failed) ? "[FAILED] " : "";
                 child_ctx.sibling_results.push_back({sib.name, prefix + sib.result_summary});
             }
@@ -749,6 +757,9 @@ void process_node(
     }
 
     auto decision = ask_decision(node, tc, depth, ctx, accum);
+
+    // Clear streaming after LLM call completes
+    if (tc.tree) tc.tree->clear_streaming();
 
     // Store LLM reasoning in node detail (visible context)
     if (!decision.reasoning.empty()) {

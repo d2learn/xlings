@@ -134,11 +134,11 @@ auto render_tree_node(const BehaviorNode& node,
     // Atom: tool(args), Thinking: truncated reasoning, Plan: task title
     std::string title_str;
     if (is_thinking_node(node)) {
-        // Truncate to first line, max ~80 chars
+        // Show full first line, truncate at terminal width (~120 chars)
         auto& raw = node.name;
         auto nl = raw.find('\n');
         auto first_line = (nl != std::string::npos) ? raw.substr(0, nl) : raw;
-        if (first_line.size() > 80) first_line = first_line.substr(0, 80) + "...";
+        if (first_line.size() > 120) first_line = first_line.substr(0, 120) + "...";
         title_str = " " + first_line;
     } else if (node.type == BehaviorNode::TypeAtom && !node.tool.empty()) {
         title_str = " " + node.tool + "(" + compact_tool_args(node.tool_args) + ")";
