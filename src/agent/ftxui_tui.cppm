@@ -142,6 +142,16 @@ auto render_tree_node(const BehaviorNode& node,
     Elements rows;
     rows.push_back(line);
 
+    // Show Plan node detail/reasoning as secondary line (when completed, no children)
+    if (node.type == BehaviorNode::TypePlan && node.is_terminal()
+        && node.children.empty() && !node.detail.empty()) {
+        std::string detail_prefix = prefix + (is_last ? "   " : "\xe2\x94\x82  ");
+        auto detail_text = node.detail;
+        if (detail_text.size() > 80) detail_text = detail_text.substr(0, 80) + "...";
+        rows.push_back(
+            text(detail_prefix + "  " + detail_text) | color(ui::theme::dim_color()));
+    }
+
     std::string child_prefix = prefix + (is_last
         ? "   "                                                      // 3 spaces
         : "\xe2\x94\x82  ");                                        // │  (│ + 2 spaces)

@@ -142,8 +142,9 @@ struct SubtaskDef {
 };
 
 struct Decision {
-    std::string action;  // "decompose" or "done"
-    std::string summary;  // for "done"
+    std::string action;     // "decompose" or "done"
+    std::string summary;    // for "done"
+    std::string reasoning;  // LLM text before decide call (decision rationale)
     std::vector<SubtaskDef> subtasks;  // for "decompose"
 };
 
@@ -478,20 +479,23 @@ auto ask_decision(
         tc.on_token_update(accum.input_tokens, accum.output_tokens);
     }
 
+    // Capture LLM reasoning text (before decide tool call)
+    auto reasoning = response.text();
+    if (reasoning.size() > 200) reasoning = reasoning.substr(0, 200);
+
     // Parse decide tool call
     auto calls = response.tool_calls();
     if (calls.empty() || calls[0].name != "decide") {
-        // No tool call → treat as done with the text as summary
-        auto text = response.text();
         return Decision{
             .action = "done",
-            .summary = text.empty() ? "completed" : (text.size() > 200 ? text.substr(0, 200) : text),
+            .summary = reasoning.empty() ? "completed" : reasoning,
+            .reasoning = reasoning,
         };
     }
 
     auto json = nlohmann::json::parse(calls[0].arguments, nullptr, false);
     if (json.is_discarded()) {
-        return Decision{.action = "done", .summary = "completed"};
+        return Decision{.action = "done", .summary = "completed", .reasoning = reasoning};
     }
 
     auto action = json.value("action", "done");
@@ -500,11 +504,12 @@ auto ask_decision(
         return Decision{
             .action = "done",
             .summary = json.value("summary", "completed"),
+            .reasoning = reasoning,
         };
     }
 
     if (action == "decompose" && json.contains("subtasks") && json["subtasks"].is_array()) {
-        Decision d{.action = "decompose"};
+        Decision d{.action = "decompose", .reasoning = reasoning};
         for (auto& s : json["subtasks"]) {
             SubtaskDef sub;
             sub.title = s.value("title", "untitled");
@@ -530,7 +535,7 @@ auto ask_decision(
         return d;
     }
 
-    return Decision{.action = "done", .summary = "completed"};
+    return Decision{.action = "done", .summary = "completed", .reasoning = reasoning};
 }
 
 // ─── Helper: create children from subtask defs ───
@@ -739,6 +744,12 @@ void process_node(
 
     auto decision = ask_decision(node, tc, depth, ctx, accum);
 
+    // Store LLM reasoning in node detail (visible context)
+    if (!decision.reasoning.empty()) {
+        node.detail = decision.reasoning;
+        if (tc.tree) tc.tree->set_result(node.id, decision.reasoning);
+    }
+
     if (tc.on_tool_result) {
         tc.on_tool_result(node.id, "decide", false);
     }
@@ -746,7 +757,7 @@ void process_node(
     // ── action: done → immediate completion ──
     if (decision.action == "done") {
         node.state = BehaviorNode::Done;
-        node.result_summary = decision.summary;
+        node.result_summary = decision.summary.empty() ? decision.reasoning : decision.summary;
         node.end_ms = steady_now_ms();
         if (tc.tree) {
             tc.tree->set_state(node.id, node.state, node.end_ms);
@@ -879,7 +890,39 @@ export auto run_task_tree(TreeConfig& tc) -> TreeResult {
 
     process_node(root, tc, 0, result, root_ctx);
 
-    result.reply = root.result_summary;
+    // Generate human-readable reply via a final summary LLM call
+    {
+        auto completed = build_completed_results(root);
+        std::string summary_prompt = tc.base_system_prompt;
+        summary_prompt += "\n\n## Task Summary\n";
+        summary_prompt += "User request: " + root.name + "\n\n";
+        summary_prompt += "Results:\n";
+        for (auto& [sn, ss] : completed) {
+            summary_prompt += "- " + sn + ": " + ss + "\n";
+        }
+        summary_prompt += "\nGive a brief, friendly summary of what was accomplished. Plain text, 1-3 sentences.";
+
+        llm::Conversation sconv;
+        sconv.push(llm::Message::system(summary_prompt));
+        sconv.push(llm::Message::user("Summarize the results."));
+
+        llm::ChatParams sparams;
+        sparams.temperature = tc.cfg.temperature;
+        sparams.maxTokens = tc.cfg.max_tokens;
+
+        try {
+            auto smsgs = sconv.messages;
+            auto sresp = do_llm_call(smsgs, sparams, tc.cfg, tc.on_stream_chunk, tc.cancel);
+            result.reply = sresp.text();
+            result.input_tokens += sresp.usage.inputTokens;
+            result.output_tokens += sresp.usage.outputTokens;
+            if (tc.on_token_update) {
+                tc.on_token_update(result.input_tokens, result.output_tokens);
+            }
+        } catch (...) {
+            result.reply = root.result_summary;  // fallback
+        }
+    }
 
     // Append to shared conversation for cross-turn context
     if (tc.conversation) {
