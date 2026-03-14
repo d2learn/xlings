@@ -357,10 +357,20 @@ auto build_scoped_prompt(
         prompt += R"(
 Decide how to handle this task. Call the decide tool:
 
-**decompose** — Split into subtasks:
-  - For subtasks with known tool+args, specify the EXACT tool name and args (system executes directly, zero cost)
-  - For subtasks needing reasoning or depending on previous results, just give title
-  - Mix both types freely
+**decompose** — Split into subtasks. Two kinds of subtasks:
+  1. **Atom** (with tool+args): system executes directly, zero LLM cost. Use EXACT tool name from list.
+  2. **Plan** (title only, no tool+args): needs LLM reasoning. Use for steps that:
+     - depend on previous results (e.g. "based on search results, install the right version")
+     - involve multiple independent sub-operations (e.g. "handle d2x", "handle mdbook")
+     - require conditional logic
+
+  IMPORTANT: Group related operations under Plan subtasks for clarity.
+  Example for "uninstall d2x and mdbook":
+    subtasks: [
+      { "title": "Handle d2x uninstall" },
+      { "title": "Handle mdbook uninstall" }
+    ]
+  NOT a flat list of atoms — that loses the ability to reason about each group.
 
 **done** — If the task is already complete or requires no action, provide a summary.
 
@@ -773,7 +783,18 @@ void process_node(
         }
 
         if (replan_decision.action == "done") {
-            // Accept current results
+            // Accept current results — add visible marker
+            BehaviorNode marker;
+            marker.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
+            marker.type = BehaviorNode::TypePlan;
+            marker.name = "re-plan: " + replan_decision.summary;
+            marker.state = BehaviorNode::Done;
+            marker.result_summary = replan_decision.summary;
+            marker.start_ms = steady_now_ms();
+            marker.end_ms = marker.start_ms;
+            if (tc.tree) tc.tree->add_child(node.id, marker);
+            node.children.push_back(std::move(marker));
+
             node.state = BehaviorNode::Done;
             node.result_summary = replan_decision.summary;
             node.end_ms = steady_now_ms();
@@ -784,8 +805,39 @@ void process_node(
             return;
         }
 
-        // Append new children and continue
-        create_children(node, replan_decision.subtasks, tc);
+        // Wrap re-plan's new children under a visible Plan sub-node
+        BehaviorNode replan_node;
+        replan_node.id = tc.id_alloc ? tc.id_alloc->alloc() : 0;
+        replan_node.type = BehaviorNode::TypePlan;
+        replan_node.name = "re-plan #" + std::to_string(replan + 1);
+        replan_node.state = BehaviorNode::Running;
+        replan_node.start_ms = steady_now_ms();
+        if (tc.tree) tc.tree->add_child(node.id, replan_node);
+        node.children.push_back(replan_node);
+
+        auto& rnode = node.children.back();
+        create_children(rnode, replan_decision.subtasks, tc);
+
+        // Build context for re-plan children
+        NodeContext replan_ctx;
+        replan_ctx.root_name = ctx.root_name;
+        replan_ctx.ancestor_path = ctx.ancestor_path;
+        replan_ctx.ancestor_path.push_back(node.name);
+        // Pass all previous results as sibling context
+        for (auto& [sn, ss] : completed) {
+            replan_ctx.sibling_results.push_back({sn, ss});
+        }
+
+        execute_pending_children(rnode, tc, depth + 1, accum, replan_ctx);
+
+        // Update re-plan node state
+        rnode.state = has_failed_children(rnode) ? BehaviorNode::Failed : BehaviorNode::Done;
+        rnode.result_summary = synthesize_children(rnode);
+        rnode.end_ms = steady_now_ms();
+        if (tc.tree) {
+            tc.tree->set_state(rnode.id, rnode.state, rnode.end_ms);
+            tc.tree->set_result(rnode.id, rnode.result_summary);
+        }
     }
 
     // Max re-plan exceeded
