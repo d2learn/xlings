@@ -365,13 +365,16 @@ Decide how to handle this task. Call the decide tool:
      - involve multiple independent sub-operations (e.g. "handle d2x", "handle mdbook")
      - require conditional logic
 
-  IMPORTANT: Group related operations under Plan subtasks for clarity.
+  IMPORTANT:
+  - Group related operations under Plan subtasks for clarity
+  - Do NOT add "check if installed" steps before operations — just do the operation directly
+  - If an operation fails, the system will evaluate and re-plan automatically
+  - Prefer Atom subtasks with tool+args whenever the parameters are known
   Example for "uninstall d2x and mdbook":
     subtasks: [
-      { "title": "Handle d2x uninstall" },
-      { "title": "Handle mdbook uninstall" }
+      { "title": "卸载 d2x", "tool": "remove_package", "args": {"target": "d2x"} },
+      { "title": "卸载 mdbook", "tool": "remove_package", "args": {"target": "mdbook"} }
     ]
-  NOT a flat list of atoms — that loses the ability to reason about each group.
 
 **done** — If the task is already complete, requires no action, or sibling results show the goal is already met, provide a summary. For example, if a previous sibling checked that a package is NOT installed, then "uninstall that package" should return done immediately.
 
@@ -393,10 +396,15 @@ auto synthesize_children(const BehaviorNode& node) -> std::string {
         ++total;
         if (child.state == BehaviorNode::Done) ++done_count;
         if (child.state == BehaviorNode::Failed) ++failed_count;
-        // Use Plan node summaries (LLM-generated), skip raw Atom output
-        if (child.type == BehaviorNode::TypePlan && !child.result_summary.empty()) {
+        // Include ALL children results (both Atom and Plan)
+        if (!child.result_summary.empty()) {
             if (!summary.empty()) summary += "; ";
-            summary += child.result_summary;
+            if (child.is_atom()) {
+                // Atom: show tool name + compact result
+                summary += child.tool + ": " + child.result_summary;
+            } else {
+                summary += child.result_summary;
+            }
         }
     }
     if (!summary.empty()) {
