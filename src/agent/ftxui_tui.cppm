@@ -15,6 +15,7 @@ import xlings.agent.tui;
 import xlings.agent.token_tracker;
 import xlings.core.utf8;
 import xlings.ui;
+import xlings.libs.json;
 namespace xlings::agent {
 
 namespace tui_icons {
@@ -97,6 +98,27 @@ auto time_text(const BehaviorNode& node) -> std::string {
     return "";
 }
 
+// Format tool args compactly: {"query":"nodejs"} → "nodejs"
+auto compact_tool_args(const std::string& args_json) -> std::string {
+    auto json = nlohmann::json::parse(args_json, nullptr, false);
+    if (json.is_discarded() || !json.is_object()) return args_json;
+    std::string result;
+    for (auto it = json.begin(); it != json.end(); ++it) {
+        if (!result.empty()) result += ", ";
+        auto& v = it.value();
+        if (v.is_string()) {
+            auto s = v.get<std::string>();
+            if (s.size() > 30) s = s.substr(0, 30) + "...";
+            result += "\"" + s + "\"";
+        } else {
+            auto s = v.dump();
+            if (s.size() > 30) s = s.substr(0, 30) + "...";
+            result += s;
+        }
+    }
+    return result;
+}
+
 auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
                       bool is_last) -> Element {
@@ -105,7 +127,15 @@ auto render_tree_node(const BehaviorNode& node,
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
     auto icon_el = text(node_icon(node)) | color(node_color(node));
-    auto title_el = text(" " + node.name) | color(title_color_for(node));
+
+    // DirectExec nodes show tool(args) instead of task title
+    std::string title_str;
+    if (node.type == BehaviorNode::TypeDirectExec && !node.tool.empty()) {
+        title_str = " " + node.tool + "(" + compact_tool_args(node.tool_args) + ")";
+    } else {
+        title_str = " " + node.name;
+    }
+    auto title_el = text(title_str) | color(title_color_for(node));
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
     auto line = hbox({
