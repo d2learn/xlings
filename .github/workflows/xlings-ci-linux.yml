@@ -136,6 +136,10 @@ jobs:
         run: |
           bash tests/e2e/script_type_install_test.sh
 
+      - name: "E2E-12: Elfpatch install verify (d2x interpreter + rpath)"
+        run: |
+          bash tests/e2e/elfpatch_install_verify_test.sh build/release.tar.gz
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

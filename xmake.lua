@@ -12,7 +12,7 @@ add_repositories("mcpplibs-index https://github.com/mcpplibs/mcpplibs-index.git"
 add_requires("cmdline 0.0.2")
 add_requires("ftxui 6.1.9")
 add_requires("mcpplibs-capi-lua")
-add_requires("mcpplibs-xpkg 0.0.29")
+add_requires("mcpplibs-xpkg 0.0.31")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
 add_requires("llmapi 0.2.3")
