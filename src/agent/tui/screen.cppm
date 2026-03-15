@@ -36,6 +36,14 @@ using namespace ftxui;
 
 auto node_icon(const BehaviorNode& node) -> std::string {
     if (node.type == BehaviorNode::TypeThinking) return tui_icons::thinking;
+    if (node.type == BehaviorNode::TypeDownload) {
+        switch (node.state) {
+            case BehaviorNode::Running: return "\xe2\x86\x93";  // ↓
+            case BehaviorNode::Done:    return tui_icons::done;
+            case BehaviorNode::Failed:  return tui_icons::failed;
+            default: return tui_icons::pending;
+        }
+    }
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return tui_icons::direct_exec;
@@ -55,9 +63,15 @@ auto node_icon(const BehaviorNode& node) -> std::string {
 }
 
 auto node_color(const BehaviorNode& node) -> Color {
-    // Thinking: dim cyan (LLM reasoning)
     if (node.type == BehaviorNode::TypeThinking) return ui::theme::dim_color();
-    // Atom: tool call status
+    if (node.type == BehaviorNode::TypeDownload) {
+        switch (node.state) {
+            case BehaviorNode::Running: return ui::theme::cyan();
+            case BehaviorNode::Done:    return ui::theme::green();
+            case BehaviorNode::Failed:  return ui::theme::red();
+            default: return ui::theme::dim_color();
+        }
+    }
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
             case BehaviorNode::Running: return ui::theme::amber();
@@ -66,7 +80,6 @@ auto node_color(const BehaviorNode& node) -> Color {
             default: return ui::theme::dim_color();
         }
     }
-    // Plan/root
     switch (node.state) {
         case BehaviorNode::Pending: return ui::theme::dim_color();
         case BehaviorNode::Running: return ui::theme::amber();
@@ -126,12 +139,51 @@ auto make_progress_bar(int pct, int width = 16) -> std::string {
     return bar;
 }
 
+auto render_download_node(const BehaviorNode& node,
+                          const std::string& prefix,
+                          bool is_last,
+                          std::size_t name_width) -> Element {
+    std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
+                                    : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
+
+    // Pad name for alignment
+    std::string padded = node.name;
+    while (padded.size() < name_width) padded += ' ';
+
+    Elements line_els;
+    line_els.push_back(text(prefix + connector) | color(ui::theme::border_color()));
+    line_els.push_back(text(node_icon(node)) | color(node_color(node)));
+    line_els.push_back(text(" " + padded + " ") | color(ui::theme::dim_color()));
+
+    if (node.state == BehaviorNode::Done) {
+        line_els.push_back(text("done") | color(ui::theme::green()));
+    } else if (node.state == BehaviorNode::Failed) {
+        line_els.push_back(text("failed") | color(ui::theme::red()));
+    } else {
+        int pct = 0;
+        if (!node.result_summary.empty()) {
+            try { pct = std::stoi(node.result_summary); } catch (...) {}
+        }
+        constexpr int bar_w = 16;
+        int filled = pct * bar_w / 100;
+        std::string filled_s, empty_s;
+        for (int b = 0; b < bar_w; ++b) {
+            if (b < filled) filled_s += "\xe2\x96\x88";  // █
+            else            empty_s  += "\xe2\x96\x91";  // ░
+        }
+        line_els.push_back(text(filled_s) | color(ui::theme::cyan()));
+        line_els.push_back(text(empty_s) | color(ui::theme::border_color()));
+        line_els.push_back(text(" " + std::to_string(pct) + "%")
+            | color(ui::theme::dim_color()));
+    }
+    return hbox(std::move(line_els));
+}
+
 auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
                       bool is_last,
                       int approval_node_id = 0,
-                      const std::string& dl_progress = {},
-                      const std::vector<tui::AgentTuiState::DownloadFile>& dl_files = {}) -> Element {
+                      const std::string& dl_progress = {}) -> Element {
     std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
@@ -163,7 +215,7 @@ auto render_tree_node(const BehaviorNode& node,
 
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
-    // Total download progress: only on running atom nodes
+    // Total download progress on parent atom node
     auto progress_el = (!dl_progress.empty()
                         && node.type == BehaviorNode::TypeAtom
                         && node.state == BehaviorNode::Running)
@@ -171,7 +223,7 @@ auto render_tree_node(const BehaviorNode& node,
         : text("");
 
     auto line = hbox({
-        text(prefix + connector),
+        text(prefix + connector) | color(ui::theme::border_color()),
         icon_el,
         title_el,
         time_el,
@@ -185,63 +237,21 @@ auto render_tree_node(const BehaviorNode& node,
         ? "   "
         : "\xe2\x94\x82  ");                                        // │
 
-    // Real children first
-    bool has_dl = (!dl_files.empty()
-                   && node.type == BehaviorNode::TypeAtom
-                   && node.state == BehaviorNode::Running);
-    for (std::size_t i = 0; i < node.children.size(); ++i) {
-        bool child_is_last = (i == node.children.size() - 1) && !has_dl;
-        rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last,
-                                        approval_node_id, dl_progress, dl_files));
+    // Compute max name width for download children alignment
+    std::size_t dl_name_w = 0;
+    for (auto& c : node.children) {
+        if (c.type == BehaviorNode::TypeDownload && c.name.size() > dl_name_w)
+            dl_name_w = c.name.size();
     }
 
-    // Download file children (visual only, not in behavior tree)
-    if (has_dl) {
-        // Compute max name width for alignment
-        std::size_t max_name = 0;
-        for (auto& df : dl_files) {
-            if (df.name.size() > max_name) max_name = df.name.size();
-        }
-
-        for (std::size_t i = 0; i < dl_files.size(); ++i) {
-            auto& df = dl_files[i];
-            bool file_is_last = (i == dl_files.size() - 1);
-            std::string fc = file_is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
-                                          : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
-
-            // Pad name to align progress bars
-            std::string padded_name = df.name;
-            while (padded_name.size() < max_name) padded_name += ' ';
-
-            Elements line_els;
-            line_els.push_back(text(child_prefix + fc));
-
-            if (df.done && df.ok) {
-                line_els.push_back(text(tui_icons::done) | color(ui::theme::green()));
-                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
-                line_els.push_back(text("done") | color(ui::theme::green()));
-            } else if (df.done) {
-                line_els.push_back(text(tui_icons::failed) | color(ui::theme::red()));
-                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
-                line_els.push_back(text("failed") | color(ui::theme::red()));
-            } else {
-                line_els.push_back(text(tui_icons::running) | color(ui::theme::cyan()));
-                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
-                // Progress bar with colored filled/unfilled portions
-                constexpr int bar_w = 16;
-                int filled = df.pct * bar_w / 100;
-                std::string filled_s, empty_s;
-                for (int b = 0; b < bar_w; ++b) {
-                    if (b < filled) filled_s += "\xe2\x96\x88";  // █
-                    else            empty_s  += "\xe2\x96\x91";  // ░
-                }
-                line_els.push_back(text(filled_s) | color(ui::theme::cyan()));
-                line_els.push_back(text(empty_s) | color(ui::theme::border_color()));
-                line_els.push_back(text(" " + std::to_string(df.pct) + "%")
-                    | color(ui::theme::dim_color()));
-            }
-
-            rows.push_back(hbox(std::move(line_els)));
+    for (std::size_t i = 0; i < node.children.size(); ++i) {
+        bool child_is_last = (i == node.children.size() - 1);
+        auto& child = node.children[i];
+        if (child.type == BehaviorNode::TypeDownload) {
+            rows.push_back(render_download_node(child, child_prefix, child_is_last, dl_name_w));
+        } else {
+            rows.push_back(render_tree_node(child, child_prefix, child_is_last,
+                                            approval_node_id, dl_progress));
         }
     }
 
@@ -292,8 +302,7 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
     for (std::size_t i = 0; i < tree_root.children.size(); ++i) {
         bool is_last = (i == tree_root.children.size() - 1);
         rows.push_back(render_tree_node(tree_root.children[i], "", is_last,
-                                        appr_id, state.download_progress,
-                                        state.download_files));
+                                        appr_id, state.download_progress));
     }
 
     // Empty line between tree and reply
@@ -312,18 +321,29 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
 
     // Final reply (multiline support)
     if (!tn.reply.empty() && &tn != state.active_turn) {
-        std::istringstream ss(tn.reply);
-        std::string line;
-        bool first = true;
-        while (std::getline(ss, line)) {
-            if (first) {
-                rows.push_back(hbox({
-                    text(std::string(tui_icons::reply) + " ") | bold | color(ui::theme::cyan()),
-                    text(line),
-                }));
-                first = false;
-            } else {
-                rows.push_back(text("  " + line));
+        bool is_interrupted = (tn.reply == "[interrupted]");
+        bool is_cancelled = (tn.reply == "[cancelled]");
+        if (is_interrupted || is_cancelled) {
+            rows.push_back(hbox({
+                text(std::string(tui_icons::failed) + " ") | color(ui::theme::red()),
+                text(is_interrupted ? "interrupted by ESC" : "cancelled") | color(ui::theme::red()),
+                text(is_interrupted ? " - type to continue or Ctrl+C \xc3\x97 3 to exit"
+                                    : "") | color(ui::theme::dim_color()),
+            }));
+        } else {
+            std::istringstream ss(tn.reply);
+            std::string line;
+            bool first = true;
+            while (std::getline(ss, line)) {
+                if (first) {
+                    rows.push_back(hbox({
+                        text(std::string(tui_icons::reply) + " ") | bold | color(ui::theme::cyan()),
+                        text(line),
+                    }));
+                    first = false;
+                } else {
+                    rows.push_back(text("  " + line));
+                }
             }
         }
     }
@@ -429,13 +449,15 @@ public:
           on_input_change_(std::move(on_input_change)),
           key_handler_(std::move(key_handler))
     {
+        // Capture Ctrl+C as event instead of letting SIGINT kill the process
+        screen_.ForceHandleCtrlC(false);
+        // Mouse tracking for scroll support (Shift+select for copy/paste)
         screen_.TrackMouse(true);
 
-        // Create ftxui Input component — provides real terminal cursor for IME
+        // Create ftxui Input component
         InputOption opt;
         opt.multiline = false;
         opt.on_change = [this] { if (on_input_change_) on_input_change_(); };
-        // Strip default background decoration — just return the raw element
         opt.transform = [](InputState state) { return state.element; };
         input_comp_ = Input(&input_content_, opt);
     }
@@ -521,6 +543,7 @@ public:
     void exit() {
         screen_.Exit();
     }
+
 
     void post(std::function<void()> fn) {
         screen_.Post(std::move(fn));

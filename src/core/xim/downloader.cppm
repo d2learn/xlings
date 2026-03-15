@@ -117,7 +117,7 @@ DownloadResult download_one(const DownloadTask& task,
             if (h.pid <= 0) { result.error = "failed to spawn git"; return result; }
             auto [code, output] = platform::wait_or_kill(
                 h, cancel, std::chrono::minutes{10});
-            if (cancel->is_cancelled()) { result.error = "cancelled"; return result; }
+            if (cancel->is_paused() || cancel->is_cancelled()) { result.error = "cancelled"; return result; }
             result.success = (code == 0);
             if (!result.success) result.error = output;
             return result;
@@ -168,7 +168,7 @@ DownloadResult download_one(const DownloadTask& task,
         opts.maxTimeSec = 600;
         opts.onProgress = onProgress;
         if (cancel) {
-            opts.isCancelled = [cancel] { return cancel->is_cancelled(); };
+            opts.isCancelled = [cancel] { return cancel->is_paused() || cancel->is_cancelled(); };
         }
 
         auto dlResult = tinyhttps::download_file(opts);
@@ -288,7 +288,7 @@ download_all(std::span<const DownloadTask> tasks,
         }
 
         while (!stoken.stop_requested() && !allDone.load() &&
-               !(cancel && cancel->is_cancelled())) {
+               !(cancel && (cancel->is_paused() || cancel->is_cancelled()))) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
             auto elapsed = std::chrono::steady_clock::now() - startTime;
@@ -324,9 +324,9 @@ download_all(std::span<const DownloadTask> tasks,
             {
                 std::unique_lock lock(mutex);
                 cv.wait(lock, [&] {
-                    return activeCount < maxConcur || (cancel && cancel->is_cancelled());
+                    return activeCount < maxConcur || (cancel && (cancel->is_paused() || cancel->is_cancelled()));
                 });
-                if (cancel && cancel->is_cancelled()) {
+                if (cancel && (cancel->is_paused() || cancel->is_cancelled())) {
                     std::lock_guard lk(mutex);
                     results[i].name = tasks[i].name;
                     results[i].error = "cancelled";

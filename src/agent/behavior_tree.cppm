@@ -26,6 +26,7 @@ export struct BehaviorNode {
     inline static constexpr int TypeAtom     = 0;  // tool call
     inline static constexpr int TypePlan     = 1;  // plan/root node
     inline static constexpr int TypeThinking = 2;  // LLM reasoning text
+    inline static constexpr int TypeDownload = 3;  // download file with progress
     int type {TypePlan};
 
     // Lifecycle state
@@ -166,6 +167,11 @@ public:
     void set_active(int id) {
         std::lock_guard lk(mtx_);
         active_node_id_ = id;
+    }
+
+    auto active_node_id() const -> int {
+        std::lock_guard lk(mtx_);
+        return active_node_id_;
     }
 
     void skip_remaining(int parent_id, std::int64_t now_ms) {

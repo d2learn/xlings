@@ -1019,7 +1019,7 @@ export int run(int argc, char* argv[]) {
             agent::AgentScreen* agent_screen = nullptr;
 
             // ─── Consumer 3: data event listener ───
-            // Download progress → update tui_state via post() for thread safety
+            // Download progress → create/update real tree nodes for each file
             int data_listener = stream.on_event([&](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
                     if (d->kind == "download_progress" && agent_screen) {
@@ -1030,11 +1030,11 @@ export int run(int argc, char* argv[]) {
                         int done_count = 0;
                         double dl_bytes = 0, total_bytes = 0;
 
-                        // Build per-file progress
-                        using DF = agent::tui::AgentTuiState::DownloadFile;
-                        std::vector<DF> file_list;
-                        file_list.reserve(total_files);
+                        // Find the currently running atom node (parent for downloads)
+                        int parent_id = tui_state.behavior_tree.active_node_id();
+
                         for (auto& f : files) {
+                            std::string name = f.value("name", std::string{});
                             bool finished = f.value("finished", false);
                             bool success = f.value("success", false);
                             double tb = f.value("totalBytes", 0.0);
@@ -1044,11 +1044,33 @@ export int run(int argc, char* argv[]) {
                             total_bytes += tb;
                             int pct = (finished && success) ? 100
                                     : (tb > 0 ? static_cast<int>(db * 100.0 / tb) : 0);
-                            file_list.push_back({f.value("name", std::string{}),
-                                                 pct, finished, success});
+
+                            // Create node on first appearance
+                            auto it = tui_state.download_node_ids.find(name);
+                            if (it == tui_state.download_node_ids.end()) {
+                                agent::BehaviorNode dn;
+                                dn.id = tui_state.id_alloc.alloc();
+                                dn.type = agent::BehaviorNode::TypeDownload;
+                                dn.name = name;
+                                dn.state = agent::BehaviorNode::Running;
+                                dn.start_ms = agent::steady_now_ms();
+                                dn.result_summary = std::to_string(pct);
+                                int nid = tui_state.behavior_tree.add_child(parent_id, std::move(dn));
+                                tui_state.download_node_ids[name] = nid;
+                            } else {
+                                int nid = it->second;
+                                if (finished) {
+                                    int st = success ? agent::BehaviorNode::Done
+                                                     : agent::BehaviorNode::Failed;
+                                    tui_state.behavior_tree.set_state(nid, st, agent::steady_now_ms());
+                                    tui_state.behavior_tree.set_result(nid, success ? "done" : "failed");
+                                } else {
+                                    tui_state.behavior_tree.set_result(nid, std::to_string(pct));
+                                }
+                            }
                         }
 
-                        // Total progress text
+                        // Total progress on parent
                         std::string progress;
                         if (done_count < total_files) {
                             int total_pct = total_bytes > 0
@@ -1056,11 +1078,8 @@ export int run(int argc, char* argv[]) {
                             progress = std::format("\xe2\x86\x93 {}%", total_pct);
                         }
 
-                        agent_screen->post([&tui_state,
-                                            p = std::move(progress),
-                                            fl = std::move(file_list)] {
-                            tui_state.download_progress = std::move(p);
-                            tui_state.download_files = std::move(fl);
+                        agent_screen->post([&tui_state, p = std::move(progress)] {
+                            tui_state.download_progress = p;
                         });
                         agent_screen->refresh();
                     }
@@ -1071,6 +1090,7 @@ export int run(int argc, char* argv[]) {
             CancellationToken cancel_token;
             int ctrl_c_count = 0;
             std::int64_t last_ctrl_c_ms = 0;
+            std::int64_t last_char_ms = 0;  // debounce paste vs Enter
 
             // ─── Approval synchronization (agent thread ↔ main thread) ───
             std::mutex approval_mtx;
@@ -1331,7 +1351,15 @@ export int run(int argc, char* argv[]) {
                     }
                     return true;
                 }
-                // Ctrl+C × 3 to exit
+                // Auto-clear Ctrl+C hint after timeout
+                if (ctrl_c_count > 0) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_ctrl_c_ms > 1500) {
+                        ctrl_c_count = 0;
+                        tui_state.current_action.clear();
+                    }
+                }
+                // Ctrl+C × 3 to exit (within 2s window)
                 if (event == ftxui::Event::Special("\x03")) {
                     auto now = agent::tui::steady_now_ms();
                     if (now - last_ctrl_c_ms > 2000) ctrl_c_count = 0;
@@ -1342,10 +1370,20 @@ export int run(int argc, char* argv[]) {
                         agent_screen->exit();
                         return true;
                     }
+                    int remaining = 3 - ctrl_c_count;
+                    tui_state.current_action = std::format(
+                        "Ctrl+C \xc3\x97 {} more to exit", remaining);
                     return true;
                 }
-                // Enter: submit input
+                // Real user input resets Ctrl+C count
+                if (ctrl_c_count > 0 && event.is_character()) {
+                    ctrl_c_count = 0;
+                    tui_state.current_action.clear();
+                }
+                // Enter: submit input (debounce to avoid paste triggering submit)
                 if (event == ftxui::Event::Return) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_char_ms < 5) return true;  // paste newline, skip
                     auto msg = input_content;
                     if (msg.empty()) return true;
                     input_content.clear();
@@ -1355,6 +1393,10 @@ export int run(int argc, char* argv[]) {
                     tui_state.completion_selected = -1;
                     runtime.send_input(std::move(msg));
                     return true;
+                }
+                // Track character timing for paste debounce
+                if (event.is_character()) {
+                    last_char_ms = agent::tui::steady_now_ms();
                 }
                 // All other events (chars, backspace, delete, arrows, home/end)
                 // fall through to ftxui::Input component

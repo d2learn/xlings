@@ -141,6 +141,7 @@ public:
             screen->refresh();
 
             tui_state->id_alloc.reset();
+            tui_state->download_node_ids.clear();
             cancel->reset();
 
             LoopResult turn_result;
@@ -151,7 +152,15 @@ public:
                 tui_state->behavior_tree.clear_streaming();
                 screen->post([this] {
                     tui_state->is_streaming = false; tui_state->is_thinking = false;
-                    tui_state->current_action = "paused"; tui_state->active_turn = nullptr;
+                    tui_state->current_action.clear();
+                    tui_state->turn_start_ms = 0;
+                    tui_state->download_progress.clear();
+                    tui_state->download_node_ids.clear();
+                    if (tui_state->active_turn) {
+                        tui_state->active_turn->root = tui_state->behavior_tree.snapshot();
+                        tui_state->active_turn->reply = "[interrupted]";
+                    }
+                    tui_state->active_turn = nullptr;
                 });
                 screen->refresh();
                 continue;
@@ -252,7 +261,7 @@ private:
             .on_tool_result = [this]([[maybe_unused]] int id, [[maybe_unused]] std::string_view name, [[maybe_unused]] bool is_error) {
                 screen->post([this] {
                     tui_state->download_progress.clear();
-                    tui_state->download_files.clear();
+                    tui_state->download_node_ids.clear();
                     tui_state->current_action = "thinking...";
                     tui_state->is_streaming = true; tui_state->is_thinking = true;
                 });

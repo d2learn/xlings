@@ -68,15 +68,10 @@ export struct AgentTuiState {
     int history_pos     {-1};
     std::string saved_input;
 
-    // Download progress
-    struct DownloadFile {
-        std::string name;
-        int pct    {0};     // 0-100
-        bool done  {false};
-        bool ok    {false};
-    };
-    std::string download_progress;            // total (e.g. "↓ 45%")
-    std::vector<DownloadFile> download_files;  // per-file
+    // Download progress (total text on parent tool node, e.g. "↓ 45%")
+    std::string download_progress;
+    // Maps download file name → behavior tree node ID (for updating progress)
+    std::map<std::string, int> download_node_ids;
 
     // Approval prompt
     bool approval_pending {false};
