@@ -153,34 +153,9 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         return 1;
     }
 
-    // Determine actual program name to exec (check bindings)
+    // Each target (including binding targets) has its own workspace version
+    // and vdata, so use program_name directly for execution.
     std::string exec_name = program_name;
-    auto vinfo = get_vinfo(db, program_name);
-
-    // Check if the program_name is actually a binding of another target
-    // Walk all targets to see if program_name is a binding key
-    std::string binding_target;
-    for (auto& [target, info] : db) {
-        auto bit = info.bindings.find(program_name);
-        if (bit != info.bindings.end()) {
-            // This program is a binding of 'target'
-            auto ws_ver = get_active_version(workspace, target);
-            if (!ws_ver.empty()) {
-                auto rv = match_version(db, target, ws_ver);
-                if (!rv.empty()) {
-                    auto bvit = bit->second.find(rv);
-                    if (bvit != bit->second.end()) {
-                        binding_target = bvit->second;
-                        log::debug("binding found: {} -> {} (via {})", program_name, binding_target, target);
-                        // Use the parent target's vdata for path resolution
-                        vdata = get_vdata(db, target, rv);
-                        exec_name = binding_target;
-                        break;
-                    }
-                }
-            }
-        }
-    }
 
     if (!vdata->alias.empty()) {
         // Env alias fallback: prepend bindir to PATH, run alias via system

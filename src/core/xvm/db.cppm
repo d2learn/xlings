@@ -39,7 +39,8 @@ void add_version(VersionDB& db,
                  const std::string& type = "program",
                  const std::string& filename = "",
                  const std::string& alias = "",
-                 const std::string& ns = "") {
+                 const std::string& ns = "",
+                 const std::string& binding = "") {
     auto& info = db[target];
     if (info.type.empty()) info.type = type;
     if (info.filename.empty() && !filename.empty()) info.filename = filename;
@@ -49,6 +50,18 @@ void add_version(VersionDB& db,
     vdata.path = path;
     if (!alias.empty()) vdata.alias.push_back(alias);
     info.versions[ver_key] = std::move(vdata);
+
+    // Establish bidirectional binding relationship
+    if (!binding.empty()) {
+        auto at = binding.find('@');
+        if (at != std::string::npos) {
+            auto peer = binding.substr(0, at);
+            auto peer_ver = make_ns_version(ns, binding.substr(at + 1));
+            // Bidirectional: peer records target, target records peer
+            db[peer].bindings[target][peer_ver] = ver_key;
+            db[target].bindings[peer][ver_key] = peer_ver;
+        }
+    }
 }
 
 // Remove a version from the database.

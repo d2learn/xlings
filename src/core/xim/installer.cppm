@@ -428,7 +428,7 @@ void process_xvm_operations_(const PlanNode& node,
             std::string type = op.type.empty() ? "program" : op.type;
             xvm::add_version(Config::versions_mut(),
                              op.name, ver, p, type, op.filename, op.alias,
-                             version_ns);
+                             version_ns, op.binding);
 
             // Write envs from XvmOp into VData
             auto ver_key = xvm::make_ns_version(version_ns, ver);
