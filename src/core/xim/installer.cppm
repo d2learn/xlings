@@ -959,6 +959,13 @@ public:
 
             // Apply elfpatch auto-patching if the install hook enabled it
             if (!payloadInstalled) {
+                // Ensure binDir is in PATH so elfpatch can find patchelf
+                auto binDir = Config::paths().binDir.string();
+                auto curPath = std::string(std::getenv("PATH") ? std::getenv("PATH") : "");
+                if (!binDir.empty() && curPath.find(binDir) == std::string::npos) {
+                    platform::set_env_variable("PATH",
+                        binDir + std::string(1, platform::PATH_SEPARATOR) + curPath);
+                }
                 auto epResult = executor.apply_elfpatch_auto();
                 if (epResult.success && !epResult.output.empty()) {
                     log::debug("{}: elfpatch auto: {}", node.name, epResult.output);
