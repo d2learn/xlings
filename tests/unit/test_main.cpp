@@ -1185,6 +1185,48 @@ TEST(XvmShimTest, IsXlingsBinary) {
     EXPECT_FALSE(xlings::xvm::is_xlings_binary(""));
 }
 
+TEST(XvmShimTest, ResolveAliasCommandToFullPath) {
+    // Test: alias command's first word resolves to full path
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_alias_resolve_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir / "bin");
+
+    // Create a real gcc binary file
+    auto gcc_path = testDir / "bin" / "gcc";
+    xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
+
+    // resolve_executable should find bin/gcc
+    auto result = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
+    EXPECT_FALSE(result.empty());
+    EXPECT_EQ(result, testDir / "bin" / "gcc");
+
+    // Non-existent binary returns empty path
+    auto result2 = xlings::xvm::resolve_executable("not-exist", testDir.string(), "");
+    EXPECT_TRUE(result2.empty());
+
+    fs::remove_all(testDir);
+}
+
+TEST(XvmShimTest, ResolveAliasDirectPath) {
+    // Test: when path root directly contains the binary (no bin/ subdir)
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_alias_direct_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir);
+
+    // Create binary directly in path root
+    auto gcc_path = testDir / "gcc";
+    xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
+
+    // resolve_executable should find path/gcc directly
+    auto result = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
+    EXPECT_FALSE(result.empty());
+    EXPECT_EQ(result, testDir / "gcc");
+
+    fs::remove_all(testDir);
+}
+
 // ============================================================
 // xvm config integration tests (filesystem-based)
 // ============================================================

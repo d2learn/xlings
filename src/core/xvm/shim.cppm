@@ -208,10 +208,28 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         // Setup custom envs
         setup_envs(*vdata, "", xlings_home);
 
+        // Resolve alias command's first word to full path, preventing shim self-recursion
+        std::string alias_cmd = vdata->alias[0];
+        auto first_space = alias_cmd.find(' ');
+        std::string alias_prog = (first_space != std::string::npos)
+            ? alias_cmd.substr(0, first_space) : alias_cmd;
+
+        auto alias_exe = resolve_executable(alias_prog, vdata->path, xlings_home);
+        if (!alias_exe.empty()) {
+            std::string alias_rest = (first_space != std::string::npos)
+                ? alias_cmd.substr(first_space) : "";
+            alias_cmd = platform::shell_quote(alias_exe.string()) + alias_rest;
+            log::debug("alias resolved: {} -> {}", alias_prog, alias_exe.string());
+        } else if (alias_prog == program_name) {
+            log::error("xlings: alias for '{}' references itself but real binary not found", program_name);
+            log::error("  path: {}", expand_path(vdata->path, xlings_home));
+            return 1;
+        }
+
         platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
 
-        // Build command: alias + original args, run via platform::exec
-        std::string cmd = vdata->alias[0];
+        // Build command: resolved alias + original args, run via platform::exec
+        std::string cmd = alias_cmd;
         for (int i = 1; i < argc; ++i) {
             cmd += " ";
             cmd += platform::shell_quote(argv[i]);
