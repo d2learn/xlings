@@ -68,8 +68,15 @@ export struct AgentTuiState {
     int history_pos     {-1};
     std::string saved_input;
 
-    // Download progress (e.g. "↓ 2/3 67%")
-    std::string download_progress;
+    // Download progress
+    struct DownloadFile {
+        std::string name;
+        int pct    {0};     // 0-100
+        bool done  {false};
+        bool ok    {false};
+    };
+    std::string download_progress;            // total (e.g. "↓ 45%")
+    std::vector<DownloadFile> download_files;  // per-file
 
     // Approval prompt
     bool approval_pending {false};

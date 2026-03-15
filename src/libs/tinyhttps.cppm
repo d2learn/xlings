@@ -44,13 +44,14 @@ auto make_client(int connectTimeoutSec, int readTimeoutSec = 60)
     return mcpplibs::tinyhttps::HttpClient(std::move(cfg));
 }
 
-// Single download attempt: stream GET url → dest file with progress
+// Single download attempt: stream GET url → dest file with progress + cancel
 DownloadFileResult download_once(
     const std::string& url,
     const std::filesystem::path& dest,
     int connectSec,
     int maxSec,
-    std::function<void(double, double)> onProgress
+    std::function<void(double, double)> onProgress,
+    std::function<bool()> isCancelled = nullptr
 ) {
     auto client = make_client(connectSec, maxSec);
 
@@ -61,7 +62,7 @@ DownloadFileResult download_once(
         };
     }
 
-    auto result = client.download_to_file(url, dest, progress);
+    auto result = client.download_to_file(url, dest, progress, isCancelled);
 
     if (!result.ok()) {
         return {false, result.error.empty()
@@ -94,7 +95,8 @@ DownloadFileResult download_file(const DownloadOptions& opts) {
         for (int att = 0; att <= opts.retryCount; ++att) {
             if (opts.isCancelled && opts.isCancelled()) return {false, "cancelled"};
             auto r = detail_::download_once(url, opts.destFile,
-                opts.connectTimeoutSec, opts.maxTimeSec, opts.onProgress);
+                opts.connectTimeoutSec, opts.maxTimeSec,
+                opts.onProgress, opts.isCancelled);
             if (r.success) return r;
             lastErr = r.error;
             std::filesystem::remove(opts.destFile, ec);

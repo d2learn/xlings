@@ -252,6 +252,7 @@ private:
             .on_tool_result = [this]([[maybe_unused]] int id, [[maybe_unused]] std::string_view name, [[maybe_unused]] bool is_error) {
                 screen->post([this] {
                     tui_state->download_progress.clear();
+                    tui_state->download_files.clear();
                     tui_state->current_action = "thinking...";
                     tui_state->is_streaming = true; tui_state->is_thinking = true;
                 });

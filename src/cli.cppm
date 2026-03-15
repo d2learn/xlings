@@ -1026,22 +1026,41 @@ export int run(int argc, char* argv[]) {
                         auto json = nlohmann::json::parse(d->json, nullptr, false);
                         if (json.is_discarded() || !json.contains("files")) return;
                         auto& files = json["files"];
-                        int total = static_cast<int>(files.size());
-                        int done = 0;
+                        int total_files = static_cast<int>(files.size());
+                        int done_count = 0;
                         double dl_bytes = 0, total_bytes = 0;
+
+                        // Build per-file progress
+                        using DF = agent::tui::AgentTuiState::DownloadFile;
+                        std::vector<DF> file_list;
+                        file_list.reserve(total_files);
                         for (auto& f : files) {
-                            if (f.value("finished", false)) ++done;
-                            dl_bytes += f.value("downloadedBytes", 0.0);
-                            total_bytes += f.value("totalBytes", 0.0);
+                            bool finished = f.value("finished", false);
+                            bool success = f.value("success", false);
+                            double tb = f.value("totalBytes", 0.0);
+                            double db = f.value("downloadedBytes", 0.0);
+                            if (finished) ++done_count;
+                            dl_bytes += db;
+                            total_bytes += tb;
+                            int pct = (finished && success) ? 100
+                                    : (tb > 0 ? static_cast<int>(db * 100.0 / tb) : 0);
+                            file_list.push_back({f.value("name", std::string{}),
+                                                 pct, finished, success});
                         }
+
+                        // Total progress text
                         std::string progress;
-                        if (done < total) {
-                            int pct = total_bytes > 0
+                        if (done_count < total_files) {
+                            int total_pct = total_bytes > 0
                                 ? static_cast<int>(dl_bytes * 100.0 / total_bytes) : 0;
-                            progress = std::format("\xe2\x86\x93 {}/{} {}%", done, total, pct);
+                            progress = std::format("\xe2\x86\x93 {}%", total_pct);
                         }
-                        agent_screen->post([&tui_state, p = std::move(progress)] {
+
+                        agent_screen->post([&tui_state,
+                                            p = std::move(progress),
+                                            fl = std::move(file_list)] {
                             tui_state.download_progress = std::move(p);
+                            tui_state.download_files = std::move(fl);
                         });
                         agent_screen->refresh();
                     }

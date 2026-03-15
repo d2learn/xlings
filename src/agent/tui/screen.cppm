@@ -115,11 +115,23 @@ auto compact_tool_args(const std::string& args_json) -> std::string {
     return result;
 }
 
+// Build a text progress bar: ████████░░░░░░░░ (width chars)
+auto make_progress_bar(int pct, int width = 16) -> std::string {
+    int filled = pct * width / 100;
+    std::string bar;
+    for (int i = 0; i < width; ++i) {
+        bar += (i < filled) ? "\xe2\x96\x88"   // █
+                            : "\xe2\x96\x91";   // ░
+    }
+    return bar;
+}
+
 auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
                       bool is_last,
                       int approval_node_id = 0,
-                      const std::string& dl_progress = {}) -> Element {
+                      const std::string& dl_progress = {},
+                      const std::vector<tui::AgentTuiState::DownloadFile>& dl_files = {}) -> Element {
     std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
@@ -151,7 +163,7 @@ auto render_tree_node(const BehaviorNode& node,
 
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
-    // Download progress: only on running atom nodes
+    // Total download progress: only on running atom nodes
     auto progress_el = (!dl_progress.empty()
                         && node.type == BehaviorNode::TypeAtom
                         && node.state == BehaviorNode::Running)
@@ -173,10 +185,64 @@ auto render_tree_node(const BehaviorNode& node,
         ? "   "
         : "\xe2\x94\x82  ");                                        // │
 
+    // Real children first
+    bool has_dl = (!dl_files.empty()
+                   && node.type == BehaviorNode::TypeAtom
+                   && node.state == BehaviorNode::Running);
     for (std::size_t i = 0; i < node.children.size(); ++i) {
-        bool child_is_last = (i == node.children.size() - 1);
+        bool child_is_last = (i == node.children.size() - 1) && !has_dl;
         rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last,
-                                        approval_node_id, dl_progress));
+                                        approval_node_id, dl_progress, dl_files));
+    }
+
+    // Download file children (visual only, not in behavior tree)
+    if (has_dl) {
+        // Compute max name width for alignment
+        std::size_t max_name = 0;
+        for (auto& df : dl_files) {
+            if (df.name.size() > max_name) max_name = df.name.size();
+        }
+
+        for (std::size_t i = 0; i < dl_files.size(); ++i) {
+            auto& df = dl_files[i];
+            bool file_is_last = (i == dl_files.size() - 1);
+            std::string fc = file_is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
+                                          : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
+
+            // Pad name to align progress bars
+            std::string padded_name = df.name;
+            while (padded_name.size() < max_name) padded_name += ' ';
+
+            Elements line_els;
+            line_els.push_back(text(child_prefix + fc));
+
+            if (df.done && df.ok) {
+                line_els.push_back(text(tui_icons::done) | color(ui::theme::green()));
+                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
+                line_els.push_back(text("done") | color(ui::theme::green()));
+            } else if (df.done) {
+                line_els.push_back(text(tui_icons::failed) | color(ui::theme::red()));
+                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
+                line_els.push_back(text("failed") | color(ui::theme::red()));
+            } else {
+                line_els.push_back(text(tui_icons::running) | color(ui::theme::cyan()));
+                line_els.push_back(text(" " + padded_name + " ") | color(ui::theme::dim_color()));
+                // Progress bar with colored filled/unfilled portions
+                constexpr int bar_w = 16;
+                int filled = df.pct * bar_w / 100;
+                std::string filled_s, empty_s;
+                for (int b = 0; b < bar_w; ++b) {
+                    if (b < filled) filled_s += "\xe2\x96\x88";  // █
+                    else            empty_s  += "\xe2\x96\x91";  // ░
+                }
+                line_els.push_back(text(filled_s) | color(ui::theme::cyan()));
+                line_els.push_back(text(empty_s) | color(ui::theme::border_color()));
+                line_els.push_back(text(" " + std::to_string(df.pct) + "%")
+                    | color(ui::theme::dim_color()));
+            }
+
+            rows.push_back(hbox(std::move(line_els)));
+        }
     }
 
     return vbox(std::move(rows));
@@ -226,7 +292,8 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
     for (std::size_t i = 0; i < tree_root.children.size(); ++i) {
         bool is_last = (i == tree_root.children.size() - 1);
         rows.push_back(render_tree_node(tree_root.children[i], "", is_last,
-                                        appr_id, state.download_progress));
+                                        appr_id, state.download_progress,
+                                        state.download_files));
     }
 
     // Empty line between tree and reply
