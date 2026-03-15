@@ -3,6 +3,7 @@ export module xlings.libs.agentfs;
 import std;
 import xlings.libs.json;
 import xlings.libs.flock;
+import xlings.core.utf8;
 
 namespace xlings::libs::agentfs {
 
@@ -73,7 +74,7 @@ public:
         tmp += ".tmp";
         {
             std::ofstream out(tmp);
-            out << j.dump(2);
+            out << utf8::safe_dump(j, 2);
         }
         fs::rename(tmp, path);
     }
@@ -82,7 +83,7 @@ public:
     static void append_jsonl(const std::filesystem::path& path, const nlohmann::json& j) {
         flock::FileLock lk(path.string() + ".lock");
         std::ofstream out(path, std::ios::app);
-        out << j.dump(-1) << '\n';
+        out << utf8::safe_dump(j) << '\n';
     }
 
     // Read all JSONL lines from a file

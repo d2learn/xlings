@@ -19,6 +19,7 @@ import xlings.core.xvm.types;
 import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
 import xlings.core.xim.libxpkg.types.script;
+import xlings.runtime.cancellation;
 
 export namespace xlings::xim {
 
@@ -682,7 +683,8 @@ public:
             const DownloaderConfig& dlConfig,
             std::function<void(const InstallStatus&)> onStatus,
             InstallRequestHandler onInstallRequests = nullptr,
-            DownloadProgressRenderer onRender = nullptr) {
+            DownloadProgressRenderer onRender = nullptr,
+            CancellationToken* cancel = nullptr) {
 
         if (plan.has_errors()) {
             return std::unexpected(
@@ -793,7 +795,7 @@ public:
                         status.progress = std::max(0.0f, progress);
                         onStatus(status);
                     }
-                });
+                }, cancel);
 
             for (auto& r : results) {
                 if (!r.success) {
@@ -806,6 +808,9 @@ public:
 
         // Phase 2: Install each package in topological order
         for (auto& node : plan.nodes) {
+            if (cancel && cancel->is_cancelled()) {
+                return std::unexpected(std::string("cancelled"));
+            }
             if (onStatus) {
                 onStatus({ node.name, InstallPhase::Installing, 0.5f, "" });
             }

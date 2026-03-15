@@ -4,6 +4,7 @@ import std;
 import mcpplibs.llmapi;
 import xlings.libs.json;
 import xlings.agent.token_tracker;
+import xlings.core.utf8;
 
 namespace xlings::agent {
 
@@ -187,6 +188,16 @@ public:
     // Record that a turn has completed (increments turn counter)
     void record_turn() { ++next_turn_id_; }
 
+    // Synchronize state from a restored conversation (e.g. after /resume)
+    void sync_from_conversation(const llm::Conversation& conv) {
+        // Count logical turns (each user message starts a turn)
+        int turns = 0;
+        for (auto& msg : conv.messages) {
+            if (msg.role == llm::Role::User) ++turns;
+        }
+        if (turns > next_turn_id_) next_turn_id_ = turns;
+    }
+
     // Persist L2/L3 cache to disk
     void save_cache() const {
         if (cache_dir_.empty()) return;
@@ -207,7 +218,7 @@ public:
         }
 
         std::ofstream l2_out(cache_dir_ / "l2_summaries.json");
-        if (l2_out) l2_out << l2_json.dump(2);
+        if (l2_out) l2_out << utf8::safe_dump(l2_json, 2);
 
         // Save L3 index
         nlohmann::json l3_json = nlohmann::json::object();
@@ -216,7 +227,7 @@ public:
         }
 
         std::ofstream l3_out(cache_dir_ / "l3_index.json");
-        if (l3_out) l3_out << l3_json.dump(2);
+        if (l3_out) l3_out << utf8::safe_dump(l3_json, 2);
 
         // Save metadata
         nlohmann::json meta;
@@ -225,7 +236,7 @@ public:
         meta["model"] = model_;
 
         std::ofstream meta_out(cache_dir_ / "context_meta.json");
-        if (meta_out) meta_out << meta.dump(2);
+        if (meta_out) meta_out << utf8::safe_dump(meta, 2);
     }
 
 private:

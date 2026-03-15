@@ -3,6 +3,7 @@ module;
 #include <cstdio>
 #include <cstdlib>
 #if defined(_WIN32)
+#define NOMINMAX
 #include <windows.h>
 #endif
 
@@ -11,6 +12,7 @@ export module xlings.platform:windows;
 #if defined(_WIN32)
 
 import std;
+import xlings.runtime.cancellation;
 
 namespace xlings {
 namespace platform_impl {
@@ -38,6 +40,113 @@ namespace platform_impl {
         }
         int status = ::_pclose(pipe);
         return {status, output};
+    }
+
+    // ─── Cancellable process management ───
+
+    export struct ProcessHandle {
+        int pid{-1};
+        int pipe_fd{-1};
+        // Windows-specific handles stored as opaque values
+        void* hProcess{nullptr};
+        void* hReadPipe{nullptr};
+    };
+
+    export auto spawn_command(const std::string& cmd) -> ProcessHandle {
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(sa);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = nullptr;
+
+        HANDLE hReadPipe, hWritePipe;
+        if (!::CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
+            return {};
+        }
+        ::SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdOutput = hWritePipe;
+        si.hStdError = hWritePipe;
+
+        PROCESS_INFORMATION pi{};
+        std::string cmdline = "cmd /c " + cmd;
+
+        BOOL ok = ::CreateProcessA(
+            nullptr, cmdline.data(), nullptr, nullptr, TRUE,
+            CREATE_NEW_PROCESS_GROUP, nullptr, nullptr, &si, &pi);
+
+        ::CloseHandle(hWritePipe);
+
+        if (!ok) {
+            ::CloseHandle(hReadPipe);
+            return {};
+        }
+
+        ::CloseHandle(pi.hThread);
+
+        ProcessHandle h;
+        h.pid = static_cast<int>(pi.dwProcessId);
+        h.hProcess = pi.hProcess;
+        h.hReadPipe = hReadPipe;
+        return h;
+    }
+
+    export auto wait_or_kill(const ProcessHandle& h,
+                             CancellationToken* cancel,
+                             std::chrono::milliseconds timeout) -> std::pair<int, std::string> {
+        if (!h.hProcess) return {-1, ""};
+
+        std::string output;
+        std::array<char, 4096> buf{};
+        auto deadline = std::chrono::steady_clock::now() + timeout;
+        HANDLE hProc = static_cast<HANDLE>(h.hProcess);
+        HANDLE hPipe = static_cast<HANDLE>(h.hReadPipe);
+
+        while (true) {
+            // Read available output
+            DWORD avail = 0;
+            while (::PeekNamedPipe(hPipe, nullptr, 0, nullptr, &avail, nullptr) && avail > 0) {
+                DWORD bytesRead = 0;
+                DWORD toRead = std::min(avail, static_cast<DWORD>(buf.size()));
+                if (::ReadFile(hPipe, buf.data(), toRead, &bytesRead, nullptr) && bytesRead > 0) {
+                    output.append(buf.data(), bytesRead);
+                } else break;
+            }
+
+            // Check if process exited
+            DWORD exitCode = 0;
+            if (::WaitForSingleObject(hProc, 0) == WAIT_OBJECT_0) {
+                // Read remaining
+                while (::PeekNamedPipe(hPipe, nullptr, 0, nullptr, &avail, nullptr) && avail > 0) {
+                    DWORD bytesRead = 0;
+                    DWORD toRead = std::min(avail, static_cast<DWORD>(buf.size()));
+                    if (::ReadFile(hPipe, buf.data(), toRead, &bytesRead, nullptr) && bytesRead > 0)
+                        output.append(buf.data(), bytesRead);
+                    else break;
+                }
+                ::GetExitCodeProcess(hProc, &exitCode);
+                ::CloseHandle(hPipe);
+                ::CloseHandle(hProc);
+                return {static_cast<int>(exitCode), output};
+            }
+
+            if (cancel && cancel->is_cancelled()) break;
+            if (std::chrono::steady_clock::now() >= deadline) break;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        }
+
+        // Terminate: Ctrl+Break to process group, then hard kill after grace period
+        ::GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, static_cast<DWORD>(h.pid));
+        if (::WaitForSingleObject(hProc, 2000) != WAIT_OBJECT_0) {
+            ::TerminateProcess(hProc, 1);
+            ::WaitForSingleObject(hProc, 1000);
+        }
+        ::CloseHandle(hPipe);
+        ::CloseHandle(hProc);
+        return {-1, output};
     }
 
     export void clear_console() {
@@ -119,6 +228,25 @@ namespace platform_impl {
         ::CloseHandle(hProcess);
         return alive;
     }
+
+    export struct Icon {
+        static constexpr auto pending    = "o";
+        static constexpr auto running    = "*";
+        static constexpr auto done       = "+";
+        static constexpr auto failed     = "x";
+        static constexpr auto skipped    = "-";
+        static constexpr auto turn       = ">";
+        static constexpr auto reply      = "#";
+        static constexpr auto exec       = "*";
+        static constexpr auto thinking   = "~";
+        static constexpr auto approval   = "!";
+        static constexpr auto download   = "v";
+        static constexpr auto upload     = "^";
+        static constexpr auto extracting = ">";
+        static constexpr auto arrow      = ">";
+        static constexpr auto package    = "#";
+        static constexpr auto info       = ">";
+    };
 
 } // namespace platform_impl
 }

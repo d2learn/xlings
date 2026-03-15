@@ -5,6 +5,9 @@ module;
 #if defined(__linux__)
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <fcntl.h>
 #endif
 
 export module xlings.platform:linux;
@@ -12,6 +15,7 @@ export module xlings.platform:linux;
 #if defined(__linux__)
 
 import std;
+import xlings.runtime.cancellation;
 
 namespace xlings {
 namespace platform_impl {
@@ -40,6 +44,116 @@ namespace platform_impl {
         }
         int status = ::pclose(pipe);
         return {status, output};
+    }
+
+    // ─── Cancellable process management ───
+
+    export struct ProcessHandle {
+        int pid{-1};
+        int pipe_fd{-1};
+    };
+
+    export auto spawn_command(const std::string& cmd) -> ProcessHandle {
+        int pipefd[2];
+        if (::pipe(pipefd) == -1) return {-1, -1};
+
+        pid_t pid = ::fork();
+        if (pid == -1) {
+            ::close(pipefd[0]);
+            ::close(pipefd[1]);
+            return {-1, -1};
+        }
+
+        if (pid == 0) {
+            // Child: new process group so we can kill the whole group
+            ::setpgid(0, 0);
+            ::close(pipefd[0]);
+            ::dup2(pipefd[1], STDOUT_FILENO);
+            ::dup2(pipefd[1], STDERR_FILENO);
+            ::close(pipefd[1]);
+            ::execl("/bin/sh", "sh", "-c", cmd.c_str(), nullptr);
+            ::_exit(127);
+        }
+
+        // Parent
+        ::close(pipefd[1]);
+        // Set read end to non-blocking
+        int flags = ::fcntl(pipefd[0], F_GETFL, 0);
+        if (flags != -1) ::fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+
+        return {static_cast<int>(pid), pipefd[0]};
+    }
+
+    export auto wait_or_kill(const ProcessHandle& h,
+                             CancellationToken* cancel,
+                             std::chrono::milliseconds timeout) -> std::pair<int, std::string> {
+        if (h.pid <= 0) return {-1, ""};
+
+        std::string output;
+        std::array<char, 4096> buf{};
+        auto deadline = std::chrono::steady_clock::now() + timeout;
+
+        while (true) {
+            // Read any available output (non-blocking)
+            while (true) {
+                ssize_t n = ::read(h.pipe_fd, buf.data(), buf.size());
+                if (n > 0) {
+                    output.append(buf.data(), static_cast<std::size_t>(n));
+                } else {
+                    break;
+                }
+            }
+
+            // Check if child exited
+            int status = 0;
+            pid_t result = ::waitpid(h.pid, &status, WNOHANG);
+            if (result == h.pid) {
+                // Read remaining output
+                while (true) {
+                    ssize_t n = ::read(h.pipe_fd, buf.data(), buf.size());
+                    if (n > 0) output.append(buf.data(), static_cast<std::size_t>(n));
+                    else break;
+                }
+                ::close(h.pipe_fd);
+                int code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+                return {code, output};
+            }
+
+            // Check cancellation
+            if (cancel && cancel->is_cancelled()) {
+                break;
+            }
+
+            // Check timeout
+            if (std::chrono::steady_clock::now() >= deadline) {
+                break;
+            }
+
+            // Sleep briefly before next poll
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        }
+
+        // Kill the process group: SIGTERM first
+        ::kill(-h.pid, SIGTERM);
+
+        // Grace period: 2 seconds
+        auto kill_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+        while (std::chrono::steady_clock::now() < kill_deadline) {
+            int status = 0;
+            pid_t result = ::waitpid(h.pid, &status, WNOHANG);
+            if (result == h.pid) {
+                ::close(h.pipe_fd);
+                return {-1, output};
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        }
+
+        // Force kill
+        ::kill(-h.pid, SIGKILL);
+        int status = 0;
+        ::waitpid(h.pid, &status, 0);
+        ::close(h.pipe_fd);
+        return {-1, output};
     }
 
     export void clear_console() {
@@ -106,6 +220,25 @@ namespace platform_impl {
         auto proc_path = std::filesystem::path("/proc") / std::to_string(pid);
         return std::filesystem::exists(proc_path);
     }
+
+    export struct Icon {
+        static constexpr auto pending    = "\xe2\x97\x8b";   // ○
+        static constexpr auto running    = "\xe2\x9f\xb3";   // ⟳
+        static constexpr auto done       = "\xe2\x9c\x93";   // ✓
+        static constexpr auto failed     = "\xe2\x9c\x97";   // ✗
+        static constexpr auto skipped    = "\xe2\x96\xb7";   // ▷
+        static constexpr auto turn       = "\xe2\x8f\xb5";   // ⏵
+        static constexpr auto reply      = "\xe2\x97\x86";   // ◆
+        static constexpr auto exec       = "\xe2\x9a\x99";   // ⚙
+        static constexpr auto thinking   = "\xe2\x97\x87";   // ◇
+        static constexpr auto approval   = "\xe2\x9a\xa0";   // ⚠
+        static constexpr auto download   = "\xe2\x86\x93";   // ↓
+        static constexpr auto upload     = "\xe2\x86\x91";   // ↑
+        static constexpr auto extracting = "\xe2\x9f\x90";   // ⟐
+        static constexpr auto arrow      = "\xe2\x96\xb8";   // ▸
+        static constexpr auto package    = "\xe2\x97\x86";   // ◆
+        static constexpr auto info       = "\xe2\x80\xba";   // ›
+    };
 
 } // namespace platform_impl
 }

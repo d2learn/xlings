@@ -4,6 +4,7 @@ import std;
 
 import xlings.runtime.event;
 import xlings.runtime.event_stream;
+import xlings.runtime.cancellation;
 
 namespace xlings::capability {
 
@@ -23,6 +24,10 @@ export struct Capability {
     virtual ~Capability() = default;
     virtual auto spec() const -> CapabilitySpec = 0;
     virtual auto execute(Params params, EventStream& stream) -> Result = 0;
+    // Cancellable variant — default delegates to 2-arg version; override for cancel support
+    virtual auto execute(Params params, EventStream& stream, CancellationToken* cancel) -> Result {
+        return execute(std::move(params), stream);
+    }
 };
 
 export class Registry {

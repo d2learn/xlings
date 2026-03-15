@@ -2,6 +2,7 @@ export module xlings.libs.mcp_server;
 
 import std;
 import xlings.libs.json;
+import xlings.core.utf8;
 
 namespace xlings::libs::mcp {
 
@@ -82,7 +83,7 @@ public:
                 auto arguments = req.params.value("arguments", nlohmann::json::object());
                 auto result = it->second(arguments);
                 resp.result = {
-                    {"content", {{{"type", "text"}, {"text", result.dump()}}}},
+                    {"content", {{{"type", "text"}, {"text", utf8::safe_dump(result)}}}},
                 };
             }
         }
@@ -124,7 +125,7 @@ public:
         } else {
             j["result"] = resp.result;
         }
-        return j.dump();
+        return utf8::safe_dump(j);
     }
 
     // Run stdio loop (blocking)

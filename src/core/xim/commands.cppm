@@ -20,6 +20,7 @@ import xlings.libs.tinyhttps;
 import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
 import xlings.core.profile;
+import xlings.runtime.cancellation;
 
 namespace xpkg = mcpplibs::xpkg;
 
@@ -57,7 +58,8 @@ int cmd_remove(const std::string& target, EventStream& stream);
 
 // === install command ===
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
-                EventStream& stream, bool forceGlobal = false) {
+                EventStream& stream, bool forceGlobal = false,
+                CancellationToken* cancel = nullptr) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -236,38 +238,37 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
 
-    // Download progress renderer: emit via EventStream so CLI consumer renders.
-    // Returns line count from the UI renderer for cursor-up rewriting.
-    DownloadProgressRenderer dlRenderer =
-        [&stream](std::span<const TaskProgress> state, std::size_t nameWidth,
-                  double elapsedSec, bool sizesReady, int prevLines) -> int {
-            nlohmann::json files = nlohmann::json::array();
-            for (auto& p : state) {
-                files.push_back({
-                    {"name", p.name},
-                    {"totalBytes", p.totalBytes},
-                    {"downloadedBytes", p.downloadedBytes},
-                    {"started", p.started},
-                    {"finished", p.finished},
-                    {"success", p.success}
-                });
-            }
-            nlohmann::json payload;
-            payload["files"] = std::move(files);
-            payload["nameWidth"] = nameWidth;
-            payload["elapsedSec"] = elapsedSec;
-            payload["sizesReady"] = sizesReady;
-            payload["prevLines"] = prevLines;
-            stream.emit(DataEvent{"download_progress", payload.dump()});
-            // Estimated line count: entries + blank line + overall bar
-            return static_cast<int>(state.size()) + 2;
-        };
+    // Download progress renderer: emit via EventStream so consumers can render.
+    // CLI consumer renders ftxui progress bars; agent TUI shows summary text.
+    DownloadProgressRenderer dlRenderer = [&stream](std::span<const TaskProgress> state,
+                  std::size_t nameWidth, double elapsedSec, bool sizesReady,
+                  int prevLines) -> int {
+        nlohmann::json files = nlohmann::json::array();
+        for (auto& p : state) {
+            files.push_back({
+                {"name", p.name},
+                {"totalBytes", p.totalBytes},
+                {"downloadedBytes", p.downloadedBytes},
+                {"started", p.started},
+                {"finished", p.finished},
+                {"success", p.success}
+            });
+        }
+        nlohmann::json payload;
+        payload["files"] = std::move(files);
+        payload["nameWidth"] = nameWidth;
+        payload["elapsedSec"] = elapsedSec;
+        payload["sizesReady"] = sizesReady;
+        payload["prevLines"] = prevLines;
+        stream.emit(DataEvent{"download_progress", payload.dump()});
+        return static_cast<int>(state.size()) + 2;
+    };
 
     int successCount = 0;
     int failedCount = 0;
 
     auto result = installer.execute(plan, dlConfig,
-        [&](const InstallStatus& status) {
+        [&, cancel](const InstallStatus& status) {
             switch (status.phase) {
                 case InstallPhase::Downloading:
                     break;  // TUI progress bar handles this
@@ -303,7 +304,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                 }
             }
         },
-        dlRenderer);
+        dlRenderer, cancel);
 
     if (!result) {
         log::error("install failed: {}", result.error());

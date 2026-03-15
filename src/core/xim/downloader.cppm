@@ -10,6 +10,7 @@ import xlings.core.log;
 import xlings.platform;
 import xlings.core.config;
 import xlings.libs.tinyhttps;
+import xlings.runtime.cancellation;
 
 export namespace xlings::xim {
 
@@ -79,7 +80,8 @@ DownloadResult git_clone_one(const DownloadTask& task) {
 
 // Download a single file using libcurl with real-time progress callback.
 DownloadResult download_one(const DownloadTask& task,
-                            std::function<void(double total, double now)> onProgress = nullptr) {
+                            std::function<void(double total, double now)> onProgress = nullptr,
+                            CancellationToken* cancel = nullptr) {
     namespace fs = std::filesystem;
 
     DownloadResult result;
@@ -96,6 +98,30 @@ DownloadResult download_one(const DownloadTask& task,
 
     // Git clone for .git URLs
     if (is_git_url(task.url)) {
+        // When cancellable, run git clone as subprocess for kill support
+        if (cancel) {
+            namespace fs = std::filesystem;
+            std::string repoName;
+            auto lastSlashGit = task.url.rfind('/');
+            if (lastSlashGit != std::string::npos) {
+                repoName = task.url.substr(lastSlashGit + 1);
+                if (repoName.ends_with(".git"))
+                    repoName = repoName.substr(0, repoName.size() - 4);
+            }
+            if (repoName.empty()) repoName = task.name;
+            auto destDir = task.destDir / repoName;
+            result.localFile = destDir;
+            auto cmd = std::format("git clone --depth 1 --recursive \"{}\" \"{}\"",
+                                   task.url, destDir.string());
+            auto h = platform::spawn_command(cmd);
+            if (h.pid <= 0) { result.error = "failed to spawn git"; return result; }
+            auto [code, output] = platform::wait_or_kill(
+                h, cancel, std::chrono::minutes{10});
+            if (cancel->is_paused() || cancel->is_cancelled()) { result.error = "cancelled"; return result; }
+            result.success = (code == 0);
+            if (!result.success) result.error = output;
+            return result;
+        }
         return git_clone_one(task);
     }
 
@@ -131,19 +157,25 @@ DownloadResult download_one(const DownloadTask& task,
     urls.push_back(url);
     for (auto& fb : task.fallbackUrls) urls.push_back(fb);
 
-    // Download with libcurl
-    tinyhttps::DownloadOptions opts;
-    opts.destFile = destFile;
-    opts.urls = std::move(urls);
-    opts.retryCount = 3;
-    opts.connectTimeoutSec = 30;
-    opts.maxTimeSec = 600;
-    opts.onProgress = onProgress;
+    // Use in-process tinyhttps for all downloads (streaming progress).
+    // When a CancellationToken is available, wire isCancelled so ESC aborts.
+    {
+        tinyhttps::DownloadOptions opts;
+        opts.destFile = destFile;
+        opts.urls = std::move(urls);
+        opts.retryCount = 3;
+        opts.connectTimeoutSec = 30;
+        opts.maxTimeSec = 600;
+        opts.onProgress = onProgress;
+        if (cancel) {
+            opts.isCancelled = [cancel] { return cancel->is_paused() || cancel->is_cancelled(); };
+        }
 
-    auto dlResult = tinyhttps::download_file(opts);
-    if (!dlResult.success) {
-        result.error = dlResult.error;
-        return result;
+        auto dlResult = tinyhttps::download_file(opts);
+        if (!dlResult.success) {
+            result.error = dlResult.error;
+            return result;
+        }
     }
 
     // Verify SHA256 if provided
@@ -189,7 +221,8 @@ std::vector<DownloadResult>
 download_all(std::span<const DownloadTask> tasks,
              const DownloaderConfig& config,
              DownloadProgressRenderer onRender,
-             std::function<void(std::string_view name, float progress)> onProgress) {
+             std::function<void(std::string_view name, float progress)> onProgress,
+             CancellationToken* cancel = nullptr) {
 
     if (tasks.empty()) return {};
 
@@ -242,19 +275,20 @@ download_all(std::span<const DownloadTask> tasks,
     // Uses relative cursor movement (\033[<N>A) to overwrite previous frame in-place.
     auto startTime = std::chrono::steady_clock::now();
 
-    bool canRewrite = platform::supports_rewrite_output();
+    bool canRewrite = platform::supports_rewrite_output() && !platform::is_tui_mode();
     int lastLines = 0;  // lines rendered in previous frame (for cursor-up)
 
     std::jthread tuiThread([&](std::stop_token stoken) {
         if (!onRender) return;  // No renderer — skip TUI
 
         if (canRewrite) {
-            // Hide cursor during download
+            // Hide cursor during download (CLI mode only)
             std::print("\033[?25l");
             std::fflush(stdout);
         }
 
-        while (!stoken.stop_requested() && !allDone.load()) {
+        while (!stoken.stop_requested() && !allDone.load() &&
+               !(cancel && (cancel->is_paused() || cancel->is_cancelled()))) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
             auto elapsed = std::chrono::steady_clock::now() - startTime;
@@ -289,7 +323,17 @@ download_all(std::span<const DownloadTask> tasks,
             // Wait for concurrency slot
             {
                 std::unique_lock lock(mutex);
-                cv.wait(lock, [&] { return activeCount < maxConcur; });
+                cv.wait(lock, [&] {
+                    return activeCount < maxConcur || (cancel && (cancel->is_paused() || cancel->is_cancelled()));
+                });
+                if (cancel && (cancel->is_paused() || cancel->is_cancelled())) {
+                    std::lock_guard lk(mutex);
+                    results[i].name = tasks[i].name;
+                    results[i].error = "cancelled";
+                    progState[i].finished = true;
+                    cv.notify_one();
+                    return;
+                }
                 ++activeCount;
                 progState[i].started = true;
             }
@@ -305,7 +349,7 @@ download_all(std::span<const DownloadTask> tasks,
                 progState[i].downloadedBytes = now;
             };
 
-            auto result = download_one(tasks[i], taskProgress);
+            auto result = download_one(tasks[i], taskProgress, cancel);
 
             {
                 std::lock_guard lock(mutex);

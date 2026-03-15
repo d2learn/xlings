@@ -1,10 +1,7 @@
 module;
 
-#include "ftxui/component/component.hpp"
-#include "ftxui/component/screen_interactive.hpp"
-#include "ftxui/dom/elements.hpp"
-#include "ftxui/screen/color.hpp"
-#include "ftxui/screen/terminal.hpp"
+#include "ftxui/component/event.hpp"
+#include "ftxui/component/mouse.hpp"
 
 export module xlings.cli;
 
@@ -29,11 +26,13 @@ import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
 import xlings.agent;
 import xlings.agent.commands;
+import xlings.core.utf8;
 import xlings.agent.token_tracker;
 import xlings.agent.context_manager;
 import xlings.libs.agentfs;
 import xlings.libs.soul;
 import xlings.libs.journal;
+import xlings.libs.tinytui;
 import mcpplibs.llmapi;
 
 namespace lua = mcpplibs::capi::lua;
@@ -174,6 +173,8 @@ static void dispatch_data_event(const DataEvent& e) {
         ui::print_table(headers, rows);
     }
     else if (e.kind == "download_progress") {
+        // Skip CLI rendering in TUI mode (agent TUI handles progress separately)
+        if (platform::is_tui_mode()) return;
         auto nameWidth = json.value("nameWidth", std::size_t{20});
         auto elapsedSec = json.value("elapsedSec", 0.0);
         auto sizesReady = json.value("sizesReady", false);
@@ -816,29 +817,10 @@ export int run(int argc, char* argv[]) {
                 return 0;
             }
 
-            // ---- sub-subcommand: mcp ----
-            if (subcmd == "mcp") {
-                auto mcps_dir = afs.root() / "mcps";
-                auto configs = agent::mcp::load_mcp_configs(mcps_dir);
-                if (configs.empty()) {
-                    agent::tui::print_hint("no MCP servers configured");
-                    agent::tui::print_hint("add JSON configs to: " + mcps_dir.string());
-                } else {
-                    std::vector<ui::InfoField> mcp_fields;
-                    for (auto& c : configs) {
-                        std::string val = c.command;
-                        for (auto& a : c.args) { val += " " + a; }
-                        mcp_fields.push_back({c.name, val});
-                    }
-                    ui::print_info_panel("MCP Servers", mcp_fields);
-                }
-                return 0;
-            }
-
             // ---- sub-subcommands that need LLM: chat / resume ----
             if (subcmd != "chat" && subcmd != "resume") {
                 agent::tui::print_error("unknown agent subcommand: " + subcmd);
-                agent::tui::print_hint("available: chat, resume, sessions, config, mcp");
+                agent::tui::print_hint("available: chat, resume, sessions, config");
                 return 1;
             }
 
@@ -1011,153 +993,120 @@ export int run(int argc, char* argv[]) {
             agent::ApprovalPolicy approval(soul);
             agent::ApprovalPolicy* policy_ptr = flag_auto_approve ? nullptr : &approval;
 
-            auto bridge = agent::ToolBridge(registry);
-            auto system_prompt = agent::build_system_prompt(bridge);
-            auto tools = agent::to_llmapi_tools(bridge);
+            // ─── Agent mode: TUI owns terminal, suppress all other output ───
+            stream.set_enabled(tui_listener, false);
+            platform::set_tui_mode(true);
 
-            // ─── Agent mode: dual consumer architecture ───
-            // Consumer 1: Agent data capture (always active) — captures DataEvents for LLM
-            int agent_listener = stream.on_event([&bridge](const Event& e) {
+            // Create agent runtime (owns all subsystems)
+            agent::AgentRuntime runtime(afs, cfg, session_meta);
+            runtime.init(soul, conversation, stream);
+
+            // Consumer 1: Agent data capture (always active)
+            int agent_listener = stream.on_event([&runtime](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
-                    bridge.on_data_event(*d);
+                    runtime.bridge.on_data_event(*d);
                 }
             });
 
-            // Consumer 2: CLI TUI rendering — disabled in agent mode (ftxui owns terminal)
-            stream.set_enabled(tui_listener, false);
-
-            // Token tracker + context manager
-            agent::TokenTracker tracker;
-            agent::ContextManager ctx_mgr(cfg.model);
-            auto cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
-            ctx_mgr.set_cache_dir(cache_dir);
-
-            // ─── ftxui screen (FitComponent = natural terminal scrolling) ───
-            auto screen = ftxui::ScreenInteractive::FitComponent();
-            screen.TrackMouse(false);  // allow terminal scroll wheel
+            // ─── Input content + TUI state ───
+            std::string input_content;
 
             agent::tui::AgentTuiState tui_state;
             tui_state.model_name = cfg.model;
             tui_state.ctx_limit = agent::TokenTracker::context_limit(cfg.model);
 
-            // ─── Consumer 3: ftxui-compatible data event listener ───
-            // Handles download progress (always) + verbose data display (toggled)
-            bool verbose_data = false;
+            // Forward pointer — set after AgentScreen construction
+            agent::AgentScreen* agent_screen = nullptr;
 
-            auto format_speed = [](double bps) -> std::string {
-                if (bps < 1024.0)
-                    return std::to_string(static_cast<int>(bps)) + " B/s";
-                if (bps < 1024.0 * 1024.0) {
-                    int kb = static_cast<int>(bps / 1024.0 * 10.0);
-                    return std::to_string(kb / 10) + "." + std::to_string(kb % 10) + " KB/s";
-                }
-                int mb = static_cast<int>(bps / (1024.0 * 1024.0) * 10.0);
-                return std::to_string(mb / 10) + "." + std::to_string(mb % 10) + " MB/s";
-            };
-
-            int ftxui_data_listener = stream.on_event([&](const Event& e) {
+            // ─── Consumer 3: data event listener ───
+            // Download progress → create/update real tree nodes for each file
+            int data_listener = stream.on_event([&](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
-                    // Download progress → update active_progress in tui_state
-                    if (d->kind == "download_progress") {
-                        auto j = nlohmann::json::parse(d->json, nullptr, false);
-                        if (j.is_discarded()) return;
+                    if (d->kind == "download_progress" && agent_screen) {
+                        auto json = nlohmann::json::parse(d->json, nullptr, false);
+                        if (json.is_discarded() || !json.contains("files")) return;
+                        auto& files = json["files"];
+                        int total_files = static_cast<int>(files.size());
+                        int done_count = 0;
+                        double dl_bytes = 0, total_bytes = 0;
 
-                        double total_bytes = 0, downloaded_bytes = 0;
-                        std::string active_name;
-                        if (j.contains("files") && j["files"].is_array()) {
-                            for (auto it = j["files"].begin(); it != j["files"].end(); ++it) {
-                                auto& f = *it;
-                                total_bytes += f.value("totalBytes", 0.0);
-                                downloaded_bytes += f.value("downloadedBytes", 0.0);
-                                if (f.value("started", false) && !f.value("finished", false)) {
-                                    active_name = f.value("name", "");
+                        // Find the currently running atom node (parent for downloads)
+                        int parent_id = tui_state.behavior_tree.active_node_id();
+
+                        for (auto& f : files) {
+                            std::string name = f.value("name", std::string{});
+                            bool finished = f.value("finished", false);
+                            bool success = f.value("success", false);
+                            double tb = f.value("totalBytes", 0.0);
+                            double db = f.value("downloadedBytes", 0.0);
+                            if (finished) ++done_count;
+                            dl_bytes += db;
+                            total_bytes += tb;
+                            int pct = (finished && success) ? 100
+                                    : (tb > 0 ? static_cast<int>(db * 100.0 / tb) : 0);
+
+                            // Create or update download node
+                            auto it = tui_state.download_node_ids.find(name);
+                            if (it == tui_state.download_node_ids.end()) {
+                                agent::BehaviorNode dn;
+                                dn.id = tui_state.id_alloc.alloc();
+                                dn.type = agent::BehaviorNode::TypeDownload;
+                                dn.name = name;
+                                dn.start_ms = agent::steady_now_ms();
+                                if (finished) {
+                                    dn.state = success ? agent::BehaviorNode::Done
+                                                       : agent::BehaviorNode::Failed;
+                                    dn.end_ms = dn.start_ms;
+                                    dn.result_summary = success ? "done" : "failed";
+                                } else {
+                                    dn.state = agent::BehaviorNode::Running;
+                                    dn.result_summary = std::to_string(pct);
+                                }
+                                int nid = tui_state.behavior_tree.add_child(parent_id, std::move(dn));
+                                tui_state.download_node_ids[name] = nid;
+                            } else {
+                                int nid = it->second;
+                                if (finished) {
+                                    int st = success ? agent::BehaviorNode::Done
+                                                     : agent::BehaviorNode::Failed;
+                                    tui_state.behavior_tree.set_state(nid, st, agent::steady_now_ms());
+                                    tui_state.behavior_tree.set_result(nid, success ? "done" : "failed");
+                                } else {
+                                    tui_state.behavior_tree.set_result(nid, std::to_string(pct));
                                 }
                             }
                         }
-                        float pct = (total_bytes > 0)
-                            ? static_cast<float>(downloaded_bytes / total_bytes) : 0.0f;
-                        if (pct > 1.0f) pct = 1.0f;
 
-                        double elapsed_sec = j.value("elapsedSec", 0.0);
-                        std::string speed, eta_str;
-                        if (elapsed_sec > 0.5 && downloaded_bytes > 0) {
-                            double bps = downloaded_bytes / elapsed_sec;
-                            speed = format_speed(bps);
-                            if (pct > 0.01f && pct < 1.0f && bps > 0) {
-                                double remain = (total_bytes - downloaded_bytes) / bps;
-                                int secs = static_cast<int>(remain);
-                                if (secs < 60) eta_str = "ETA " + std::to_string(secs) + "s";
-                                else eta_str = "ETA " + std::to_string(secs / 60) + "m"
-                                    + std::to_string(secs % 60) + "s";
+                        // Total progress on parent (with speed)
+                        std::string progress;
+                        if (done_count < total_files) {
+                            int total_pct = total_bytes > 0
+                                ? static_cast<int>(dl_bytes * 100.0 / total_bytes) : 0;
+                            double elapsed = json.value("elapsedSec", 0.0);
+                            std::string speed;
+                            if (elapsed > 0.5 && dl_bytes > 0) {
+                                double bps = dl_bytes / elapsed;
+                                if (bps >= 1048576.0)
+                                    speed = std::format(" {:.1f} MB/s", bps / 1048576.0);
+                                else if (bps >= 1024.0)
+                                    speed = std::format(" {:.0f} KB/s", bps / 1024.0);
                             }
+                            progress = std::format("\xe2\x86\x93 {}%{}", total_pct, speed);
                         }
 
-                        screen.Post([&, pct, name = std::move(active_name),
-                                     spd = std::move(speed), et = std::move(eta_str)] {
-                            tui_state.active_progress = pct;
-                            tui_state.active_progress_name = name;
-                            tui_state.active_progress_speed = spd;
-                            tui_state.active_progress_eta = et;
+                        agent_screen->post([&tui_state, p = std::move(progress)] {
+                            tui_state.download_progress = p;
                         });
-                        screen.PostEvent(ftxui::Event::Custom);
-                        return;
-                    }
-
-                    // Other data events → accumulate as detail text
-                    {
-                        std::string summary;
-                        if (d->kind == "styled_list" || d->kind == "search_results") {
-                            auto j = nlohmann::json::parse(d->json, nullptr, false);
-                            if (!j.is_discarded()) {
-                                summary = "[" + d->kind + "] " + j.value("title", "");
-                            }
-                        } else if (d->kind == "install_summary") {
-                            auto j = nlohmann::json::parse(d->json, nullptr, false);
-                            if (!j.is_discarded()) {
-                                summary = "[install] success:" +
-                                    std::to_string(j.value("success", 0)) +
-                                    " failed:" + std::to_string(j.value("failed", 0));
-                            }
-                        } else {
-                            summary = "[" + d->kind + "]";
-                        }
-                        if (!summary.empty()) {
-                            screen.Post([&, s = std::move(summary)] {
-                                tui_state.active_details.push_back(s);
-                            });
-                            screen.PostEvent(ftxui::Event::Custom);
-                        }
+                        agent_screen->refresh();
                     }
                 }
             });
 
-            // Helper: add output lines (thread-safe via Post)
-            auto add_hint = [&](std::string text) {
-                screen.Post([&, t = std::move(text)] {
-                    tui_state.lines.push_back({
-                        .type = agent::tui::ChatLine::Hint,
-                        .text = std::move(t),
-                    });
-                });
-                screen.PostEvent(ftxui::Event::Custom);
-            };
-            auto add_error = [&](std::string text) {
-                screen.Post([&, t = std::move(text)] {
-                    tui_state.lines.push_back({
-                        .type = agent::tui::ChatLine::Error,
-                        .text = std::move(t),
-                    });
-                });
-                screen.PostEvent(ftxui::Event::Custom);
-            };
-
-            // ─── Cancellation flag (ESC to abort current turn) ───
-            std::atomic<bool> cancel_requested{false};
-
-            // ─── Message queue (main thread → agent thread) ───
-            std::mutex msg_mtx;
-            std::condition_variable msg_cv;
-            std::deque<std::string> msg_queue;
+            // ─── Cancellation token ───
+            CancellationToken cancel_token;
+            int ctrl_c_count = 0;
+            std::int64_t last_ctrl_c_ms = 0;
+            std::int64_t last_char_ms = 0;  // debounce paste vs Enter
 
             // ─── Approval synchronization (agent thread ↔ main thread) ───
             std::mutex approval_mtx;
@@ -1167,30 +1116,98 @@ export int run(int argc, char* argv[]) {
             agent::ConfirmCallback confirm_cb;
             if (!flag_auto_approve) {
                 confirm_cb = [&](std::string_view tool_name, std::string_view arguments) -> bool {
-                    // Show approval prompt in TUI
-                    screen.Post([&, tn = std::string(tool_name), a = std::string(arguments)] {
-                        tui_state.approval_pending = true;
-                        tui_state.approval_tool_name = tn;
-                        tui_state.approval_args = a;
-                    });
-                    screen.PostEvent(ftxui::Event::Custom);
-
-                    // Block agent thread until user responds
                     {
                         std::lock_guard lk(approval_mtx);
                         approval_result = std::nullopt;
                     }
-                    std::unique_lock lk(approval_mtx);
-                    approval_cv.wait(lk, [&] { return approval_result.has_value(); });
+
+                    agent_screen->post([&, tn = std::string(tool_name), a = std::string(arguments)] {
+                        tui_state.approval_pending = true;
+                        tui_state.approval_tool_name = tn;
+                        tui_state.approval_args = a;
+                    });
+                    agent_screen->refresh();
+
+                    // Wait with cancellation (30s timeout)
+                    {
+                        std::unique_lock lk(approval_mtx);
+                        if (!cancel_token.wait_or_cancel(lk, approval_cv,
+                                [&] { return approval_result.has_value(); },
+                                std::chrono::seconds{30})) {
+                            agent_screen->post([&] {
+                                tui_state.approval_pending = false;
+                            });
+                            agent_screen->refresh();
+                            return false;
+                        }
+                    }
+
                     bool approved = *approval_result;
+                    approval_result = std::nullopt;
 
-                    // Clear approval prompt
-                    screen.Post([&] { tui_state.approval_pending = false; });
-                    screen.PostEvent(ftxui::Event::Custom);
-
+                    agent_screen->post([&] {
+                        tui_state.approval_pending = false;
+                    });
+                    agent_screen->refresh();
                     return approved;
                 };
             }
+
+            // ─── Auto-responders for agent mode ───
+            stream.register_auto_responder("confirm_install", [](const PromptEvent& req) {
+                return req.defaultValue.empty() ? "y" : req.defaultValue;
+            });
+            stream.register_auto_responder("select_package", [](const PromptEvent& req) {
+                return req.options.empty() ? "" : req.options.front();
+            });
+
+            // ─── Helper: add hint/error as a turn with just a reply ───
+            auto add_hint = [&](std::string text) {
+                // For slash commands, we don't create turns — just log
+                (void)text;
+            };
+            auto add_error = [&](std::string text) {
+                (void)text;
+            };
+
+            // ─── Helper: restore conversation history as TurnNodes ───
+            auto restore_conversation_history = [&]() {
+                namespace llm = mcpplibs::llmapi;
+                tui_state.turns.clear();
+                std::string pending_user;
+                for (auto& msg : conversation.messages) {
+                    if (msg.role == llm::Role::User) {
+                        if (auto* s = std::get_if<std::string>(&msg.content)) {
+                            pending_user = *s;
+                        } else if (auto* parts = std::get_if<std::vector<llm::ContentPart>>(&msg.content)) {
+                            pending_user.clear();
+                            for (auto& part : *parts) {
+                                if (auto* t = std::get_if<llm::TextContent>(&part)) {
+                                    pending_user += t->text;
+                                }
+                            }
+                        }
+                    } else if (msg.role == llm::Role::Assistant && !pending_user.empty()) {
+                        std::string reply_text;
+                        if (auto* s = std::get_if<std::string>(&msg.content)) {
+                            reply_text = *s;
+                        } else if (auto* parts = std::get_if<std::vector<llm::ContentPart>>(&msg.content)) {
+                            for (auto& part : *parts) {
+                                if (auto* t = std::get_if<llm::TextContent>(&part)) {
+                                    reply_text += t->text;
+                                }
+                            }
+                        }
+                        if (!reply_text.empty()) {
+                            agent::tui::TurnNode tn;
+                            tn.user_message = std::move(pending_user);
+                            tn.reply = std::move(reply_text);
+                            tui_state.turns.push_back(std::move(tn));
+                            pending_user.clear();
+                        }
+                    }
+                }
+            };
 
             // ─── Slash command registry ───
             agent::CommandRegistry cmd_registry;
@@ -1199,63 +1216,44 @@ export int run(int argc, char* argv[]) {
                 session_mgr.save_conversation(session_meta.id, conversation);
                 session_meta.turn_count = conversation.size();
                 session_mgr.update_meta(session_meta);
-                add_hint("session saved: " + session_meta.id);
             }});
 
             cmd_registry.register_command({"/sessions", "List all saved sessions", [&](std::string_view) {
                 auto sessions = session_mgr.list();
-                if (sessions.empty()) {
-                    add_hint("no saved sessions");
-                } else {
-                    for (auto& s : sessions) {
-                        add_hint(s.id + " | " + s.title + " | " +
-                            s.model + " | " + std::to_string(s.turn_count) + " turns");
-                    }
-                }
+                (void)sessions;
             }});
 
             cmd_registry.register_command({"/resume", "Resume a saved session", [&](std::string_view args) {
-                if (args.empty()) {
-                    add_hint("usage: /resume <session-id>");
-                    return;
-                }
+                if (args.empty()) return;
                 auto meta = session_mgr.load_meta(std::string(args));
-                if (!meta) {
-                    add_error("session not found: " + std::string(args));
-                    return;
-                }
+                if (!meta) return;
                 session_meta = *meta;
                 conversation = session_mgr.load_conversation(std::string(args));
-                add_hint("resumed session: " + session_meta.title +
-                    " (" + std::to_string(conversation.size()) + " messages)");
-            }});
 
-            cmd_registry.register_command({"/verbose", "Toggle activity details display", [&](std::string_view) {
-                verbose_data = !verbose_data;
-                add_hint(verbose_data ? "activity details: ON" : "activity details: OFF");
+                // Restore history as TurnNodes
+                agent_screen->post([&] {
+                    restore_conversation_history();
+                    agent_screen->scroll_to_bottom();
+                });
+                agent_screen->refresh();
+
+                runtime.ctx_mgr.sync_from_conversation(conversation);
+                auto new_cache_dir = afs.sessions_path() / session_meta.id / "context_cache";
+                runtime.ctx_mgr.set_cache_dir(new_cache_dir);
             }});
 
             cmd_registry.register_command({"/model", "Switch or show current model", [&](std::string_view args) {
-                if (args.empty()) {
-                    add_hint("current model: " + cfg.model + " (" + cfg.provider + ")");
-                } else {
-                    cfg.model = std::string(args);
-                    cfg.provider = agent::infer_provider(cfg.model);
-                    tools = agent::to_llmapi_tools(bridge);
-                    ctx_mgr.set_model(cfg.model);
-                    screen.Post([&] { tui_state.model_name = cfg.model; });
-                    add_hint("switched to: " + cfg.model + " (" + cfg.provider + ")");
+                if (!args.empty()) {
+                    runtime.cfg.model = std::string(args);
+                    runtime.cfg.provider = agent::infer_provider(runtime.cfg.model);
+                    runtime.set_tools(agent::to_llmapi_tools(runtime.bridge));
+                    runtime.ctx_mgr.set_model(runtime.cfg.model);
+                    agent_screen->post([&] { tui_state.model_name = runtime.cfg.model; });
+                    agent_screen->refresh();
                 }
             }});
 
             cmd_registry.register_command({"/tokens", "Show token usage for this session", [&](std::string_view) {
-                add_hint("session tokens: \xe2\x86\x91" +
-                    agent::TokenTracker::format_tokens(tracker.session_input()) + " \xe2\x86\x93" +
-                    agent::TokenTracker::format_tokens(tracker.session_output()));
-                add_hint("context: " +
-                    agent::TokenTracker::format_tokens(tracker.context_used()) + " / " +
-                    agent::TokenTracker::format_tokens(
-                        agent::TokenTracker::context_limit(cfg.model)));
             }});
 
             cmd_registry.register_command({"/compact", "Compress context (keep last N turns, default 3)", [&](std::string_view args) {
@@ -1263,62 +1261,23 @@ export int run(int argc, char* argv[]) {
                 if (!args.empty()) {
                     try { keep = std::stoi(std::string(args)); } catch (...) {}
                 }
-                auto before = conversation.size();
-                ctx_mgr.compact(conversation, keep);
-                auto after = conversation.size();
-                add_hint("compacted: " + std::to_string(before) +
-                    " -> " + std::to_string(after) + " messages" +
-                    " (L2 cache: " + std::to_string(ctx_mgr.l2_count()) + " turns)");
+                runtime.ctx_mgr.compact(conversation, keep);
             }});
 
             cmd_registry.register_command({"/context", "Show context cache stats", [&](std::string_view) {
-                auto ctx_limit = agent::TokenTracker::context_limit(cfg.model);
-                add_hint("context cache stats:");
-                add_hint("  L1 (hot)  : " + std::to_string(conversation.size()) + " messages");
-                add_hint("  L2 (warm) : " + std::to_string(ctx_mgr.l2_count()) + " turn summaries");
-                add_hint("  L3 (cold) : " + std::to_string(ctx_mgr.l3_keyword_count()) + " keywords");
-                add_hint("  evicted   : ~" + agent::TokenTracker::format_tokens(
-                    ctx_mgr.total_evicted_tokens()) + " tokens");
-                add_hint("  context   : " + agent::TokenTracker::format_tokens(
-                    tracker.context_used()) + "/" + agent::TokenTracker::format_tokens(ctx_limit));
             }});
 
-            cmd_registry.register_command({"/clear", "Clear output", [&](std::string_view) {
-                screen.Post([&] { tui_state.lines.clear(); });
-                screen.PostEvent(ftxui::Event::Custom);
+            cmd_registry.register_command({"/clear", "Clear display", [&](std::string_view) {
             }});
 
             cmd_registry.register_command({"/help", "Show available commands", [&](std::string_view) {
-                add_hint("available commands:");
-                for (auto& cmd : cmd_registry.list_all()) {
-                    add_hint("  " + cmd.name + "  " + cmd.description);
-                }
-                add_hint("  exit/quit  Exit agent");
             }});
 
-            // ─── Build ftxui component (minimal: active content + input + status) ───
-            // Start with a space so ftxui places a blinking cursor (workaround for
-            // Chinese IME positioning — empty input has no cursor anchor).
-            std::string input_content = " ";
-
-            auto input_opt = ftxui::InputOption();
-            input_opt.content = &input_content;
-            input_opt.multiline = false;
-            input_opt.placeholder = "";
-            // Strip default decoration (no white background)
-            input_opt.transform = [](ftxui::InputState state) {
-                return state.element;
-            };
-            input_opt.on_change = [&] {
-                // Ensure leading space cursor anchor is preserved
-                if (input_content.empty() || input_content[0] != ' ') {
-                    input_content = " " + input_content;
-                }
-                // Check for slash commands (after the leading space)
-                auto trimmed = input_content.substr(1);
-                if (!trimmed.empty() && trimmed[0] == '/' &&
-                    trimmed.find(' ') == std::string::npos) {
-                    auto matches = cmd_registry.match(trimmed);
+            // ─── Input change handler: slash completion ───
+            auto on_input_change = [&] {
+                if (!input_content.empty() && input_content[0] == '/' &&
+                    input_content.find(' ') == std::string::npos) {
+                    auto matches = cmd_registry.match(input_content);
                     tui_state.completions = std::move(matches);
                     tui_state.completion_selected = tui_state.completions.empty() ? -1 : 0;
                 } else {
@@ -1326,32 +1285,11 @@ export int run(int argc, char* argv[]) {
                     tui_state.completion_selected = -1;
                 }
             };
-            input_opt.on_enter = [&] {
-                if (tui_state.approval_pending) {
-                    std::lock_guard lk(approval_mtx);
-                    approval_result = true;
-                    approval_cv.notify_one();
-                    return;
-                }
-                // Trim leading space (cursor workaround)
-                auto msg = input_content;
-                if (!msg.empty() && msg[0] == ' ') msg.erase(0, 1);
-                if (msg.empty()) return;
-                input_content = " ";  // reset with cursor anchor space
-                tui_state.history_pos = -1;
-                tui_state.saved_input.clear();
-                tui_state.completions.clear();
-                tui_state.completion_selected = -1;
-                {
-                    std::lock_guard lk(msg_mtx);
-                    msg_queue.push_back(std::move(msg));
-                }
-                msg_cv.notify_one();
-            };
 
-            auto input_component = ftxui::Input(input_opt);
-
-            auto component = ftxui::CatchEvent(input_component, [&](ftxui::Event event) {
+            // ─── ftxui key handler (runs in ftxui event loop) ───
+            // Note: must use ftxui:: prefix — "Event" clashes with xlings::Event
+            auto ftxui_key_handler = [&](const ftxui::Event& event) -> bool {
+                // Approval mode
                 if (tui_state.approval_pending) {
                     if (event == ftxui::Event::Character('y') || event == ftxui::Event::Character('Y')) {
                         std::lock_guard lk(approval_mtx);
@@ -1365,10 +1303,16 @@ export int run(int argc, char* argv[]) {
                         approval_cv.notify_one();
                         return true;
                     }
-                    if (event.is_character()) return true;
+                    if (event == ftxui::Event::Return) {
+                        std::lock_guard lk(approval_mtx);
+                        approval_result = true;
+                        approval_cv.notify_one();
+                        return true;
+                    }
+                    return true;
                 }
 
-                // History: ↑
+                // Arrow Up
                 if (event == ftxui::Event::ArrowUp) {
                     if (!tui_state.completions.empty()) {
                         if (tui_state.completion_selected > 0) --tui_state.completion_selected;
@@ -1379,10 +1323,11 @@ export int run(int argc, char* argv[]) {
                         } else if (tui_state.history_pos > 0) {
                             --tui_state.history_pos;
                         }
-                        input_content = " " + tui_state.history[tui_state.history_pos];
+                        input_content = tui_state.history[tui_state.history_pos];
                     }
                     return true;
                 }
+                // Arrow Down
                 if (event == ftxui::Event::ArrowDown) {
                     if (!tui_state.completions.empty()) {
                         if (tui_state.completion_selected < static_cast<int>(tui_state.completions.size()) - 1)
@@ -1393,20 +1338,22 @@ export int run(int argc, char* argv[]) {
                             tui_state.history_pos = -1;
                             input_content = tui_state.saved_input;
                         } else {
-                            input_content = " " + tui_state.history[tui_state.history_pos];
+                            input_content = tui_state.history[tui_state.history_pos];
                         }
                     }
                     return true;
                 }
+                // Tab: complete
                 if (event == ftxui::Event::Tab) {
                     if (tui_state.completion_selected >= 0 &&
                         tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
-                        input_content = " " + tui_state.completions[tui_state.completion_selected].first + " ";
+                        input_content = tui_state.completions[tui_state.completion_selected].first + " ";
                         tui_state.completions.clear();
                         tui_state.completion_selected = -1;
                     }
                     return true;
                 }
+                // Escape
                 if (event == ftxui::Event::Escape) {
                     if (!tui_state.completions.empty()) {
                         tui_state.completions.clear();
@@ -1414,415 +1361,116 @@ export int run(int argc, char* argv[]) {
                         return true;
                     }
                     if (tui_state.is_streaming || !tui_state.current_action.empty()) {
-                        cancel_requested.store(true);
+                        cancel_token.pause();
+                        stream.cancel_all_prompts();
                         return true;
                     }
+                    return true;
                 }
+                // Auto-clear Ctrl+C hint after timeout
+                if (ctrl_c_count > 0) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_ctrl_c_ms > 1500) {
+                        ctrl_c_count = 0;
+                        tui_state.current_action.clear();
+                    }
+                }
+                // Ctrl+C × 3 to exit (within 2s window)
+                if (event == ftxui::Event::Special("\x03")) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_ctrl_c_ms > 2000) ctrl_c_count = 0;
+                    ++ctrl_c_count;
+                    last_ctrl_c_ms = now;
+                    if (ctrl_c_count >= 3) {
+                        cancel_token.cancel();
+                        agent_screen->exit();
+                        return true;
+                    }
+                    int remaining = 3 - ctrl_c_count;
+                    tui_state.current_action = std::format(
+                        "Ctrl+C \xc3\x97 {} more to exit", remaining);
+                    return true;
+                }
+                // Real user input resets Ctrl+C count
+                if (ctrl_c_count > 0 && event.is_character()) {
+                    ctrl_c_count = 0;
+                    tui_state.current_action.clear();
+                }
+                // Enter: submit input (debounce to avoid paste triggering submit)
+                if (event == ftxui::Event::Return) {
+                    auto now = agent::tui::steady_now_ms();
+                    if (now - last_char_ms < 5) return true;  // paste newline, skip
+                    // Auto-fill selected completion on Enter
+                    if (tui_state.completion_selected >= 0 &&
+                        tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
+                        input_content = tui_state.completions[tui_state.completion_selected].first + " ";
+                        tui_state.completions.clear();
+                        tui_state.completion_selected = -1;
+                        return true;
+                    }
+                    auto msg = input_content;
+                    if (msg.empty()) return true;
+                    input_content.clear();
+                    tui_state.history_pos = -1;
+                    tui_state.saved_input.clear();
+                    tui_state.completions.clear();
+                    tui_state.completion_selected = -1;
+                    runtime.send_input(std::move(msg));
+                    return true;
+                }
+                // Track character timing for paste debounce
+                if (event.is_character()) {
+                    last_char_ms = agent::tui::steady_now_ms();
+                }
+                // All other events (chars, backspace, delete, arrows, home/end)
+                // fall through to ftxui::Input component
                 return false;
-            });
+            };
 
-            // Renderer: adaptive layout — expands downward until reaching
-            // terminal bottom, then pins input/status and scrolls content up.
-            auto renderer = ftxui::Renderer(component, [&] {
-                using namespace ftxui;
-                auto now_ms = agent::tui::steady_now_ms();
-                auto term_sz = ftxui::Terminal::Size();
-                int term_h = term_sz.dimy;
-                int term_w = term_sz.dimx;
+            // ─── Create AgentScreen ───
+            auto agent_screen_owner = std::make_unique<agent::AgentScreen>(
+                tui_state, input_content, on_input_change, ftxui_key_handler);
+            agent_screen = agent_screen_owner.get();
 
-                // ── Build content elements (history + streaming + active action) ──
-                // Trim history for performance (keep at most ~2x terminal height)
-                int max_history = std::max(term_h * 2, 40);
-                Elements content_elems;
-
-                int est_rows = 0;
-                int start_idx = static_cast<int>(tui_state.lines.size());
-                for (int i = static_cast<int>(tui_state.lines.size()) - 1; i >= 0; --i) {
-                    auto& line = tui_state.lines[i];
-                    int h = 1;
-                    if (line.type == agent::tui::ChatLine::ToolAction) {
-                        h += static_cast<int>(line.sub_steps.size())
-                           + static_cast<int>(line.details.size());
-                    } else if (line.type == agent::tui::ChatLine::AssistantText) {
-                        h = std::max(1, static_cast<int>(line.text.size()) / std::max(term_w - 4, 20) + 1);
-                    }
-                    if (est_rows + h > max_history) break;
-                    est_rows += h;
-                    start_idx = i;
-                }
-                for (int i = start_idx; i < static_cast<int>(tui_state.lines.size()); ++i) {
-                    content_elems.push_back(agent::tui::render_chat_line(tui_state.lines[i], now_ms));
-                }
-
-                // Active streaming / thinking
-                if (tui_state.is_streaming) {
-                    if (tui_state.is_thinking && tui_state.streaming_text.empty()) {
-                        auto elapsed_str = tui_state.turn_start_ms > 0
-                            ? agent::tui::format_duration(now_ms - tui_state.turn_start_ms) : "";
-                        content_elems.push_back(hbox({
-                            text("  thinking... ") | color(agent::tui::colors::dim()),
-                            text(elapsed_str) | color(agent::tui::colors::border()),
-                        }));
-                    } else if (!tui_state.streaming_text.empty()) {
-                        content_elems.push_back(hbox({
-                            text("\xe2\x97\x86 ") | color(agent::tui::colors::magenta()),
-                            paragraph(tui_state.streaming_text),
-                        }));
-                    }
-                }
-
-                // Active tool action
-                if (!tui_state.active_action_text.empty()) {
-                    content_elems.push_back(hbox({
-                        text("  \xe2\x9a\xa1 ") | color(agent::tui::colors::amber()),
-                        text(tui_state.active_action_text) | color(agent::tui::colors::amber()),
-                    }));
-                    for (auto& ss : tui_state.active_sub_steps) {
-                        content_elems.push_back(agent::tui::render_sub_step(ss, now_ms));
-                    }
-                    if (tui_state.active_progress > 0.01f) {
-                        int pct = static_cast<int>(tui_state.active_progress * 100.0f);
-                        content_elems.push_back(hbox({
-                            text("      \xe2\x96\xb8 ") | color(agent::tui::colors::cyan()),
-                            gauge(tui_state.active_progress)
-                                | size(WIDTH, EQUAL, 24) | color(agent::tui::colors::cyan()),
-                            text(" " + std::to_string(pct) + "%") | bold,
-                            text("  " + tui_state.active_progress_name)
-                                | color(agent::tui::colors::magenta()),
-                            text("  " + tui_state.active_progress_speed)
-                                | color(agent::tui::colors::cyan()),
-                            text("  " + tui_state.active_progress_eta)
-                                | color(agent::tui::colors::dim()),
-                        }));
-                    }
-                    for (auto& d : tui_state.active_details) {
-                        content_elems.push_back(text("      " + d) | color(agent::tui::colors::border()));
-                    }
-                }
-
-                // ── Bottom area: separator + input + separator + completions + status + margin ──
-                Elements bottom_elems;
-                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
-                if (tui_state.approval_pending) {
-                    bottom_elems.push_back(agent::tui::render_approval(tui_state));
-                } else {
-                    bottom_elems.push_back(hbox({
-                        text("> ") | bold | color(agent::tui::colors::cyan()),
-                        component->Render() | flex,
-                    }) | size(WIDTH, EQUAL, term_w));
-                }
-                bottom_elems.push_back(separator() | color(agent::tui::colors::border()));
-                if (!tui_state.completions.empty()) {
-                    bottom_elems.push_back(agent::tui::render_completions(tui_state));
-                }
-                bottom_elems.push_back(agent::tui::render_status_bar(tui_state, now_ms));
-                bottom_elems.push_back(text(""));
-
-                // Count bottom area height: sep(1) + input(1) + sep(1) + status(1) + margin(1) = 5
-                int bottom_h = 5;
-                if (!tui_state.completions.empty()) {
-                    bottom_h += std::min(static_cast<int>(tui_state.completions.size()), 8);
-                }
-                if (tui_state.approval_pending) bottom_h += 1;
-
-                // Estimate content height (rough: reuse est_rows from trimming + active elements)
-                int content_h = est_rows;
-                if (tui_state.is_streaming) content_h += 1;
-                if (!tui_state.active_action_text.empty()) {
-                    content_h += 1 + static_cast<int>(tui_state.active_sub_steps.size())
-                        + static_cast<int>(tui_state.active_details.size());
-                    if (tui_state.active_progress > 0.01f) content_h += 1;
-                }
-
-                int total_h = content_h + bottom_h;
-
-                if (total_h < term_h) {
-                    // ── Not yet at bottom: natural expansion, no pinning ──
-                    Elements all;
-                    for (auto& e : content_elems) all.push_back(std::move(e));
-                    for (auto& e : bottom_elems) all.push_back(std::move(e));
-                    return vbox(std::move(all));
-                } else {
-                    // ── Reached bottom: pin bottom area, scroll content up ──
-                    auto scroll_area = vbox(std::move(content_elems))
-                        | yframe | focusPositionRelative(0, 1) | flex;
-                    return vbox({
-                        scroll_area,
-                        vbox(std::move(bottom_elems)),
-                    }) | size(HEIGHT, EQUAL, term_h);
-                }
-            });
+            // Wire session to TUI + threading components
+            runtime.policy = policy_ptr;
+            runtime.confirm_cb = confirm_cb;
+            runtime.cancel = &cancel_token;
+            runtime.screen = agent_screen;
+            runtime.tui_state = &tui_state;
+            runtime.commands = &cmd_registry;
+            runtime.on_log = [&](std::string_view role, std::string_view content) {
+                journal.log_llm_turn(std::string(role), std::string(content));
+            };
 
             // ─── Agent worker thread ───
             std::jthread agent_thread([&](std::stop_token st) {
-                while (!st.stop_requested()) {
-                    std::string user_input;
-                    {
-                        std::unique_lock lk(msg_mtx);
-                        msg_cv.wait(lk, [&] {
-                            return !msg_queue.empty() || st.stop_requested();
-                        });
-                        if (st.stop_requested() && msg_queue.empty()) break;
-                        if (msg_queue.empty()) continue;
-                        user_input = std::move(msg_queue.front());
-                        msg_queue.pop_front();
-                    }
-
-                    if (user_input == "exit" || user_input == "quit") {
-                        screen.Post([&] { screen.Exit(); });
-                        break;
-                    }
-
-                    // Handle slash commands
-                    if (!user_input.empty() && user_input[0] == '/' && cmd_registry.execute(user_input)) {
-                        continue;
-                    }
-
-                    journal.log_llm_turn("user", user_input);
-
-                    // Add user message to lines, set streaming state
-                    auto now_ms = agent::tui::steady_now_ms();
-                    screen.Post([&, input = user_input, now_ms] {
-                        tui_state.lines.push_back({
-                            .type = agent::tui::ChatLine::UserMsg,
-                            .text = input,
-                        });
-                        tui_state.is_streaming = true;
-                        tui_state.is_thinking = true;
-                        tui_state.streaming_text.clear();
-                        tui_state.current_action = "thinking...";
-                        tui_state.turn_start_ms = now_ms;
-                        tui_state.active_progress = 0.0f;
-                        tui_state.active_details.clear();
-                        if (tui_state.history.empty() || tui_state.history.back() != input) {
-                            tui_state.history.push_back(input);
-                        }
-                    });
-                    screen.PostEvent(ftxui::Event::Custom);
-
-                    // Reset cancel flag
-                    cancel_requested.store(false);
-
-                    // Run LLM turn with streaming
-                    agent::tui::ThinkFilter think_filter;
-                    agent::TurnResult turn_result;
-
-                    try {
-                        turn_result = agent::run_one_turn(
-                            conversation, user_input, system_prompt, tools, bridge, stream, cfg,
-                            // Streaming callback
-                            [&](std::string_view chunk) {
-                                if (cancel_requested.load()) {
-                                    throw std::runtime_error("cancelled");
-                                }
-                                auto filtered = think_filter.filter(chunk);
-                                bool thinking = think_filter.in_think;
-                                screen.Post([&, f = std::move(filtered), thinking] {
-                                    if (thinking && tui_state.streaming_text.empty()) {
-                                        tui_state.is_thinking = true;
-                                        tui_state.current_action = "thinking...";
-                                    }
-                                    if (!f.empty()) {
-                                        tui_state.is_thinking = false;
-                                        tui_state.streaming_text += f;
-                                        tui_state.current_action = "responding...";
-                                    }
-                                });
-                                screen.PostEvent(ftxui::Event::Custom);
-                            },
-                            policy_ptr, confirm_cb,
-                            // Tool call callback — flush streaming, track active action
-                            [&](int id, std::string_view name, std::string_view args) {
-                                auto call_start = agent::tui::steady_now_ms();
-                                std::string args_display(args);
-                                if (args_display.size() > 60) {
-                                    args_display = args_display.substr(0, 57) + "...";
-                                }
-                                // Flush any streaming text to lines
-                                screen.Post([&, n = std::string(name), a = std::move(args_display), call_start] {
-                                    if (!tui_state.streaming_text.empty()) {
-                                        tui_state.lines.push_back({
-                                            .type = agent::tui::ChatLine::AssistantText,
-                                            .text = std::move(tui_state.streaming_text),
-                                        });
-                                        tui_state.streaming_text.clear();
-                                    }
-                                    tui_state.is_streaming = false;
-                                    tui_state.is_thinking = false;
-                                    tui_state.current_action = "executing " + n + "...";
-                                    tui_state.active_action_text = n + " (" + a + ")";
-                                    tui_state.active_action_start = call_start;
-                                    tui_state.active_progress = 0.0f;
-                                    tui_state.active_details.clear();
-                                    // Build sub-steps: close thinking, start execution
-                                    tui_state.active_sub_steps.clear();
-                                    tui_state.active_sub_steps.push_back({
-                                        .label = "thinking",
-                                        .start_ms = tui_state.turn_start_ms,
-                                        .end_ms = call_start,
-                                        .done = true,
-                                    });
-                                    tui_state.active_sub_steps.push_back({
-                                        .label = "execution",
-                                        .start_ms = call_start,
-                                    });
-                                });
-                                screen.PostEvent(ftxui::Event::Custom);
-                            },
-                            // Tool result callback — add completed action to lines
-                            [&](int id, std::string_view name, bool is_error) {
-                                auto end_ms = agent::tui::steady_now_ms();
-                                screen.Post([&, id, n = std::string(name), is_error, end_ms] {
-                                    // Close execution sub-step
-                                    if (!tui_state.active_sub_steps.empty()) {
-                                        auto& last = tui_state.active_sub_steps.back();
-                                        if (!last.done) {
-                                            last.end_ms = end_ms;
-                                            last.done = true;
-                                            last.failed = is_error;
-                                        }
-                                    }
-                                    // Total time = sum of all sub-step durations
-                                    int64_t total_ms = 0;
-                                    for (auto& ss : tui_state.active_sub_steps) {
-                                        if (ss.done) total_ms += (ss.end_ms - ss.start_ms);
-                                    }
-                                    // Build completed action line
-                                    agent::tui::ChatLine done_line;
-                                    done_line.type = agent::tui::ChatLine::ToolAction;
-                                    done_line.text = tui_state.active_action_text;
-                                    done_line.action_id = id;
-                                    done_line.status = is_error ? agent::tui::ChatLine::Failed
-                                                               : agent::tui::ChatLine::Done;
-                                    done_line.elapsed_ms = static_cast<int>(total_ms);
-                                    done_line.sub_steps = tui_state.active_sub_steps;
-                                    done_line.details = tui_state.active_details;
-                                    tui_state.lines.push_back(std::move(done_line));
-
-                                    // Reset active state, back to streaming
-                                    tui_state.current_action = "thinking...";
-                                    tui_state.active_action_text.clear();
-                                    tui_state.active_action_start = 0;
-                                    tui_state.active_progress = 0.0f;
-                                    tui_state.active_details.clear();
-                                    tui_state.active_sub_steps.clear();
-                                    tui_state.is_streaming = true;
-                                    tui_state.is_thinking = true;
-                                });
-                                screen.PostEvent(ftxui::Event::Custom);
-                            },
-                            &ctx_mgr, &tracker,
-                            // Auto-compact callback
-                            [&](int evicted, int freed) {
-                                add_hint("\xe2\x97\x88 auto-compact: evicted "
-                                    + std::to_string(evicted) + " turns, freed ~"
-                                    + agent::TokenTracker::format_tokens(freed) + " tokens");
-                            }
-                        );
-                    } catch (const std::exception& e) {
-                        bool was_cancelled = cancel_requested.exchange(false);
-                        screen.Post([&, err = std::string(e.what()), was_cancelled] {
-                            tui_state.is_streaming = false;
-                            tui_state.is_thinking = false;
-                            tui_state.streaming_text.clear();
-                            tui_state.current_action.clear();
-                            tui_state.turn_start_ms = 0;
-                            if (was_cancelled) {
-                                tui_state.lines.push_back({
-                                    .type = agent::tui::ChatLine::Hint,
-                                    .text = "  cancelled by user",
-                                });
-                            } else {
-                                tui_state.lines.push_back({
-                                    .type = agent::tui::ChatLine::Error,
-                                    .text = "LLM request failed: " + err,
-                                });
-                            }
-                            tui_state.lines.push_back({.type = agent::tui::ChatLine::Separator});
-                        });
-                        screen.PostEvent(ftxui::Event::Custom);
-                        // Remove the incomplete user message from conversation
-                        if (was_cancelled && !conversation.messages.empty()) {
-                            conversation.messages.pop_back();
-                        }
-                        continue;
-                    }
-
-                    // Flush remaining think filter content
-                    auto remaining = think_filter.flush();
-
-                    // Turn complete: finalize streaming, update status
-                    auto turn_end_ms = agent::tui::steady_now_ms();
-                    screen.Post([&, rem = std::move(remaining), tr = turn_result, turn_end_ms] {
-                        auto total_elapsed = tui_state.turn_start_ms > 0
-                            ? turn_end_ms - tui_state.turn_start_ms : 0LL;
-                        std::string final_text = tui_state.streaming_text;
-                        if (!rem.empty()) final_text += rem;
-                        if (!final_text.empty()) {
-                            tui_state.lines.push_back({
-                                .type = agent::tui::ChatLine::AssistantText,
-                                .text = std::move(final_text),
-                            });
-                        }
-                        tui_state.is_streaming = false;
-                        tui_state.is_thinking = false;
-                        tui_state.streaming_text.clear();
-                        // Show total turn time as hint
-                        tui_state.lines.push_back({
-                            .type = agent::tui::ChatLine::Hint,
-                            .text = "  total: " + agent::tui::format_duration(
-                                static_cast<int>(total_elapsed)),
-                        });
-
-                        // Update status bar
-                        tracker.record(tr.input_tokens, tr.output_tokens);
-                        ctx_mgr.record_turn();
-                        tui_state.ctx_used = tracker.context_used();
-                        tui_state.session_input = tracker.session_input();
-                        tui_state.session_output = tracker.session_output();
-                        tui_state.l2_cache_count = ctx_mgr.l2_count();
-                        tui_state.current_action.clear();
-                        tui_state.turn_start_ms = 0;
-                    });
-                    screen.PostEvent(ftxui::Event::Custom);
-
-                    journal.log_llm_turn("assistant", turn_result.reply);
-                }
+                runtime.run_session(st);
             });
 
-            // ─── Timer thread: 24fps re-render for smooth UI and resize handling ───
-            std::jthread timer_thread([&](std::stop_token st) {
-                while (!st.stop_requested()) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(42));
-                    if (!st.stop_requested()) {
-                        screen.PostEvent(ftxui::Event::Custom);
-                    }
-                }
-            });
-
-            // ─── Ensure cursor is on input from the start ───
-            input_component->TakeFocus();
+            // ─── Restore history if resuming a session ───
+            if (!conversation.messages.empty()) {
+                restore_conversation_history();
+            }
 
             // ─── ftxui main loop (blocks main thread) ───
-            screen.Loop(renderer);
-
-            // Stop timer
-            timer_thread.request_stop();
+            agent_screen->loop();
 
             // ─── Cleanup ───
+            // Wait for agent thread to fully stop before re-enabling CLI output,
+            // otherwise in-flight download events would render CLI progress bars.
             agent_thread.request_stop();
-            msg_cv.notify_all();
-            // jthread destructor will join
+            runtime.notify();
+            agent_thread.join();
 
-            // Save context cache
-            ctx_mgr.save_cache();
+            runtime.ctx_mgr.save_cache();
 
-            // Restore TUI listener and remove agent listeners
-            stream.set_enabled(tui_listener, true);
             stream.remove_listener(agent_listener);
-            stream.remove_listener(ftxui_data_listener);
+            stream.remove_listener(data_listener);
+            stream.clear_auto_responders();
+            platform::set_tui_mode(false);
+            stream.set_enabled(tui_listener, true);
 
-            // Auto-save on exit
             session_mgr.save_conversation(session_meta.id, conversation);
             session_meta.turn_count = conversation.size();
             session_mgr.update_meta(session_meta);

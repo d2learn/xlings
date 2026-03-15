@@ -31,18 +31,31 @@ auto highlight() -> Decorator { return ftxui::bold | ftxui::color(magenta()); }
 auto label()     -> Decorator { return ftxui::color(dim_color()); }
 auto body()      -> Decorator { return ftxui::color(text_color()); }
 
-// --- Unicode Icons ---
+// --- Icons (cross-platform safe) ---
 namespace icon {
-    constexpr auto pending     = "\u25CC";  // ◌
-    constexpr auto downloading = "\u2193";  // ↓
-    constexpr auto extracting  = "\u27D0";  // ⟐
-    constexpr auto installing  = "\u2699";  // ⚙
-    constexpr auto configuring = "\u2699";  // ⚙
-    constexpr auto done        = "\u2713";  // ✓
-    constexpr auto failed      = "\u2717";  // ✗
-    constexpr auto info        = "\u203A";  // ›
-    constexpr auto arrow       = "\u25B8";  // ▸
-    constexpr auto package     = "\u25C6";  // ◆
+#if defined(_WIN32)
+    inline constexpr auto pending     = "o";
+    inline constexpr auto downloading = "v";
+    inline constexpr auto extracting  = ">";
+    inline constexpr auto installing  = "*";
+    inline constexpr auto configuring = "*";
+    inline constexpr auto done        = "+";
+    inline constexpr auto failed      = "x";
+    inline constexpr auto info        = ">";
+    inline constexpr auto arrow       = ">";
+    inline constexpr auto package     = "#";
+#else
+    inline constexpr auto pending     = "\xe2\x97\x8b";   // ○
+    inline constexpr auto downloading = "\xe2\x86\x93";   // ↓
+    inline constexpr auto extracting  = "\xe2\x9f\x90";   // ⟐
+    inline constexpr auto installing  = "\xe2\x9a\x99";   // ⚙
+    inline constexpr auto configuring = "\xe2\x9a\x99";   // ⚙
+    inline constexpr auto done        = "\xe2\x9c\x93";   // ✓
+    inline constexpr auto failed      = "\xe2\x9c\x97";   // ✗
+    inline constexpr auto info        = "\xe2\x80\xba";   // ›
+    inline constexpr auto arrow       = "\xe2\x96\xb8";   // ▸
+    inline constexpr auto package     = "\xe2\x97\x86";   // ◆
+#endif
 } // namespace icon
 
 } // namespace xlings::ui::theme

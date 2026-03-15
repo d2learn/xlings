@@ -285,11 +285,22 @@ int render_download_progress(std::span<const DownloadProgressEntry> progState,
     }
 
     // Overall progress bar
+    // When some packages have unknown sizes (totalBytes==0 and not finished),
+    // byte-based progress is misleading. Fall back to finished_count/total_count.
     float overallPct = 0.0f;
     std::string speedStr;
     std::string etaStr;
 
-    if (sizesReady && totalBytes > 0.0) {
+    int totalCount = static_cast<int>(progState.size());
+    int finishedCount = 0;
+    bool allSizesKnown = true;
+    for (auto& p : progState) {
+        if (p.finished) ++finishedCount;
+        else if (p.totalBytes <= 0.0) allSizesKnown = false;
+    }
+
+    if (allSizesKnown && totalBytes > 0.0) {
+        // All sizes known: use byte-weighted progress
         overallPct = static_cast<float>(totalDownloaded / totalBytes);
         if (overallPct > 1.0f) overallPct = 1.0f;
 
@@ -306,6 +317,9 @@ int render_download_progress(std::span<const DownloadProgressEntry> progState,
                 etaStr = "  ETA " + format_eta(remainingSec);
             }
         }
+    } else if (totalCount > 0) {
+        // Fallback: count-based progress
+        overallPct = static_cast<float>(finishedCount) / static_cast<float>(totalCount);
     }
 
     int pctWhole = static_cast<int>(overallPct * 100.0f);
