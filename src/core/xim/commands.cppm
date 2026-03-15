@@ -238,33 +238,31 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto mirror = Config::mirror();
     if (!mirror.empty()) dlConfig.preferredMirror = mirror;
 
-    // Download progress renderer: emit via EventStream so CLI consumer renders.
-    // In quiet mode (agent TUI), skip rendering to avoid stdout interference.
-    DownloadProgressRenderer dlRenderer;
-    if (!platform::is_tui_mode()) {
-        dlRenderer = [&stream](std::span<const TaskProgress> state, std::size_t nameWidth,
-                      double elapsedSec, bool sizesReady, int prevLines) -> int {
-            nlohmann::json files = nlohmann::json::array();
-            for (auto& p : state) {
-                files.push_back({
-                    {"name", p.name},
-                    {"totalBytes", p.totalBytes},
-                    {"downloadedBytes", p.downloadedBytes},
-                    {"started", p.started},
-                    {"finished", p.finished},
-                    {"success", p.success}
-                });
-            }
-            nlohmann::json payload;
-            payload["files"] = std::move(files);
-            payload["nameWidth"] = nameWidth;
-            payload["elapsedSec"] = elapsedSec;
-            payload["sizesReady"] = sizesReady;
-            payload["prevLines"] = prevLines;
-            stream.emit(DataEvent{"download_progress", payload.dump()});
-            return static_cast<int>(state.size()) + 2;
-        };
-    }
+    // Download progress renderer: emit via EventStream so consumers can render.
+    // CLI consumer renders ftxui progress bars; agent TUI shows summary text.
+    DownloadProgressRenderer dlRenderer = [&stream](std::span<const TaskProgress> state,
+                  std::size_t nameWidth, double elapsedSec, bool sizesReady,
+                  int prevLines) -> int {
+        nlohmann::json files = nlohmann::json::array();
+        for (auto& p : state) {
+            files.push_back({
+                {"name", p.name},
+                {"totalBytes", p.totalBytes},
+                {"downloadedBytes", p.downloadedBytes},
+                {"started", p.started},
+                {"finished", p.finished},
+                {"success", p.success}
+            });
+        }
+        nlohmann::json payload;
+        payload["files"] = std::move(files);
+        payload["nameWidth"] = nameWidth;
+        payload["elapsedSec"] = elapsedSec;
+        payload["sizesReady"] = sizesReady;
+        payload["prevLines"] = prevLines;
+        stream.emit(DataEvent{"download_progress", payload.dump()});
+        return static_cast<int>(state.size()) + 2;
+    };
 
     int successCount = 0;
     int failedCount = 0;

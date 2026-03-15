@@ -68,6 +68,9 @@ export struct AgentTuiState {
     int history_pos     {-1};
     std::string saved_input;
 
+    // Download progress (e.g. "↓ 2/3 67%")
+    std::string download_progress;
+
     // Approval prompt
     bool approval_pending {false};
     std::string approval_tool_name;

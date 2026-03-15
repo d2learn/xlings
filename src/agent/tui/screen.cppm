@@ -118,7 +118,8 @@ auto compact_tool_args(const std::string& args_json) -> std::string {
 auto render_tree_node(const BehaviorNode& node,
                       const std::string& prefix,
                       bool is_last,
-                      int approval_node_id = 0) -> Element {
+                      int approval_node_id = 0,
+                      const std::string& dl_progress = {}) -> Element {
     std::string connector = is_last ? "\xe2\x94\x94\xe2\x94\x80 "   // └─
                                     : "\xe2\x94\x9c\xe2\x94\x80 ";  // ├─
 
@@ -150,11 +151,19 @@ auto render_tree_node(const BehaviorNode& node,
 
     auto time_el = text(time_text(node)) | color(ui::theme::dim_color());
 
+    // Download progress: only on running atom nodes
+    auto progress_el = (!dl_progress.empty()
+                        && node.type == BehaviorNode::TypeAtom
+                        && node.state == BehaviorNode::Running)
+        ? text("  " + dl_progress) | color(ui::theme::cyan())
+        : text("");
+
     auto line = hbox({
         text(prefix + connector),
         icon_el,
         title_el,
         time_el,
+        progress_el,
     });
 
     Elements rows;
@@ -166,7 +175,8 @@ auto render_tree_node(const BehaviorNode& node,
 
     for (std::size_t i = 0; i < node.children.size(); ++i) {
         bool child_is_last = (i == node.children.size() - 1);
-        rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last, approval_node_id));
+        rows.push_back(render_tree_node(node.children[i], child_prefix, child_is_last,
+                                        approval_node_id, dl_progress));
     }
 
     return vbox(std::move(rows));
@@ -215,7 +225,8 @@ auto render_turn(const tui::TurnNode& tn, const tui::AgentTuiState& state,
     int appr_id = state.approval_pending ? state.approval_node_id : 0;
     for (std::size_t i = 0; i < tree_root.children.size(); ++i) {
         bool is_last = (i == tree_root.children.size() - 1);
-        rows.push_back(render_tree_node(tree_root.children[i], "", is_last, appr_id));
+        rows.push_back(render_tree_node(tree_root.children[i], "", is_last,
+                                        appr_id, state.download_progress));
     }
 
     // Empty line between tree and reply

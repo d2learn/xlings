@@ -157,52 +157,9 @@ DownloadResult download_one(const DownloadTask& task,
     urls.push_back(url);
     for (auto& fb : task.fallbackUrls) urls.push_back(fb);
 
-    // When cancellation is available, use subprocess curl for instant kill support.
-    // The in-process tinyhttps client blocks on socket I/O and can't be interrupted
-    // mid-transfer, so spawning curl as a child process lets wait_or_kill() send
-    // SIGTERM/SIGKILL immediately when the user presses ESC.
-    if (cancel) {
-        bool downloaded = false;
-        std::string lastErr;
-        for (auto& tryUrl : urls) {
-            if (cancel->is_cancelled()) { result.error = "cancelled"; return result; }
-            for (int att = 0; att <= 3; ++att) {
-                if (cancel->is_cancelled()) { result.error = "cancelled"; return result; }
-                // Spawn curl: -sS (silent + show errors), -L (follow redirects),
-                // --connect-timeout, --max-time, -o (output file)
-                auto cmd = std::format(
-                    "curl -sSL --connect-timeout 30 --max-time 600 -o \"{}\" \"{}\"",
-                    destFile.string(), tryUrl);
-                auto h = platform::spawn_command(cmd);
-                if (h.pid <= 0) { lastErr = "failed to spawn curl"; continue; }
-                auto [code, output] = platform::wait_or_kill(
-                    h, cancel, std::chrono::minutes{10});
-                if (cancel->is_cancelled()) {
-                    // Remove partial file
-                    std::filesystem::remove(destFile, ec);
-                    result.error = "cancelled";
-                    return result;
-                }
-                if (code == 0 && std::filesystem::exists(destFile)) {
-                    downloaded = true;
-                    // Report final progress
-                    if (onProgress) {
-                        auto sz = static_cast<double>(std::filesystem::file_size(destFile, ec));
-                        onProgress(sz, sz);
-                    }
-                    break;
-                }
-                lastErr = output.empty() ? std::format("curl exit code {}", code) : output;
-                std::filesystem::remove(destFile, ec);
-            }
-            if (downloaded) break;
-        }
-        if (!downloaded) {
-            result.error = lastErr;
-            return result;
-        }
-    } else {
-        // Non-cancellable path: use in-process HTTP client
+    // Use in-process tinyhttps for all downloads (streaming progress).
+    // When a CancellationToken is available, wire isCancelled so ESC aborts.
+    {
         tinyhttps::DownloadOptions opts;
         opts.destFile = destFile;
         opts.urls = std::move(urls);
@@ -210,6 +167,9 @@ DownloadResult download_one(const DownloadTask& task,
         opts.connectTimeoutSec = 30;
         opts.maxTimeSec = 600;
         opts.onProgress = onProgress;
+        if (cancel) {
+            opts.isCancelled = [cancel] { return cancel->is_cancelled(); };
+        }
 
         auto dlResult = tinyhttps::download_file(opts);
         if (!dlResult.success) {
@@ -315,14 +275,14 @@ download_all(std::span<const DownloadTask> tasks,
     // Uses relative cursor movement (\033[<N>A) to overwrite previous frame in-place.
     auto startTime = std::chrono::steady_clock::now();
 
-    bool canRewrite = platform::supports_rewrite_output();
+    bool canRewrite = platform::supports_rewrite_output() && !platform::is_tui_mode();
     int lastLines = 0;  // lines rendered in previous frame (for cursor-up)
 
     std::jthread tuiThread([&](std::stop_token stoken) {
         if (!onRender) return;  // No renderer — skip TUI
 
         if (canRewrite) {
-            // Hide cursor during download
+            // Hide cursor during download (CLI mode only)
             std::print("\033[?25l");
             std::fflush(stdout);
         }

@@ -44,7 +44,7 @@ auto make_client(int connectTimeoutSec, int readTimeoutSec = 60)
     return mcpplibs::tinyhttps::HttpClient(std::move(cfg));
 }
 
-// Single download attempt: GET url → dest file
+// Single download attempt: stream GET url → dest file with progress
 DownloadFileResult download_once(
     const std::string& url,
     const std::filesystem::path& dest,
@@ -54,30 +54,18 @@ DownloadFileResult download_once(
 ) {
     auto client = make_client(connectSec, maxSec);
 
-    mcpplibs::tinyhttps::HttpRequest req;
-    req.method = mcpplibs::tinyhttps::Method::GET;
-    req.url = url;
-    req.headers["User-Agent"] = "xlings/1.0";
-    req.headers["Accept"] = "*/*";
-
-    auto resp = client.send(req);
-
-    if (!resp.ok()) {
-        return {false, "HTTP " + std::to_string(resp.statusCode) + " " + resp.statusText};
+    mcpplibs::tinyhttps::DownloadProgressFn progress;
+    if (onProgress) {
+        progress = [&](std::int64_t total, std::int64_t downloaded) {
+            onProgress(static_cast<double>(total), static_cast<double>(downloaded));
+        };
     }
 
-    std::error_code ec;
-    std::filesystem::create_directories(dest.parent_path(), ec);
+    auto result = client.download_to_file(url, dest, progress);
 
-    std::ofstream ofs(dest, std::ios::binary);
-    if (!ofs) return {false, "cannot open: " + dest.string()};
-
-    ofs.write(resp.body.data(), static_cast<std::streamsize>(resp.body.size()));
-    ofs.close();
-
-    if (onProgress) {
-        auto total = static_cast<double>(resp.body.size());
-        onProgress(total, total);
+    if (!result.ok()) {
+        return {false, result.error.empty()
+            ? "HTTP " + std::to_string(result.statusCode) : result.error};
     }
 
     return {true, {}};

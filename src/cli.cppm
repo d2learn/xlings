@@ -173,6 +173,8 @@ static void dispatch_data_event(const DataEvent& e) {
         ui::print_table(headers, rows);
     }
     else if (e.kind == "download_progress") {
+        // Skip CLI rendering in TUI mode (agent TUI handles progress separately)
+        if (platform::is_tui_mode()) return;
         auto nameWidth = json.value("nameWidth", std::size_t{20});
         auto elapsedSec = json.value("elapsedSec", 0.0);
         auto sizesReady = json.value("sizesReady", false);
@@ -1017,12 +1019,32 @@ export int run(int argc, char* argv[]) {
             agent::AgentScreen* agent_screen = nullptr;
 
             // ─── Consumer 3: data event listener ───
-            // Download progress → tree node, other events ignored in ftxui mode
+            // Download progress → update tui_state via post() for thread safety
             int data_listener = stream.on_event([&](const Event& e) {
                 if (auto* d = std::get_if<DataEvent>(&e)) {
-                    // Data events are captured by ToolBridge event buffer
-                    // No direct TUI update needed — tree nodes show tool status
-                    (void)d;
+                    if (d->kind == "download_progress" && agent_screen) {
+                        auto json = nlohmann::json::parse(d->json, nullptr, false);
+                        if (json.is_discarded() || !json.contains("files")) return;
+                        auto& files = json["files"];
+                        int total = static_cast<int>(files.size());
+                        int done = 0;
+                        double dl_bytes = 0, total_bytes = 0;
+                        for (auto& f : files) {
+                            if (f.value("finished", false)) ++done;
+                            dl_bytes += f.value("downloadedBytes", 0.0);
+                            total_bytes += f.value("totalBytes", 0.0);
+                        }
+                        std::string progress;
+                        if (done < total) {
+                            int pct = total_bytes > 0
+                                ? static_cast<int>(dl_bytes * 100.0 / total_bytes) : 0;
+                            progress = std::format("\xe2\x86\x93 {}/{} {}%", done, total, pct);
+                        }
+                        agent_screen->post([&tui_state, p = std::move(progress)] {
+                            tui_state.download_progress = std::move(p);
+                        });
+                        agent_screen->refresh();
+                    }
                 }
             });
 
@@ -1350,16 +1372,19 @@ export int run(int argc, char* argv[]) {
             agent_screen->loop();
 
             // ─── Cleanup ───
+            // Wait for agent thread to fully stop before re-enabling CLI output,
+            // otherwise in-flight download events would render CLI progress bars.
             agent_thread.request_stop();
             runtime.notify();
+            agent_thread.join();
 
             runtime.ctx_mgr.save_cache();
 
-            stream.set_enabled(tui_listener, true);
-            platform::set_tui_mode(false);
             stream.remove_listener(agent_listener);
             stream.remove_listener(data_listener);
             stream.clear_auto_responders();
+            platform::set_tui_mode(false);
+            stream.set_enabled(tui_listener, true);
 
             session_mgr.save_conversation(session_meta.id, conversation);
             session_meta.turn_count = conversation.size();
