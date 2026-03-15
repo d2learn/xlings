@@ -34,6 +34,7 @@ namespace platform {
     export using platform_impl::ProcessHandle;
     export using platform_impl::spawn_command;
     export using platform_impl::wait_or_kill;
+    export using platform_impl::Icon;
 
     export [[nodiscard]] std::string get_rundir() {
         return gRundir;

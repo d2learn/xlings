@@ -30,8 +30,8 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "search_packages",
-            .description = "Search for available packages by keyword. Returns only package names and brief descriptions. Use package_info to get full details (versions, metadata, install status).",
-            .inputSchema = R"({"type":"object","properties":{"keyword":{"type":"string"}},"required":["keyword"]})",
+            .description = "Search available packages by keyword (fuzzy match). Use plain name without version or namespace (e.g. gc matches gcc, musl-gcc)",
+            .inputSchema = R"JSON({"type":"object","properties":{"keyword":{"type":"string","description":"Keyword for fuzzy matching package names, e.g. gc, nod, rust"}},"required":["keyword"]})JSON",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = false,
         };
@@ -49,7 +49,7 @@ public:
         return {
             .name = "install_packages",
             .description = "Install one or more packages",
-            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"}},"yes":{"type":"boolean"},"noDeps":{"type":"boolean"},"global":{"type":"boolean"}},"required":["targets"]})",
+            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"},"description":"Format: name, name@version, or namespace:name@version"},"yes":{"type":"boolean","description":"Auto-confirm without prompting"},"noDeps":{"type":"boolean","description":"Skip dependency installation"},"global":{"type":"boolean","description":"Install to global scope"}},"required":["targets"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
@@ -75,8 +75,8 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "remove_package",
-            .description = "Remove an installed package",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string"}},"required":["target"]})",
+            .description = "Remove one package or one specific version. Only removes one target per call — to remove multiple versions, call multiple times",
+            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Format: name, name@version, or namespace:name@version"}},"required":["target"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
@@ -93,7 +93,7 @@ public:
         return {
             .name = "update_packages",
             .description = "Update package index or a specific package",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string"}}})",
+            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Package name to update, or omit to update index"}}})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
@@ -109,8 +109,8 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "list_packages",
-            .description = "List installed packages, optionally filtered",
-            .inputSchema = R"({"type":"object","properties":{"filter":{"type":"string"}}})",
+            .description = "List installed packages. Filter is a plain package name keyword (fuzzy match, not regex)",
+            .inputSchema = R"JSON({"type":"object","properties":{"filter":{"type":"string","description":"Plain package name to filter, e.g. gcc, node"}}})JSON",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = false,
         };
@@ -126,8 +126,8 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "package_info",
-            .description = "Get complete package information including name, all available versions, install status, and metadata. Use this when you need version details or package state.",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string"}},"required":["target"]})",
+            .description = "Get detailed package info: versions, install status, metadata. Use namespace:name format (e.g. xim:gcc)",
+            .inputSchema = R"JSON({"type":"object","properties":{"target":{"type":"string","description":"Package in namespace:name format, e.g. xim:gcc"}},"required":["target"]})JSON",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = false,
         };
@@ -138,25 +138,37 @@ public:
     }
 };
 
+class ListVersions : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_installed_versions",
+            .description = "List installed versions for a package and show which is active. Use plain name (e.g. gcc not xim:gcc)",
+            .inputSchema = R"JSON({"type":"object","properties":{"target":{"type":"string","description":"Plain package name, e.g. gcc, node"}},"required":["target"]})JSON",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        return exit_result(xvm::cmd_list_versions(json.value("target", ""), stream));
+    }
+};
+
 class UseVersion : public Capability {
 public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "use_version",
-            .description = "Switch tool version or list available versions",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string"},"version":{"type":"string"}},"required":["target"]})",
+            .description = "Switch to a specific version of a package. Use plain name (e.g. gcc not xim:gcc)",
+            .inputSchema = R"JSON({"type":"object","properties":{"target":{"type":"string","description":"Plain package name, e.g. gcc, node"},"version":{"type":"string","description":"Version to switch to, e.g. 15, 22"}},"required":["target","version"]})JSON",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
     }
     auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
-        auto target = json.value("target", "");
-        auto version = json.value("version", "");
-        if (version.empty()) {
-            return exit_result(xvm::cmd_list_versions(target, stream));
-        }
-        return exit_result(xvm::cmd_use(target, version, stream));
+        return exit_result(xvm::cmd_use(json.value("target", ""), json.value("version", ""), stream));
     }
 };
 
@@ -314,6 +326,7 @@ export capability::Registry build_registry(
     reg.register_capability(std::make_unique<UpdatePackages>());
     reg.register_capability(std::make_unique<ListPackages>());
     reg.register_capability(std::make_unique<PackageInfo>());
+    reg.register_capability(std::make_unique<ListVersions>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
     // Memory tools

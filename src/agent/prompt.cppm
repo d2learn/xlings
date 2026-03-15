@@ -4,6 +4,7 @@ import std;
 import mcpplibs.llmapi;
 import xlings.agent.tool_bridge;
 import xlings.libs.soul;
+import xlings.libs.agent_skill;
 
 namespace xlings::agent {
 
@@ -22,14 +23,18 @@ export auto to_llmapi_tools(const ToolBridge& bridge) -> std::vector<llm::ToolDe
     return tools;
 }
 
-// Build system prompt from Soul + ToolBridge
+// Build system prompt from Soul + ToolBridge + Skills
 export auto build_system_prompt(
     const ToolBridge& bridge,
-    const libs::soul::Soul& soul
+    const libs::soul::Soul& soul,
+    const std::vector<libs::agent_skill::Skill>& skills = {}
 ) -> std::string {
     std::string prompt = "You are xlings agent";
     if (!soul.persona.empty()) {
         prompt += ", " + soul.persona;
+    }
+    if (!soul.scope.empty()) {
+        prompt += ". Scope: " + soul.scope;
     }
     prompt += ".\n";
 
@@ -58,18 +63,20 @@ export auto build_system_prompt(
     prompt += R"(
 ## Rules
 
-1. ALWAYS use built-in tools for package/version operations:
-   - install → `install_packages`, remove → `remove_package`, update → `update_packages`
-   - search → `search_packages`, info → `package_info`, list → `list_packages`
-   - version switch → `use_version`, status → `system_status`
+1. Call tools directly — don't describe intent first.
+2. Keep replies as short and fast as possible, plain text.
+3. Use parallel tool calls whenever possible — don't call tools one at a time if they are independent.
+4. If a tool fails, explain the error to the user — don't retry the same call.
+5. Use `search_memory` proactively when past context may help.
+6. Reply in the user's language.)";
 
-2. ALL tools provided to you are available and functional. NEVER say a tool is unavailable — just call it.
-
-3. Keep responses short, plain text, no markdown.
-
-4. Call tools directly — do NOT describe what you will do.
-
-4. You have long-term memory via `search_memory` and `save_memory`. Use `search_memory` when past context may be relevant.)";
+    // ── Skills ──
+    if (!skills.empty()) {
+        prompt += "\n\n## Skills\n";
+        for (auto& skill : skills) {
+            prompt += "\n### " + skill.name + "\n" + skill.prompt + "\n";
+        }
+    }
 
     return prompt;
 }

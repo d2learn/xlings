@@ -2681,11 +2681,14 @@ TEST(AgentLoop, BuildSystemPrompt) {
     soul.id = "test";
     soul.persona = "package management assistant";
     soul.trust_level = "confirm";
+    soul.scope = "system";
     soul.allowed_capabilities = {"*"};
     auto prompt = xlings::agent::build_system_prompt(bridge, soul);
 
     EXPECT_NE(prompt.find("package management assistant"), std::string::npos);
-    EXPECT_NE(prompt.find("search_packages"), std::string::npos);
+    EXPECT_NE(prompt.find("Scope: system"), std::string::npos);
+    EXPECT_NE(prompt.find("search_memory"), std::string::npos);
+    EXPECT_NE(prompt.find("Reply in the user"), std::string::npos);
 }
 
 TEST(AgentLoop, ConvertToolDefsToLlmapi) {

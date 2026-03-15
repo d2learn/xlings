@@ -14,21 +14,12 @@ import xlings.agent.behavior_tree;
 import xlings.agent.tui.state;
 import xlings.agent.token_tracker;
 import xlings.core.utf8;
+import xlings.platform;
 import xlings.ui;
 import xlings.libs.json;
 namespace xlings::agent {
 
-namespace tui_icons {
-    constexpr auto pending    = "\xe2\x97\x8b";   // ○
-    constexpr auto running    = "\xe2\x9f\xb3";   // ⟳
-    constexpr auto done       = "\xe2\x9c\x93";   // ✓
-    constexpr auto failed     = "\xe2\x9c\x97";   // ✗
-    constexpr auto skipped    = "\xe2\x96\xb7";   // ▷
-    constexpr auto turn       = "\xe2\x8f\xb5";   // ⏵
-    constexpr auto reply      = "\xe2\x97\x86";   // ◆
-    constexpr auto direct_exec = "\xe2\x9a\x99";  // ⚙
-    constexpr auto thinking    = "\xe2\x97\x87";  // ◇
-}
+using tui_icons = platform::Icon;
 
 // ─── Render helpers ───
 
@@ -38,7 +29,7 @@ auto node_icon(const BehaviorNode& node) -> std::string {
     if (node.type == BehaviorNode::TypeThinking) return tui_icons::thinking;
     if (node.type == BehaviorNode::TypeDownload) {
         switch (node.state) {
-            case BehaviorNode::Running: return "\xe2\x86\x93";  // ↓
+            case BehaviorNode::Running: return tui_icons::download;
             case BehaviorNode::Done:    return tui_icons::done;
             case BehaviorNode::Failed:  return tui_icons::failed;
             default: return tui_icons::pending;
@@ -46,10 +37,10 @@ auto node_icon(const BehaviorNode& node) -> std::string {
     }
     if (node.type == BehaviorNode::TypeAtom) {
         switch (node.state) {
-            case BehaviorNode::Running: return tui_icons::direct_exec;
+            case BehaviorNode::Running: return tui_icons::exec;
             case BehaviorNode::Done:    return tui_icons::done;
             case BehaviorNode::Failed:  return tui_icons::failed;
-            default: return tui_icons::direct_exec;
+            default: return tui_icons::exec;
         }
     }
     switch (node.state) {
@@ -192,7 +183,7 @@ auto render_tree_node(const BehaviorNode& node,
                         && node.state == BehaviorNode::Running);
 
     auto icon_el = is_awaiting
-        ? (text("\xe2\x9a\xa0") | bold | color(ui::theme::amber()) | blink)   // ⚠ blinking amber
+        ? (text(tui_icons::approval) | bold | color(ui::theme::amber()) | blink)
         : (text(node_icon(node)) | color(node_color(node)));
 
     // Thinking: truncated reasoning, Atom: tool(args), Plan: task title
@@ -387,9 +378,9 @@ auto render_status_bar(const tui::AgentTuiState& st) -> Element {
     parts.push_back(text("ctx " + fmt(st.ctx_used) + " / " + fmt(st.ctx_limit))
         | color(Color::RGB(96, 165, 250)));  // blue
     parts.push_back(text(" | ") | color(ui::theme::border_color()));
-    parts.push_back(text("\xe2\x86\x91 " + fmt(st.session_input)) | color(ui::theme::green()));
+    parts.push_back(text(std::string(tui_icons::upload) + " " + fmt(st.session_input)) | color(ui::theme::green()));
     parts.push_back(text(" | ") | color(ui::theme::border_color()));
-    parts.push_back(text("\xe2\x86\x93 " + fmt(st.session_output)) | color(ui::theme::magenta()));
+    parts.push_back(text(std::string(tui_icons::download) + " " + fmt(st.session_output)) | color(ui::theme::magenta()));
     if (st.l2_cache_count > 0) {
         parts.push_back(text(" | ") | color(ui::theme::border_color()));
         parts.push_back(text("cache " + std::to_string(st.l2_cache_count) + "t")
@@ -430,7 +421,7 @@ auto render_completion_menu(const tui::AgentTuiState& st) -> Element {
 auto render_approval(const tui::AgentTuiState& st) -> Element {
     if (!st.approval_pending) return text("");
     return hbox({
-        text("\xe2\x9a\xa0 approve ") | color(ui::theme::amber()),
+        text(std::string(tui_icons::approval) + " approve ") | color(ui::theme::amber()),
         text(st.approval_tool_name) | bold | color(ui::theme::amber()),
         text(" (" + utf8::safe_truncate(st.approval_args, 50) + ")? ") | color(ui::theme::dim_color()),
         text("[Y/n]") | bold | color(ui::theme::amber()),

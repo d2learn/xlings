@@ -4,6 +4,7 @@ import std;
 import xlings.agent.behavior_tree;
 import xlings.agent.token_tracker;
 import xlings.libs.tinytui;
+import xlings.platform;
 
 namespace xlings::agent::tui {
 
@@ -95,7 +96,7 @@ export auto print_chat_line(const ChatLine& line) -> int {
 
         case ChatLine::AssistantText: {
             tt::print(tt::ansi::bold, "");
-            tt::print(tt::ansi::cyan, "\xe2\x97\x87 ");  // ◇
+            tt::print(tt::ansi::cyan, std::string(platform::Icon::thinking) + " ");
             int term_w = tt::terminal_width();
             int avail = term_w - 2;
             int line_count = 0;
@@ -207,7 +208,7 @@ export struct ThinkFilter {
 // ─── Simple ANSI helpers for pre-REPL messages ───
 
 export void print_error(std::string_view msg) {
-    std::print("\033[38;2;239;68;68m\xe2\x9c\x97 {}\033[0m\n", msg);
+    std::print("\033[38;2;239;68;68m{} {}\033[0m\n", platform::Icon::failed, msg);
 }
 
 export void print_hint(std::string_view msg) {

@@ -15,6 +15,7 @@ import xlings.agent.tui.state;
 import xlings.agent.tui.screen;
 import xlings.agent.commands;
 import xlings.libs.soul;
+import xlings.libs.agent_skill;
 import xlings.runtime.event_stream;
 import xlings.runtime.capability;
 import xlings.runtime.cancellation;
@@ -70,8 +71,10 @@ public:
         , registry(capabilities::build_registry(&memory_store, &ctx_mgr))
         , bridge(registry)
         , cfg(config)
+        , skill_mgr_(afs)
     {
         memory_store.load();
+        skill_mgr_.load_all();
         auto cache_dir = afs.sessions_path() / session.id / "context_cache";
         ctx_mgr.set_cache_dir(cache_dir);
     }
@@ -84,7 +87,7 @@ public:
               llm::Conversation& conv, EventStream& ev_stream) {
         stream = &ev_stream;
         conversation = &conv;
-        system_prompt_ = build_system_prompt(bridge, soul);
+        system_prompt_ = build_system_prompt(bridge, soul, skill_mgr_.all_skills());
         tools_ = to_llmapi_tools(bridge);
     }
 
@@ -220,6 +223,8 @@ public:
             if (on_log) on_log("assistant", turn_result.reply);
         }
     }
+
+    libs::agent_skill::SkillManager skill_mgr_;
 
 private:
     auto process_turn_(std::string_view user_input) -> LoopResult {

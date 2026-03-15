@@ -1045,16 +1045,23 @@ export int run(int argc, char* argv[]) {
                             int pct = (finished && success) ? 100
                                     : (tb > 0 ? static_cast<int>(db * 100.0 / tb) : 0);
 
-                            // Create node on first appearance
+                            // Create or update download node
                             auto it = tui_state.download_node_ids.find(name);
                             if (it == tui_state.download_node_ids.end()) {
                                 agent::BehaviorNode dn;
                                 dn.id = tui_state.id_alloc.alloc();
                                 dn.type = agent::BehaviorNode::TypeDownload;
                                 dn.name = name;
-                                dn.state = agent::BehaviorNode::Running;
                                 dn.start_ms = agent::steady_now_ms();
-                                dn.result_summary = std::to_string(pct);
+                                if (finished) {
+                                    dn.state = success ? agent::BehaviorNode::Done
+                                                       : agent::BehaviorNode::Failed;
+                                    dn.end_ms = dn.start_ms;
+                                    dn.result_summary = success ? "done" : "failed";
+                                } else {
+                                    dn.state = agent::BehaviorNode::Running;
+                                    dn.result_summary = std::to_string(pct);
+                                }
                                 int nid = tui_state.behavior_tree.add_child(parent_id, std::move(dn));
                                 tui_state.download_node_ids[name] = nid;
                             } else {
@@ -1070,12 +1077,21 @@ export int run(int argc, char* argv[]) {
                             }
                         }
 
-                        // Total progress on parent
+                        // Total progress on parent (with speed)
                         std::string progress;
                         if (done_count < total_files) {
                             int total_pct = total_bytes > 0
                                 ? static_cast<int>(dl_bytes * 100.0 / total_bytes) : 0;
-                            progress = std::format("\xe2\x86\x93 {}%", total_pct);
+                            double elapsed = json.value("elapsedSec", 0.0);
+                            std::string speed;
+                            if (elapsed > 0.5 && dl_bytes > 0) {
+                                double bps = dl_bytes / elapsed;
+                                if (bps >= 1048576.0)
+                                    speed = std::format(" {:.1f} MB/s", bps / 1048576.0);
+                                else if (bps >= 1024.0)
+                                    speed = std::format(" {:.0f} KB/s", bps / 1024.0);
+                            }
+                            progress = std::format("\xe2\x86\x93 {}%{}", total_pct, speed);
                         }
 
                         agent_screen->post([&tui_state, p = std::move(progress)] {
@@ -1384,6 +1400,14 @@ export int run(int argc, char* argv[]) {
                 if (event == ftxui::Event::Return) {
                     auto now = agent::tui::steady_now_ms();
                     if (now - last_char_ms < 5) return true;  // paste newline, skip
+                    // Auto-fill selected completion on Enter
+                    if (tui_state.completion_selected >= 0 &&
+                        tui_state.completion_selected < static_cast<int>(tui_state.completions.size())) {
+                        input_content = tui_state.completions[tui_state.completion_selected].first + " ";
+                        tui_state.completions.clear();
+                        tui_state.completion_selected = -1;
+                        return true;
+                    }
                     auto msg = input_content;
                     if (msg.empty()) return true;
                     input_content.clear();

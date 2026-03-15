@@ -228,6 +228,25 @@ namespace platform_impl {
         return alive;
     }
 
+    export struct Icon {
+        static constexpr auto pending    = "o";
+        static constexpr auto running    = "*";
+        static constexpr auto done       = "+";
+        static constexpr auto failed     = "x";
+        static constexpr auto skipped    = "-";
+        static constexpr auto turn       = ">";
+        static constexpr auto reply      = "#";
+        static constexpr auto exec       = "*";
+        static constexpr auto thinking   = "~";
+        static constexpr auto approval   = "!";
+        static constexpr auto download   = "v";
+        static constexpr auto upload     = "^";
+        static constexpr auto extracting = ">";
+        static constexpr auto arrow      = ">";
+        static constexpr auto package    = "#";
+        static constexpr auto info       = ">";
+    };
+
 } // namespace platform_impl
 }
 
