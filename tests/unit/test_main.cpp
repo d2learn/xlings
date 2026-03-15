@@ -1185,6 +1185,48 @@ TEST(XvmShimTest, IsXlingsBinary) {
     EXPECT_FALSE(xlings::xvm::is_xlings_binary(""));
 }
 
+TEST(XvmShimTest, ResolveAliasCommandToFullPath) {
+    // Test: alias command's first word resolves to full path
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_alias_resolve_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir / "bin");
+
+    // Create a real gcc binary file
+    auto gcc_path = testDir / "bin" / "gcc";
+    xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
+
+    // resolve_executable should find bin/gcc
+    auto result = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
+    EXPECT_FALSE(result.empty());
+    EXPECT_EQ(result, testDir / "bin" / "gcc");
+
+    // Non-existent binary returns empty path
+    auto result2 = xlings::xvm::resolve_executable("not-exist", testDir.string(), "");
+    EXPECT_TRUE(result2.empty());
+
+    fs::remove_all(testDir);
+}
+
+TEST(XvmShimTest, ResolveAliasDirectPath) {
+    // Test: when path root directly contains the binary (no bin/ subdir)
+    namespace fs = std::filesystem;
+    auto testDir = fs::temp_directory_path() / "xlings_alias_direct_test";
+    fs::remove_all(testDir);
+    fs::create_directories(testDir);
+
+    // Create binary directly in path root
+    auto gcc_path = testDir / "gcc";
+    xlings::platform::write_string_to_file(gcc_path.string(), "#!/bin/sh\n");
+
+    // resolve_executable should find path/gcc directly
+    auto result = xlings::xvm::resolve_executable("gcc", testDir.string(), "");
+    EXPECT_FALSE(result.empty());
+    EXPECT_EQ(result, testDir / "gcc");
+
+    fs::remove_all(testDir);
+}
+
 // ============================================================
 // xvm config integration tests (filesystem-based)
 // ============================================================
@@ -1799,6 +1841,152 @@ TEST(XvmDbTest, NamespacedVersionMatch) {
 
     // Bare prefix prefers bare versions
     EXPECT_EQ(xlings::xvm::match_version(db, "gcc", "13"), "13.3.0");
+}
+
+// ============================================================
+// xvm binding tree tests
+// ============================================================
+
+TEST(XvmDbTest, AddVersionWithBinding) {
+    xlings::xvm::VersionDB db;
+
+    // Simulate installing gcc package: xim-gnu-gcc is the parent package,
+    // gcc, g++, gcc-ar are binding targets
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "15.1.0", "/pkg/gcc-15");
+    xlings::xvm::add_version(db, "gcc", "15.1.0", "/pkg/gcc-15", "program", "gcc", "gcc", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "g++", "15.1.0", "/pkg/gcc-15", "program", "g++", "g++", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "gcc-ar", "gcc-15.1.0", "/pkg/gcc-15", "program", "gcc-ar", "gcc-ar", "", "xim-gnu-gcc@15.1.0");
+
+    // Verify bidirectional bindings exist
+    // xim-gnu-gcc should know about gcc, g++, gcc-ar
+    auto* parent = xlings::xvm::get_vinfo(db, "xim-gnu-gcc");
+    ASSERT_NE(parent, nullptr);
+    ASSERT_TRUE(parent->bindings.contains("gcc"));
+    ASSERT_TRUE(parent->bindings.contains("g++"));
+    ASSERT_TRUE(parent->bindings.contains("gcc-ar"));
+    EXPECT_EQ(parent->bindings.at("gcc").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(parent->bindings.at("g++").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(parent->bindings.at("gcc-ar").at("15.1.0"), "gcc-15.1.0");
+
+    // gcc should know about xim-gnu-gcc
+    auto* gcc_info = xlings::xvm::get_vinfo(db, "gcc");
+    ASSERT_NE(gcc_info, nullptr);
+    ASSERT_TRUE(gcc_info->bindings.contains("xim-gnu-gcc"));
+    EXPECT_EQ(gcc_info->bindings.at("xim-gnu-gcc").at("15.1.0"), "15.1.0");
+
+    // gcc-ar should know about xim-gnu-gcc with correct version mapping
+    auto* ar_info = xlings::xvm::get_vinfo(db, "gcc-ar");
+    ASSERT_NE(ar_info, nullptr);
+    ASSERT_TRUE(ar_info->bindings.contains("xim-gnu-gcc"));
+    EXPECT_EQ(ar_info->bindings.at("xim-gnu-gcc").at("gcc-15.1.0"), "15.1.0");
+}
+
+TEST(XvmDbTest, AddVersionWithBindingMultipleVersions) {
+    xlings::xvm::VersionDB db;
+
+    // Install gcc 15.1.0
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "15.1.0", "/pkg/gcc-15");
+    xlings::xvm::add_version(db, "gcc", "15.1.0", "/pkg/gcc-15", "program", "gcc", "gcc", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "g++", "15.1.0", "/pkg/gcc-15", "program", "g++", "g++", "", "xim-gnu-gcc@15.1.0");
+
+    // Install gcc 14.2.0
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "14.2.0", "/pkg/gcc-14");
+    xlings::xvm::add_version(db, "gcc", "14.2.0", "/pkg/gcc-14", "program", "gcc", "gcc", "", "xim-gnu-gcc@14.2.0");
+    xlings::xvm::add_version(db, "g++", "14.2.0", "/pkg/gcc-14", "program", "g++", "g++", "", "xim-gnu-gcc@14.2.0");
+
+    // Parent should have version mappings for both versions
+    auto* parent = xlings::xvm::get_vinfo(db, "xim-gnu-gcc");
+    ASSERT_NE(parent, nullptr);
+    EXPECT_EQ(parent->bindings.at("gcc").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(parent->bindings.at("gcc").at("14.2.0"), "14.2.0");
+    EXPECT_EQ(parent->bindings.at("g++").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(parent->bindings.at("g++").at("14.2.0"), "14.2.0");
+
+    // Each child should map back to both parent versions
+    auto* gcc_info = xlings::xvm::get_vinfo(db, "gcc");
+    ASSERT_NE(gcc_info, nullptr);
+    EXPECT_EQ(gcc_info->bindings.at("xim-gnu-gcc").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(gcc_info->bindings.at("xim-gnu-gcc").at("14.2.0"), "14.2.0");
+}
+
+TEST(XvmDbTest, AddVersionWithBindingNamespaced) {
+    xlings::xvm::VersionDB db;
+
+    // Simulate a non-primary repo with namespace
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "15.1.0", "/pkg/gcc-15", "program", "", "", "xim");
+    xlings::xvm::add_version(db, "gcc", "15.1.0", "/pkg/gcc-15", "program", "gcc", "gcc", "xim", "xim-gnu-gcc@15.1.0");
+
+    // Verify namespaced version keys in bindings
+    auto* parent = xlings::xvm::get_vinfo(db, "xim-gnu-gcc");
+    ASSERT_NE(parent, nullptr);
+    ASSERT_TRUE(parent->bindings.contains("gcc"));
+    EXPECT_EQ(parent->bindings.at("gcc").at("xim:15.1.0"), "xim:15.1.0");
+
+    auto* gcc_info = xlings::xvm::get_vinfo(db, "gcc");
+    ASSERT_NE(gcc_info, nullptr);
+    EXPECT_EQ(gcc_info->bindings.at("xim-gnu-gcc").at("xim:15.1.0"), "xim:15.1.0");
+}
+
+TEST(XvmDbTest, BindingTreeTraversal) {
+    // Test the binding tree traversal logic used by cmd_use
+    xlings::xvm::VersionDB db;
+
+    // Build a binding tree: xim-gnu-gcc -> gcc, g++, gcc-ar
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "15.1.0", "/pkg/gcc-15");
+    xlings::xvm::add_version(db, "gcc", "15.1.0", "/pkg/gcc-15", "program", "gcc", "gcc", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "g++", "15.1.0", "/pkg/gcc-15", "program", "g++", "g++", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "gcc-ar", "gcc-15.1.0", "/pkg/gcc-15", "program", "gcc-ar", "gcc-ar", "", "xim-gnu-gcc@15.1.0");
+
+    // Simulate the collect_bindings traversal starting from "gcc" version "15.1.0"
+    std::map<std::string, std::string> to_switch;
+    std::set<std::string> visited;
+
+    std::function<void(const std::string&, const std::string&)> collect_bindings;
+    collect_bindings = [&](const std::string& node, const std::string& node_ver) {
+        if (visited.contains(node)) return;
+        visited.insert(node);
+        to_switch[node] = node_ver;
+
+        auto info = xlings::xvm::get_vinfo(db, node);
+        if (!info) return;
+        for (auto& [peer_name, vermap] : info->bindings) {
+            auto it = vermap.find(node_ver);
+            if (it != vermap.end()) {
+                collect_bindings(peer_name, it->second);
+            }
+        }
+    };
+
+    collect_bindings("gcc", "15.1.0");
+
+    // Should have traversed the entire binding tree
+    EXPECT_EQ(to_switch.size(), 4u);
+    EXPECT_EQ(to_switch.at("gcc"), "15.1.0");
+    EXPECT_EQ(to_switch.at("xim-gnu-gcc"), "15.1.0");
+    EXPECT_EQ(to_switch.at("g++"), "15.1.0");
+    EXPECT_EQ(to_switch.at("gcc-ar"), "gcc-15.1.0");
+}
+
+TEST(XvmDbTest, BindingJsonRoundTrip) {
+    xlings::xvm::VersionDB db;
+
+    xlings::xvm::add_version(db, "xim-gnu-gcc", "15.1.0", "/pkg/gcc-15");
+    xlings::xvm::add_version(db, "gcc", "15.1.0", "/pkg/gcc-15", "program", "gcc", "gcc", "", "xim-gnu-gcc@15.1.0");
+    xlings::xvm::add_version(db, "g++", "15.1.0", "/pkg/gcc-15", "program", "g++", "g++", "", "xim-gnu-gcc@15.1.0");
+
+    // Serialize and deserialize
+    auto j = xlings::xvm::versions_to_json(db);
+    auto restored = xlings::xvm::versions_from_json(j);
+
+    // Verify bindings survived round-trip
+    auto* parent = xlings::xvm::get_vinfo(restored, "xim-gnu-gcc");
+    ASSERT_NE(parent, nullptr);
+    EXPECT_EQ(parent->bindings.at("gcc").at("15.1.0"), "15.1.0");
+    EXPECT_EQ(parent->bindings.at("g++").at("15.1.0"), "15.1.0");
+
+    auto* gcc_info = xlings::xvm::get_vinfo(restored, "gcc");
+    ASSERT_NE(gcc_info, nullptr);
+    EXPECT_EQ(gcc_info->bindings.at("xim-gnu-gcc").at("15.1.0"), "15.1.0");
 }
 
 // ============================================================

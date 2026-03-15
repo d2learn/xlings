@@ -198,11 +198,36 @@ int cmd_use(const std::string& target, const std::string& version, EventStream& 
     if (new_vdata && !new_vdata->libdir.empty())
         install_libdir(new_vdata->libdir, sysroot_lib);
 
-    // Update workspace
-    Config::workspace_mut()[target] = resolved;
+    // Collect all (target, version) pairs by traversing the binding tree
+    std::map<std::string, std::string> to_switch;
+    std::set<std::string> visited;
+
+    std::function<void(const std::string&, const std::string&)> collect_bindings;
+    collect_bindings = [&](const std::string& node, const std::string& node_ver) {
+        if (visited.contains(node)) return;
+        visited.insert(node);
+        to_switch[node] = node_ver;
+
+        auto info = get_vinfo(db, node);
+        if (!info) return;
+        for (auto& [peer_name, vermap] : info->bindings) {
+            auto it = vermap.find(node_ver);
+            if (it != vermap.end()) {
+                collect_bindings(peer_name, it->second);
+            }
+        }
+    };
+
+    collect_bindings(target, resolved);
+
+    // Update workspace for all nodes in the binding tree
+    for (auto& [name, ver] : to_switch) {
+        Config::workspace_mut()[name] = ver;
+        log::debug("binding sync: {} -> {}", name, ver);
+    }
     Config::save_workspace();
 
-    // Create/update shim in subos bin/ using unified create_shim()
+    // Create/update shims for all switched targets
 #ifdef _WIN32
     auto xlings_bin = p.homeDir / "bin" / "xlings.exe";
     constexpr std::string_view shim_ext = ".exe";
@@ -215,28 +240,15 @@ int cmd_use(const std::string& target, const std::string& version, EventStream& 
     }
 
     if (fs::exists(xlings_bin)) {
-        auto vinfo = get_vinfo(db, target);
-        std::string shim_name = (vinfo && !vinfo->filename.empty()) ? vinfo->filename : target;
-        if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
-            shim_name += shim_ext;
-
         fs::create_directories(p.binDir);
-        auto result = xself::create_shim(xlings_bin, p.binDir / shim_name);
-        if (result == xself::LinkResult::Failed) {
-            log::warn("[xlings:use] failed to create shim for '{}'", shim_name);
-        }
-
-        common::mirror_shim_to_global_bin(xlings_bin, shim_name);
-
-        // Create shims for bindings
-        if (vinfo) {
-            for (auto& [binding_name, vermap] : vinfo->bindings) {
-                std::string bind_name{binding_name};
-                if (!shim_ext.empty() && !bind_name.ends_with(shim_ext))
-                    bind_name += shim_ext;
-                xself::create_shim(xlings_bin, p.binDir / bind_name);
-                common::mirror_shim_to_global_bin(xlings_bin, bind_name);
-            }
+        for (auto& [name, ver] : to_switch) {
+            auto vinfo = get_vinfo(db, name);
+            if (!vinfo || vinfo->type != "program") continue;
+            std::string shim_name = (!vinfo->filename.empty()) ? vinfo->filename : name;
+            if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
+                shim_name += shim_ext;
+            xself::create_shim(xlings_bin, p.binDir / shim_name);
+            common::mirror_shim_to_global_bin(xlings_bin, shim_name);
         }
     }
 

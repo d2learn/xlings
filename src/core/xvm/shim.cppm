@@ -100,9 +100,10 @@ void setup_envs(const VData& vdata,
 int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
     // Recursion guard: detect infinite shim re-invocation
     constexpr int MAX_SHIM_DEPTH = 8;
+    constexpr int FALLBACK_DEPTH = MAX_SHIM_DEPTH + 2;
     auto depth_str = std::getenv("XLINGS_SHIM_DEPTH");
     int depth = depth_str ? std::atoi(depth_str) : 0;
-    if (depth >= MAX_SHIM_DEPTH) {
+    if (depth >= FALLBACK_DEPTH) {
         log::error("xlings: shim recursion detected for '{}' (depth={})", program_name, depth);
         log::error("  hint: the real '{}' binary may not be installed", program_name);
         return 1;
@@ -152,34 +153,9 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         return 1;
     }
 
-    // Determine actual program name to exec (check bindings)
+    // Each target (including binding targets) has its own workspace version
+    // and vdata, so use program_name directly for execution.
     std::string exec_name = program_name;
-    auto vinfo = get_vinfo(db, program_name);
-
-    // Check if the program_name is actually a binding of another target
-    // Walk all targets to see if program_name is a binding key
-    std::string binding_target;
-    for (auto& [target, info] : db) {
-        auto bit = info.bindings.find(program_name);
-        if (bit != info.bindings.end()) {
-            // This program is a binding of 'target'
-            auto ws_ver = get_active_version(workspace, target);
-            if (!ws_ver.empty()) {
-                auto rv = match_version(db, target, ws_ver);
-                if (!rv.empty()) {
-                    auto bvit = bit->second.find(rv);
-                    if (bvit != bit->second.end()) {
-                        binding_target = bvit->second;
-                        log::debug("binding found: {} -> {} (via {})", program_name, binding_target, target);
-                        // Use the parent target's vdata for path resolution
-                        vdata = get_vdata(db, target, rv);
-                        exec_name = binding_target;
-                        break;
-                    }
-                }
-            }
-        }
-    }
 
     if (!vdata->alias.empty()) {
         // Env alias fallback: prepend bindir to PATH, run alias via system
@@ -208,10 +184,36 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
         // Setup custom envs
         setup_envs(*vdata, "", xlings_home);
 
+        std::string alias_cmd = vdata->alias[0];
+
+        if (depth >= MAX_SHIM_DEPTH) {
+            // Fallback: resolve alias command to full path to break recursion
+            auto expanded_pkg = expand_path(vdata->path, xlings_home);
+            log::debug("shim alias fallback (depth={}): program={}, alias='{}'", depth, program_name, alias_cmd);
+            log::debug("  package path: {}", expanded_pkg);
+            log::debug("  PATH: {}", std::getenv("PATH") ? std::getenv("PATH") : "(null)");
+
+            auto first_space = alias_cmd.find(' ');
+            std::string alias_prog = (first_space != std::string::npos)
+                ? alias_cmd.substr(0, first_space) : alias_cmd;
+
+            auto alias_exe = resolve_executable(alias_prog, vdata->path, xlings_home);
+            if (!alias_exe.empty()) {
+                std::string alias_rest = (first_space != std::string::npos)
+                    ? alias_cmd.substr(first_space) : "";
+                alias_cmd = platform::shell_quote(alias_exe.string()) + alias_rest;
+                log::debug("  resolved: {} -> {}", alias_prog, alias_exe.string());
+            } else if (alias_prog == program_name) {
+                log::error("xlings: alias for '{}' references itself but real binary not found", program_name);
+                log::error("  path: {}", expanded_pkg);
+                return 1;
+            }
+        }
+
         platform::set_env_variable("XLINGS_SHIM_DEPTH", std::to_string(depth + 1));
 
-        // Build command: alias + original args, run via platform::exec
-        std::string cmd = vdata->alias[0];
+        // Build command: resolved alias + original args, run via platform::exec
+        std::string cmd = alias_cmd;
         for (int i = 1; i < argc; ++i) {
             cmd += " ";
             cmd += platform::shell_quote(argv[i]);
