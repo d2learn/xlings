@@ -34,9 +34,9 @@ HOME="$INSTALL_USER_DIR" PATH="$INSTALLED_PATH" env -u XLINGS_HOME \
   "$INSTALLED_HOME/bin/xlings" --verbose config >/dev/null 2>&1 \
   || fail "installed home config command failed"
 
-# Verify elfpatch (patchelf) was installed as runtime dependency (Linux only)
+# Verify patchelf was installed as runtime dependency (Linux only)
 if [[ "$(uname -s)" == "Linux" ]]; then
-  [[ -x "$INSTALLED_HOME/data/xpkgs/xim-x-elfpatch/0.18.0/bin/patchelf" ]] || \
+  [[ -x "$INSTALLED_HOME/data/xpkgs/xim-x-patchelf/0.18.0/bin/patchelf" ]] || \
     fail "patchelf binary not found after self install"
 fi
 
