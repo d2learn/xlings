@@ -53,6 +53,7 @@ private:
     xvm::Workspace projectWorkspace_;       // from project .xlings.json
     xvm::Workspace projectSubosWorkspace_;  // from project-local subos file
     bool hasProjectConfig_ = false;
+    bool forceGlobalScope_ = false;
     std::filesystem::path projectDir_;      // directory containing project .xlings.json
     std::vector<IndexRepo> globalIndexRepos_;
     std::vector<IndexRepo> projectIndexRepos_;
@@ -441,6 +442,9 @@ private:
             if (!json.is_discarded()) {
                 projectDir_ = dir;
                 hasProjectConfig_ = true;
+                // Export project dir so child processes (shims, os.execute)
+                // can find project workspace even when CWD changes.
+                platform::set_env_variable("XLINGS_PROJECT_DIR", dir.string());
                 // Project-level mirror/lang override global
                 if (json.contains("mirror") && json["mirror"].is_string())
                     mirror_ = json["mirror"].get<std::string>();
@@ -585,7 +589,8 @@ public:
     }
     [[nodiscard]] static xvm::VersionDB& versions_mut() {
         auto& self = instance_();
-        return self.hasProjectConfig_ ? self.projectVersions_ : self.globalVersions_;
+        if (self.forceGlobalScope_ || !self.hasProjectConfig_) return self.globalVersions_;
+        return self.projectVersions_;
     }
     [[nodiscard]] static const xvm::VersionDB& global_versions() { return instance_().globalVersions_; }
     [[nodiscard]] static const xvm::VersionDB& project_versions() { return instance_().projectVersions_; }
@@ -704,12 +709,16 @@ public:
     }
     [[nodiscard]] static xvm::Workspace& workspace_mut() {
         auto& self = instance_();
-        if (!self.hasProjectConfig_) return self.globalWorkspace_;
+        if (self.forceGlobalScope_ || !self.hasProjectConfig_) return self.globalWorkspace_;
         if (self.projectSubosMode_ == ProjectSubosMode::Named ||
             self.projectSubosMode_ == ProjectSubosMode::Anonymous) return self.projectSubosWorkspace_;
         return self.projectWorkspace_;
     }
     [[nodiscard]] static bool has_project_config() { return instance_().hasProjectConfig_; }
+
+    // Force all version/workspace writes to go to global scope.
+    // Used by `install -g` to ensure tools are available outside project context.
+    static void set_force_global_scope(bool force) { instance_().forceGlobalScope_ = force; }
 
     static std::filesystem::path subos_dir(const std::string& name) {
         return instance_().paths_.homeDir / "subos" / name;
@@ -738,11 +747,12 @@ public:
     static void save_versions() {
         namespace fs = std::filesystem;
         auto& self = instance_();
-        auto configPath = (self.hasProjectConfig_ && !self.projectDir_.empty())
-            ? self.project_state_path_()
-            : self.paths_.homeDir / ".xlings.json";
+        bool useGlobal = self.forceGlobalScope_ || !self.hasProjectConfig_ || self.projectDir_.empty();
+        auto configPath = useGlobal
+            ? self.paths_.homeDir / ".xlings.json"
+            : self.project_state_path_();
 
-        if (self.hasProjectConfig_) {
+        if (!useGlobal) {
             auto projectHomeDir = self.project_home_dir_();
             if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
         }
@@ -756,7 +766,7 @@ public:
             } catch (...) { json = nlohmann::json::object(); }
         }
 
-        auto& versions = self.hasProjectConfig_ ? self.projectVersions_ : self.globalVersions_;
+        auto& versions = useGlobal ? self.globalVersions_ : self.projectVersions_;
         json["versions"] = xvm::versions_to_json(versions);
         platform::write_string_to_file(configPath.string(), json.dump(2));
     }
@@ -765,8 +775,9 @@ public:
     static void save_workspace() {
         namespace fs = std::filesystem;
         auto& self = instance_();
+        bool useProject = self.hasProjectConfig_ && !self.forceGlobalScope_;
         fs::path subosConfigPath;
-        if (self.hasProjectConfig_ &&
+        if (useProject &&
             self.projectSubosMode_ == ProjectSubosMode::Named) {
             auto projSubosDir = self.project_subos_dir_();
             fs::create_directories(projSubosDir);
@@ -775,7 +786,7 @@ public:
             fs::create_directories(projSubosDir / "usr");
             fs::create_directories(projSubosDir / "generations");
             subosConfigPath = projSubosDir / ".xlings.json";
-        } else if (self.hasProjectConfig_ &&
+        } else if (useProject &&
                    self.projectSubosMode_ == ProjectSubosMode::Anonymous) {
             auto projSubosDir = self.project_subos_dir_();
             auto projectHomeDir = self.project_home_dir_();
@@ -786,7 +797,7 @@ public:
             fs::create_directories(projSubosDir / "usr");
             fs::create_directories(projSubosDir / "generations");
             subosConfigPath = self.project_state_path_();
-        } else if (self.hasProjectConfig_ && !self.projectDir_.empty()) {
+        } else if (useProject && !self.projectDir_.empty()) {
             auto projectHomeDir = self.project_home_dir_();
             if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
             subosConfigPath = self.project_state_path_();
@@ -803,7 +814,7 @@ public:
             } catch (...) { json = nlohmann::json::object(); }
         }
 
-        auto& workspace = self.hasProjectConfig_
+        auto& workspace = useProject
             ? ((self.projectSubosMode_ == ProjectSubosMode::Named ||
                 self.projectSubosMode_ == ProjectSubosMode::Anonymous) ? self.projectSubosWorkspace_ : self.projectWorkspace_)
             : self.globalWorkspace_;
