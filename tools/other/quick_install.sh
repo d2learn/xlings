@@ -163,8 +163,10 @@ fi
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
 chmod +x bin/xlings
-# Pipe mode (curl|bash): redirect stdin to /dev/tty; CI skips via XLINGS_NON_INTERACTIVE
+# Pipe mode (curl|bash): redirect stdin for the install command only (NOT exec, which
+# would hijack bash's own stdin and prevent it from reading remaining script lines)
 if [[ -z "${XLINGS_NON_INTERACTIVE:-}" ]] && ! [[ -t 0 ]] && [[ -r /dev/tty ]]; then
-  exec < /dev/tty
+  ./bin/xlings self install < /dev/tty
+else
+  ./bin/xlings self install
 fi
-./bin/xlings self install
