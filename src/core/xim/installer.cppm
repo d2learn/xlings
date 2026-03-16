@@ -877,9 +877,12 @@ public:
                     }
                     extractedRoot = *extracted;
                 }
-            } else {
-                ctx.install_file = node.pkgFile;
             }
+            // No download artifact: install_file stays empty (type-only packages
+            // like auto-config don't need a payload).  Do NOT fall back to
+            // node.pkgFile — that is the package *definition* file; an install
+            // hook calling os.mv(install_file, install_dir) would move it out
+            // of the package index, destroying the index entry.
 
             // Ensure install_dir exists so hooks can mv/cp into it
             {
