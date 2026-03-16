@@ -154,16 +154,19 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
         return 1;
     }
 
-    // -g: force all packages to install into global scope
+    // -g: register versions/workspace in global scope so tools work outside project dir
     if (forceGlobal) {
-        auto globalXpkgs = Config::global_data_dir() / "xpkgs";
+        bool hasProjectOnly = false;
         for (auto& node : plan.nodes) {
-            node.scope = PackageScope::Global;
-            node.storeRoot = globalXpkgs;
+            if (node.scope == PackageScope::Project) {
+                log::warn("-g ignored for '{}': only exists in project-local index", node.name);
+                hasProjectOnly = true;
+            }
         }
-        for (auto& match : requestedMatches) {
-            match.scope = PackageScope::Global;
-            match.storeRoot = globalXpkgs;
+        if (hasProjectOnly) {
+            log::warn("-g disabled: cannot globally register project-only packages (uninstall would fail)");
+        } else {
+            Config::set_force_global_scope(true);
         }
     }
 

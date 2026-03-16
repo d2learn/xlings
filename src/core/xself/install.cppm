@@ -420,7 +420,7 @@ export int cmd_install() {
         platform::set_env_variable("PATH", binDir + platform::PATH_SEPARATOR + existingPath);
 
         log::println("[xlings:self] installing elfpatch (runtime dependency) ...");
-        auto rc = platform::exec("xlings install xim:elfpatch@0.18.0 -y");
+        auto rc = platform::exec("xlings install xim:elfpatch@0.18.0 -y -g");
         if (rc != 0) {
             log::warn("[xlings:self] elfpatch install failed (rc={})", rc);
             log::warn("  hint: run manually: xlings install xim:elfpatch@0.18.0 -y");
