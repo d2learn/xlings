@@ -47,13 +47,13 @@ else
     fail "elfpatch did not report 0 failures"
 fi
 
-# ── Test 2: interpreter points to subos ld-linux ─────────────────────
-log "Test 2: PT_INTERP points to subos"
+# ── Test 2: interpreter points to local ld-linux (xpkgs or subos) ─────
+log "Test 2: PT_INTERP points to XLINGS_HOME"
 INTERP="$(readelf -l "$D2X_BIN" 2>&1 | grep "Requesting program interpreter:" | sed 's/.*: //; s/]//')"
 log "  interpreter: $INTERP"
 
 [[ -n "$INTERP" ]] || fail "no interpreter found in d2x binary"
-echo "$INTERP" | grep -q "$XLINGS_HOME/subos/" || fail "interpreter '$INTERP' does not point to subos"
+echo "$INTERP" | grep -q "$XLINGS_HOME/" || fail "interpreter '$INTERP' does not point to XLINGS_HOME"
 [[ -f "$INTERP" ]] || fail "interpreter file does not exist: $INTERP"
 
 # ── Test 3: RUNPATH/RPATH contains dependency lib paths ──────────────
