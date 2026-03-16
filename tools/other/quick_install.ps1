@@ -2,6 +2,10 @@
 #   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex"
 #Requires -Version 5
 
+param(
+    [string]$Version = $env:XLINGS_VERSION
+)
+
 $ErrorActionPreference = "Stop"
 
 # --------------- helpers ---------------
@@ -41,15 +45,36 @@ if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_ARCHITEW6432 -eq 
 
 # --------------- resolve download URL ---------------
 
-Log-Info "Querying latest release..."
-try {
-    $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/$GITHUB_REPO/releases/latest" -UseBasicParsing
-    $latestVersion = $releaseInfo.tag_name
-} catch {
-    Log-Error "Failed to query the latest release: $_"
+function Resolve-LatestVersion {
+    $baseUrl = if ($GITHUB_MIRROR) { $GITHUB_MIRROR } else { "https://github.com" }
+    $url = "$baseUrl/$GITHUB_REPO/releases/latest"
+    $response = Invoke-WebRequest -Uri $url -MaximumRedirection 10 -UseBasicParsing -ErrorAction Stop
+    $finalUrl = $response.BaseResponse.ResponseUri
+    if (-not $finalUrl) {
+        $finalUrl = $response.BaseResponse.RequestMessage.RequestUri  # PS 7+
+    }
+    return ($finalUrl.ToString() -split '/')[-1]
+}
+
+if ($Version) {
+    $latestVersion = $Version
+    Log-Info "Using specified version: $latestVersion"
+} else {
+    Log-Info "Querying latest release..."
+    try {
+        $latestVersion = Resolve-LatestVersion
+    } catch {
+        Log-Error "Failed to query the latest release: $_"
+        exit 1
+    }
+}
+
+if (-not $latestVersion) {
+    Log-Error "Failed to resolve release version."
     exit 1
 }
 
+if ($latestVersion -notmatch '^v') { $latestVersion = "v$latestVersion" }
 $versionNum = $latestVersion -replace '^v', ''
 $zipName = "xlings-$versionNum-windows-$arch.zip"
 

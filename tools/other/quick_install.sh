@@ -19,6 +19,10 @@ trap 'log_error "Interrupted"; exit 1' INT TERM
 GITHUB_REPO="d2learn/xlings"
 GITHUB_MIRROR="${XLINGS_GITHUB_MIRROR:-}"
 
+# Specify version: curl ... | bash -s -- v0.5.0
+# Or env var:      XLINGS_VERSION=v0.5.0 curl ... | bash
+XLINGS_VERSION="${1:-${XLINGS_VERSION:-}}"
+
 # --------------- detect platform ---------------
 
 detect_os() {
@@ -85,14 +89,28 @@ ensure_cmd() {
 ensure_cmd curl
 ensure_cmd tar
 
-LATEST_VERSION=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    | grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/')
+resolve_latest_version() {
+    local base_url="${GITHUB_MIRROR:-https://github.com}"
+    local url="${base_url}/${GITHUB_REPO}/releases/latest"
+    local final_url
+    final_url=$(curl -fsSIL -o /dev/null -w '%{url_effective}' "$url")
+    echo "${final_url##*/}"
+}
+
+if [[ -n "$XLINGS_VERSION" ]]; then
+    LATEST_VERSION="$XLINGS_VERSION"
+    log_info "Using specified version: ${CYAN}${LATEST_VERSION}${RESET}"
+else
+    log_info "Querying latest release..."
+    LATEST_VERSION=$(resolve_latest_version)
+fi
 
 if [[ -z "$LATEST_VERSION" ]]; then
-    log_error "Failed to query the latest release version."
+    log_error "Failed to resolve release version."
     exit 1
 fi
 
+[[ "$LATEST_VERSION" == v* ]] || LATEST_VERSION="v${LATEST_VERSION}"
 VERSION_NUM="${LATEST_VERSION#v}"
 TARBALL="xlings-${VERSION_NUM}-${PLATFORM}-${ARCH_TYPE}.tar.gz"
 
@@ -145,11 +163,8 @@ fi
 log_info "Running installer..."
 cd "$EXTRACT_DIR"
 chmod +x bin/xlings
-# Use /dev/tty for interactive prompts when piped (curl|bash); set XLINGS_NON_INTERACTIVE=1 in CI
-if [[ -n "${XLINGS_NON_INTERACTIVE:-}" ]]; then
-  ./bin/xlings self install
-elif [[ -e /dev/tty ]] && [[ -r /dev/tty ]]; then
-  ./bin/xlings self install < /dev/tty
-else
-  ./bin/xlings self install
+# Pipe mode (curl|bash): redirect stdin to /dev/tty; CI skips via XLINGS_NON_INTERACTIVE
+if [[ -z "${XLINGS_NON_INTERACTIVE:-}" ]] && ! [[ -t 0 ]] && [[ -r /dev/tty ]]; then
+  exec < /dev/tty
 fi
+./bin/xlings self install
