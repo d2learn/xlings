@@ -901,6 +901,16 @@ public:
                     payloadInstalled = true;
                 }
             }
+            // Default: check xvm version database when no installed hook
+            else if (!payloadInstalled) {
+                auto db = Config::versions();
+                auto resolved = xvm::match_version(db, node.name, node.version);
+                if (!resolved.empty()) {
+                    log::debug("{} already installed in xvm (version {})",
+                              node.name, resolved);
+                    payloadInstalled = true;
+                }
+            }
 
             // Run install hook
             if (!payloadInstalled && executor.has_hook(mcpplibs::xpkg::HookType::Install)) {
