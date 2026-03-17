@@ -1052,7 +1052,17 @@ public:
         if (requestedVersion.empty()) {
             requestedVersion = xvm::get_active_version(Config::effective_workspace(), targetName);
         }
-        auto resolvedTarget = requestedVersion.empty() ? targetName : targetName + "@" + requestedVersion;
+        std::string resolvedTarget;
+        if (requestedVersion.empty()) {
+            resolvedTarget = targetName;
+        } else {
+            auto [ns, bareVersion] = xvm::parse_ns_version(requestedVersion);
+            if (ns.empty()) {
+                resolvedTarget = targetName + "@" + bareVersion;
+            } else {
+                resolvedTarget = ns + ":" + targetName + "@" + bareVersion;
+            }
+        }
 
         std::filesystem::path pkgFile;
         std::filesystem::path installDir;
