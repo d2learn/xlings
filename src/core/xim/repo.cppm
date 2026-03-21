@@ -166,7 +166,7 @@ bool sync_repo(const std::filesystem::path& localDir,
 
     if (!fs::exists(localDir / ".git")) {
         log::debug("cloning index repo: {}", url);
-        auto cmd = std::format("git clone --depth 1 \"{}\" \"{}\"",
+        auto cmd = std::format("git clone --depth 1 --quiet \"{}\" \"{}\"",
                                url, localDir.string());
         auto [rc, output] = platform::run_command_capture(cmd);
         if (rc != 0) {
