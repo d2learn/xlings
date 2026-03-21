@@ -66,7 +66,7 @@ DownloadResult git_clone_one(const DownloadTask& task) {
 
     log::debug("cloning {} from {}", task.name, url);
     auto cmd = std::format(
-        "git clone --depth 1 --recursive \"{}\" \"{}\"",
+        "git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
         url, destDir.string());
     auto rc = platform::exec(cmd);
     if (rc != 0) {
@@ -111,7 +111,7 @@ DownloadResult download_one(const DownloadTask& task,
             if (repoName.empty()) repoName = task.name;
             auto destDir = task.destDir / repoName;
             result.localFile = destDir;
-            auto cmd = std::format("git clone --depth 1 --recursive \"{}\" \"{}\"",
+            auto cmd = std::format("git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
                                    task.url, destDir.string());
             auto h = platform::spawn_command(cmd);
             if (h.pid <= 0) { result.error = "failed to spawn git"; return result; }
