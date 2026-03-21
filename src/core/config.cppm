@@ -416,6 +416,21 @@ private:
         }
         if (globalIndexRepos_.empty()) {
             globalIndexRepos_ = default_global_index_repos_(mirror_);
+        } else {
+            // Ensure the default index repo is always present when user
+            // defines custom index_repos (e.g. adding "ros2").  Without
+            // this, user-defined repos replace the default and packages
+            // in the primary index (like "python") become unfindable.
+            auto defaults = default_global_index_repos_(mirror_);
+            for (auto& def : defaults) {
+                bool found = false;
+                for (auto& repo : globalIndexRepos_) {
+                    if (repo.name == def.name) { found = true; break; }
+                }
+                if (!found) {
+                    globalIndexRepos_.insert(globalIndexRepos_.begin(), std::move(def));
+                }
+            }
         }
 
         paths_.dataDir  = paths_.homeDir / "data";
