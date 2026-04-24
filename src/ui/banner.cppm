@@ -166,7 +166,6 @@ void print_help(std::string_view version) {
         {"subos",    "Manage sub-OS environments"},
         {"self",     "Manage xlings itself (install, update, clean)"},
         {"script",   "Run xlings scripts"},
-        {"agent",    "AI agent for interactive package management"},
     };
     for (auto& cmd : cmds) {
         rows.push_back(hbox({

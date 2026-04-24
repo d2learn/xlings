@@ -2,14 +2,13 @@
 
 ## 项目简介
 
-**xlings** 是一个跨平台通用包管理器，核心理念是 **"一切皆可成包"** + **AI Agent 原生支持**。
+**xlings** 是一个跨平台通用包管理器，核心理念是 **"一切皆可成包"**。
 
 - **当前版本**: v0.4.0
 - **技术架构**: C++23 模块单二进制 multicall 架构
 - **核心模块**:
   - **xim** — 安装管理（多版本共存、依赖解析、并行下载）
   - **xvm** — 版本管理（Shim 机制、版本切换）
-  - **agent** — AI Agent 集成（规划中）
 - **环境隔离**: SubOS 隔离环境 + 项目级 `.xlings.json` 配置
 - **平台支持**: Linux / macOS / Windows
 
@@ -117,17 +116,6 @@
 - **添加 XPackage 包** — [官网指南](https://xlings.d2learn.org) / [xim-pkgindex 仓库](https://github.com/d2learn/xim-pkgindex)
 - **文档编写** — [官网指南](https://xlings.d2learn.org)
 - **社区**: [论坛](https://forum.d2learn.org/category/9/xlings) / QQ 群 167535744 / 1006282943
-
----
-
-## 未来规划：xlings agent
-
-xlings 定位为 **AI Agent 时代的原生包管理器**。`xlings agent` 子命令（规划中）将提供四大能力：
-
-1. **智能安装与环境搭建** — Agent 自动分析项目需求，安装依赖并配置环境
-2. **自动编写 xpkg 包** — Agent 根据软件特征自动生成包定义
-3. **向生态贡献 xpkg 包** — Agent 自动提交包到 xim-pkgindex
-4. **xlings 自优化** — Agent 参与 xlings 自身的开发与改进
 
 ---
 

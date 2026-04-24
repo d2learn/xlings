@@ -11,8 +11,6 @@ import xlings.core.xvm.commands;
 import xlings.core.config;
 import xlings.runtime.cancellation;
 import xlings.core.utf8;
-import xlings.libs.semantic_memory;
-import xlings.agent.context_manager;
 
 namespace xlings::capabilities {
 
@@ -208,116 +206,7 @@ public:
     }
 };
 
-// ─── Memory & Context Tools ───
-
-libs::semantic_memory::MemoryStore* shared_memory_store_{nullptr};
-agent::ContextManager* shared_ctx_mgr_{nullptr};
-
-class SaveMemory : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "save_memory",
-            .description = "Save a piece of information to long-term memory for future sessions",
-            .inputSchema = R"({"type":"object","properties":{"content":{"type":"string","description":"The information to remember"},"category":{"type":"string","enum":["fact","preference","experience"],"default":"fact"}},"required":["content"]})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        if (!shared_memory_store_) return nlohmann::json({{"error", "memory store not initialized"}}).dump();
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto content = json.value("content", "");
-        auto category = json.value("category", "fact");
-        if (content.empty()) return nlohmann::json({{"error", "content is required"}}).dump();
-        auto id = shared_memory_store_->remember(content, category);
-        return nlohmann::json({{"ok", true}, {"id", id}, {"category", category}}).dump();
-    }
-};
-
-class SearchMemory : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "search_memory",
-            .description = "Search long-term memory by keyword",
-            .inputSchema = R"({"type":"object","properties":{"query":{"type":"string","description":"Search keyword"},"max_results":{"type":"integer","default":5}},"required":["query"]})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        if (!shared_memory_store_) return nlohmann::json({{"error", "memory store not initialized"}}).dump();
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto query = json.value("query", "");
-        int max_results = json.value("max_results", 5);
-        auto results = shared_memory_store_->recall_text(query, max_results);
-        nlohmann::json arr = nlohmann::json::array();
-        for (auto& r : results) {
-            arr.push_back({{"id", r.entry.id}, {"content", r.entry.content},
-                           {"category", r.entry.category}, {"score", r.score}});
-        }
-        return nlohmann::json({{"results", std::move(arr)}, {"count", static_cast<int>(results.size())}}).dump();
-    }
-};
-
-class ForgetMemory : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "forget_memory",
-            .description = "Delete a memory entry by ID",
-            .inputSchema = R"({"type":"object","properties":{"id":{"type":"string","description":"Memory entry ID to delete"}},"required":["id"]})",
-            .destructive = true,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        if (!shared_memory_store_) return nlohmann::json({{"error", "memory store not initialized"}}).dump();
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto id = json.value("id", "");
-        bool ok = shared_memory_store_->forget(id);
-        return nlohmann::json({{"ok", ok}}).dump();
-    }
-};
-
-class ManageContext : public Capability {
-public:
-    auto spec() const -> CapabilitySpec override {
-        return {
-            .name = "manage_context",
-            .description = "Manage conversation context: check stats or retrieve relevant history",
-            .inputSchema = R"({"type":"object","properties":{"action":{"type":"string","enum":["status","retrieve"],"description":"status=show cache stats, retrieve=find relevant past turns"},"query":{"type":"string","description":"Search query for retrieve action"}},"required":["action"]})",
-            .destructive = false,
-        };
-    }
-    auto execute(Params params, EventStream& stream) -> Result override {
-        if (!shared_ctx_mgr_) return nlohmann::json({{"error", "context manager not initialized"}}).dump();
-        auto json = nlohmann::json::parse(params, nullptr, false);
-        auto action = json.value("action", "");
-        if (action == "status") {
-            return nlohmann::json({
-                {"l2_summaries", shared_ctx_mgr_->l2_count()},
-                {"l3_keywords", shared_ctx_mgr_->l3_keyword_count()},
-                {"evicted_tokens", shared_ctx_mgr_->total_evicted_tokens()},
-                {"turn_count", shared_ctx_mgr_->next_turn_id()},
-            }).dump();
-        } else if (action == "retrieve") {
-            auto query = json.value("query", "");
-            if (query.empty()) return nlohmann::json({{"error", "query required for retrieve"}}).dump();
-            auto results = shared_ctx_mgr_->retrieve_relevant(query, 5);
-            nlohmann::json arr = nlohmann::json::array();
-            for (auto* s : results) {
-                arr.push_back({{"turn_id", s->turn_id}, {"user", s->user_brief},
-                               {"assistant", s->assistant_brief}, {"tools", s->tool_names}});
-            }
-            return nlohmann::json({{"results", std::move(arr)}}).dump();
-        }
-        return nlohmann::json({{"error", "unknown action: " + action}}).dump();
-    }
-};
-
-export capability::Registry build_registry(
-    libs::semantic_memory::MemoryStore* memory_store = nullptr,
-    agent::ContextManager* ctx_mgr = nullptr
-) {
+export capability::Registry build_registry() {
     capability::Registry reg;
     // xlings core capabilities
     reg.register_capability(std::make_unique<SearchPackages>());
@@ -329,18 +218,6 @@ export capability::Registry build_registry(
     reg.register_capability(std::make_unique<ListVersions>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
-    // Memory tools
-    if (memory_store) {
-        shared_memory_store_ = memory_store;
-        reg.register_capability(std::make_unique<SaveMemory>());
-        reg.register_capability(std::make_unique<SearchMemory>());
-        reg.register_capability(std::make_unique<ForgetMemory>());
-    }
-    // Context management tool
-    if (ctx_mgr) {
-        shared_ctx_mgr_ = ctx_mgr;
-        reg.register_capability(std::make_unique<ManageContext>());
-    }
     return reg;
 }
 
