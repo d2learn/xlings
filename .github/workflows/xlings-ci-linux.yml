@@ -140,6 +140,10 @@ jobs:
         run: |
           bash tests/e2e/elfpatch_install_verify_test.sh build/release.tar.gz
 
+      - name: "E2E-13: Remove preserves other versions (multi-version regression)"
+        run: |
+          bash tests/e2e/remove_multi_version_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

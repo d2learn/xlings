@@ -1174,12 +1174,57 @@ public:
                 if (std::filesystem::exists(shim_path)) {
                     std::filesystem::remove(shim_path);
                 }
-                Config::workspace_mut().erase(op.name);
 
-                if (op.version.empty()) {
+                // Resolve the authoritative version to drop from the DB.
+                // Prefer what the hook sent; fall back to the outer resolve only when the
+                // op is for the same package as the top-level uninstall target.
+                std::string effective_version = op.version;
+                if (effective_version.empty() && op.name == detachTarget) {
+                    effective_version = detachVersion;
+                }
+
+                // Snapshot the active binding before we mutate anything. For detachTarget
+                // this was already cleared by detach_current_subos_ above; for sibling
+                // ops (npm/npx when removing node) it still reflects the pre-remove state.
+                std::string prev_active;
+                if (auto wit = Config::workspace().find(op.name);
+                    wit != Config::workspace().end()) {
+                    prev_active = wit->second;
+                }
+
+                if (effective_version.empty()) {
+                    // No version information anywhere — legacy fallback: clear the whole
+                    // entry. Should only happen for packages whose hook emits versionless
+                    // ops for sibling names that were never registered with a version.
                     Config::versions_mut().erase(op.name);
+                    Config::workspace_mut().erase(op.name);
+                    continue;
+                }
+
+                xvm::remove_version(Config::versions_mut(), op.name, effective_version);
+
+                // Decide the new active binding for this op.name.
+                auto dit = Config::versions_mut().find(op.name);
+                bool survivors = (dit != Config::versions_mut().end()
+                                  && !dit->second.versions.empty());
+                if (!survivors) {
+                    // Package fully gone — clear workspace binding too.
+                    Config::workspace_mut().erase(op.name);
+                } else if (prev_active.empty() || prev_active == effective_version) {
+                    // We just removed the active version (or detach already cleared the
+                    // slot for detachTarget). Auto-switch to the highest remaining
+                    // semver so leftover versions stay reachable.
+                    Config::workspace_mut()[op.name] =
+                        xvm::pick_highest_version(dit->second.versions);
                 } else {
-                    xvm::remove_version(Config::versions_mut(), op.name, op.version);
+                    // A non-active version was removed; keep the previous active if still
+                    // present, otherwise fall back to highest remaining.
+                    if (dit->second.versions.contains(prev_active)) {
+                        Config::workspace_mut()[op.name] = prev_active;
+                    } else {
+                        Config::workspace_mut()[op.name] =
+                            xvm::pick_highest_version(dit->second.versions);
+                    }
                 }
             } else if (op.op == "remove_headers") {
                 xvm::remove_headers(op.includedir, sysroot_include);
