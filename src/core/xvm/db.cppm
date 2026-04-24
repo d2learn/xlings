@@ -91,6 +91,42 @@ void remove_version(VersionDB& db,
     }
 }
 
+// Pick the highest semver key from a version map (descending by dotted numeric components,
+// then by component count). Namespace prefix is stripped before comparison, but the
+// original key is returned so callers can write it back to the workspace as-is.
+// Returns empty string if the map is empty.
+std::string pick_highest_version(const std::map<std::string, VData>& versions) {
+    if (versions.empty()) return {};
+
+    auto split = [](const std::string& s) -> std::vector<std::string> {
+        std::vector<std::string> parts;
+        std::istringstream iss(s);
+        std::string part;
+        while (std::getline(iss, part, '.')) {
+            parts.push_back(part);
+        }
+        return parts;
+    };
+
+    std::vector<std::string> keys;
+    keys.reserve(versions.size());
+    for (auto& [k, _] : versions) keys.push_back(k);
+
+    std::ranges::sort(keys, [&](const std::string& a, const std::string& b) {
+        auto pa = split(strip_namespace(a));
+        auto pb = split(strip_namespace(b));
+        for (std::size_t i = 0; i < std::min(pa.size(), pb.size()); ++i) {
+            int na = 0, nb = 0;
+            std::from_chars(pa[i].data(), pa[i].data() + pa[i].size(), na);
+            std::from_chars(pb[i].data(), pb[i].data() + pb[i].size(), nb);
+            if (na != nb) return na > nb;
+        }
+        return pa.size() > pb.size();
+    });
+
+    return keys.front();
+}
+
 // Fuzzy version match: "15" -> "15.1.0", "ns:14.2" -> "ns:14.2.0"
 // Matching priority:
 //   1. Exact match

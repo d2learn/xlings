@@ -9,7 +9,7 @@ on:
 env:
   GIT_TERMINAL_PROMPT: 0
   MACOSX_DEPLOYMENT_TARGET: "11.0"
-  BOOTSTRAP_XLINGS_VERSION: v0.3.2
+  BOOTSTRAP_XLINGS_VERSION: v0.4.2
   BOOTSTRAP_LLVM_VERSION: 20.1.7
   XMAKE_VERSION: v3.0.7
 
@@ -129,6 +129,10 @@ jobs:
       - name: "E2E-06: Script-type package install/export/uninstall"
         run: |
           bash tests/e2e/script_type_install_test.sh
+
+      - name: "E2E-07: Remove preserves other versions (multi-version regression)"
+        run: |
+          bash tests/e2e/remove_multi_version_test.sh
 
       - name: Attach artifact
         uses: actions/upload-artifact@v4

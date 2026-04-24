@@ -56,3 +56,7 @@ tests/e2e/project_workspace
 tests/e2e/scenarios/**/.xlings
 bin/xmake
 bin/mdbook*
+
+# local dev sandbox
+.xlings-home-dev/
+.xlings-sandbox/
