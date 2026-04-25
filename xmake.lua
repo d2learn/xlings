@@ -15,6 +15,10 @@ add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.31")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
+-- libarchive pulls in 5 compression backends; some xmake-repo paths don't
+-- auto-install zlib/lz4 before libarchive on first-run CI, so list them
+-- explicitly to guarantee install order.
+add_requires("zlib", "lz4", "bzip2", "zstd", "lzma")
 add_requires("libarchive 3.8.7")
 
 -- C++23 main binary
