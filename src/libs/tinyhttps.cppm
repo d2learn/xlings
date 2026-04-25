@@ -88,23 +88,26 @@ bool host_in_no_proxy_(std::string_view host, std::string_view np) {
 // behaviour: HTTPS_PROXY for https:// URLs, HTTP_PROXY for http://, ALL_PROXY
 // as fallback, NO_PROXY exemptions, lowercase variants accepted.
 std::string env_proxy_for_(std::string_view url) {
-    auto get = [](const char* name) -> const char* {
-        const char* v = std::getenv(name);
-        return (v && *v) ? v : nullptr;
+    // Two-name lookup: try uppercase first, then lowercase. Avoids the
+    // GNU `?:` binary-conditional extension (MSVC rejects it).
+    auto get_either = [](const char* a, const char* b) -> const char* {
+        if (auto v = std::getenv(a); v && *v) return v;
+        if (auto v = std::getenv(b); v && *v) return v;
+        return nullptr;
     };
 
     // NO_PROXY exemption first.
-    if (auto np = get("NO_PROXY") ?: get("no_proxy")) {
+    if (auto np = get_either("NO_PROXY", "no_proxy")) {
         if (host_in_no_proxy_(url_host_(url), np)) return {};
     }
 
     bool isHttps = url.starts_with("https://");
     if (isHttps) {
-        if (auto p = get("HTTPS_PROXY") ?: get("https_proxy")) return p;
+        if (auto p = get_either("HTTPS_PROXY", "https_proxy")) return p;
     } else {
-        if (auto p = get("HTTP_PROXY") ?: get("http_proxy")) return p;
+        if (auto p = get_either("HTTP_PROXY", "http_proxy")) return p;
     }
-    if (auto p = get("ALL_PROXY") ?: get("all_proxy")) return p;
+    if (auto p = get_either("ALL_PROXY", "all_proxy")) return p;
     return {};
 }
 
