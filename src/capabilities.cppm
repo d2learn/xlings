@@ -9,6 +9,9 @@ import xlings.libs.json;
 import xlings.core.xim.commands;
 import xlings.core.xvm.commands;
 import xlings.core.config;
+import xlings.core.subos;
+import xlings.core.xself;
+import xlings.platform;
 import xlings.runtime.cancellation;
 import xlings.core.utf8;
 
@@ -201,7 +204,146 @@ public:
         nlohmann::json payload;
         payload["title"] = "xlings status";
         payload["fields"] = std::move(fields);
-        stream.emit(DataEvent{"info_panel", payload.dump()});
+        stream.emit(DataEvent{"system_info", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class ListSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_subos",
+            .description = "List all sub-OSs and which one is active",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto all = subos::list_all();
+        nlohmann::json entries = nlohmann::json::array();
+        for (auto& s : all) {
+            entries.push_back({
+                {"name",     s.name},
+                {"dir",      s.dir.string()},
+                {"pkgCount", s.toolCount},
+                {"active",   s.isActive},
+            });
+        }
+        nlohmann::json payload;
+        payload["entries"] = std::move(entries);
+        stream.emit(DataEvent{"subos_list", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class ListSubosShims : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_subos_shims",
+            .description = "List installed shim binaries in the active sub-OS bin directory",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto& p = Config::paths();
+        std::vector<std::string> shims;
+        if (std::filesystem::exists(p.binDir)) {
+            for (auto& e : platform::dir_entries(p.binDir)) {
+                auto stem = e.path().stem().string();
+                if (xself::is_builtin_shim(stem) || stem == "xvm-alias") continue;
+                shims.push_back(std::move(stem));
+            }
+        }
+        std::ranges::sort(shims);
+        nlohmann::json payload;
+        payload["shims"]  = shims;
+        payload["binDir"] = p.binDir.string();
+        stream.emit(DataEvent{"subos_shims", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class CreateSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "create_subos",
+            .description = "Create a new sub-OS. The name must be alphanumeric (plus _ or -); 'current' is reserved",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"},"dir":{"type":"string","description":"Optional custom directory; defaults to $XLINGS_HOME/subos/<name>"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        auto dir  = json.value("dir", "");
+        return exit_result(subos::create(name, dir.empty() ? std::filesystem::path{} : std::filesystem::path{dir}));
+    }
+};
+
+class SwitchSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "switch_subos",
+            .description = "Switch the active sub-OS to <name>",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        return exit_result(subos::use(json.value("name", "")));
+    }
+};
+
+class RemoveSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "remove_subos",
+            .description = "Remove a sub-OS. Refuses to remove 'default' or the currently active sub-OS",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        return exit_result(subos::remove(json.value("name", "")));
+    }
+};
+
+class Env : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "env",
+            .description = "Return effective xlings environment (home, active sub-OS, paths, mirror, lang)",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto& p = Config::paths();
+        nlohmann::json payload;
+        payload["xlingsHome"]  = p.homeDir.string();
+        payload["dataDir"]     = p.dataDir.string();
+        payload["subosDir"]    = p.subosDir.string();
+        payload["binDir"]      = p.binDir.string();
+        payload["libDir"]      = p.libDir.string();
+        payload["activeSubos"] = p.activeSubos;
+        payload["mirror"]      = Config::mirror();
+        payload["lang"]        = Config::lang();
+        stream.emit(DataEvent{"env", payload.dump()});
         return exit_result(0);
     }
 };
@@ -218,6 +360,13 @@ export capability::Registry build_registry() {
     reg.register_capability(std::make_unique<ListVersions>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
+    // sub-OS + env (added 2026-04-26 per interface-api-v1-eval)
+    reg.register_capability(std::make_unique<ListSubos>());
+    reg.register_capability(std::make_unique<ListSubosShims>());
+    reg.register_capability(std::make_unique<CreateSubos>());
+    reg.register_capability(std::make_unique<SwitchSubos>());
+    reg.register_capability(std::make_unique<RemoveSubos>());
+    reg.register_capability(std::make_unique<Env>());
     return reg;
 }
 

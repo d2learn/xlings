@@ -3344,6 +3344,174 @@ TEST(InterfaceProtocol, NoCapabilityArgEmitsResultExitOne) {
     EXPECT_EQ(last["exitCode"].get<int>(), 1);
 }
 
+TEST(InterfaceProtocol, ListIncludesSubosAndEnv) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "--list"}, home);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    auto j = nlohmann::json::parse(out, nullptr, false);
+    ASSERT_FALSE(j.is_discarded());
+    std::set<std::string> names;
+    for (auto& c : j["capabilities"]) names.insert(c["name"].get<std::string>());
+    for (auto* expected : {"list_subos", "list_subos_shims", "create_subos",
+                           "switch_subos", "remove_subos", "env"}) {
+        EXPECT_TRUE(names.count(expected) == 1)
+            << "missing capability: " << expected;
+    }
+}
+
+TEST(InterfaceProtocol, EnvCapabilityReturnsHomeAndPaths) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "env", "--args", "{}"}, home);
+    auto events = parse_ndjson_(out);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    nlohmann::json data;
+    for (auto& e : events) {
+        if (e.value("kind", "") == "data" && e.value("dataKind", "") == "env") {
+            data = e["payload"];
+            break;
+        }
+    }
+    ASSERT_FALSE(data.is_null()) << "no kind:data dataKind:env event in: " << out;
+    EXPECT_EQ(data["xlingsHome"].get<std::string>(), home);
+    EXPECT_TRUE(data.contains("activeSubos"));
+    EXPECT_TRUE(data.contains("binDir"));
+    EXPECT_TRUE(data.contains("subosDir"));
+    EXPECT_TRUE(data.contains("dataDir"));
+    EXPECT_EQ(events.back().value("exitCode", -1), 0);
+}
+
+TEST(InterfaceProtocol, ListSubosEmitsSubosListDataKind) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "list_subos", "--args", "{}"}, home);
+    auto events = parse_ndjson_(out);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    bool found = false;
+    for (auto& e : events) {
+        if (e.value("kind", "") == "data" && e.value("dataKind", "") == "subos_list") {
+            ASSERT_TRUE(e["payload"].contains("entries"));
+            EXPECT_TRUE(e["payload"]["entries"].is_array());
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found) << "no subos_list dataKind in: " << out;
+}
+
+TEST(InterfaceProtocol, SubosLifecycleCreateSwitchRemove) {
+    auto home = make_sandbox_home_();
+
+    // The sandbox is empty (no .xlings.json), so "default" doesn't exist as a
+    // tracked entry yet. Create it first so we have somewhere to switch back to
+    // before removing the test subos (subos::remove refuses to delete the
+    // active subos).
+    {
+        auto [out, rc] = run_xlings_(
+            {"interface", "create_subos", "--args", R"({"name":"default"})"}, home);
+        EXPECT_EQ(rc, 0) << out;
+    }
+
+    // create_subos
+    {
+        auto [out, rc] = run_xlings_(
+            {"interface", "create_subos", "--args", R"({"name":"iface_test_subos"})"}, home);
+        EXPECT_EQ(rc, 0) << out;
+        auto events = parse_ndjson_(out);
+        ASSERT_FALSE(events.empty()) << out;
+        EXPECT_EQ(events.back().value("exitCode", -1), 0);
+    }
+    EXPECT_TRUE(std::filesystem::exists(
+        std::filesystem::path(home) / "subos" / "iface_test_subos"));
+
+    // switch_subos
+    {
+        auto [out, rc] = run_xlings_(
+            {"interface", "switch_subos", "--args", R"({"name":"iface_test_subos"})"}, home);
+        EXPECT_EQ(rc, 0) << out;
+        auto events = parse_ndjson_(out);
+        EXPECT_EQ(events.back().value("exitCode", -1), 0);
+    }
+
+    // env reflects the switch
+    {
+        auto [out, rc] = run_xlings_({"interface", "env", "--args", "{}"}, home);
+        auto events = parse_ndjson_(out);
+        EXPECT_EQ(rc, 0);
+        nlohmann::json data;
+        for (auto& e : events)
+            if (e.value("kind", "") == "data" && e.value("dataKind", "") == "env")
+                data = e["payload"];
+        ASSERT_FALSE(data.is_null());
+        EXPECT_EQ(data["activeSubos"].get<std::string>(), "iface_test_subos");
+    }
+
+    // switch back to default before removing (subos::remove refuses active)
+    {
+        auto [out, rc] = run_xlings_(
+            {"interface", "switch_subos", "--args", R"({"name":"default"})"}, home);
+        EXPECT_EQ(rc, 0) << out;
+    }
+
+    // remove_subos
+    {
+        auto [out, rc] = run_xlings_(
+            {"interface", "remove_subos", "--args", R"({"name":"iface_test_subos"})"}, home);
+        EXPECT_EQ(rc, 0) << out;
+        auto events = parse_ndjson_(out);
+        EXPECT_EQ(events.back().value("exitCode", -1), 0);
+    }
+    EXPECT_FALSE(std::filesystem::exists(
+        std::filesystem::path(home) / "subos" / "iface_test_subos"));
+
+    std::filesystem::remove_all(home);
+}
+
+TEST(InterfaceProtocol, RemoveSubosRefusesDefault) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_(
+        {"interface", "remove_subos", "--args", R"({"name":"default"})"}, home);
+    auto events = parse_ndjson_(out);
+    std::filesystem::remove_all(home);
+    ASSERT_FALSE(events.empty()) << out;
+    EXPECT_NE(events.back().value("exitCode", 0), 0)
+        << "remove_subos default should fail with non-zero exit";
+}
+
+TEST(InterfaceProtocol, ListSubosShimsEmitsShimsArray) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "list_subos_shims", "--args", "{}"}, home);
+    auto events = parse_ndjson_(out);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    bool found = false;
+    for (auto& e : events) {
+        if (e.value("kind", "") == "data" && e.value("dataKind", "") == "subos_shims") {
+            ASSERT_TRUE(e["payload"].contains("shims"));
+            EXPECT_TRUE(e["payload"]["shims"].is_array());
+            ASSERT_TRUE(e["payload"].contains("binDir"));
+            found = true;
+        }
+    }
+    EXPECT_TRUE(found) << "no subos_shims dataKind in: " << out;
+}
+
+TEST(InterfaceProtocol, SystemStatusEmitsSystemInfoDataKind) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "system_status", "--args", "{}"}, home);
+    auto events = parse_ndjson_(out);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    bool found_new = false;
+    for (auto& e : events) {
+        if (e.value("kind", "") == "data" && e.value("dataKind", "") == "system_info") {
+            found_new = true;
+        }
+    }
+    EXPECT_TRUE(found_new)
+        << "expected dataKind:\"system_info\" (renamed from info_panel) in: " << out;
+}
+
 // ============================================================
 
 int main(int argc, char** argv) {
