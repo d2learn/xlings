@@ -15,10 +15,16 @@ add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.31")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
--- libarchive pulls in 5 compression backends; some xmake-repo paths don't
--- auto-install zlib/lz4 before libarchive on first-run CI, so list them
--- explicitly to guarantee install order.
-add_requires("zlib", "lz4", "bzip2", "zstd", "lzma")
+-- libarchive's compression backends. Force `system = false` so xmake
+-- builds them from source under our musl-cross toolchain instead of
+-- picking up the host's glibc-built /usr/lib copies, which can't be
+-- linked into a musl-static binary. Required for the linux release
+-- build; harmless on macOS/Windows.
+add_requires("zlib",  { system = false })
+add_requires("lz4",   { system = false })
+add_requires("bzip2", { system = false })
+add_requires("zstd",  { system = false })
+add_requires("lzma",  { system = false })
 add_requires("libarchive 3.8.7")
 
 -- C++23 main binary
