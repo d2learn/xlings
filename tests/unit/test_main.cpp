@@ -2778,6 +2778,56 @@ TEST(ThemeIcons, AllAreThreeByteBmpUtf8) {
             << "icon::" << slot.name << " byte 2 not a continuation";
     }
 }
+
+TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
+    // Render the same panel that `xlings config` uses, capture the bytes
+    // that ftxui actually wrote to stdout, and confirm the canonical icon
+    // and box-drawing UTF-8 sequences survive end-to-end. This is the
+    // in-process equivalent of the bash e2e test, runs on every platform
+    // (Linux / macOS / Windows xlings_tests) so Windows gets the same
+    // emission-path coverage that redirected-stdout makes hard at the
+    // binary level.
+    namespace ui = xlings::ui;
+
+    std::vector<ui::InfoField> fields = {
+        {"language",  "en"},
+        {"mirror",    "GLOBAL", true},
+        {"data dir",  "/tmp/xlings"},
+    };
+
+    testing::internal::CaptureStdout();
+    ui::print_info_panel("Test Panel", fields);
+    auto output = testing::internal::GetCapturedStdout();
+
+    ASSERT_FALSE(output.empty())
+        << "print_info_panel emitted no bytes — ftxui rendering path broken";
+
+    // The package icon ◆ (U+25C6, E2 97 86) is the title bullet;
+    // box-drawing ─ (U+2500, E2 94 80) and │ (U+2502, E2 94 82) come
+    // from ftxui's border. At least one of these byte triples must be
+    // present in the captured output, on every platform, byte-for-byte.
+    auto has = [&](std::string_view needle) {
+        return output.find(needle) != std::string::npos;
+    };
+    EXPECT_TRUE(has("\xe2\x97\x86") || has("\xe2\x94\x80") || has("\xe2\x94\x82"))
+        << "info_panel output contains no canonical UTF-8 sequences "
+           "(◆ ─ │). Hex prefix: "
+        << [&] {
+               std::string hex;
+               for (std::size_t i = 0; i < std::min<std::size_t>(80, output.size()); ++i) {
+                   char buf[4];
+                   std::snprintf(buf, sizeof(buf), "%02x ",
+                                 static_cast<unsigned char>(output[i]));
+                   hex += buf;
+               }
+               return hex;
+           }();
+
+    // Negative check: long runs of '?' would indicate that the rendering
+    // layer or stdout capture downconverted UTF-8 to replacement chars.
+    EXPECT_EQ(output.find("?????"), std::string::npos)
+        << "info_panel output contains run of '?' — possible encoding loss";
+}
 // ============================================================
 
 int main(int argc, char** argv) {
