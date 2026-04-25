@@ -2,6 +2,33 @@
 
 ## 2026
 
+### 2026-04 (v0.4.3)
+
+- **下载器：自动识别系统代理 (#222)**
+  - `src/libs/tinyhttps.cppm` 增加 env 解析：`HTTPS_PROXY` / `HTTP_PROXY` / `ALL_PROXY`（含小写变体）按 libcurl 优先级生效；`NO_PROXY` 支持 exact / dotted-suffix / bare-suffix / `*` 通配。
+  - 命中代理时通过 `log::debug("tinyhttps: using proxy ... for ...")` 输出，全局 `-v` 可见。
+  - 复用 `mcpplibs::tinyhttps` 0.2.0 已内建的 HTTP CONNECT 隧道，无需上游改动。
+  - 9 个 `TEST(Proxy, …)` 单测锁定行为矩阵。
+
+- **TUI：Linux/macOS/Windows 图标一致 (#221)**
+  - 移除 `src/ui/theme.cppm` 的 `#ifdef _WIN32` ASCII fallback：三个平台用同一组 BMP 图标 `○ ↓ ▾ ⊕ ✓ ✗ › ▸ ◆`，把 `⟐` `⚙` 这种缺字形的偏门字符换掉。
+  - 新增 `tests/unit/test_main.cpp::ThemeIcons` 4 个单测：逐字节锁定 + 防 ASCII fallback + 强制 3-byte BMP UTF-8 + 渲染流抓 stdout 验字节。
+  - 配套 `tests/e2e/tui_utf8_test.sh` 在 Linux/macOS CI 跑端到端编码验证。
+  - macOS / 文档加 Windows 字体推荐段。
+
+- **架构：移除 agent 子系统 (#220)**
+  - 删除 `src/agent/` 整目录（14 个 .cppm，~3000 行）+ `src/libs/` 中 8 个 agent-only 模块。
+  - 删除 `mcpplibs-llmapi` 外部依赖；`mcpplibs-tinyhttps` 保留（xim 下载器使用）。
+  - 51 files changed, +119 / -16768 行；xlings 回归到纯包管理器 + xvm 运行时定位。
+
+- **修复：`xlings remove <pkg>` 不再误删整包版本表 (#219)**
+  - `src/core/xim/installer.cppm` 修复：当 uninstall hook 发出无版本号的 `xvm.remove(name)` 时，旧路径 `versions_mut().erase(name)` 把整个包条目擦掉（其它已装版本变孤儿）；现在改为用外层 resolved 的 `detachVersion` 兜底，`xvm::remove_version` 精确删一个；删后若有剩余版本且被删的是 active，自动按 semver 降序切到最高。
+  - 新增 `xvm::pick_highest_version()`。
+  - `tests/e2e/remove_multi_version_test.sh` 端到端回归（hermetic、私有 fixture index、Linux + macOS CI 都跑）。
+
+- **CI：macOS bootstrap xlings v0.3.2 → v0.4.2**
+  - `.github/workflows/xlings-ci-macos.yml` 和 `release.yml`：旧 v0.3.2 在 GitHub Actions 非 TTY 下载 LLVM 时 progress 输出被吞，导致 7+ 分钟无日志看似卡死；v0.4.2 进度行正常输出，CI 不再误判。
+
 ### 2026-03 (v0.4.0)
 
 - **xvm C++ 集成：消除 Rust xvm 依赖**
