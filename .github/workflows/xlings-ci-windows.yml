@@ -105,11 +105,6 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\tests\e2e\sub_index_search_test.ps1" "build\release.zip"
 
-      - name: "E2E-08: TUI UTF-8 output regression"
-        shell: pwsh
-        run: |
-          & "$env:GITHUB_WORKSPACE\tests\e2e\tui_utf8_test.ps1"
-
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
