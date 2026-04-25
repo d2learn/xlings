@@ -19,22 +19,34 @@ import xlings.libs.json;
 
 namespace {
 
+// Resolve once on first call and cache the absolute path. Without the
+// fs::absolute, a CWD change by another test in the same binary (e.g.
+// the Extract.* fixture's run_in_ helper) leaves the relative
+// "build/.../xlings" lookup pointing at the wrong place. Linux/macOS
+// happen not to hit this in the current order; Windows CI does.
 std::string find_xlings_binary_() {
     namespace fs = std::filesystem;
+    static const std::string cached = []() -> std::string {
 #ifdef _WIN32
-    const char* exe = "xlings.exe";
+        const char* exe = "xlings.exe";
 #else
-    const char* exe = "xlings";
+        const char* exe = "xlings";
 #endif
-    static const char* platforms[] = {"linux", "macosx", "windows"};
-    static const char* archs[] = {"x86_64", "arm64", "x64"};
-    static const char* modes[] = {"release", "debug"};
-    for (auto* p : platforms) for (auto* a : archs) for (auto* m : modes) {
-        fs::path candidate = fs::path("build") / p / a / m / exe;
-        std::error_code ec;
-        if (fs::is_regular_file(candidate, ec)) return candidate.string();
-    }
-    return {};
+        static const char* platforms[] = {"linux", "macosx", "windows"};
+        static const char* archs[] = {"x86_64", "arm64", "x64"};
+        static const char* modes[] = {"release", "debug"};
+        for (auto* p : platforms) for (auto* a : archs) for (auto* m : modes) {
+            fs::path candidate = fs::path("build") / p / a / m / exe;
+            std::error_code ec;
+            if (fs::is_regular_file(candidate, ec)) {
+                auto abs = fs::absolute(candidate, ec);
+                if (!ec) return abs.string();
+                return candidate.string();
+            }
+        }
+        return std::string{};
+    }();
+    return cached;
 }
 
 // Run `xlings <args...>` with an isolated XLINGS_HOME, capture stdout.
