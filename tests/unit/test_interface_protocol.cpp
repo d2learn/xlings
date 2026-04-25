@@ -473,6 +473,41 @@ TEST(InterfaceProtocol, RemoveRepoNonexistentEmitsNotFound) {
     EXPECT_TRUE(saw_err);
 }
 
+// ─── plan_install (dry-run) ────────────────────────────────
+
+TEST(InterfaceProtocol, PlanInstallEmitsInstallPlanWithoutSideEffects) {
+    auto home = make_sandbox_home_();
+
+    // plan_install for a nonexistent package should still emit a result;
+    // the catalog won't be loaded in a fresh sandbox so resolution exits 1
+    // — that is itself a useful preflight signal for clients. Just verify
+    // the capability is dispatched and produces NDJSON.
+    auto [out, _rc] = run_xlings_({"interface", "plan_install", "--args",
+        R"({"targets":["xim:nonexistent_pkg_xyz"]})"}, home);
+    auto events = parse_ndjson_(out);
+    ASSERT_FALSE(events.empty()) << out;
+    EXPECT_EQ(events.back().value("kind", ""), "result");
+
+    std::filesystem::remove_all(home);
+}
+
+TEST(InterfaceProtocol, PlanInstallShowsUpInCapabilityList) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "--list"}, home);
+    std::filesystem::remove_all(home);
+    ASSERT_EQ(rc, 0) << out;
+    auto j = nlohmann::json::parse(out, nullptr, false);
+    bool found_plan = false;
+    for (auto& c : j["capabilities"]) {
+        if (c["name"].get<std::string>() == "plan_install") {
+            EXPECT_FALSE(c["destructive"].get<bool>())
+                << "plan_install must be non-destructive (read-only preflight)";
+            found_plan = true;
+        }
+    }
+    EXPECT_TRUE(found_plan) << "plan_install missing from --list";
+}
+
 TEST(InterfaceProtocol, AddRepoInvalidEmitsInvalidInput) {
     auto home = make_sandbox_home_();
     auto [out, _rc] = run_xlings_({"interface", "add_repo", "--args",

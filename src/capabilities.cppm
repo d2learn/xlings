@@ -71,6 +71,33 @@ public:
     }
 };
 
+// Pre-flight planning entry point. Resolves targets and emits the
+// install_plan dataKind, but does not download or install anything.
+// Clients use this for dry-run / "would do X" UX without committing.
+class PlanInstall : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "plan_install",
+            .description = "Resolve targets and report what install_packages WOULD do (no download, no install)",
+            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"}},"noDeps":{"type":"boolean"},"global":{"type":"boolean"}},"required":["targets"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        std::vector<std::string> targets;
+        if (json.contains("targets") && json["targets"].is_array()) {
+            for (auto& t : json["targets"]) targets.push_back(t.get<std::string>());
+        }
+        bool noDeps = json.value("noDeps", false);
+        bool global = json.value("global", false);
+        return exit_result(xim::cmd_install(targets, /*yes=*/true, noDeps, stream,
+                                             global, /*cancel=*/nullptr, /*dryRun=*/true));
+    }
+};
+
 class RemovePackage : public Capability {
 public:
     auto spec() const -> CapabilitySpec override {
@@ -526,6 +553,7 @@ export capability::Registry build_registry() {
     // xlings core capabilities
     reg.register_capability(std::make_unique<SearchPackages>());
     reg.register_capability(std::make_unique<InstallPackages>());
+    reg.register_capability(std::make_unique<PlanInstall>());
     reg.register_capability(std::make_unique<RemovePackage>());
     reg.register_capability(std::make_unique<UpdatePackages>());
     reg.register_capability(std::make_unique<ListPackages>());

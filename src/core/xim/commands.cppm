@@ -57,9 +57,14 @@ std::string detect_platform() {
 int cmd_remove(const std::string& target, EventStream& stream);
 
 // === install command ===
+//
+// dryRun: when true, resolves the install plan and emits the install_plan
+// data event but does NOT download or install anything. The capability layer
+// uses this to back the plan_install capability — clients can preflight
+// what would be installed without making changes.
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                 EventStream& stream, bool forceGlobal = false,
-                CancellationToken* cancel = nullptr) {
+                CancellationToken* cancel = nullptr, bool dryRun = false) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -219,6 +224,11 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
         nlohmann::json planPayload;
         planPayload["packages"] = std::move(planPackages);
         stream.emit(DataEvent{"install_plan", planPayload.dump()});
+    }
+
+    // dry-run stops here — clients (plan_install) only want the plan.
+    if (dryRun) {
+        return 0;
     }
 
     // Confirm via EventStream prompt
