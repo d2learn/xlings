@@ -2701,6 +2701,54 @@ TEST(Capabilities, SearchSpecSchema) {
     EXPECT_TRUE(schema.contains("required"));
     EXPECT_EQ(schema["required"][0], "keyword");
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  TUI: theme icon byte sequences
+// ═══════════════════════════════════════════════════════════════
+//
+// Lock the canonical UTF-8 byte sequence for every theme icon. If a
+// developer ever swaps one for a platform-conditional ASCII fallback
+// (e.g. `#ifdef _WIN32 "+" #else "✓" #endif`) or for an obscure code
+// point that doesn't render in mainstream monospace fonts, the test
+// breaks here, where the fix is obvious. The companion e2e test
+// (tests/e2e/tui_utf8_test.{sh,ps1}) covers the OS-console emission
+// path; this unit test covers source-level regression.
+
+TEST(ThemeIcons, AllByteSequencesAreCanonical) {
+    namespace icon = xlings::ui::theme::icon;
+    using sv = std::string_view;
+
+    EXPECT_EQ(sv(icon::pending),     sv("\xe2\x97\x8b"));   // ○ U+25CB
+    EXPECT_EQ(sv(icon::downloading), sv("\xe2\x86\x93"));   // ↓ U+2193
+    EXPECT_EQ(sv(icon::extracting),  sv("\xe2\x96\xbe"));   // ▾ U+25BE
+    EXPECT_EQ(sv(icon::installing),  sv("\xe2\x8a\x95"));   // ⊕ U+2295
+    EXPECT_EQ(sv(icon::configuring), sv("\xe2\x8a\x95"));   // ⊕ U+2295
+    EXPECT_EQ(sv(icon::done),        sv("\xe2\x9c\x93"));   // ✓ U+2713
+    EXPECT_EQ(sv(icon::failed),      sv("\xe2\x9c\x97"));   // ✗ U+2717
+    EXPECT_EQ(sv(icon::info),        sv("\xe2\x80\xba"));   // › U+203A
+    EXPECT_EQ(sv(icon::arrow),       sv("\xe2\x96\xb8"));   // ▸ U+25B8
+    EXPECT_EQ(sv(icon::package),     sv("\xe2\x97\x86"));   // ◆ U+25C6
+}
+
+TEST(ThemeIcons, NoPlatformBranching) {
+    namespace icon = xlings::ui::theme::icon;
+    // Each icon must be a multi-byte UTF-8 sequence (high bit set in the
+    // leading byte). Catches an accidental "Windows = ASCII" fallback
+    // re-introducing a single-byte alternative for any of the slots.
+    auto is_multibyte = [](std::string_view s) {
+        return !s.empty() && (static_cast<unsigned char>(s[0]) & 0x80);
+    };
+    EXPECT_TRUE(is_multibyte(icon::pending));
+    EXPECT_TRUE(is_multibyte(icon::downloading));
+    EXPECT_TRUE(is_multibyte(icon::extracting));
+    EXPECT_TRUE(is_multibyte(icon::installing));
+    EXPECT_TRUE(is_multibyte(icon::configuring));
+    EXPECT_TRUE(is_multibyte(icon::done));
+    EXPECT_TRUE(is_multibyte(icon::failed));
+    EXPECT_TRUE(is_multibyte(icon::info));
+    EXPECT_TRUE(is_multibyte(icon::arrow));
+    EXPECT_TRUE(is_multibyte(icon::package));
+}
 // ============================================================
 
 int main(int argc, char** argv) {
