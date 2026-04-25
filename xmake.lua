@@ -15,6 +15,17 @@ add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.31")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
+-- libarchive's compression backends. Force `system = false` so xmake
+-- builds them from source under our musl-cross toolchain instead of
+-- picking up the host's glibc-built /usr/lib copies, which can't be
+-- linked into a musl-static binary. Required for the linux release
+-- build; harmless on macOS/Windows.
+add_requires("zlib",  { system = false })
+add_requires("lz4",   { system = false })
+add_requires("bzip2", { system = false })
+add_requires("zstd",  { system = false })
+add_requires("lzma",  { system = false })
+add_requires("libarchive 3.8.7")
 
 -- C++23 main binary
 target("xlings")
@@ -24,13 +35,18 @@ target("xlings")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua")
     add_packages("mcpplibs-xpkg")
-    add_packages("mcpplibs-tinyhttps")
+    add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
         set_toolchains("llvm")
     elseif is_plat("linux") then
         add_ldflags("-static", {force = true})
+    elseif is_plat("windows") then
+        -- libarchive's XAR format parser uses xmllite (CreateXmlReader);
+        -- xmake-repo's libarchive package_def only adds advapi32. Add
+        -- xmllite here so the link step finds CreateXmlReader.
+        add_syslinks("xmllite")
     end
 
 -- Unit tests
@@ -43,11 +59,16 @@ target("xlings_tests")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua", "gtest")
     add_packages("mcpplibs-xpkg")
-    add_packages("mcpplibs-tinyhttps")
+    add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
         set_toolchains("llvm")
     elseif is_plat("linux") then
         add_ldflags("-static", {force = true})
+    elseif is_plat("windows") then
+        -- libarchive's XAR format parser uses xmllite (CreateXmlReader);
+        -- xmake-repo's libarchive package_def only adds advapi32. Add
+        -- xmllite here so the link step finds CreateXmlReader.
+        add_syslinks("xmllite")
     end
