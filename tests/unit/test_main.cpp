@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <iomanip>
+#ifdef __unix__
+#include <sys/wait.h>
+#endif
 
 import std;
 import xlings.core.i18n;
@@ -3135,6 +3138,176 @@ TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
     EXPECT_EQ(output.find("?????"), std::string::npos)
         << "info_panel output contains run of '?' — possible encoding loss";
 }
+// ============================================================
+// InterfaceProtocol — `xlings interface` v1 NDJSON wire format
+// (see docs/plans/2026-04-25-interface-api-v1.md)
+// ============================================================
+
+namespace {
+
+// Locate the xlings binary built by xmake. The unit-test target uses
+// set_rundir($(projectdir)), so build/<plat>/<arch>/release/xlings is
+// reachable relative to cwd.
+std::string find_xlings_binary_() {
+    namespace fs = std::filesystem;
+    for (const auto& entry : fs::recursive_directory_iterator("build")) {
+        if (entry.is_regular_file() && entry.path().filename() == "xlings") {
+            auto status = fs::status(entry.path());
+            if ((status.permissions() & fs::perms::owner_exec) != fs::perms::none) {
+                return entry.path().string();
+            }
+        }
+    }
+    return {};
+}
+
+// Run `xlings <args...>` with an isolated XLINGS_HOME, capture stdout.
+// Returns {stdout, exit_code}. On Unix uses popen for simplicity;
+// stderr is silenced via 2>/dev/null in the command line.
+std::pair<std::string, int> run_xlings_(
+        const std::vector<std::string>& args,
+        const std::string& xlings_home = "") {
+    auto bin = find_xlings_binary_();
+    if (bin.empty()) return {"", -1};
+
+    std::string cmd;
+    if (!xlings_home.empty()) {
+        cmd += "XLINGS_HOME=\"" + xlings_home + "\" ";
+    }
+    cmd += "\"" + bin + "\"";
+    for (auto& a : args) {
+        cmd += " '" + a + "'";
+    }
+    cmd += " 2>/dev/null";
+
+    auto* fp = popen(cmd.c_str(), "r");
+    if (!fp) return {"", -1};
+    std::string out;
+    char buf[4096];
+    while (auto n = std::fread(buf, 1, sizeof(buf), fp)) {
+        out.append(buf, buf + n);
+    }
+    int rc = pclose(fp);
+    return {out, WIFEXITED(rc) ? WEXITSTATUS(rc) : -1};
+}
+
+// Parse NDJSON output into a vector of JSON objects (skips blank lines).
+std::vector<nlohmann::json> parse_ndjson_(const std::string& s) {
+    std::vector<nlohmann::json> v;
+    std::stringstream ss(s);
+    std::string line;
+    while (std::getline(ss, line)) {
+        if (line.empty()) continue;
+        auto j = nlohmann::json::parse(line, nullptr, false);
+        if (!j.is_discarded()) v.push_back(std::move(j));
+    }
+    return v;
+}
+
+// Build a fresh sandbox XLINGS_HOME that survives one test (no real
+// download — `xlings self init` only creates the directory layout).
+std::string make_sandbox_home_() {
+    namespace fs = std::filesystem;
+    auto root = fs::temp_directory_path() / ("xlings-iface-test-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    fs::create_directories(root);
+    return root.string();
+}
+
+}  // namespace
+
+TEST(InterfaceProtocol, VersionFlagPrintsProtocolVersion) {
+    auto [out, rc] = run_xlings_({"interface", "--version"});
+    ASSERT_EQ(rc, 0) << "xlings interface --version exit non-zero, out=" << out;
+    auto j = nlohmann::json::parse(out, nullptr, false);
+    ASSERT_FALSE(j.is_discarded()) << "non-JSON output: " << out;
+    ASSERT_TRUE(j.contains("protocol_version"));
+    EXPECT_EQ(j["protocol_version"].get<std::string>(), "1.0");
+}
+
+TEST(InterfaceProtocol, ListEmitsAllCapabilitiesWithSchema) {
+    auto [out, rc] = run_xlings_({"interface", "--list"});
+    ASSERT_EQ(rc, 0) << out;
+    auto j = nlohmann::json::parse(out, nullptr, false);
+    ASSERT_FALSE(j.is_discarded()) << "non-JSON: " << out;
+    ASSERT_TRUE(j.contains("protocol_version"));
+    ASSERT_TRUE(j.contains("capabilities"));
+    ASSERT_TRUE(j["capabilities"].is_array());
+    EXPECT_GE(j["capabilities"].size(), 9u)
+        << "expected at least 9 capabilities (search/install/remove/...)";
+    // Every capability has the spec triplet (input/output schemas live in spec)
+    for (auto& c : j["capabilities"]) {
+        EXPECT_TRUE(c.contains("name"));
+        EXPECT_TRUE(c.contains("description"));
+        EXPECT_TRUE(c.contains("inputSchema"));
+        EXPECT_TRUE(c.contains("destructive"));
+    }
+}
+
+TEST(InterfaceProtocol, SystemStatusEmitsResultLine) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "system_status", "--args", "{}"}, home);
+    ASSERT_EQ(rc, 0) << out;
+    auto events = parse_ndjson_(out);
+    ASSERT_FALSE(events.empty()) << "no NDJSON output";
+    // Last line MUST be {kind:"result", exitCode:0}
+    auto& last = events.back();
+    ASSERT_TRUE(last.contains("kind"));
+    EXPECT_EQ(last["kind"].get<std::string>(), "result");
+    ASSERT_TRUE(last.contains("exitCode"));
+    EXPECT_EQ(last["exitCode"].get<int>(), 0);
+    std::filesystem::remove_all(home);
+}
+
+TEST(InterfaceProtocol, DataEventWiredAsKindData) {
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "system_status", "--args", "{}"}, home);
+    ASSERT_EQ(rc, 0) << out;
+    auto events = parse_ndjson_(out);
+    // At least one mid event with kind:"data"
+    bool found_data = false;
+    for (auto& e : events) {
+        if (e.contains("kind") && e["kind"].get<std::string>() == "data") {
+            ASSERT_TRUE(e.contains("dataKind"));
+            ASSERT_TRUE(e.contains("payload"));
+            EXPECT_FALSE(e["dataKind"].get<std::string>().empty());
+            found_data = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_data) << "no kind:\"data\" event in: " << out;
+    std::filesystem::remove_all(home);
+}
+
+TEST(InterfaceProtocol, UnknownCapabilityEmitsErrorThenResult) {
+    auto [out, rc] = run_xlings_({"interface", "no_such_capability_xyz"});
+    auto events = parse_ndjson_(out);
+    ASSERT_GE(events.size(), 2u) << "expected error + result lines, got: " << out;
+    // Find error event with code == 404
+    bool saw_error = false;
+    for (auto& e : events) {
+        if (e.contains("kind") && e["kind"].get<std::string>() == "error") {
+            EXPECT_EQ(e["code"].get<int>(), 404);
+            EXPECT_FALSE(e["recoverable"].get<bool>());
+            saw_error = true;
+        }
+    }
+    EXPECT_TRUE(saw_error);
+    // Last line is result with exitCode:1
+    auto& last = events.back();
+    EXPECT_EQ(last["kind"].get<std::string>(), "result");
+    EXPECT_EQ(last["exitCode"].get<int>(), 1);
+}
+
+TEST(InterfaceProtocol, NoCapabilityArgEmitsResultExitOne) {
+    auto [out, rc] = run_xlings_({"interface"});
+    auto events = parse_ndjson_(out);
+    ASSERT_FALSE(events.empty()) << out;
+    auto& last = events.back();
+    EXPECT_EQ(last["kind"].get<std::string>(), "result");
+    EXPECT_EQ(last["exitCode"].get<int>(), 1);
+}
+
 // ============================================================
 
 int main(int argc, char** argv) {
