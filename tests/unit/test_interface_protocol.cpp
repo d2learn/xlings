@@ -81,7 +81,12 @@ std::pair<std::string, int> run_xlings_(
 #endif
 
 #ifdef _WIN32
-    auto* fp = _popen(cmd.c_str(), "r");
+    // cmd.exe /c, per its parsing rules, strips ONE pair of outer quotes
+    // when there are >2 quotes in the command, garbling our `"path" "arg"
+    // "arg"` shape. Wrap the whole command in an extra pair so the strip
+    // removes only those wrappers and leaves the per-token quoting intact.
+    std::string wrapped = "\"" + cmd + "\"";
+    auto* fp = _popen(wrapped.c_str(), "r");
 #else
     auto* fp = popen(cmd.c_str(), "r");
 #endif
