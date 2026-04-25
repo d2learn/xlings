@@ -48,8 +48,11 @@ std::string event_to_ndjson_line_(const Event& e) {
                 {"question", pr->question}, {"options", pr->options},
                 {"defaultValue", pr->defaultValue}};
     } else if (auto* er = std::get_if<ErrorEvent>(&e)) {
-        line = {{"kind", "error"}, {"code", er->code},
-                {"message", er->message}, {"recoverable", er->recoverable}};
+        line = {{"kind", "error"},
+                {"code", std::string(to_wire_string(er->code))},
+                {"message", er->message},
+                {"recoverable", er->recoverable}};
+        if (!er->hint.empty()) line["hint"] = er->hint;
     } else if (std::get_if<CompletedEvent>(&e)) {
         return "";
     } else {
@@ -221,9 +224,10 @@ export int run(const mcpplibs::cmdline::ParsedArgs& args,
     if (!cap) {
         nlohmann::json err = {
             {"kind", "error"},
-            {"code", 404},
+            {"code", std::string(to_wire_string(ErrorCode::NotFound))},
             {"message", "unknown capability: " + cap_name},
-            {"recoverable", false}
+            {"recoverable", false},
+            {"hint", "run `xlings interface --list` to see available capabilities"}
         };
         std::cout << err.dump() << "\n";
         nlohmann::json done = {{"kind", "result"}, {"exitCode", 1}};
@@ -246,7 +250,8 @@ export int run(const mcpplibs::cmdline::ParsedArgs& args,
         exit_code = 130;
     } catch (const std::exception& e) {
         nlohmann::json err = {
-            {"kind", "error"}, {"code", 500},
+            {"kind", "error"},
+            {"code", std::string(to_wire_string(ErrorCode::Internal))},
             {"message", std::string("internal: ") + e.what()},
             {"recoverable", false}
         };

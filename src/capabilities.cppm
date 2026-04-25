@@ -321,6 +321,179 @@ public:
     }
 };
 
+// ─── Index repos ────────────────────────────────────────────
+
+class ListRepos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_repos",
+            .description = "List configured xim package index repositories (global + project)",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        nlohmann::json repos = nlohmann::json::array();
+        for (auto& r : Config::global_index_repos()) {
+            repos.push_back({{"name", r.name}, {"url", r.url}, {"scope", "global"}});
+        }
+        if (Config::has_project_config()) {
+            for (auto& r : Config::project_index_repos()) {
+                repos.push_back({{"name", r.name}, {"url", r.url}, {"scope", "project"}});
+            }
+        }
+        nlohmann::json payload;
+        payload["repos"] = std::move(repos);
+        payload["override"] = (Config::has_project_config() && !Config::project_index_repos().empty())
+                              ? "project" : "global";
+        stream.emit(DataEvent{"repo_list", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+// File-local repo config helpers. Keep these non-inline (avoiding the C++20
+// module + libstdc++ static-link pitfall where inline functions touching
+// nlohmann::json triggers an unresolved std::shared_ptr<output_adapter_protocol>
+// copy ctor across translation units).
+namespace repo_helpers {
+
+nlohmann::json load_global_json() {
+    auto path = Config::paths().homeDir / ".xlings.json";
+    if (!std::filesystem::exists(path)) return nlohmann::json::object();
+    try {
+        auto content = platform::read_file_to_string(path.string());
+        auto j = nlohmann::json::parse(content, nullptr, false);
+        return j.is_discarded() ? nlohmann::json::object() : j;
+    } catch (...) { return nlohmann::json::object(); }
+}
+
+void save_global_json(const nlohmann::json& j) {
+    auto path = Config::paths().homeDir / ".xlings.json";
+    platform::write_string_to_file(path.string(), j.dump());
+}
+
+}  // namespace repo_helpers
+
+class AddRepo : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "add_repo",
+            .description = "Add or update a global xim index repository. If the name already exists, the URL is updated in place",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"},"url":{"type":"string","description":"git URL of the index repository"}},"required":["name","url"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        auto url  = json.value("url",  "");
+        if (name.empty() || url.empty()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::InvalidInput,
+                .message = "add_repo requires non-empty name and url",
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+
+        auto cfg = repo_helpers::load_global_json();
+        if (!cfg.contains("index_repos") || !cfg["index_repos"].is_array()) {
+            cfg["index_repos"] = nlohmann::json::array();
+        }
+        bool updated = false;
+        for (auto& entry : cfg["index_repos"]) {
+            if (entry.is_object() && entry.contains("name")
+                && entry["name"].get<std::string>() == name) {
+                entry["url"] = url;
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            nlohmann::json entry;
+            entry["name"] = name;
+            entry["url"]  = url;
+            cfg["index_repos"].push_back(std::move(entry));
+        }
+        try { repo_helpers::save_global_json(cfg); }
+        catch (const std::exception& e) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::Permission,
+                .message = std::string("write .xlings.json failed: ") + e.what(),
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+        return exit_result(0);
+    }
+};
+
+class RemoveRepo : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "remove_repo",
+            .description = "Remove a global xim index repository by name",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        if (name.empty()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::InvalidInput,
+                .message = "remove_repo requires non-empty name",
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+
+        auto cfg = repo_helpers::load_global_json();
+        if (!cfg.contains("index_repos") || !cfg["index_repos"].is_array()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::NotFound,
+                .message = "no repo named '" + name + "'",
+                .recoverable = true,
+            });
+            return exit_result(1);
+        }
+        auto& arr = cfg["index_repos"];
+        bool removed = false;
+        for (auto it = arr.begin(); it != arr.end(); ) {
+            if (it->is_object() && it->contains("name")
+                && (*it)["name"].get<std::string>() == name) {
+                it = arr.erase(it);
+                removed = true;
+            } else { ++it; }
+        }
+        if (!removed) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::NotFound,
+                .message = "no repo named '" + name + "'",
+                .recoverable = true,
+            });
+            return exit_result(1);
+        }
+        try { repo_helpers::save_global_json(cfg); }
+        catch (const std::exception& e) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::Permission,
+                .message = std::string("write .xlings.json failed: ") + e.what(),
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+        return exit_result(0);
+    }
+};
+
 class Env : public Capability {
 public:
     auto spec() const -> CapabilitySpec override {
@@ -367,6 +540,10 @@ export capability::Registry build_registry() {
     reg.register_capability(std::make_unique<SwitchSubos>());
     reg.register_capability(std::make_unique<RemoveSubos>());
     reg.register_capability(std::make_unique<Env>());
+    // Index repo management (added 2026-04-26 per interface-api-v1-eval P1)
+    reg.register_capability(std::make_unique<ListRepos>());
+    reg.register_capability(std::make_unique<AddRepo>());
+    reg.register_capability(std::make_unique<RemoveRepo>());
     return reg;
 }
 
