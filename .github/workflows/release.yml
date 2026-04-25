@@ -184,8 +184,12 @@ jobs:
           if [[ -n "${{ inputs.version }}" ]]; then
             echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            VER=$(sed -n 's/.*VERSION = "\([^"]*\)".*/\1/p' core/config.cppm | head -1)
-            [[ -z "$VER" ]] && VER="0.2.0"
+            VER=$(sed -n 's/.*VERSION = "\([^"]*\)".*/\1/p' src/core/config.cppm | head -1)
+            if [[ -z "$VER" ]]; then
+              echo "Failed to read VERSION from src/core/config.cppm." >&2
+              echo "Either fix the source path or pass an explicit version via workflow_dispatch input." >&2
+              exit 1
+            fi
             echo "version=$VER" >> "$GITHUB_OUTPUT"
           fi
 
