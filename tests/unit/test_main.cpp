@@ -3245,17 +3245,20 @@ std::string make_sandbox_home_() {
 }  // namespace
 
 TEST(InterfaceProtocol, VersionFlagPrintsProtocolVersion) {
-    auto [out, rc] = run_xlings_({"interface", "--version"});
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "--version"}, home);
     ASSERT_EQ(rc, 0) << "xlings interface --version exit non-zero, out=" << out;
     auto j = nlohmann::json::parse(out, nullptr, false);
     ASSERT_FALSE(j.is_discarded()) << "non-JSON output: " << out;
     ASSERT_TRUE(j.contains("protocol_version"));
     EXPECT_EQ(j["protocol_version"].get<std::string>(), "1.0");
+    std::filesystem::remove_all(home);
 }
 
 TEST(InterfaceProtocol, ListEmitsAllCapabilitiesWithSchema) {
-    auto [out, rc] = run_xlings_({"interface", "--list"});
-    ASSERT_EQ(rc, 0) << out;
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "--list"}, home);
+    ASSERT_EQ(rc, 0) << "rc=" << rc << " out=" << out;
     auto j = nlohmann::json::parse(out, nullptr, false);
     ASSERT_FALSE(j.is_discarded()) << "non-JSON: " << out;
     ASSERT_TRUE(j.contains("protocol_version"));
@@ -3270,6 +3273,7 @@ TEST(InterfaceProtocol, ListEmitsAllCapabilitiesWithSchema) {
         EXPECT_TRUE(c.contains("inputSchema"));
         EXPECT_TRUE(c.contains("destructive"));
     }
+    std::filesystem::remove_all(home);
 }
 
 TEST(InterfaceProtocol, SystemStatusEmitsResultLine) {
@@ -3308,7 +3312,9 @@ TEST(InterfaceProtocol, DataEventWiredAsKindData) {
 }
 
 TEST(InterfaceProtocol, UnknownCapabilityEmitsErrorThenResult) {
-    auto [out, rc] = run_xlings_({"interface", "no_such_capability_xyz"});
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface", "no_such_capability_xyz"}, home);
+    std::filesystem::remove_all(home);
     auto events = parse_ndjson_(out);
     ASSERT_GE(events.size(), 2u) << "expected error + result lines, got: " << out;
     // Find error event with code == 404
@@ -3328,7 +3334,9 @@ TEST(InterfaceProtocol, UnknownCapabilityEmitsErrorThenResult) {
 }
 
 TEST(InterfaceProtocol, NoCapabilityArgEmitsResultExitOne) {
-    auto [out, rc] = run_xlings_({"interface"});
+    auto home = make_sandbox_home_();
+    auto [out, rc] = run_xlings_({"interface"}, home);
+    std::filesystem::remove_all(home);
     auto events = parse_ndjson_(out);
     ASSERT_FALSE(events.empty()) << out;
     auto& last = events.back();
