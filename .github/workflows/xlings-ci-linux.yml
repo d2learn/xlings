@@ -144,6 +144,10 @@ jobs:
         run: |
           bash tests/e2e/remove_multi_version_test.sh
 
+      - name: "E2E-14: TUI UTF-8 output regression"
+        run: |
+          bash tests/e2e/tui_utf8_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

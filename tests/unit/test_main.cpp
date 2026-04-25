@@ -2701,6 +2701,133 @@ TEST(Capabilities, SearchSpecSchema) {
     EXPECT_TRUE(schema.contains("required"));
     EXPECT_EQ(schema["required"][0], "keyword");
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  TUI: theme icon byte sequences
+// ═══════════════════════════════════════════════════════════════
+//
+// Force-check that every theme icon is the same UTF-8 byte sequence on
+// every platform. xlings_tests is built and run on Linux / macOS /
+// Windows in CI, so a regression that, say, changes `icon::done` to
+// "+" only on Windows is caught the moment xlings_tests boots there.
+//
+// The intent is: there is exactly one icon set, byte-for-byte, no
+// platform conditional, no font-substitution fallback, no ASCII
+// downgrade. If the test fails on any platform, the source has
+// drifted.
+
+namespace {
+struct IconSlot {
+    std::string_view name;
+    const char* value;
+    std::string_view expected;
+};
+
+constexpr IconSlot kThemeIconSlots[] = {
+    {"pending",     xlings::ui::theme::icon::pending,     "\xe2\x97\x8b"},  // ○ U+25CB
+    {"downloading", xlings::ui::theme::icon::downloading, "\xe2\x86\x93"},  // ↓ U+2193
+    {"extracting",  xlings::ui::theme::icon::extracting,  "\xe2\x96\xbe"},  // ▾ U+25BE
+    {"installing",  xlings::ui::theme::icon::installing,  "\xe2\x8a\x95"},  // ⊕ U+2295
+    {"configuring", xlings::ui::theme::icon::configuring, "\xe2\x8a\x95"},  // ⊕ U+2295
+    {"done",        xlings::ui::theme::icon::done,        "\xe2\x9c\x93"},  // ✓ U+2713
+    {"failed",      xlings::ui::theme::icon::failed,      "\xe2\x9c\x97"},  // ✗ U+2717
+    {"info",        xlings::ui::theme::icon::info,        "\xe2\x80\xba"},  // › U+203A
+    {"arrow",       xlings::ui::theme::icon::arrow,       "\xe2\x96\xb8"},  // ▸ U+25B8
+    {"package",     xlings::ui::theme::icon::package,     "\xe2\x97\x86"},  // ◆ U+25C6
+};
+} // namespace
+
+TEST(ThemeIcons, AllByteSequencesAreCanonical) {
+    // Every slot must equal its expected UTF-8 byte sequence exactly.
+    for (auto& slot : kThemeIconSlots) {
+        EXPECT_EQ(std::string_view{slot.value}, slot.expected)
+            << "icon::" << slot.name << " drifted from canonical bytes";
+    }
+}
+
+TEST(ThemeIcons, NoPlatformAsciiFallback) {
+    // Each icon's leading byte must have bit 7 set — i.e. it is a
+    // multi-byte UTF-8 sequence, not an ASCII fallback. Catches
+    // `#ifdef _WIN32 "+" #else "✓"` slipping back in for any slot.
+    for (auto& slot : kThemeIconSlots) {
+        std::string_view s{slot.value};
+        ASSERT_FALSE(s.empty()) << "icon::" << slot.name << " is empty";
+        EXPECT_TRUE(static_cast<unsigned char>(s[0]) & 0x80)
+            << "icon::" << slot.name << " is single-byte ASCII (\""
+            << s << "\")";
+    }
+}
+
+TEST(ThemeIcons, AllAreThreeByteBmpUtf8) {
+    // Belt-and-braces: every slot is a well-formed 3-byte BMP UTF-8
+    // sequence (lead byte 0xE0..0xEF, followed by two continuation
+    // bytes 0x80..0xBF). Rules out 4-byte SMP code points (which many
+    // monospace fonts can't render) and malformed sequences.
+    for (auto& slot : kThemeIconSlots) {
+        std::string_view s{slot.value};
+        ASSERT_EQ(s.size(), 3u) << "icon::" << slot.name
+                                 << " is " << s.size() << " bytes, expected 3";
+        auto b0 = static_cast<unsigned char>(s[0]);
+        auto b1 = static_cast<unsigned char>(s[1]);
+        auto b2 = static_cast<unsigned char>(s[2]);
+        EXPECT_TRUE(b0 >= 0xE0 && b0 <= 0xEF)
+            << "icon::" << slot.name << " lead byte not 3-byte UTF-8";
+        EXPECT_TRUE((b1 & 0xC0) == 0x80)
+            << "icon::" << slot.name << " byte 1 not a continuation";
+        EXPECT_TRUE((b2 & 0xC0) == 0x80)
+            << "icon::" << slot.name << " byte 2 not a continuation";
+    }
+}
+
+TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
+    // Render the same panel that `xlings config` uses, capture the bytes
+    // that ftxui actually wrote to stdout, and confirm the canonical icon
+    // and box-drawing UTF-8 sequences survive end-to-end. This is the
+    // in-process equivalent of the bash e2e test, runs on every platform
+    // (Linux / macOS / Windows xlings_tests) so Windows gets the same
+    // emission-path coverage that redirected-stdout makes hard at the
+    // binary level.
+    namespace ui = xlings::ui;
+
+    std::vector<ui::InfoField> fields = {
+        {"language",  "en"},
+        {"mirror",    "GLOBAL", true},
+        {"data dir",  "/tmp/xlings"},
+    };
+
+    testing::internal::CaptureStdout();
+    ui::print_info_panel("Test Panel", fields);
+    auto output = testing::internal::GetCapturedStdout();
+
+    ASSERT_FALSE(output.empty())
+        << "print_info_panel emitted no bytes — ftxui rendering path broken";
+
+    // The package icon ◆ (U+25C6, E2 97 86) is the title bullet;
+    // box-drawing ─ (U+2500, E2 94 80) and │ (U+2502, E2 94 82) come
+    // from ftxui's border. At least one of these byte triples must be
+    // present in the captured output, on every platform, byte-for-byte.
+    auto has = [&](std::string_view needle) {
+        return output.find(needle) != std::string::npos;
+    };
+    EXPECT_TRUE(has("\xe2\x97\x86") || has("\xe2\x94\x80") || has("\xe2\x94\x82"))
+        << "info_panel output contains no canonical UTF-8 sequences "
+           "(◆ ─ │). Hex prefix: "
+        << [&] {
+               std::string hex;
+               for (std::size_t i = 0; i < std::min<std::size_t>(80, output.size()); ++i) {
+                   char buf[4];
+                   std::snprintf(buf, sizeof(buf), "%02x ",
+                                 static_cast<unsigned char>(output[i]));
+                   hex += buf;
+               }
+               return hex;
+           }();
+
+    // Negative check: long runs of '?' would indicate that the rendering
+    // layer or stdout capture downconverted UTF-8 to replacement chars.
+    EXPECT_EQ(output.find("?????"), std::string::npos)
+        << "info_panel output contains run of '?' — possible encoding loss";
+}
 // ============================================================
 
 int main(int argc, char** argv) {
