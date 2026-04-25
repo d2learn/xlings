@@ -121,6 +121,14 @@ extract_archive(const std::filesystem::path& archive,
             "archive does not exist: {}", archive.string()));
     }
 
+    // Resolve symlinks in the destination root before handing paths to
+    // libarchive. macOS exposes the temp dir under /var → /private/var,
+    // and ARCHIVE_EXTRACT_SECURE_SYMLINKS refuses to write through any
+    // symlink on the path. weakly_canonical follows existing prefix
+    // links and leaves not-yet-created tail components alone.
+    auto canonicalDest = fs::weakly_canonical(destDir, ec);
+    if (ec) canonicalDest = destDir;  // fall back if canonicalization fails
+
     struct archive* src = ::archive_read_new();
     struct archive* dst = ::archive_write_disk_new();
 
@@ -173,7 +181,7 @@ extract_archive(const std::filesystem::path& archive,
             cleanup();
             return std::unexpected(std::move(safeRel).error());
         }
-        auto rebased = (destDir / *safeRel).lexically_normal().string();
+        auto rebased = (canonicalDest / *safeRel).lexically_normal().string();
         ::archive_entry_set_pathname(entry, rebased.c_str());
 
         // Hardlinks may carry inner paths that point to other archive
@@ -186,7 +194,7 @@ extract_archive(const std::filesystem::path& archive,
                 cleanup();
                 return std::unexpected(std::move(safeHl).error());
             }
-            auto rebasedHl = (destDir / *safeHl).lexically_normal().string();
+            auto rebasedHl = (canonicalDest / *safeHl).lexically_normal().string();
             ::archive_entry_set_hardlink(entry, rebasedHl.c_str());
         }
 
@@ -221,7 +229,7 @@ extract_archive(const std::filesystem::path& archive,
     }
 
     cleanup();
-    return destDir;
+    return canonicalDest;
 }
 
 } // namespace xlings::xim
