@@ -39,9 +39,11 @@ function Log($msg) {
     Write-Host "[tui-utf8] $msg"
 }
 
-# Exact UTF-8 byte sequences for the canonical icon set in src/ui/theme.cppm.
-# Any one of these appearing in the output proves the binary emitted real
-# UTF-8 (and that a downstream layer didn't replace them with '?').
+# Exact UTF-8 byte sequences for the canonical icon set in src/ui/theme.cppm
+# plus ftxui box-drawing primitives. Any one of these appearing proves the
+# binary emitted real UTF-8 (and that a downstream layer didn't replace them
+# with '?'). `xlings config` reliably exercises both the icon set (◆) and
+# ftxui's border (─ ┌ ┐ └ ┘ │) on every platform.
 $utf8Markers = @(
     @{ Glyph = '✓'; Bytes = @(0xE2, 0x9C, 0x93) }   # done
     @{ Glyph = '✗'; Bytes = @(0xE2, 0x9C, 0x97) }   # failed
@@ -52,26 +54,30 @@ $utf8Markers = @(
     @{ Glyph = '›'; Bytes = @(0xE2, 0x80, 0xBA) }   # info
     @{ Glyph = '↓'; Bytes = @(0xE2, 0x86, 0x93) }   # downloading
     @{ Glyph = '▾'; Bytes = @(0xE2, 0x96, 0xBE) }   # extracting
+    @{ Glyph = '─'; Bytes = @(0xE2, 0x94, 0x80) }   # box horizontal (ftxui border)
+    @{ Glyph = '│'; Bytes = @(0xE2, 0x94, 0x82) }   # box vertical
 )
 
 function Capture-Utf8Bytes($args) {
-    # Run xlings, capture its stdout as raw bytes (not via PowerShell's
-    # string pipeline, which would re-encode if console CP isn't UTF-8).
-    $tempOut = New-TemporaryFile
-    try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $bin
-        $psi.Arguments = $args
-        $psi.RedirectStandardOutput = $true
-        $psi.UseShellExecute = $false
-        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        $proc.WaitForExit()
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($proc.StandardOutput.ReadToEnd())
-        return ,$bytes
-    } finally {
-        Remove-Item $tempOut -ErrorAction SilentlyContinue
-    }
+    # Run xlings and collect both stdout and stderr as UTF-8 bytes. We
+    # combine the two streams because xlings's TUI rendering (ftxui) and
+    # log layer can land on either depending on the path; we just want to
+    # confirm "the binary emits valid UTF-8 byte sequences for our icons".
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $bin
+    $psi.Arguments = $args
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+    $combined = $stdout + $stderr
+    return ,([System.Text.Encoding]::UTF8.GetBytes($combined))
 }
 
 function Contains-ByteSequence($haystack, $needle) {
@@ -86,35 +92,39 @@ function Contains-ByteSequence($haystack, $needle) {
     return $false
 }
 
-# ── 1. Capture xlings --help bytes ───────────────────────────────
-Log "Running: $bin --help"
-$helpBytes = Capture-Utf8Bytes '--help'
-if ($helpBytes.Length -eq 0) { Fail "--help produced no output" }
-Log "--help emitted $($helpBytes.Length) bytes"
+# ── 1. Capture xlings config bytes ───────────────────────────────
+# `xlings config` reliably renders an info_panel with ftxui borders and
+# the ◆ package icon, so its output is the most stable carrier for the
+# UTF-8 byte sequences we want to verify. `--help` is pure text and
+# wouldn't exercise the byte path we care about.
+Log "Running: $bin config"
+$bytes = Capture-Utf8Bytes 'config'
+if ($bytes.Length -eq 0) { Fail "'xlings config' produced no output" }
+Log "'xlings config' emitted $($bytes.Length) bytes (stdout+stderr combined)"
 
-# ── 2. Look for any of the canonical UTF-8 sequences ─────────────
+# ── 2. Look for any canonical UTF-8 sequence ─────────────────────
 $matched = @()
 foreach ($m in $utf8Markers) {
-    if (Contains-ByteSequence $helpBytes $m.Bytes) { $matched += $m.Glyph }
+    if (Contains-ByteSequence $bytes $m.Bytes) { $matched += $m.Glyph }
 }
 
 if ($matched.Count -eq 0) {
     # Print the first ~200 bytes hex for triage
-    $preview = ($helpBytes[0..([Math]::Min(200, $helpBytes.Length-1))] | ForEach-Object { '{0:x2}' -f $_ }) -join ' '
+    $preview = ($bytes[0..([Math]::Min(200, $bytes.Length-1))] | ForEach-Object { '{0:x2}' -f $_ }) -join ' '
     Log "First bytes (hex): $preview"
-    Fail "No canonical UTF-8 icon byte sequences found in --help output. Check src/ui/theme.cppm and platform::init_console_output()."
+    Fail "No canonical UTF-8 byte sequences found in 'xlings config' output. Check src/ui/theme.cppm and platform::init_console_output()."
 }
 
-Log "Found UTF-8 glyphs in --help output: $($matched -join ', ')"
+Log "Found UTF-8 glyphs: $($matched -join ', ')"
 
 # ── 3. Reject classic mojibake markers ───────────────────────────
 # If SetConsoleOutputCP failed AND PowerShell down-converted, we'd see
-# replacement char (?) instead of the multi-byte sequences. But since we
-# just verified the bytes are present, this is a belt-and-braces check
-# against output containing '???' for what should be a single icon row.
-$asString = [System.Text.Encoding]::UTF8.GetString($helpBytes)
-if ($asString -match '\?\?\?') {
-    Log "WARN: triple-question-mark sequence found, may indicate partial encoding loss"
+# replacement char (?) instead of the multi-byte sequences. The matcher
+# above already proves the bytes survived; this is just a belt-and-braces
+# check that consecutive '?' characters aren't masking a partial loss.
+$asString = [System.Text.Encoding]::UTF8.GetString($bytes)
+if ($asString -match '\?\?\?\?') {
+    Log "WARN: long question-mark run found, may indicate partial encoding loss"
 }
 
 Log "PASS: xlings emits well-formed UTF-8 icon glyphs on Windows"
