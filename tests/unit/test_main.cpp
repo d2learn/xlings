@@ -2775,10 +2775,14 @@ TEST(Extract, TarGzRoundTrip) {
     auto r = xlings::xim::extract_archive(archive, out);
     ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
 
-    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
-    EXPECT_TRUE(std::filesystem::exists(out / "src/sub/nested.txt"));
-    EXPECT_TRUE(file_has_(out / "src/hello.txt", "hello-from-fixture"));
-    EXPECT_TRUE(file_has_(out / "src/sub/nested.txt", "deeply-nested-content"));
+    // Use the canonicalized path returned by extract_archive — on Windows
+    // (and macOS) `out` and the resolved path can differ once symlinks /
+    // 8.3 short names are walked.
+    auto root = *r;
+    EXPECT_TRUE(std::filesystem::exists(root / "src/hello.txt"));
+    EXPECT_TRUE(std::filesystem::exists(root / "src/sub/nested.txt"));
+    EXPECT_TRUE(file_has_(root / "src/hello.txt", "hello-from-fixture"));
+    EXPECT_TRUE(file_has_(root / "src/sub/nested.txt", "deeply-nested-content"));
 }
 
 TEST(Extract, ZipRoundTrip) {
@@ -2793,8 +2797,9 @@ TEST(Extract, ZipRoundTrip) {
     auto r = xlings::xim::extract_archive(archive, out);
     ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
 
-    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
-    EXPECT_TRUE(file_has_(out / "src/hello.txt", "hello-from-fixture"));
+    auto root = *r;
+    EXPECT_TRUE(std::filesystem::exists(root / "src/hello.txt"));
+    EXPECT_TRUE(file_has_(root / "src/hello.txt", "hello-from-fixture"));
 }
 
 TEST(Extract, TarXzRoundTrip) {
@@ -2811,8 +2816,9 @@ TEST(Extract, TarXzRoundTrip) {
     auto r = xlings::xim::extract_archive(archive, out);
     ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
 
-    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
-    EXPECT_TRUE(std::filesystem::exists(out / "src/sub/nested.txt"));
+    auto root = *r;
+    EXPECT_TRUE(std::filesystem::exists(root / "src/hello.txt"));
+    EXPECT_TRUE(std::filesystem::exists(root / "src/sub/nested.txt"));
 }
 
 TEST(Extract, MissingArchiveReturnsError) {
