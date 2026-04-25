@@ -27,10 +27,39 @@ export struct PromptEvent {
     std::string defaultValue;
 };
 
+// Stable wire codes for ErrorEvent. Mapped to the canonical "E_*" string in
+// interface.cppm; downstream clients should match on the string, not the int.
+//
+// Internal corresponds to a bug in xlings itself (uncaught exception). All
+// other codes describe a recoverable / actionable failure mode.
+export enum class ErrorCode {
+    InvalidInput,   // E_INVALID_INPUT  — malformed args, missing fields
+    NotFound,       // E_NOT_FOUND      — package / capability / subos not found
+    Network,        // E_NETWORK        — DNS / TCP / TLS / HTTP failure
+    DiskFull,       // E_DISK_FULL      — write failed due to no space
+    Permission,     // E_PERMISSION     — fs / config write denied
+    Cancelled,      // E_CANCELLED      — caller sent cancel via stdin
+    Internal,       // E_INTERNAL       — uncaught exception or invariant bug
+};
+
+export constexpr std::string_view to_wire_string(ErrorCode c) {
+    switch (c) {
+        case ErrorCode::InvalidInput: return "E_INVALID_INPUT";
+        case ErrorCode::NotFound:     return "E_NOT_FOUND";
+        case ErrorCode::Network:      return "E_NETWORK";
+        case ErrorCode::DiskFull:     return "E_DISK_FULL";
+        case ErrorCode::Permission:   return "E_PERMISSION";
+        case ErrorCode::Cancelled:    return "E_CANCELLED";
+        case ErrorCode::Internal:     return "E_INTERNAL";
+    }
+    return "E_INTERNAL";
+}
+
 export struct ErrorEvent {
-    int code;
+    ErrorCode code;
     std::string message;
     bool recoverable { false };
+    std::string hint;     // optional remediation hint, written if non-empty
 };
 
 export struct DataEvent {

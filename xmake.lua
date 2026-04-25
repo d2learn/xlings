@@ -54,6 +54,9 @@ target("xlings_tests")
     set_kind("binary")
     set_default(false)
     set_rundir("$(projectdir)")
+    -- InterfaceProtocol tests spawn the real xlings binary via popen,
+    -- so make sure it's available when `xmake build xlings_tests` runs.
+    add_deps("xlings")
     add_files("tests/unit/*.cpp")
     add_files("src/**.cppm")
     add_includedirs("src/libs/json")

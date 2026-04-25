@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <iomanip>
+#ifdef __unix__
+#include <sys/wait.h>
+#endif
 
 import std;
 import xlings.core.i18n;
@@ -2185,9 +2188,10 @@ TEST(Event, VariantHoldsTypes) {
     xlings::Event ev = xlings::LogEvent{xlings::LogLevel::info, "hello"};
     EXPECT_TRUE(std::holds_alternative<xlings::LogEvent>(ev));
 
-    ev = xlings::ErrorEvent{.code = 42, .message = "fail", .recoverable = true};
+    ev = xlings::ErrorEvent{.code = xlings::ErrorCode::Network,
+                             .message = "fail", .recoverable = true};
     auto& err = std::get<xlings::ErrorEvent>(ev);
-    EXPECT_EQ(err.code, 42);
+    EXPECT_TRUE(err.code == xlings::ErrorCode::Network);
     EXPECT_TRUE(err.recoverable);
 }
 
@@ -3135,6 +3139,7 @@ TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
     EXPECT_EQ(output.find("?????"), std::string::npos)
         << "info_panel output contains run of '?' — possible encoding loss";
 }
+
 // ============================================================
 
 int main(int argc, char** argv) {

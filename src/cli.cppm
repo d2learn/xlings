@@ -18,6 +18,7 @@ import xlings.ui;
 import xlings.core.i18n;
 import xlings.platform;
 import xlings.capabilities;
+import xlings.interface;
 import xlings.core.subos;
 import xlings.core.xself;
 import xlings.core.xim.commands;
@@ -359,6 +360,7 @@ void apply_global_opts_(const mcpplibs::cmdline::ParsedArgs& args) {
     if (args.is_flag_set("quiet")) log::set_level(log::Level::Error);
 }
 
+
 // Read-modify-write the global .xlings.json config file
 nlohmann::json load_global_config_json_() {
     auto configPath = Config::paths().homeDir / ".xlings.json";
@@ -640,6 +642,7 @@ export int run(int argc, char* argv[]) {
             static constexpr std::string_view known_cmds[] = {
                 "install", "remove", "update", "search", "list",
                 "info", "use", "config", "subos", "self", "script",
+                "interface",
             };
             bool known = false;
             for (auto& k : known_cmds) {
@@ -788,6 +791,21 @@ export int run(int argc, char* argv[]) {
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 return cmd_config_(args, stream);
+            })
+
+        // interface — programmatic JSON API (NDJSON over stdio).
+        // See docs/plans/2026-04-25-interface-api-v1.md for full protocol spec.
+        .subcommand("interface")
+            .description("Programmatic JSON API for external tools (NDJSON over stdio)")
+            .option(cmdline::Option("args").takes_value().value_name("JSON")
+                .help("Capability arguments as JSON string"))
+            .option(cmdline::Option("args-file").takes_value().value_name("PATH")
+                .help("Read capability arguments from a file (avoids cmd.exe quoting on Windows)"))
+            .option(cmdline::Option("list").help("List all available capabilities with schemas"))
+            .option(cmdline::Option("version").help("Print protocol version and exit"))
+            .arg("capability").help("Capability name to invoke")
+            .action([&stream, tui_listener, &registry](const cmdline::ParsedArgs& args) -> int {
+                return interface::run(args, stream, tui_listener, registry);
             });
 
     return app.run(argc, argv);

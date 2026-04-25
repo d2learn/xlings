@@ -9,6 +9,9 @@ import xlings.libs.json;
 import xlings.core.xim.commands;
 import xlings.core.xvm.commands;
 import xlings.core.config;
+import xlings.core.subos;
+import xlings.core.xself;
+import xlings.platform;
 import xlings.runtime.cancellation;
 import xlings.core.utf8;
 
@@ -65,6 +68,33 @@ public:
         bool noDeps = json.value("noDeps", false);
         bool global = json.value("global", false);
         return exit_result(xim::cmd_install(targets, yes, noDeps, stream, global, cancel));
+    }
+};
+
+// Pre-flight planning entry point. Resolves targets and emits the
+// install_plan dataKind, but does not download or install anything.
+// Clients use this for dry-run / "would do X" UX without committing.
+class PlanInstall : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "plan_install",
+            .description = "Resolve targets and report what install_packages WOULD do (no download, no install)",
+            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"}},"noDeps":{"type":"boolean"},"global":{"type":"boolean"}},"required":["targets"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        std::vector<std::string> targets;
+        if (json.contains("targets") && json["targets"].is_array()) {
+            for (auto& t : json["targets"]) targets.push_back(t.get<std::string>());
+        }
+        bool noDeps = json.value("noDeps", false);
+        bool global = json.value("global", false);
+        return exit_result(xim::cmd_install(targets, /*yes=*/true, noDeps, stream,
+                                             global, /*cancel=*/nullptr, /*dryRun=*/true));
     }
 };
 
@@ -201,7 +231,319 @@ public:
         nlohmann::json payload;
         payload["title"] = "xlings status";
         payload["fields"] = std::move(fields);
-        stream.emit(DataEvent{"info_panel", payload.dump()});
+        stream.emit(DataEvent{"system_info", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class ListSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_subos",
+            .description = "List all sub-OSs and which one is active",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto all = subos::list_all();
+        nlohmann::json entries = nlohmann::json::array();
+        for (auto& s : all) {
+            entries.push_back({
+                {"name",     s.name},
+                {"dir",      s.dir.string()},
+                {"pkgCount", s.toolCount},
+                {"active",   s.isActive},
+            });
+        }
+        nlohmann::json payload;
+        payload["entries"] = std::move(entries);
+        stream.emit(DataEvent{"subos_list", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class ListSubosShims : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_subos_shims",
+            .description = "List installed shim binaries in the active sub-OS bin directory",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto& p = Config::paths();
+        std::vector<std::string> shims;
+        if (std::filesystem::exists(p.binDir)) {
+            for (auto& e : platform::dir_entries(p.binDir)) {
+                auto stem = e.path().stem().string();
+                if (xself::is_builtin_shim(stem) || stem == "xvm-alias") continue;
+                shims.push_back(std::move(stem));
+            }
+        }
+        std::ranges::sort(shims);
+        nlohmann::json payload;
+        payload["shims"]  = shims;
+        payload["binDir"] = p.binDir.string();
+        stream.emit(DataEvent{"subos_shims", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+class CreateSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "create_subos",
+            .description = "Create a new sub-OS. The name must be alphanumeric (plus _ or -); 'current' is reserved",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"},"dir":{"type":"string","description":"Optional custom directory; defaults to $XLINGS_HOME/subos/<name>"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        auto dir  = json.value("dir", "");
+        return exit_result(subos::create(name, dir.empty() ? std::filesystem::path{} : std::filesystem::path{dir}));
+    }
+};
+
+class SwitchSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "switch_subos",
+            .description = "Switch the active sub-OS to <name>",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        return exit_result(subos::use(json.value("name", "")));
+    }
+};
+
+class RemoveSubos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "remove_subos",
+            .description = "Remove a sub-OS. Refuses to remove 'default' or the currently active sub-OS",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream&) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        return exit_result(subos::remove(json.value("name", "")));
+    }
+};
+
+// ─── Index repos ────────────────────────────────────────────
+
+class ListRepos : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "list_repos",
+            .description = "List configured xim package index repositories (global + project)",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        nlohmann::json repos = nlohmann::json::array();
+        for (auto& r : Config::global_index_repos()) {
+            repos.push_back({{"name", r.name}, {"url", r.url}, {"scope", "global"}});
+        }
+        if (Config::has_project_config()) {
+            for (auto& r : Config::project_index_repos()) {
+                repos.push_back({{"name", r.name}, {"url", r.url}, {"scope", "project"}});
+            }
+        }
+        nlohmann::json payload;
+        payload["repos"] = std::move(repos);
+        payload["override"] = (Config::has_project_config() && !Config::project_index_repos().empty())
+                              ? "project" : "global";
+        stream.emit(DataEvent{"repo_list", payload.dump()});
+        return exit_result(0);
+    }
+};
+
+// File-local repo config helpers. Keep these non-inline (avoiding the C++20
+// module + libstdc++ static-link pitfall where inline functions touching
+// nlohmann::json triggers an unresolved std::shared_ptr<output_adapter_protocol>
+// copy ctor across translation units).
+namespace repo_helpers {
+
+nlohmann::json load_global_json() {
+    auto path = Config::paths().homeDir / ".xlings.json";
+    if (!std::filesystem::exists(path)) return nlohmann::json::object();
+    try {
+        auto content = platform::read_file_to_string(path.string());
+        auto j = nlohmann::json::parse(content, nullptr, false);
+        return j.is_discarded() ? nlohmann::json::object() : j;
+    } catch (...) { return nlohmann::json::object(); }
+}
+
+void save_global_json(const nlohmann::json& j) {
+    auto path = Config::paths().homeDir / ".xlings.json";
+    platform::write_string_to_file(path.string(), j.dump());
+}
+
+}  // namespace repo_helpers
+
+class AddRepo : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "add_repo",
+            .description = "Add or update a global xim index repository. If the name already exists, the URL is updated in place",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"},"url":{"type":"string","description":"git URL of the index repository"}},"required":["name","url"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        auto url  = json.value("url",  "");
+        if (name.empty() || url.empty()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::InvalidInput,
+                .message = "add_repo requires non-empty name and url",
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+
+        auto cfg = repo_helpers::load_global_json();
+        if (!cfg.contains("index_repos") || !cfg["index_repos"].is_array()) {
+            cfg["index_repos"] = nlohmann::json::array();
+        }
+        bool updated = false;
+        for (auto& entry : cfg["index_repos"]) {
+            if (entry.is_object() && entry.contains("name")
+                && entry["name"].get<std::string>() == name) {
+                entry["url"] = url;
+                updated = true;
+                break;
+            }
+        }
+        if (!updated) {
+            nlohmann::json entry;
+            entry["name"] = name;
+            entry["url"]  = url;
+            cfg["index_repos"].push_back(std::move(entry));
+        }
+        try { repo_helpers::save_global_json(cfg); }
+        catch (const std::exception& e) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::Permission,
+                .message = std::string("write .xlings.json failed: ") + e.what(),
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+        return exit_result(0);
+    }
+};
+
+class RemoveRepo : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "remove_repo",
+            .description = "Remove a global xim index repository by name",
+            .inputSchema = R"({"type":"object","properties":{"name":{"type":"string"}},"required":["name"]})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = true,
+        };
+    }
+    auto execute(Params params, EventStream& stream) -> Result override {
+        auto json = nlohmann::json::parse(params, nullptr, false);
+        auto name = json.value("name", "");
+        if (name.empty()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::InvalidInput,
+                .message = "remove_repo requires non-empty name",
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+
+        auto cfg = repo_helpers::load_global_json();
+        if (!cfg.contains("index_repos") || !cfg["index_repos"].is_array()) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::NotFound,
+                .message = "no repo named '" + name + "'",
+                .recoverable = true,
+            });
+            return exit_result(1);
+        }
+        auto& arr = cfg["index_repos"];
+        bool removed = false;
+        for (auto it = arr.begin(); it != arr.end(); ) {
+            if (it->is_object() && it->contains("name")
+                && (*it)["name"].get<std::string>() == name) {
+                it = arr.erase(it);
+                removed = true;
+            } else { ++it; }
+        }
+        if (!removed) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::NotFound,
+                .message = "no repo named '" + name + "'",
+                .recoverable = true,
+            });
+            return exit_result(1);
+        }
+        try { repo_helpers::save_global_json(cfg); }
+        catch (const std::exception& e) {
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::Permission,
+                .message = std::string("write .xlings.json failed: ") + e.what(),
+                .recoverable = false,
+            });
+            return exit_result(1);
+        }
+        return exit_result(0);
+    }
+};
+
+class Env : public Capability {
+public:
+    auto spec() const -> CapabilitySpec override {
+        return {
+            .name = "env",
+            .description = "Return effective xlings environment (home, active sub-OS, paths, mirror, lang)",
+            .inputSchema = R"({"type":"object","properties":{}})",
+            .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
+            .destructive = false,
+        };
+    }
+    auto execute(Params, EventStream& stream) -> Result override {
+        auto& p = Config::paths();
+        nlohmann::json payload;
+        payload["xlingsHome"]  = p.homeDir.string();
+        payload["dataDir"]     = p.dataDir.string();
+        payload["subosDir"]    = p.subosDir.string();
+        payload["binDir"]      = p.binDir.string();
+        payload["libDir"]      = p.libDir.string();
+        payload["activeSubos"] = p.activeSubos;
+        payload["mirror"]      = Config::mirror();
+        payload["lang"]        = Config::lang();
+        stream.emit(DataEvent{"env", payload.dump()});
         return exit_result(0);
     }
 };
@@ -211,6 +553,7 @@ export capability::Registry build_registry() {
     // xlings core capabilities
     reg.register_capability(std::make_unique<SearchPackages>());
     reg.register_capability(std::make_unique<InstallPackages>());
+    reg.register_capability(std::make_unique<PlanInstall>());
     reg.register_capability(std::make_unique<RemovePackage>());
     reg.register_capability(std::make_unique<UpdatePackages>());
     reg.register_capability(std::make_unique<ListPackages>());
@@ -218,6 +561,17 @@ export capability::Registry build_registry() {
     reg.register_capability(std::make_unique<ListVersions>());
     reg.register_capability(std::make_unique<UseVersion>());
     reg.register_capability(std::make_unique<SystemStatus>());
+    // sub-OS + env (added 2026-04-26 per interface-api-v1-eval)
+    reg.register_capability(std::make_unique<ListSubos>());
+    reg.register_capability(std::make_unique<ListSubosShims>());
+    reg.register_capability(std::make_unique<CreateSubos>());
+    reg.register_capability(std::make_unique<SwitchSubos>());
+    reg.register_capability(std::make_unique<RemoveSubos>());
+    reg.register_capability(std::make_unique<Env>());
+    // Index repo management (added 2026-04-26 per interface-api-v1-eval P1)
+    reg.register_capability(std::make_unique<ListRepos>());
+    reg.register_capability(std::make_unique<AddRepo>());
+    reg.register_capability(std::make_unique<RemoveRepo>());
     return reg;
 }
 
