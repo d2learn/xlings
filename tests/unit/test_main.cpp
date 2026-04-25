@@ -25,6 +25,7 @@ import xlings.core.xself;
 import xlings.core.profile;
 import xlings.runtime;
 import xlings.capabilities;
+import xlings.libs.tinyhttps;
 import mcpplibs.xpkg;
 import mcpplibs.cmdline;
 
@@ -2777,6 +2778,143 @@ TEST(ThemeIcons, AllAreThreeByteBmpUtf8) {
         EXPECT_TRUE((b2 & 0xC0) == 0x80)
             << "icon::" << slot.name << " byte 2 not a continuation";
     }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Proxy: env-driven proxy resolution for the downloader
+// ═══════════════════════════════════════════════════════════════
+//
+// xlings::tinyhttps::resolve_proxy(url) reads HTTPS_PROXY / HTTP_PROXY /
+// ALL_PROXY (case-insensitive variants) and respects NO_PROXY. These
+// tests lock the libcurl-compatible behaviour: scheme-aware selection,
+// NO_PROXY suffix exemption, lowercase fallback.
+
+namespace {
+struct EnvScope {
+    std::string name;
+    bool had_prev{false};
+    std::string prev_value;
+
+    EnvScope(std::string_view n, const char* val) : name(n) {
+        if (auto v = std::getenv(name.c_str())) {
+            had_prev = true;
+            prev_value = v;
+        }
+        set_(val);
+    }
+    ~EnvScope() {
+        if (had_prev) set_(prev_value.c_str());
+        else clear_();
+    }
+    void set_(const char* val) {
+        if (!val) { clear_(); return; }
+#ifdef _WIN32
+        _putenv_s(name.c_str(), val);
+#else
+        ::setenv(name.c_str(), val, 1);
+#endif
+    }
+    void clear_() {
+#ifdef _WIN32
+        _putenv_s(name.c_str(), "");
+#else
+        ::unsetenv(name.c_str());
+#endif
+    }
+};
+
+// Wipe every proxy-related env var so each test starts from a clean slate.
+// Vector elements are unique_ptrs so a reallocation on push_back doesn't
+// move-then-destroy intermediate EnvScopes (which would prematurely
+// restore env vars before the test body runs).
+struct ProxyEnvSandbox {
+    std::vector<std::unique_ptr<EnvScope>> guards;
+    ProxyEnvSandbox() {
+        for (auto* n : {"HTTPS_PROXY", "https_proxy",
+                        "HTTP_PROXY",  "http_proxy",
+                        "ALL_PROXY",   "all_proxy",
+                        "NO_PROXY",    "no_proxy"}) {
+            guards.push_back(std::make_unique<EnvScope>(n, nullptr));
+        }
+    }
+};
+} // namespace
+
+TEST(Proxy, NoEnvMeansDirect) {
+    ProxyEnvSandbox sandbox;
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://example.com/foo"), "");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("http://example.com/foo"),  "");
+}
+
+TEST(Proxy, HttpsProxyUsedForHttpsScheme) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("HTTPS_PROXY", "http://127.0.0.1:7890");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://example.com/x"),
+              "http://127.0.0.1:7890");
+}
+
+TEST(Proxy, HttpProxyUsedForHttpScheme) {
+    ProxyEnvSandbox sandbox;
+    EnvScope http("HTTP_PROXY", "http://127.0.0.1:7890");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("http://example.com/x"),
+              "http://127.0.0.1:7890");
+}
+
+TEST(Proxy, LowercaseEnvAlsoAccepted) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("https_proxy", "http://10.0.0.1:8080");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://example.com/x"),
+              "http://10.0.0.1:8080");
+}
+
+TEST(Proxy, AllProxyFallback) {
+    ProxyEnvSandbox sandbox;
+    EnvScope all("ALL_PROXY", "socks5://127.0.0.1:1080");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://example.com/x"),
+              "socks5://127.0.0.1:1080");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("http://example.com/x"),
+              "socks5://127.0.0.1:1080");
+}
+
+TEST(Proxy, HttpsProxyTakesPrecedenceOverHttpProxy) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("HTTPS_PROXY", "http://https-proxy:1");
+    EnvScope http("HTTP_PROXY",   "http://http-proxy:2");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://example.com/x"),
+              "http://https-proxy:1");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("http://example.com/x"),
+              "http://http-proxy:2");
+}
+
+TEST(Proxy, NoProxyExactHostExempt) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("HTTPS_PROXY", "http://127.0.0.1:7890");
+    EnvScope np("NO_PROXY", "localhost,internal.example");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://localhost:9000/x"), "");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://internal.example/x"), "");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://other.example.com/x"),
+              "http://127.0.0.1:7890");
+}
+
+TEST(Proxy, NoProxySuffixMatchExempt) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("HTTPS_PROXY", "http://127.0.0.1:7890");
+    EnvScope np("NO_PROXY", ".internal.example,corp.local");
+    // dot-prefixed suffix: matches both bare and prefixed
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://api.internal.example/x"), "");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://internal.example/x"), "");
+    // bare suffix without dot: still suffix-matches subdomains
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://node1.corp.local/x"), "");
+    // unrelated host still goes through proxy
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://github.com/x"),
+              "http://127.0.0.1:7890");
+}
+
+TEST(Proxy, NoProxyWildcardExemptsAll) {
+    ProxyEnvSandbox sandbox;
+    EnvScope https("HTTPS_PROXY", "http://127.0.0.1:7890");
+    EnvScope np("NO_PROXY", "*");
+    EXPECT_EQ(xlings::tinyhttps::resolve_proxy("https://anything.example/x"), "");
 }
 
 TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
