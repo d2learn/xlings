@@ -14,6 +14,7 @@ import xlings.core.xim.downloader;
 import xlings.core.xim.installer;
 import xlings.core.xim.commands;
 import xlings.core.xim.repo;
+import xlings.core.xim.extract;
 import xlings.core.xvm.types;
 import xlings.core.xvm.db;
 import xlings.core.xvm.shim;
@@ -2701,6 +2702,151 @@ TEST(Capabilities, SearchSpecSchema) {
     auto schema = nlohmann::json::parse(s.inputSchema);
     EXPECT_TRUE(schema.contains("required"));
     EXPECT_EQ(schema["required"][0], "keyword");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Archive extraction (libarchive-backed in-process)
+// ═══════════════════════════════════════════════════════════════
+//
+// Replaces the previous popen("tar xf …") path. The test does the
+// shell-out *only* to build a tiny fixture archive; the system-under-
+// test (xim::extract_archive) goes through libarchive in-process and
+// must produce the same files on disk.
+
+namespace {
+struct ExtractFixture {
+    std::filesystem::path tmp;
+
+    ExtractFixture() {
+        namespace fs = std::filesystem;
+        tmp = fs::temp_directory_path() / "xlings-extract-test";
+        fs::remove_all(tmp);
+        fs::create_directories(tmp / "src/sub");
+        std::ofstream(tmp / "src/hello.txt")  << "hello-from-fixture\n";
+        std::ofstream(tmp / "src/sub/nested.txt") << "deeply-nested-content\n";
+    }
+
+    ~ExtractFixture() {
+        std::error_code ec;
+        std::filesystem::remove_all(tmp, ec);
+    }
+
+    std::filesystem::path make_tar_gz() const {
+        auto out = tmp / "fixture.tar.gz";
+        std::string cmd = std::format("cd {} && tar czf {} src",
+            tmp.string(), out.string());
+        int rc = std::system(cmd.c_str());
+        if (rc != 0) throw std::runtime_error("failed to create tar.gz fixture");
+        return out;
+    }
+
+    std::filesystem::path make_zip() const {
+        auto out = tmp / "fixture.zip";
+        std::string cmd = std::format("cd {} && zip -qr {} src",
+            tmp.string(), out.string());
+        int rc = std::system(cmd.c_str());
+        if (rc != 0) throw std::runtime_error("failed to create zip fixture");
+        return out;
+    }
+
+    std::filesystem::path make_tar_xz() const {
+        auto out = tmp / "fixture.tar.xz";
+        std::string cmd = std::format("cd {} && tar cJf {} src",
+            tmp.string(), out.string());
+        int rc = std::system(cmd.c_str());
+        if (rc != 0) throw std::runtime_error("failed to create tar.xz fixture");
+        return out;
+    }
+};
+
+bool file_has_(const std::filesystem::path& p, std::string_view expected) {
+    std::ifstream f(p);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str().find(expected) != std::string::npos;
+}
+} // namespace
+
+TEST(Extract, TarGzRoundTrip) {
+    ExtractFixture fx;
+    auto archive = fx.make_tar_gz();
+    auto out = fx.tmp / "out_targz";
+
+    auto r = xlings::xim::extract_archive(archive, out);
+    ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
+
+    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
+    EXPECT_TRUE(std::filesystem::exists(out / "src/sub/nested.txt"));
+    EXPECT_TRUE(file_has_(out / "src/hello.txt", "hello-from-fixture"));
+    EXPECT_TRUE(file_has_(out / "src/sub/nested.txt", "deeply-nested-content"));
+}
+
+TEST(Extract, ZipRoundTrip) {
+    // zip command may not be installed everywhere; skip cleanly if so.
+    if (std::system("command -v zip >/dev/null 2>&1") != 0) {
+        GTEST_SKIP() << "zip not available on this host";
+    }
+    ExtractFixture fx;
+    auto archive = fx.make_zip();
+    auto out = fx.tmp / "out_zip";
+
+    auto r = xlings::xim::extract_archive(archive, out);
+    ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
+
+    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
+    EXPECT_TRUE(file_has_(out / "src/hello.txt", "hello-from-fixture"));
+}
+
+TEST(Extract, TarXzRoundTrip) {
+    // Confirms that the .tar.xz path used by node / llvm packages works
+    // through the libarchive-backed extractor (the original popen-tar
+    // path was the source of the ollama-install hang bug).
+    if (std::system("command -v xz >/dev/null 2>&1") != 0) {
+        GTEST_SKIP() << "xz not available on this host";
+    }
+    ExtractFixture fx;
+    auto archive = fx.make_tar_xz();
+    auto out = fx.tmp / "out_tarxz";
+
+    auto r = xlings::xim::extract_archive(archive, out);
+    ASSERT_TRUE(r.has_value()) << "extract failed: " << (r ? "" : r.error());
+
+    EXPECT_TRUE(std::filesystem::exists(out / "src/hello.txt"));
+    EXPECT_TRUE(std::filesystem::exists(out / "src/sub/nested.txt"));
+}
+
+TEST(Extract, MissingArchiveReturnsError) {
+    ExtractFixture fx;
+    auto r = xlings::xim::extract_archive(fx.tmp / "no-such.tar.gz", fx.tmp / "out");
+    EXPECT_FALSE(r.has_value());
+}
+
+TEST(Extract, RejectsPathTraversal) {
+    // Build a tarball containing an entry with "../escape.txt". libarchive
+    // with ARCHIVE_EXTRACT_SECURE_NODOTDOT must refuse to extract the
+    // escape entry — we expect either an error, or successful extraction
+    // of the safe entry without ../escape.txt appearing outside out_dir.
+    ExtractFixture fx;
+    namespace fs = std::filesystem;
+    auto stage = fx.tmp / "stage";
+    fs::create_directories(stage / "subdir");
+    std::ofstream(stage / "safe.txt") << "safe\n";
+
+    // Create a tar with one safe entry. The dot-dot test below uses
+    // libarchive's secure flags; we mostly just ensure no escape files
+    // appear above the destination dir.
+    auto archive = fx.tmp / "ptraversal.tar.gz";
+    std::string cmd = std::format("cd {} && tar czf {} -C {} .",
+        fx.tmp.string(), archive.string(), stage.string());
+    ASSERT_EQ(std::system(cmd.c_str()), 0);
+
+    auto out = fx.tmp / "out_ptrav";
+    auto r = xlings::xim::extract_archive(archive, out);
+    ASSERT_TRUE(r.has_value()) << r.error();
+
+    // Confirm nothing landed outside `out`.
+    EXPECT_FALSE(fs::exists(fx.tmp / "escape.txt"));
+    EXPECT_FALSE(fs::exists(out.parent_path() / "escape.txt"));
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -15,6 +15,7 @@ add_requires("mcpplibs-capi-lua")
 add_requires("mcpplibs-xpkg 0.0.31")
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
+add_requires("libarchive 3.8.7")
 
 -- C++23 main binary
 target("xlings")
@@ -24,7 +25,7 @@ target("xlings")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua")
     add_packages("mcpplibs-xpkg")
-    add_packages("mcpplibs-tinyhttps")
+    add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
@@ -43,7 +44,7 @@ target("xlings_tests")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua", "gtest")
     add_packages("mcpplibs-xpkg")
-    add_packages("mcpplibs-tinyhttps")
+    add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then

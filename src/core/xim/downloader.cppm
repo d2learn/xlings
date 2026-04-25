@@ -11,6 +11,8 @@ import xlings.platform;
 import xlings.core.config;
 import xlings.libs.tinyhttps;
 import xlings.runtime.cancellation;
+// Re-export extract_archive so existing importers (installer) keep working.
+export import xlings.core.xim.extract;
 
 export namespace xlings::xim {
 
@@ -379,55 +381,7 @@ download_all(std::span<const DownloadTask> tasks,
     return results;
 }
 
-// Extract an archive (tar.gz, tar.xz, tar.bz2, zip)
-std::expected<std::filesystem::path, std::string>
-extract_archive(const std::filesystem::path& archive,
-                const std::filesystem::path& destDir) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    fs::create_directories(destDir, ec);
-
-    auto ext = archive.extension().string();
-    auto stem = archive.stem().string();
-    std::string cmd;
-
-    if (ext == ".gz" || ext == ".xz" || ext == ".bz2" || ext == ".tgz") {
-        cmd = std::format("tar xf \"{}\" -C \"{}\"",
-                          archive.string(), destDir.string());
-    } else if (ext == ".zip") {
-#ifdef _WIN32
-        const fs::path winTar = "C:\\Windows\\System32\\tar.exe";
-        if (fs::exists(winTar)) {
-            cmd = std::format("{} -xf \"{}\" -C \"{}\"",
-                              winTar.string(), archive.string(), destDir.string());
-        } else {
-            auto [unzip_rc, _u] = platform::run_command_capture("where unzip");
-            if (unzip_rc == 0) {
-                cmd = std::format("unzip -o \"{}\" -d \"{}\"",
-                                  archive.string(), destDir.string());
-            } else {
-                cmd = std::format(
-                    "powershell -NoProfile -Command \"Expand-Archive -LiteralPath '{}' -DestinationPath '{}' -Force\"",
-                    archive.string(), destDir.string());
-            }
-        }
-#else
-        cmd = std::format("unzip -o \"{}\" -d \"{}\"",
-                          archive.string(), destDir.string());
-#endif
-    } else if (stem.ends_with(".tar")) {
-        cmd = std::format("tar xf \"{}\" -C \"{}\"",
-                          archive.string(), destDir.string());
-    } else {
-        return std::unexpected(std::format("unsupported archive format: {}", ext));
-    }
-
-    auto [rc, output] = platform::run_command_capture(cmd);
-    if (rc != 0) {
-        return std::unexpected(std::format("extraction failed: {}", output));
-    }
-
-    return destDir;
-}
+// extract_archive lives in xlings.core.xim.extract (libarchive-backed).
+// Re-exported above so existing importers keep working without changes.
 
 } // namespace xlings::xim
