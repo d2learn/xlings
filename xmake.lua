@@ -42,6 +42,11 @@ target("xlings")
         set_toolchains("llvm")
     elseif is_plat("linux") then
         add_ldflags("-static", {force = true})
+    elseif is_plat("windows") then
+        -- libarchive's XAR format parser uses xmllite (CreateXmlReader);
+        -- xmake-repo's libarchive package_def only adds advapi32. Add
+        -- xmllite here so the link step finds CreateXmlReader.
+        add_syslinks("xmllite")
     end
 
 -- Unit tests
@@ -61,4 +66,9 @@ target("xlings_tests")
         set_toolchains("llvm")
     elseif is_plat("linux") then
         add_ldflags("-static", {force = true})
+    elseif is_plat("windows") then
+        -- libarchive's XAR format parser uses xmllite (CreateXmlReader);
+        -- xmake-repo's libarchive package_def only adds advapi32. Add
+        -- xmllite here so the link step finds CreateXmlReader.
+        add_syslinks("xmllite")
     end
