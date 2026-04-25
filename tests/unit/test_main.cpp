@@ -2706,48 +2706,77 @@ TEST(Capabilities, SearchSpecSchema) {
 //  TUI: theme icon byte sequences
 // ═══════════════════════════════════════════════════════════════
 //
-// Lock the canonical UTF-8 byte sequence for every theme icon. If a
-// developer ever swaps one for a platform-conditional ASCII fallback
-// (e.g. `#ifdef _WIN32 "+" #else "✓" #endif`) or for an obscure code
-// point that doesn't render in mainstream monospace fonts, the test
-// breaks here, where the fix is obvious. The companion e2e test
-// (tests/e2e/tui_utf8_test.{sh,ps1}) covers the OS-console emission
-// path; this unit test covers source-level regression.
+// Force-check that every theme icon is the same UTF-8 byte sequence on
+// every platform. xlings_tests is built and run on Linux / macOS /
+// Windows in CI, so a regression that, say, changes `icon::done` to
+// "+" only on Windows is caught the moment xlings_tests boots there.
+//
+// The intent is: there is exactly one icon set, byte-for-byte, no
+// platform conditional, no font-substitution fallback, no ASCII
+// downgrade. If the test fails on any platform, the source has
+// drifted.
+
+namespace {
+struct IconSlot {
+    std::string_view name;
+    const char* value;
+    std::string_view expected;
+};
+
+constexpr IconSlot kThemeIconSlots[] = {
+    {"pending",     xlings::ui::theme::icon::pending,     "\xe2\x97\x8b"},  // ○ U+25CB
+    {"downloading", xlings::ui::theme::icon::downloading, "\xe2\x86\x93"},  // ↓ U+2193
+    {"extracting",  xlings::ui::theme::icon::extracting,  "\xe2\x96\xbe"},  // ▾ U+25BE
+    {"installing",  xlings::ui::theme::icon::installing,  "\xe2\x8a\x95"},  // ⊕ U+2295
+    {"configuring", xlings::ui::theme::icon::configuring, "\xe2\x8a\x95"},  // ⊕ U+2295
+    {"done",        xlings::ui::theme::icon::done,        "\xe2\x9c\x93"},  // ✓ U+2713
+    {"failed",      xlings::ui::theme::icon::failed,      "\xe2\x9c\x97"},  // ✗ U+2717
+    {"info",        xlings::ui::theme::icon::info,        "\xe2\x80\xba"},  // › U+203A
+    {"arrow",       xlings::ui::theme::icon::arrow,       "\xe2\x96\xb8"},  // ▸ U+25B8
+    {"package",     xlings::ui::theme::icon::package,     "\xe2\x97\x86"},  // ◆ U+25C6
+};
+} // namespace
 
 TEST(ThemeIcons, AllByteSequencesAreCanonical) {
-    namespace icon = xlings::ui::theme::icon;
-    using sv = std::string_view;
-
-    EXPECT_EQ(sv(icon::pending),     sv("\xe2\x97\x8b"));   // ○ U+25CB
-    EXPECT_EQ(sv(icon::downloading), sv("\xe2\x86\x93"));   // ↓ U+2193
-    EXPECT_EQ(sv(icon::extracting),  sv("\xe2\x96\xbe"));   // ▾ U+25BE
-    EXPECT_EQ(sv(icon::installing),  sv("\xe2\x8a\x95"));   // ⊕ U+2295
-    EXPECT_EQ(sv(icon::configuring), sv("\xe2\x8a\x95"));   // ⊕ U+2295
-    EXPECT_EQ(sv(icon::done),        sv("\xe2\x9c\x93"));   // ✓ U+2713
-    EXPECT_EQ(sv(icon::failed),      sv("\xe2\x9c\x97"));   // ✗ U+2717
-    EXPECT_EQ(sv(icon::info),        sv("\xe2\x80\xba"));   // › U+203A
-    EXPECT_EQ(sv(icon::arrow),       sv("\xe2\x96\xb8"));   // ▸ U+25B8
-    EXPECT_EQ(sv(icon::package),     sv("\xe2\x97\x86"));   // ◆ U+25C6
+    // Every slot must equal its expected UTF-8 byte sequence exactly.
+    for (auto& slot : kThemeIconSlots) {
+        EXPECT_EQ(std::string_view{slot.value}, slot.expected)
+            << "icon::" << slot.name << " drifted from canonical bytes";
+    }
 }
 
-TEST(ThemeIcons, NoPlatformBranching) {
-    namespace icon = xlings::ui::theme::icon;
-    // Each icon must be a multi-byte UTF-8 sequence (high bit set in the
-    // leading byte). Catches an accidental "Windows = ASCII" fallback
-    // re-introducing a single-byte alternative for any of the slots.
-    auto is_multibyte = [](std::string_view s) {
-        return !s.empty() && (static_cast<unsigned char>(s[0]) & 0x80);
-    };
-    EXPECT_TRUE(is_multibyte(icon::pending));
-    EXPECT_TRUE(is_multibyte(icon::downloading));
-    EXPECT_TRUE(is_multibyte(icon::extracting));
-    EXPECT_TRUE(is_multibyte(icon::installing));
-    EXPECT_TRUE(is_multibyte(icon::configuring));
-    EXPECT_TRUE(is_multibyte(icon::done));
-    EXPECT_TRUE(is_multibyte(icon::failed));
-    EXPECT_TRUE(is_multibyte(icon::info));
-    EXPECT_TRUE(is_multibyte(icon::arrow));
-    EXPECT_TRUE(is_multibyte(icon::package));
+TEST(ThemeIcons, NoPlatformAsciiFallback) {
+    // Each icon's leading byte must have bit 7 set — i.e. it is a
+    // multi-byte UTF-8 sequence, not an ASCII fallback. Catches
+    // `#ifdef _WIN32 "+" #else "✓"` slipping back in for any slot.
+    for (auto& slot : kThemeIconSlots) {
+        std::string_view s{slot.value};
+        ASSERT_FALSE(s.empty()) << "icon::" << slot.name << " is empty";
+        EXPECT_TRUE(static_cast<unsigned char>(s[0]) & 0x80)
+            << "icon::" << slot.name << " is single-byte ASCII (\""
+            << s << "\")";
+    }
+}
+
+TEST(ThemeIcons, AllAreThreeByteBmpUtf8) {
+    // Belt-and-braces: every slot is a well-formed 3-byte BMP UTF-8
+    // sequence (lead byte 0xE0..0xEF, followed by two continuation
+    // bytes 0x80..0xBF). Rules out 4-byte SMP code points (which many
+    // monospace fonts can't render) and malformed sequences.
+    for (auto& slot : kThemeIconSlots) {
+        std::string_view s{slot.value};
+        ASSERT_EQ(s.size(), 3u) << "icon::" << slot.name
+                                 << " is " << s.size() << " bytes, expected 3";
+        auto b0 = static_cast<unsigned char>(s[0]);
+        auto b1 = static_cast<unsigned char>(s[1]);
+        auto b2 = static_cast<unsigned char>(s[2]);
+        EXPECT_TRUE(b0 >= 0xE0 && b0 <= 0xEF)
+            << "icon::" << slot.name << " lead byte not 3-byte UTF-8";
+        EXPECT_TRUE((b1 & 0xC0) == 0x80)
+            << "icon::" << slot.name << " byte 1 not a continuation";
+        EXPECT_TRUE((b2 & 0xC0) == 0x80)
+            << "icon::" << slot.name << " byte 2 not a continuation";
+    }
 }
 // ============================================================
 
