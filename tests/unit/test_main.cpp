@@ -3146,49 +3146,77 @@ TEST(ThemeIcons, InfoPanelEmitsIconBytesToStdout) {
 namespace {
 
 // Locate the xlings binary built by xmake. The unit-test target uses
-// set_rundir($(projectdir)), so build/<plat>/<arch>/release/xlings is
-// reachable relative to cwd.
+// set_rundir($(projectdir)) and add_deps("xlings"), so the binary lives
+// at build/<plat>/<arch>/release/xlings[.exe]. We try the common
+// platform/arch combos rather than recursing (libc++ on macOS has a
+// known issue with `for (auto& e : recursive_directory_iterator)`).
 std::string find_xlings_binary_() {
     namespace fs = std::filesystem;
-    for (const auto& entry : fs::recursive_directory_iterator("build")) {
-        if (entry.is_regular_file() && entry.path().filename() == "xlings") {
-            auto status = fs::status(entry.path());
-            if ((status.permissions() & fs::perms::owner_exec) != fs::perms::none) {
-                return entry.path().string();
-            }
-        }
+#ifdef _WIN32
+    const char* exe = "xlings.exe";
+#else
+    const char* exe = "xlings";
+#endif
+    static const char* platforms[] = {"linux", "macosx", "windows"};
+    static const char* archs[] = {"x86_64", "arm64", "x64"};
+    static const char* modes[] = {"release", "debug"};
+    for (auto* p : platforms) for (auto* a : archs) for (auto* m : modes) {
+        fs::path candidate = fs::path("build") / p / a / m / exe;
+        std::error_code ec;
+        if (fs::is_regular_file(candidate, ec)) return candidate.string();
     }
     return {};
 }
 
 // Run `xlings <args...>` with an isolated XLINGS_HOME, capture stdout.
-// Returns {stdout, exit_code}. On Unix uses popen for simplicity;
-// stderr is silenced via 2>/dev/null in the command line.
+// Returns {stdout, exit_code}. Sets XLINGS_HOME via putenv (portable
+// across cmd.exe / sh) and silences stderr via shell redirection.
 std::pair<std::string, int> run_xlings_(
         const std::vector<std::string>& args,
         const std::string& xlings_home = "") {
     auto bin = find_xlings_binary_();
-    if (bin.empty()) return {"", -1};
+    if (bin.empty()) return std::pair<std::string, int>{"", -1};
 
-    std::string cmd;
     if (!xlings_home.empty()) {
-        cmd += "XLINGS_HOME=\"" + xlings_home + "\" ";
+#ifdef _WIN32
+        _putenv_s("XLINGS_HOME", xlings_home.c_str());
+#else
+        ::setenv("XLINGS_HOME", xlings_home.c_str(), 1);
+#endif
     }
-    cmd += "\"" + bin + "\"";
-    for (auto& a : args) {
-        cmd += " '" + a + "'";
-    }
-    cmd += " 2>/dev/null";
 
+    std::string cmd = "\"" + bin + "\"";
+    for (auto& a : args) {
+#ifdef _WIN32
+        cmd += " \"" + a + "\"";
+#else
+        cmd += " '" + a + "'";
+#endif
+    }
+#ifdef _WIN32
+    cmd += " 2>NUL";
+#else
+    cmd += " 2>/dev/null";
+#endif
+
+#ifdef _WIN32
+    auto* fp = _popen(cmd.c_str(), "r");
+#else
     auto* fp = popen(cmd.c_str(), "r");
-    if (!fp) return {"", -1};
+#endif
+    if (!fp) return std::pair<std::string, int>{"", -1};
     std::string out;
     char buf[4096];
     while (auto n = std::fread(buf, 1, sizeof(buf), fp)) {
         out.append(buf, buf + n);
     }
+#ifdef _WIN32
+    int rc = _pclose(fp);
+    return std::pair<std::string, int>{out, rc};
+#else
     int rc = pclose(fp);
-    return {out, WIFEXITED(rc) ? WEXITSTATUS(rc) : -1};
+    return std::pair<std::string, int>{out, WIFEXITED(rc) ? WEXITSTATUS(rc) : -1};
+#endif
 }
 
 // Parse NDJSON output into a vector of JSON objects (skips blank lines).
