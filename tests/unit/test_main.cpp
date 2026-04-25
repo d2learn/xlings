@@ -2731,37 +2731,46 @@ struct ExtractFixture {
         std::filesystem::remove_all(tmp, ec);
     }
 
+    // Chdir-based archive helpers. We use std::filesystem::current_path()
+    // rather than shell `cd && tool` so we avoid:
+    //   - cmd.exe `cd <other-drive>` being a no-op without /d
+    //   - dash not having `pushd`
+    //   - cross-shell quoting of paths with spaces
+    // All archive tools below are invoked with relative inputs from inside
+    // tmp/, producing the output as a relative filename, then we resolve
+    // back to the absolute path.
+    template <class F>
+    static int run_in_(const std::filesystem::path& dir, F&& fn) {
+        auto saved = std::filesystem::current_path();
+        std::filesystem::current_path(dir);
+        int rc = fn();
+        std::filesystem::current_path(saved);
+        return rc;
+    }
+
     std::filesystem::path make_tar_gz() const {
-        // `tar -C <dir>` chdir's before archiving; this avoids cmd.exe's
-        // `cd` not switching drives on Windows (D:\... → C:\... cd is a
-        // no-op without /d), which made `src` look-up land in the wrong
-        // cwd and produce an empty archive.
         auto out = tmp / "fixture.tar.gz";
-        std::string cmd = std::format("tar -C \"{}\" czf \"{}\" src",
-            tmp.string(), out.string());
-        int rc = std::system(cmd.c_str());
+        int rc = run_in_(tmp, [] {
+            return std::system("tar czf fixture.tar.gz src");
+        });
         if (rc != 0) throw std::runtime_error("failed to create tar.gz fixture");
         return out;
     }
 
     std::filesystem::path make_zip() const {
         auto out = tmp / "fixture.zip";
-        // `zip` has no `-C` equivalent, so use a one-shot subshell that
-        // switches drive (cmd.exe `cd /d`) or just chains via `pushd`
-        // which on POSIX behaves like `cd` but on Windows always
-        // switches drives.
-        std::string cmd = std::format("pushd \"{}\" && zip -qr \"{}\" src && popd",
-            tmp.string(), out.string());
-        int rc = std::system(cmd.c_str());
+        int rc = run_in_(tmp, [] {
+            return std::system("zip -qr fixture.zip src");
+        });
         if (rc != 0) throw std::runtime_error("failed to create zip fixture");
         return out;
     }
 
     std::filesystem::path make_tar_xz() const {
         auto out = tmp / "fixture.tar.xz";
-        std::string cmd = std::format("tar -C \"{}\" cJf \"{}\" src",
-            tmp.string(), out.string());
-        int rc = std::system(cmd.c_str());
+        int rc = run_in_(tmp, [] {
+            return std::system("tar cJf fixture.tar.xz src");
+        });
         if (rc != 0) throw std::runtime_error("failed to create tar.xz fixture");
         return out;
     }
