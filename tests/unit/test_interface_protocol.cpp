@@ -52,8 +52,15 @@ std::string find_xlings_binary_() {
 // Run `xlings <args...>` with an isolated XLINGS_HOME, capture stdout.
 // Returns {stdout, exit_code}. Sets XLINGS_HOME via putenv (portable
 // across cmd.exe / sh) and silences stderr via shell redirection.
+//
+// Windows portability hack: if any arg contains a `"` character (typical
+// of JSON args like `{"name":"x"}`), we cannot reliably round-trip it
+// through cmd.exe + the MSVC CRT command-line parser. Detect that case,
+// rewrite the trailing `--args <JSON>` into `--args-file <tmpPath>`, and
+// drop the JSON body into a temp file. xlings interface reads the file
+// directly, sidestepping all shell quoting concerns.
 std::pair<std::string, int> run_xlings_(
-        const std::vector<std::string>& args,
+        std::vector<std::string> args,
         const std::string& xlings_home = "") {
     auto bin = find_xlings_binary_();
     if (bin.empty()) return std::pair<std::string, int>{"", -1};
@@ -65,6 +72,21 @@ std::pair<std::string, int> run_xlings_(
         ::setenv("XLINGS_HOME", xlings_home.c_str(), 1);
 #endif
     }
+
+#ifdef _WIN32
+    // Reroute any --args <JSON-with-quotes> through --args-file <tmp>.
+    std::filesystem::path args_tmp;
+    for (size_t i = 0; i + 1 < args.size(); ++i) {
+        if (args[i] == "--args" && args[i + 1].find('"') != std::string::npos) {
+            args_tmp = std::filesystem::temp_directory_path() / ("xlings-iface-args-" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".json");
+            std::ofstream(args_tmp) << args[i + 1];
+            args[i] = "--args-file";
+            args[i + 1] = args_tmp.string();
+            break;
+        }
+    }
+#endif
 
     std::string cmd = "\"" + bin + "\"";
     for (auto& a : args) {

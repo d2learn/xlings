@@ -219,6 +219,24 @@ export int run(const mcpplibs::cmdline::ParsedArgs& args,
     auto cap_name = std::string(args.positional(0));
     std::string cap_args = "{}";
     if (auto a = args.value("args")) cap_args = std::string(*a);
+    // --args-file <path> reads the JSON args from a file instead of the
+    // command line. Useful for clients on Windows where cmd.exe + MSVC
+    // CRT quoting makes embedded `"` characters in JSON args unreliable.
+    if (auto a = args.value("args-file")) {
+        try {
+            cap_args = platform::read_file_to_string(std::string(*a));
+        } catch (const std::exception& e) {
+            nlohmann::json err = {
+                {"kind", "error"},
+                {"code", std::string(to_wire_string(ErrorCode::InvalidInput))},
+                {"message", std::string("failed to read --args-file: ") + e.what()},
+                {"recoverable", false},
+            };
+            std::cout << err.dump() << "\n";
+            std::cout << R"({"kind":"result","exitCode":1})" << "\n" << std::flush;
+            return 1;
+        }
+    }
 
     auto* cap = registry.get(cap_name);
     if (!cap) {

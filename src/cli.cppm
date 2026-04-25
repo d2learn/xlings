@@ -799,6 +799,8 @@ export int run(int argc, char* argv[]) {
             .description("Programmatic JSON API for external tools (NDJSON over stdio)")
             .option(cmdline::Option("args").takes_value().value_name("JSON")
                 .help("Capability arguments as JSON string"))
+            .option(cmdline::Option("args-file").takes_value().value_name("PATH")
+                .help("Read capability arguments from a file (avoids cmd.exe quoting on Windows)"))
             .option(cmdline::Option("list").help("List all available capabilities with schemas"))
             .option(cmdline::Option("version").help("Print protocol version and exit"))
             .arg("capability").help("Capability name to invoke")
