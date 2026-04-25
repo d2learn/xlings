@@ -77,13 +77,16 @@ mkdir -p "$OUT_DIR/bin"
 cp "$BIN_SRC"         "$OUT_DIR/bin/xlings"
 chmod +x "$OUT_DIR/bin/"*
 
-# .xlings.json
+# .xlings.json — default mirror is CN; CI sets XLINGS_RELEASE_MIRROR=GLOBAL
+# so test runs (which need github.com endpoints) don't hit gitee auth.
+MIRROR="${XLINGS_RELEASE_MIRROR:-CN}"
 if command -v jq &>/dev/null && [[ -f config/xlings.json ]]; then
-  jq --arg version "$VERSION" '. + {"version":$version,"activeSubos":"default","subos":{"default":{"dir":""}}}' \
+  jq --arg version "$VERSION" --arg mirror "$MIRROR" \
+     '. + {"version":$version,"mirror":$mirror,"activeSubos":"default","subos":{"default":{"dir":""}}}' \
     config/xlings.json > "$OUT_DIR/.xlings.json"
 else
   cat > "$OUT_DIR/.xlings.json" << DOTJSON
-{"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false,"mirror":"CN","xim":{"mirrors":{"index-repo":{"GLOBAL":"https://github.com/d2learn/xim-pkgindex.git","CN":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"res-server":{"GLOBAL":"https://github.com/xlings-res","CN":"https://gitcode.com/xlings-res"}},"res-server":"https://gitcode.com/xlings-res","index-repo":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"repo":"https://gitee.com/sunrisepeak/xlings.git"}
+{"activeSubos":"default","subos":{"default":{"dir":""}},"version":"$VERSION","need_update":false,"mirror":"$MIRROR","xim":{"mirrors":{"index-repo":{"GLOBAL":"https://github.com/d2learn/xim-pkgindex.git","CN":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"res-server":{"GLOBAL":"https://github.com/xlings-res","CN":"https://gitcode.com/xlings-res"}},"res-server":"https://gitcode.com/xlings-res","index-repo":"https://gitee.com/sunrisepeak/xim-pkgindex.git"},"repo":"https://gitee.com/sunrisepeak/xlings.git"}
 DOTJSON
 fi
 

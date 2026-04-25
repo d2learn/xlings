@@ -12,6 +12,9 @@ env:
   BOOTSTRAP_XLINGS_VERSION: v0.4.2
   BOOTSTRAP_LLVM_VERSION: 20.1.7
   XMAKE_VERSION: v3.0.7
+  # CI runs on github.com; force GLOBAL mirror so xim doesn't try gitee
+  # endpoints (which need auth and aren't reachable in CI).
+  XLINGS_RELEASE_MIRROR: GLOBAL
 
 jobs:
   build-and-test:
