@@ -31,31 +31,29 @@ auto highlight() -> Decorator { return ftxui::bold | ftxui::color(magenta()); }
 auto label()     -> Decorator { return ftxui::color(dim_color()); }
 auto body()      -> Decorator { return ftxui::color(text_color()); }
 
-// --- Icons (cross-platform safe) ---
+// --- Icons ---
+//
+// All glyphs are BMP-region characters that ship in the default monospace
+// fonts of every mainstream terminal we care about: Cascadia Code/Mono
+// (Windows Terminal default), Consolas (conhost), Lucida Console (legacy
+// conhost), DejaVu Sans Mono / Liberation Mono / Noto Mono (Linux), and
+// SF Mono / Menlo (macOS). No platform-conditional ASCII fallback —
+// keeping a single glyph set is what makes Linux / macOS / Windows look
+// the same, which is the whole point.
+//
+// Avoid: U+27D0 ⟐, U+2699 ⚙, U+27F0 ⟰ — these are spotty in older
+// console fonts and were the main offenders behind Windows mojibake.
 namespace icon {
-#if defined(_WIN32)
-    inline constexpr auto pending     = "o";
-    inline constexpr auto downloading = "v";
-    inline constexpr auto extracting  = ">";
-    inline constexpr auto installing  = "*";
-    inline constexpr auto configuring = "*";
-    inline constexpr auto done        = "+";
-    inline constexpr auto failed      = "x";
-    inline constexpr auto info        = ">";
-    inline constexpr auto arrow       = ">";
-    inline constexpr auto package     = "#";
-#else
-    inline constexpr auto pending     = "\xe2\x97\x8b";   // ○
-    inline constexpr auto downloading = "\xe2\x86\x93";   // ↓
-    inline constexpr auto extracting  = "\xe2\x9f\x90";   // ⟐
-    inline constexpr auto installing  = "\xe2\x9a\x99";   // ⚙
-    inline constexpr auto configuring = "\xe2\x9a\x99";   // ⚙
-    inline constexpr auto done        = "\xe2\x9c\x93";   // ✓
-    inline constexpr auto failed      = "\xe2\x9c\x97";   // ✗
-    inline constexpr auto info        = "\xe2\x80\xba";   // ›
-    inline constexpr auto arrow       = "\xe2\x96\xb8";   // ▸
-    inline constexpr auto package     = "\xe2\x97\x86";   // ◆
-#endif
+    inline constexpr auto pending     = "\xe2\x97\x8b";   // ○ U+25CB
+    inline constexpr auto downloading = "\xe2\x86\x93";   // ↓ U+2193
+    inline constexpr auto extracting  = "\xe2\x96\xbe";   // ▾ U+25BE
+    inline constexpr auto installing  = "\xe2\x8a\x95";   // ⊕ U+2295
+    inline constexpr auto configuring = "\xe2\x8a\x95";   // ⊕ U+2295
+    inline constexpr auto done        = "\xe2\x9c\x93";   // ✓ U+2713
+    inline constexpr auto failed      = "\xe2\x9c\x97";   // ✗ U+2717
+    inline constexpr auto info        = "\xe2\x80\xba";   // › U+203A
+    inline constexpr auto arrow       = "\xe2\x96\xb8";   // ▸ U+25B8
+    inline constexpr auto package     = "\xe2\x97\x86";   // ◆ U+25C6
 } // namespace icon
 
 } // namespace xlings::ui::theme
