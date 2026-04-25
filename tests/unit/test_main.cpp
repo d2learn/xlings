@@ -2732,8 +2732,12 @@ struct ExtractFixture {
     }
 
     std::filesystem::path make_tar_gz() const {
+        // `tar -C <dir>` chdir's before archiving; this avoids cmd.exe's
+        // `cd` not switching drives on Windows (D:\... → C:\... cd is a
+        // no-op without /d), which made `src` look-up land in the wrong
+        // cwd and produce an empty archive.
         auto out = tmp / "fixture.tar.gz";
-        std::string cmd = std::format("cd {} && tar czf {} src",
+        std::string cmd = std::format("tar -C \"{}\" czf \"{}\" src",
             tmp.string(), out.string());
         int rc = std::system(cmd.c_str());
         if (rc != 0) throw std::runtime_error("failed to create tar.gz fixture");
@@ -2742,7 +2746,11 @@ struct ExtractFixture {
 
     std::filesystem::path make_zip() const {
         auto out = tmp / "fixture.zip";
-        std::string cmd = std::format("cd {} && zip -qr {} src",
+        // `zip` has no `-C` equivalent, so use a one-shot subshell that
+        // switches drive (cmd.exe `cd /d`) or just chains via `pushd`
+        // which on POSIX behaves like `cd` but on Windows always
+        // switches drives.
+        std::string cmd = std::format("pushd \"{}\" && zip -qr \"{}\" src && popd",
             tmp.string(), out.string());
         int rc = std::system(cmd.c_str());
         if (rc != 0) throw std::runtime_error("failed to create zip fixture");
@@ -2751,7 +2759,7 @@ struct ExtractFixture {
 
     std::filesystem::path make_tar_xz() const {
         auto out = tmp / "fixture.tar.xz";
-        std::string cmd = std::format("cd {} && tar cJf {} src",
+        std::string cmd = std::format("tar -C \"{}\" cJf \"{}\" src",
             tmp.string(), out.string());
         int rc = std::system(cmd.c_str());
         if (rc != 0) throw std::runtime_error("failed to create tar.xz fixture");
