@@ -484,6 +484,15 @@ int cmd_config_(const mcpplibs::cmdline::ParsedArgs& args, EventStream& stream) 
 export int run(int argc, char* argv[]) {
     using namespace mcpplibs;
 
+    // Bare `xlings` (no args) used to silently exit 0 because the
+    // help branch below requires fargc >= 2 (i.e. at least one arg).
+    // Treat it as `xlings --help` instead — much friendlier for first
+    // contact and matches what most modern package managers do.
+    if (argc <= 1) {
+        ui::print_help(Info::VERSION);
+        return 0;
+    }
+
     // Create EventStream for core→UI decoupling
     EventStream stream;
     // Default TUI consumer for CLI mode (will be toggled in agent mode)
