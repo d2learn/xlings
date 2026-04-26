@@ -307,11 +307,14 @@ public:
             .destructive = true,
         };
     }
-    auto execute(Params params, EventStream&) -> Result override {
+    auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
         auto name = json.value("name", "");
         auto dir  = json.value("dir", "");
-        return exit_result(subos::create(name, dir.empty() ? std::filesystem::path{} : std::filesystem::path{dir}));
+        return exit_result(subos::create(
+            name,
+            dir.empty() ? std::filesystem::path{} : std::filesystem::path{dir},
+            stream));
     }
 };
 
@@ -326,9 +329,9 @@ public:
             .destructive = true,
         };
     }
-    auto execute(Params params, EventStream&) -> Result override {
+    auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
-        return exit_result(subos::use(json.value("name", "")));
+        return exit_result(subos::use(json.value("name", ""), stream));
     }
 };
 
@@ -343,9 +346,9 @@ public:
             .destructive = true,
         };
     }
-    auto execute(Params params, EventStream&) -> Result override {
+    auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
-        return exit_result(subos::remove(json.value("name", "")));
+        return exit_result(subos::remove(json.value("name", ""), stream));
     }
 };
 
