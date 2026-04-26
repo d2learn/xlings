@@ -121,15 +121,16 @@ public:
     auto spec() const -> CapabilitySpec override {
         return {
             .name = "update_packages",
-            .description = "Update package index or a specific package",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Package name to update, or omit to update index"}}})",
+            .description = "Update package index or upgrade a specific package to the latest declared version",
+            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Package name to upgrade, or omit to refresh the index only"},"yes":{"type":"boolean","description":"Auto-confirm the upgrade prompt"}}})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
     }
     auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
-        return exit_result(xim::cmd_update(json.value("target", ""), stream));
+        bool yes = json.value("yes", false);
+        return exit_result(xim::cmd_update(json.value("target", ""), yes, stream));
     }
 };
 

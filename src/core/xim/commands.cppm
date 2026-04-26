@@ -686,7 +686,18 @@ int cmd_add_xpkg(const std::string& fileOrUrl, EventStream& stream) {
 }
 
 // === update command ===
-int cmd_update(const std::string& target, EventStream& stream) {
+//
+// Flow:
+//   xlings update            → sync index only (legacy behavior)
+//   xlings update <pkg>      → sync index, then upgrade <pkg> if a newer
+//                              version is declared in the catalog
+//   xlings update <pkg> -y   → same, skip the confirmation prompt
+//
+// Old payloads are NOT removed automatically — xlings is multi-version, and
+// keeping the previous install lets the user `xlings use <pkg> <oldver>` if
+// the upgrade misbehaves. We surface a hint at the end pointing at how to
+// remove old versions.
+int cmd_update(const std::string& target, bool yes, EventStream& stream) {
     // Sync repos
     if (!sync_all_repos(true)) {
         log::error("failed to sync repositories");
@@ -695,19 +706,76 @@ int cmd_update(const std::string& target, EventStream& stream) {
 
     // Force rebuild index (writes fresh cache)
     auto& catalog = get_catalog();
-    auto result = catalog.rebuild(true);
-    if (!result) {
-        log::error("failed to rebuild catalog: {}", result.error());
+    auto rebuildResult = catalog.rebuild(true);
+    if (!rebuildResult) {
+        log::error("failed to rebuild catalog: {}", rebuildResult.error());
         return 1;
     }
 
     log::println("index updated");
 
-    if (!target.empty()) {
-        // TODO: Upgrade specific package
-        log::println("package upgrade not yet implemented");
+    if (target.empty()) return 0;
+
+    auto match = catalog.resolve_target(target, detect_platform());
+    if (!match) {
+        log::error("{}", match.error());
+        return 1;
     }
 
+    auto bareName = match->name;
+    auto latest = match->version;
+    auto currentActive = xvm::get_active_version(
+        Config::effective_workspace(), bareName);
+
+    nlohmann::json planPayload;
+    planPayload["name"]    = match->canonicalName;
+    planPayload["current"] = currentActive;
+    planPayload["latest"]  = latest;
+    stream.emit(DataEvent{"update_plan", planPayload.dump()});
+
+    if (currentActive.empty()) {
+        log::warn("{} is not installed — run: xlings install {}",
+                  match->canonicalName, bareName);
+        return 0;
+    }
+
+    if (currentActive == latest) {
+        log::println("{}@{} is already the latest", match->canonicalName, currentActive);
+        return 0;
+    }
+
+    if (!yes) {
+        PromptEvent confirmReq;
+        confirmReq.id = "confirm_update";
+        confirmReq.question = std::format(
+            "Upgrade {} from {} to {} ?",
+            match->canonicalName, currentActive, latest);
+        confirmReq.options = {"y", "n"};
+        confirmReq.defaultValue = "y";
+        auto answer = stream.prompt(std::move(confirmReq));
+        if (answer != "y") {
+            log::println("cancelled");
+            return 0;
+        }
+    }
+
+    // Install the new version. cmd_install handles dependency resolution,
+    // download, hooks, and switches the active version on success. We pass
+    // yes=true because the user already confirmed the upgrade above (and
+    // hook-driven sub-installs should never re-prompt regardless).
+    std::vector<std::string> installTargets = { bareName + "@" + latest };
+    auto rc = cmd_install(installTargets, /*yes=*/true, /*noDeps=*/false, stream);
+    if (rc != 0) return rc;
+
+    nlohmann::json summaryPayload;
+    summaryPayload["name"] = match->canonicalName;
+    summaryPayload["from"] = currentActive;
+    summaryPayload["to"]   = latest;
+    stream.emit(DataEvent{"update_summary", summaryPayload.dump()});
+
+    log::println("upgraded {}: {} -> {}", match->canonicalName, currentActive, latest);
+    log::println("  old version retained — remove with: xlings remove {}@{}",
+                 bareName, currentActive);
     return 0;
 }
 
