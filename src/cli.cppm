@@ -756,7 +756,8 @@ export int run(int argc, char* argv[]) {
                 std::string target;
                 if (args.positional_count() > 0)
                     target = std::string(args.positional(0));
-                return xim::cmd_update(target, stream);
+                bool yes = args.is_flag_set("yes");
+                return xim::cmd_update(target, yes, stream);
             })
 
         // search
