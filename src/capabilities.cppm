@@ -104,14 +104,15 @@ public:
         return {
             .name = "remove_package",
             .description = "Remove one package or one specific version. Only removes one target per call — to remove multiple versions, call multiple times",
-            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Format: name, name@version, or namespace:name@version"}},"required":["target"]})",
+            .inputSchema = R"({"type":"object","properties":{"target":{"type":"string","description":"Format: name, name@version, or namespace:name@version"},"yes":{"type":"boolean","description":"Auto-confirm without prompting"}},"required":["target"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
     }
     auto execute(Params params, EventStream& stream) -> Result override {
         auto json = nlohmann::json::parse(params, nullptr, false);
-        return exit_result(xim::cmd_remove(json.value("target", ""), stream));
+        bool yes = json.value("yes", false);
+        return exit_result(xim::cmd_remove(json.value("target", ""), yes, stream));
     }
 };
 

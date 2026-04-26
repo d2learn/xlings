@@ -63,12 +63,12 @@ NODE_VER_S2="$(
 [[ "$NODE_VER_S2" == "v22.17.1" ]] || fail "s2 node shim did not resolve to v22.17.1"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
-REMOVE_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node)"
+REMOVE_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node -y)"
 [[ -x "$PAYLOAD_DIR/bin/node" ]] || fail "payload removed even though s2 still referenced it"
 [[ ! -e "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim still present after detach"
 
 run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
-REMOVE_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node)"
+REMOVE_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node -y)"
 [[ ! -e "$PAYLOAD_DIR" ]] || fail "payload still present after last subos reference was removed"
 [[ ! -e "$HOME_DIR/subos/s2/bin/node" ]] || fail "s2 shim still present after final remove"
 

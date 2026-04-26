@@ -117,8 +117,20 @@ static void dispatch_data_event(const DataEvent& e) {
     else if (e.kind == "install_summary") {
         ui::print_install_summary(json.value("success", 0), json.value("failed", 0));
     }
+    else if (e.kind == "remove_plan") {
+        ui::print_remove_plan(
+            json.value("subos", ""),
+            json.value("name", ""),
+            json.value("version", ""));
+    }
     else if (e.kind == "remove_summary") {
-        ui::print_remove_summary(json.value("target", ""));
+        // Tolerate the legacy "target" key (older interface clients) by
+        // falling back when name/version were not provided.
+        auto name = json.value("name", json.value("target", ""));
+        ui::print_remove_summary(
+            json.value("subos", ""),
+            name,
+            json.value("version", ""));
     }
     else if (e.kind == "subos_list") {
         std::vector<std::tuple<std::string, std::string, int, bool>> entries;
@@ -731,7 +743,8 @@ export int run(int argc, char* argv[]) {
             .arg("package").required().help("Package to remove")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return xim::cmd_remove(std::string(args.positional(0)), stream);
+                bool yes = args.is_flag_set("yes");
+                return xim::cmd_remove(std::string(args.positional(0)), yes, stream);
             })
 
         // update

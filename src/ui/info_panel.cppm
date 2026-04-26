@@ -224,15 +224,57 @@ void print_install_summary(int success, int failed) {
     std::println("");
 }
 
-// Print uninstall summary
-void print_remove_summary(const std::string& name) {
+// Format "<name>[@<version>]" for display. Centralized so the plan and
+// summary lines stay aligned when version is absent.
+inline std::string remove_target_label_(const std::string& name,
+                                        const std::string& version) {
+    if (version.empty()) return name;
+    return name + "@" + version;
+}
+
+// Print remove plan (shown before the confirmation prompt)
+void print_remove_plan(const std::string& subos,
+                       const std::string& name,
+                       const std::string& version) {
     using namespace ftxui;
+
+    auto label = remove_target_label_(name, version);
+
+    Elements rows;
+    rows.push_back(text(""));
+    rows.push_back(hbox({
+        text("  Package to remove:") | color(theme::text_color()),
+    }));
+    rows.push_back(text(""));
+    rows.push_back(hbox({
+        text("    " + std::string(theme::icon::package) + " ") | color(theme::magenta()),
+        text(label) | bold | color(theme::magenta()),
+        text("  (subos: " + subos + ")") | color(theme::dim_color()),
+    }));
+    rows.push_back(text(""));
+
+    auto doc = vbox(std::move(rows));
+    auto screen = Screen::Create(Dimension::Full(), Dimension::Fit(doc));
+    Render(screen, doc);
+    screen.Print();
+}
+
+// Print uninstall summary
+void print_remove_summary(const std::string& subos,
+                          const std::string& name,
+                          const std::string& version) {
+    using namespace ftxui;
+
+    auto label = remove_target_label_(name, version);
 
     Elements rows;
     rows.push_back(text(""));
     rows.push_back(hbox({
         text("  " + std::string(theme::icon::done) + " ") | color(theme::green()),
-        text(name + " removed") | color(theme::green()) | bold,
+        text(label + " removed") | color(theme::green()) | bold,
+        subos.empty()
+            ? text("")
+            : (text("  (subos: " + subos + ")") | color(theme::dim_color())),
     }));
     rows.push_back(text(""));
 
