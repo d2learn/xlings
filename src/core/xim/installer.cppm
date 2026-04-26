@@ -1243,6 +1243,45 @@ public:
         if (ec) {
             log::warn("failed to remove payload dir {}: {}", installDir.string(), ec.message());
         }
+
+        // installDir is the version directory (e.g. .../xim-x-node/22.17.1).
+        // Its parent is the per-package directory (.../xim-x-node) which
+        // holds one subdirectory per installed version of the same package.
+        // After we delete the version we just uninstalled, the package
+        // directory may be left as an empty stub if this was its last
+        // version — sweep it.
+        //
+        // Why "list-then-remove" instead of "remove and tolerate ENOTEMPTY":
+        // fs::remove (non-recursive) silently returns false for non-empty
+        // directories, which would conflate the "still has versions, leave
+        // it alone" expected case with real errors (permission denied, IO
+        // failure). It is also a maintenance trap — the next reader can
+        // upgrade it to fs::remove_all and wipe sibling versions. So check
+        // emptiness explicitly first.
+        //
+        // Cross-platform: directory_iterator and fs::remove are part of
+        // std::filesystem and behave identically on Linux/macOS/Windows
+        // for the cases we care about (empty dir → end iterator; remove of
+        // an empty directory → succeeds; non-existent or unreadable parent
+        // → ec set, we skip). One platform-specific edge case worth naming:
+        // file managers occasionally drop hidden metadata into the dir
+        // (.DS_Store on macOS, Thumbs.db on Windows). Those count as
+        // non-empty, so we will leave the package directory alone — that
+        // is the right behavior; never silently delete files we did not
+        // create.
+        auto parent = installDir.parent_path();
+        std::error_code listEc;
+        auto first = std::filesystem::directory_iterator(parent, listEc);
+        if (!listEc && first == std::filesystem::directory_iterator{}) {
+            std::error_code rmEc;
+            if (std::filesystem::remove(parent, rmEc)) {
+                log::debug("swept empty package dir: {}", parent.string());
+            } else if (rmEc) {
+                log::warn("failed to sweep empty package dir {}: {}",
+                          parent.string(), rmEc.message());
+            }
+        }
+
         log::debug("{} uninstalled", resolvedTarget);
         return {};
     }
