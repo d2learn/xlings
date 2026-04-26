@@ -229,6 +229,15 @@ namespace platform_impl {
         return alive;
     }
 
+    // OSC-11 background-color query is a POSIX-tty trick (open /dev/tty,
+    // termios raw mode, blocking read with timeout). Windows conhost +
+    // legacy terminals don't have a clean equivalent, so we don't try.
+    // Modern Windows Terminal users can still set XLINGS_THEME explicitly,
+    // and the COLORFGBG fallback in ui::theme is platform-agnostic.
+    export std::optional<bool> query_terminal_is_light() {
+        return std::nullopt;
+    }
+
     export struct Icon {
         static constexpr auto pending    = "o";
         static constexpr auto running    = "*";

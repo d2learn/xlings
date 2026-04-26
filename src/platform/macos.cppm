@@ -200,6 +200,8 @@ namespace platform_impl {
         return ::kill(pid, 0) == 0;
     }
 
+    // query_terminal_is_light() lives in :unix — shared with Linux.
+
     export struct Icon {
         static constexpr auto pending    = "\xe2\x97\x8b";   // ○
         static constexpr auto running    = "\xe2\x9f\xb3";   // ⟳

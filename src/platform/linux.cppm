@@ -221,6 +221,8 @@ namespace platform_impl {
         return std::filesystem::exists(proc_path);
     }
 
+    // query_terminal_is_light() lives in :unix — shared with macOS.
+
     export struct Icon {
         static constexpr auto pending    = "\xe2\x97\x8b";   // ○
         static constexpr auto running    = "\xe2\x9f\xb3";   // ⟳

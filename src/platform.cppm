@@ -12,6 +12,8 @@ import std;
 export import :linux;
 export import :macos;
 export import :windows;
+// Shared POSIX implementations (linux + macos). Empty TU on Windows.
+export import :unix;
 
 namespace xlings {
 namespace platform {
@@ -31,6 +33,7 @@ namespace platform {
     export using platform_impl::supports_rewrite_output;
     export using platform_impl::get_pid;
     export using platform_impl::is_process_alive;
+    export using platform_impl::query_terminal_is_light;
     export using platform_impl::ProcessHandle;
     export using platform_impl::spawn_command;
     export using platform_impl::wait_or_kill;

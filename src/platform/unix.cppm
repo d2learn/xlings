@@ -1,0 +1,86 @@
+module;
+
+#include <cstdio>
+#include <cstdlib>
+#if defined(__linux__) || defined(__APPLE__)
+#include <unistd.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#endif
+
+export module xlings.platform:unix;
+
+#if defined(__linux__) || defined(__APPLE__)
+
+import std;
+
+namespace xlings {
+namespace platform_impl {
+
+    // Query the controlling terminal for its background color via the
+    // OSC-11 sequence (xterm spec, supported by xterm / iTerm2 / Alacritty
+    // / Kitty / WezTerm / modern Windows Terminal). Returns std::nullopt
+    // if there's no controlling tty, the terminal doesn't respond within
+    // ~50 ms, or the reply is malformed.
+    //
+    // Lives in the shared `unix` partition because the implementation
+    // (open /dev/tty + termios raw mode + select-with-timeout + parse the
+    // hex reply) is identical across Linux and macOS — both inherit the
+    // POSIX terminal API. windows.cppm provides its own stub. Putting it
+    // here means linux.cppm and macos.cppm carry no copy of this code.
+    export std::optional<bool> query_terminal_is_light() {
+        int fd = ::open("/dev/tty", O_RDWR | O_NOCTTY);
+        if (fd < 0) return std::nullopt;
+        struct CloseGuard { int fd; ~CloseGuard() { ::close(fd); } } _g{fd};
+
+        struct termios saved{};
+        if (::tcgetattr(fd, &saved) != 0) return std::nullopt;
+        struct termios raw = saved;
+        raw.c_lflag &= ~(static_cast<tcflag_t>(ICANON) | static_cast<tcflag_t>(ECHO));
+        raw.c_cc[VMIN]  = 0;
+        raw.c_cc[VTIME] = 0;
+        if (::tcsetattr(fd, TCSANOW, &raw) != 0) return std::nullopt;
+        struct RestoreGuard {
+            int fd; struct termios s;
+            ~RestoreGuard() { ::tcsetattr(fd, TCSANOW, &s); }
+        } _r{fd, saved};
+
+        static constexpr char query[] = "\033]11;?\033\\";
+        if (::write(fd, query, sizeof(query) - 1) < 0) return std::nullopt;
+
+        fd_set rfds; FD_ZERO(&rfds); FD_SET(fd, &rfds);
+        struct timeval tv{0, 50 * 1000};  // 50 ms
+        if (::select(fd + 1, &rfds, nullptr, nullptr, &tv) <= 0) return std::nullopt;
+
+        char buf[64]{};
+        auto n = ::read(fd, buf, sizeof(buf) - 1);
+        if (n <= 0) return std::nullopt;
+
+        // Reply: \e]11;rgb:RRRR/GGGG/BBBB\e\\ (or \a terminator).
+        std::string_view s{buf, static_cast<std::size_t>(n)};
+        auto p = s.find("rgb:");
+        if (p == std::string_view::npos || p + 4 + 14 > s.size()) return std::nullopt;
+        auto hex4 = [&](std::size_t off) -> int {
+            int v = 0;
+            for (int i = 0; i < 4 && off + i < s.size(); ++i) {
+                char c = s[off + i];
+                int d = (c >= '0' && c <= '9') ? c - '0'
+                      : (c >= 'a' && c <= 'f') ? c - 'a' + 10
+                      : (c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
+                if (d < 0) return -1;
+                v = v * 16 + d;
+            }
+            return v;  // 16-bit channel, 0..65535
+        };
+        int r = hex4(p + 4), g = hex4(p + 9), b = hex4(p + 14);
+        if (r < 0 || g < 0 || b < 0) return std::nullopt;
+        // Rec. 601 luma; threshold at half-bright.
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 32768.0;
+    }
+
+} // namespace platform_impl
+} // namespace xlings
+
+#endif // defined(__linux__) || defined(__APPLE__)
