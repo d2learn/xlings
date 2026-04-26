@@ -80,8 +80,36 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     std::vector<std::string> targetVec(targets.begin(), targets.end());
     std::vector<PackageMatch> requestedMatches;
 
+    // Idempotency: `install` is NOT supposed to be a silent upgrader.
+    // If the package already has a version active in the current sub-OS
+    // that satisfies the user's request — bare name (no @ver) accepts
+    // anything, `name@<prefix>` accepts any active version starting with
+    // the prefix — pin the resolution to that exact version. The existing
+    // "all packages already installed" fast path takes it from there.
+    // For deliberate upgrades, users should run `xlings update <pkg>`.
+    auto pin_to_active_if_satisfies_ = [&](const std::string& t) -> std::string {
+        auto at        = t.find('@');
+        auto namePart  = (at == std::string::npos) ? t : t.substr(0, at);
+        auto verHint   = (at == std::string::npos) ? std::string{} : t.substr(at + 1);
+        auto bareName  = namePart.substr(namePart.rfind(':') + 1);
+        auto active    = xvm::get_active_version(
+                            Config::effective_workspace(), bareName);
+        if (active.empty()) return t;
+        if (verHint.empty() || active.rfind(verHint, 0) == 0) {
+            return namePart + "@" + active;
+        }
+        return t;
+    };
+
     for (auto& target : targetVec) {
-        auto match = catalog.resolve_target(target, platform);
+        auto pinned = pin_to_active_if_satisfies_(target);
+        auto match = catalog.resolve_target(pinned, platform);
+        if (!match && pinned != target) {
+            // Active version no longer in the catalog (xpm declaration changed
+            // since install) — fall back to the original target so the user
+            // still gets a useful resolve / error / fuzzy-match path.
+            match = catalog.resolve_target(target, platform);
+        }
         if (!match) {
             // Ambiguous matches: show error directly, don't fall through to fuzzy
             if (match.error().contains("ambiguous")) {
@@ -135,11 +163,16 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                     return 0;
                 }
             }
-            // Update target so dependency resolution uses the resolved name
-            target = match->canonicalName;
-            if (!match->version.empty()) {
-                target += "@" + match->version;
-            }
+        }
+        // Update target to the canonical "<ns:name>@<version>" form so that
+        // the downstream dependency resolver (which calls resolve_target
+        // again on each item in targetVec) lands on this exact version.
+        // Without this, pin_to_active_if_satisfies_ above is silently undone
+        // when the resolver picks the catalog's highest-declared version for
+        // bare-name targets.
+        target = match->canonicalName;
+        if (!match->version.empty()) {
+            target += "@" + match->version;
         }
         requestedMatches.push_back(*match);
     }
