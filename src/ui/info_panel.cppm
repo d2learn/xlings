@@ -196,6 +196,41 @@ void print_subos_list(
     std::println("");
 }
 
+// Subos status messages are single-line with a possibly-long path. ftxui
+// hbox layout truncates them to the detected terminal width (80 cols when
+// TERM is unset), so use plain std::print + raw ANSI here instead — the
+// content has to stay readable in CI / pipes / non-TTY contexts.
+namespace subos_ansi_ {
+    constexpr auto reset  = "\033[0m";
+    constexpr auto bold   = "\033[1m";
+    constexpr auto cyan   = "\033[38;2;34;211;238m";
+    constexpr auto green  = "\033[38;2;34;197;94m";
+    constexpr auto gray   = "\033[38;2;148;163;184m";
+}
+
+void print_subos_created(const std::string& name, const std::string& dir) {
+    using namespace subos_ansi_;
+    std::println("{}  ✓ subos created: {}{}{}{}", green, bold, name, reset, reset);
+    if (!dir.empty()) {
+        std::println("{}    dir:{} {}", gray, reset, dir);
+    }
+}
+
+void print_subos_switched(const std::string& name, const std::string& dir) {
+    using namespace subos_ansi_;
+    if (dir.empty()) {
+        std::println("{}  ▸ switched to subos {}{}{}", cyan, bold, name, reset);
+    } else {
+        std::println("{}  ▸ switched to subos {}{}{}{}  ({}){}",
+                     cyan, bold, name, reset, cyan, dir, reset);
+    }
+}
+
+void print_subos_removed(const std::string& name) {
+    using namespace subos_ansi_;
+    std::println("{}  ✓ subos removed: {}{}{}", green, bold, name, reset);
+}
+
 // Print install summary with success/fail counts
 void print_install_summary(int success, int failed) {
     using namespace ftxui;

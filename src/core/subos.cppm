@@ -65,25 +65,43 @@ export std::vector<SubosInfo> list_all() {
     return result;
 }
 
-void update_current_symlink_(const fs::path& homeDir, const fs::path& targetDir) {
+void update_current_symlink_(EventStream& stream,
+                              const fs::path& homeDir,
+                              const fs::path& targetDir) {
     auto linkPath = homeDir / "subos" / "current";
     std::error_code ec;
     fs::remove(linkPath, ec);
     fs::create_directory_symlink(targetDir, linkPath, ec);
-    if (ec) log::error("[xlings:subos] failed to update current symlink: {}", ec.message());
+    if (ec) {
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::Permission,
+            .message = "failed to update current symlink: " + ec.message(),
+            .recoverable = true,
+        });
+    }
 }
 
-export int create(const std::string& name, const fs::path& customDir = {}) {
+export int create(const std::string& name, const fs::path& customDir,
+                  EventStream& stream) {
     auto& p = Config::paths();
 
     if (name == "current") {
-        log::error("[xlings:subos] 'current' is reserved");
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::InvalidInput,
+            .message = "'current' is a reserved subos name",
+            .recoverable = false,
+        });
         return 1;
     }
 
     for (char c : name) {
         if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-') {
-            log::error("[xlings:subos] invalid name: {}", name);
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::InvalidInput,
+                .message = "invalid subos name: '" + name
+                           + "' (allowed: alphanumeric, underscore, dash)",
+                .recoverable = false,
+            });
             return 1;
         }
     }
@@ -91,7 +109,11 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     auto configPath = p.homeDir / ".xlings.json";
     auto json = read_config_json_(configPath);
     if (json.contains("subos") && json["subos"].contains(name)) {
-        log::error("[xlings:subos] '{}' already exists", name);
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::InvalidInput,
+            .message = "subos '" + name + "' already exists",
+            .recoverable = false,
+        });
         return 1;
     }
 
@@ -122,19 +144,25 @@ export int create(const std::string& name, const fs::path& customDir = {}) {
     json["subos"][name] = {{"dir", customDir.empty() ? "" : customDir.string()}};
     write_config_json_(configPath, json);
 
-    log::println("[xlings:subos] created '{}'", name);
-    log::println("  dir: {}", dir.string());
+    nlohmann::json payload;
+    payload["name"] = name;
+    payload["dir"]  = dir.string();
+    stream.emit(DataEvent{"subos_created", payload.dump()});
     return 0;
 }
 
-export int use(const std::string& name) {
+export int use(const std::string& name, EventStream& stream) {
     auto& p = Config::paths();
     auto configPath = p.homeDir / ".xlings.json";
     auto json = read_config_json_(configPath);
 
     if (!json.contains("subos") || !json["subos"].contains(name)) {
-        log::error("[xlings:subos] '{}' not found", name);
-        log::error("  run: xlings subos new {}", name);
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::NotFound,
+            .message = "subos '" + name + "' not found",
+            .recoverable = true,
+            .hint = "create it first: xlings subos new " + name,
+        });
         return 1;
     }
 
@@ -142,22 +170,33 @@ export int use(const std::string& name) {
     write_config_json_(configPath, json);
 
     auto dir = Config::subos_dir(name);
-    update_current_symlink_(p.homeDir, dir);
+    update_current_symlink_(stream, p.homeDir, dir);
 
-    log::println("[xlings:subos] switched to '{}' ({})", name, dir.string());
+    nlohmann::json payload;
+    payload["name"] = name;
+    payload["dir"]  = dir.string();
+    stream.emit(DataEvent{"subos_switched", payload.dump()});
     return 0;
 }
 
-export int remove(const std::string& name) {
+export int remove(const std::string& name, EventStream& stream) {
     if (name == "default") {
-        log::error("[xlings:subos] cannot remove the default subos");
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::InvalidInput,
+            .message = "cannot remove the 'default' subos",
+            .recoverable = false,
+        });
         return 1;
     }
 
     auto& p = Config::paths();
     if (p.activeSubos == name) {
-        log::error("[xlings:subos] cannot remove the active subos '{}'", name);
-        log::error("  switch first: xlings subos use default");
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::InvalidInput,
+            .message = "cannot remove the active subos '" + name + "'",
+            .recoverable = true,
+            .hint = "switch first: xlings subos use default",
+        });
         return 1;
     }
 
@@ -165,7 +204,11 @@ export int remove(const std::string& name) {
     auto json = read_config_json_(configPath);
 
     if (!json.contains("subos") || !json["subos"].contains(name)) {
-        log::error("[xlings:subos] '{}' not found", name);
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::NotFound,
+            .message = "subos '" + name + "' not found",
+            .recoverable = true,
+        });
         return 1;
     }
 
@@ -174,7 +217,11 @@ export int remove(const std::string& name) {
         std::error_code ec;
         fs::remove_all(dir, ec);
         if (ec) {
-            log::error("[xlings:subos] failed to remove {}: {}", dir.string(), ec.message());
+            stream.emit(ErrorEvent{
+                .code = ErrorCode::Permission,
+                .message = "failed to remove " + dir.string() + ": " + ec.message(),
+                .recoverable = false,
+            });
             return 1;
         }
     }
@@ -182,7 +229,9 @@ export int remove(const std::string& name) {
     json["subos"].erase(name);
     write_config_json_(configPath, json);
 
-    log::println("[xlings:subos] removed '{}'", name);
+    nlohmann::json payload;
+    payload["name"] = name;
+    stream.emit(DataEvent{"subos_removed", payload.dump()});
     return 0;
 }
 
@@ -224,7 +273,11 @@ int run_info_(const std::string& name, EventStream& stream) {
     auto target = name.empty() ? p.activeSubos : name;
     auto si = info(target);
     if (!si) {
-        log::error("[xlings:subos] '{}' not found", target);
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::NotFound,
+            .message = "subos '" + target + "' not found",
+            .recoverable = true,
+        });
         return 1;
     }
     nlohmann::json fieldsJson = nlohmann::json::array();
@@ -246,23 +299,31 @@ export int run(int argc, char* argv[], EventStream& stream) {
     if (sub == "rm") sub = "remove";
     if (sub == "i")  sub = "info";
 
+    auto usageError = [&](std::string_view detail) {
+        stream.emit(ErrorEvent{
+            .code = ErrorCode::InvalidInput,
+            .message = std::string(detail),
+            .recoverable = false,
+            .hint = "usage: xlings subos <new|use|list|ls|remove|rm|info|i> [name]",
+        });
+    };
+
     if (sub == "new") {
-        if (argc < 4) { log::error("usage: xlings subos new <name>"); return 1; }
-        return create(argv[3]);
+        if (argc < 4) { usageError("missing <name> for: xlings subos new"); return 1; }
+        return create(argv[3], {}, stream);
     }
     if (sub == "use") {
-        if (argc < 4) { log::error("usage: xlings subos use <name>"); return 1; }
-        return use(argv[3]);
+        if (argc < 4) { usageError("missing <name> for: xlings subos use"); return 1; }
+        return use(argv[3], stream);
     }
     if (sub == "list")   return run_list_(stream);
     if (sub == "remove") {
-        if (argc < 4) { log::error("usage: xlings subos remove|rm <name>"); return 1; }
-        return remove(argv[3]);
+        if (argc < 4) { usageError("missing <name> for: xlings subos remove|rm"); return 1; }
+        return remove(argv[3], stream);
     }
     if (sub == "info")   return run_info_(argc > 3 ? argv[3] : "", stream);
 
-    log::error("[xlings:subos] unknown subcommand: {}", sub);
-    log::error("usage: xlings subos <new|use|list|ls|remove|rm|info|i> [name]");
+    usageError("unknown subcommand: " + sub);
     return 1;
 }
 

@@ -146,6 +146,17 @@ static void dispatch_data_event(const DataEvent& e) {
         }
         ui::print_subos_list(entries);
     }
+    else if (e.kind == "subos_created") {
+        ui::print_subos_created(
+            json.value("name", ""), json.value("dir", ""));
+    }
+    else if (e.kind == "subos_switched") {
+        ui::print_subos_switched(
+            json.value("name", ""), json.value("dir", ""));
+    }
+    else if (e.kind == "subos_removed") {
+        ui::print_subos_removed(json.value("name", ""));
+    }
     else if (e.kind == "search_results") {
         std::vector<std::pair<std::string, std::string>> results;
         if (json.contains("results") && json["results"].is_array()) {
@@ -507,13 +518,28 @@ export int run(int argc, char* argv[]) {
 
     // Create EventStream for core→UI decoupling
     EventStream stream;
-    // Default TUI consumer for CLI mode (will be toggled in agent mode)
+    // Default TUI consumer for CLI mode (will be toggled in agent mode).
+    // ErrorEvent/LogEvent surfacing keeps capability-emitted errors visible
+    // to CLI users — without it, anything that emits an ErrorEvent (subos
+    // operations, repo helpers) would silently fail in CLI mode.
     int tui_listener = stream.on_event([&stream](const Event& e) {
         if (auto* d = std::get_if<DataEvent>(&e)) {
             dispatch_data_event(*d);
         }
-        if (auto* p = std::get_if<PromptEvent>(&e)) {
+        else if (auto* p = std::get_if<PromptEvent>(&e)) {
             handle_prompt(stream, *p);
+        }
+        else if (auto* er = std::get_if<ErrorEvent>(&e)) {
+            log::error("{}", er->message);
+            if (!er->hint.empty()) log::error("  {}", er->hint);
+        }
+        else if (auto* l = std::get_if<LogEvent>(&e)) {
+            switch (l->level) {
+                case LogLevel::debug: log::debug("{}", l->message); break;
+                case LogLevel::info:  log::info("{}",  l->message); break;
+                case LogLevel::warn:  log::warn("{}",  l->message); break;
+                case LogLevel::error: log::error("{}", l->message); break;
+            }
         }
     });
 
