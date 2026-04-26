@@ -54,7 +54,7 @@ std::string detect_platform() {
 }
 
 // Forward declaration for deferred install request processing
-int cmd_remove(const std::string& target, EventStream& stream);
+int cmd_remove(const std::string& target, bool yes, EventStream& stream);
 
 // === install command ===
 //
@@ -313,7 +313,7 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                     cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, stream, forceGlobal);
                 } else if (req.op == "remove") {
                     log::debug("removing sub-dependency: {}", req.target);
-                    cmd_remove(req.target, stream);
+                    cmd_remove(req.target, /*yes=*/true, stream);
                 }
             }
         },
@@ -335,11 +335,73 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
 }
 
 // === remove command ===
-int cmd_remove(const std::string& target, EventStream& stream) {
+//
+// yes: skip the interactive confirmation. Recursive calls from install hooks
+// (pkgmanager.remove inside an xpkg) always pass yes=true: the user already
+// approved the parent install, so the connected uninstall is implicit.
+// CLI-driven `xlings remove <pkg>` defaults to yes=false and bails on n.
+int cmd_remove(const std::string& target, bool yes, EventStream& stream) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::error("package index not available");
         return 1;
+    }
+
+    // Resolve up-front so the prompt and summary can show the canonical
+    // name + version + active subos. When the user did not pin a version,
+    // prefer the active one — catalog.resolve_target's default is the
+    // highest *declared* version, which may not be installed.
+    std::string displayName = target;
+    std::string displayVersion;
+    std::string subos = Config::paths().activeSubos;
+
+    std::string resolveTarget = target;
+    if (target.find('@') == std::string::npos) {
+        auto bareName = target.substr(target.rfind(':') + 1);
+        auto active = xvm::get_active_version(
+            Config::effective_workspace(), bareName);
+        if (!active.empty()) {
+            resolveTarget = target + "@" + active;
+        }
+    }
+    bool resolvedToDefiniteVersion = (resolveTarget.find('@') != std::string::npos);
+
+    auto match = catalog.resolve_target(resolveTarget, detect_platform());
+    if (match) {
+        displayName = match->canonicalName;
+        displayVersion = match->version;
+        // Only short-circuit "not installed" when the resolution is
+        // unambiguous (user pinned, or matches the active version).
+        // Otherwise the catalog may have picked the highest *declared*
+        // version, which can differ from what's actually installed —
+        // let installer.uninstall handle that path.
+        if (!match->installed && resolvedToDefiniteVersion) {
+            log::warn("{}@{} is not installed", displayName, displayVersion);
+            return 0;
+        }
+    }
+
+    nlohmann::json planPayload;
+    planPayload["subos"] = subos;
+    planPayload["name"] = displayName;
+    planPayload["version"] = displayVersion;
+    stream.emit(DataEvent{"remove_plan", planPayload.dump()});
+
+    if (!yes) {
+        std::string suffix = displayVersion.empty()
+            ? std::string{}
+            : "@" + displayVersion;
+        PromptEvent confirmReq;
+        confirmReq.id = "confirm_remove";
+        confirmReq.question = std::format(
+            "Remove {}{} from subos '{}' ?", displayName, suffix, subos);
+        confirmReq.options = {"y", "n"};
+        confirmReq.defaultValue = "n";
+        auto answer = stream.prompt(std::move(confirmReq));
+        if (answer != "y") {
+            log::println("cancelled");
+            return 0;
+        }
     }
 
     Installer installer(catalog);
@@ -349,7 +411,11 @@ int cmd_remove(const std::string& target, EventStream& stream) {
         return 1;
     }
 
-    stream.emit(DataEvent{"remove_summary", nlohmann::json{{"target", target}}.dump()});
+    nlohmann::json summaryPayload;
+    summaryPayload["subos"] = subos;
+    summaryPayload["name"] = displayName;
+    summaryPayload["version"] = displayVersion;
+    stream.emit(DataEvent{"remove_summary", summaryPayload.dump()});
     return 0;
 }
 
