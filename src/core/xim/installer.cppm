@@ -388,7 +388,8 @@ void detach_current_subos_(const std::string& target, const std::string& version
 
 void process_xvm_operations_(const PlanNode& node,
                              const std::filesystem::path& dataDir,
-                             mcpplibs::xpkg::PackageExecutor& executor) {
+                             mcpplibs::xpkg::PackageExecutor& executor,
+                             bool useAfterInstall) {
     auto xvm_ops = executor.xvm_operations();
     auto sysroot_include = Config::paths().subosDir / "usr" / "include";
     auto sysroot_lib = Config::paths().libDir;
@@ -439,9 +440,17 @@ void process_xvm_operations_(const PlanNode& node,
                 }
             }
 
-            // Activate and create shim for each added program
+            // Activate and create shim for each added program.
+            // Auto-activate only when no version is currently active for this
+            // program OR the caller passed useAfterInstall (`--use`). Otherwise
+            // preserve the user's existing choice. The shim is always
+            // (re-)created so the program is reachable on PATH once activated.
             if (type == "program") {
-                Config::workspace_mut()[op.name] = ver_key;
+                auto& ws = Config::workspace();
+                bool hasActive = ws.contains(op.name) && !ws.at(op.name).empty();
+                if (!hasActive || useAfterInstall) {
+                    Config::workspace_mut()[op.name] = ver_key;
+                }
                 if (std::filesystem::exists(xlings_bin)) {
                     std::string shim_name = op.name;
                     if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
@@ -506,7 +515,8 @@ bool run_config_hook_(const PlanNode& node,
                       const std::filesystem::path& dataDir,
                       mcpplibs::xpkg::PackageExecutor& executor,
                       mcpplibs::xpkg::ExecutionContext& ctx,
-                      std::function<void(const InstallStatus&)> onStatus) {
+                      std::function<void(const InstallStatus&)> onStatus,
+                      bool useAfterInstall) {
     if (!executor.has_hook(mcpplibs::xpkg::HookType::Config)) return true;
     if (onStatus) {
         onStatus({ node.name, InstallPhase::Configuring, 0.8f, "" });
@@ -517,7 +527,7 @@ bool run_config_hook_(const PlanNode& node,
         log::warn("config hook failed for {}: {}", node.name, hookResult.error);
         return false;
     }
-    process_xvm_operations_(node, dataDir, executor);
+    process_xvm_operations_(node, dataDir, executor, useAfterInstall);
     return true;
 }
 
@@ -677,14 +687,18 @@ public:
     explicit Installer(IndexManager& index) : index_(&index) {}
     explicit Installer(PackageCatalog& catalog) : catalog_(&catalog) {}
 
-    // Execute an install plan
+    // Execute an install plan.
+    // useAfterInstall: when true, force the installed program version to
+    // become the active one even if another version is currently active.
+    // Default behavior preserves the existing active version.
     std::expected<void, std::string>
     execute(const InstallPlan& plan,
             const DownloaderConfig& dlConfig,
             std::function<void(const InstallStatus&)> onStatus,
             InstallRequestHandler onInstallRequests = nullptr,
             DownloadProgressRenderer onRender = nullptr,
-            CancellationToken* cancel = nullptr) {
+            CancellationToken* cancel = nullptr,
+            bool useAfterInstall = false) {
 
         if (plan.has_errors()) {
             return std::unexpected(
@@ -1007,7 +1021,8 @@ public:
                     }
                     continue;
                 }
-            } else if (!detail_::run_config_hook_(node, dataDir, executor, ctx, onStatus)) {
+            } else if (!detail_::run_config_hook_(node, dataDir, executor, ctx,
+                                                  onStatus, useAfterInstall)) {
                 if (onStatus) {
                     onStatus({ node.name, InstallPhase::Failed, 0.0f,
                                "config hook failed" });

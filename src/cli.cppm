@@ -346,7 +346,15 @@ int install_from_project_config_(EventStream& stream) {
                     auto workspace = xvm::workspace_from_json(json["workspace"]);
                     auto targets = Config::workspace_install_targets(workspace);
                     if (!targets.empty()) {
-                        return xim::cmd_install(targets, true, false, stream);
+                        // Project-config install: the workspace file declares
+                        // which versions should be active in this subos, so
+                        // force-activate to keep workspace state in sync with
+                        // the config.
+                        return xim::cmd_install(targets, true, false, stream,
+                                                /*forceGlobal=*/false,
+                                                /*cancel=*/nullptr,
+                                                /*dryRun=*/false,
+                                                /*useAfterInstall=*/true);
                     }
                 }
             } catch (...) {
@@ -365,7 +373,11 @@ int install_from_project_config_(EventStream& stream) {
                 generate_xlings_json_(cur, workspace);
                 log::println("generated: {}", (cur / ".xlings.json").string());
                 auto targets = Config::workspace_install_targets(workspace);
-                return xim::cmd_install(targets, true, false, stream);
+                return xim::cmd_install(targets, true, false, stream,
+                                        /*forceGlobal=*/false,
+                                        /*cancel=*/nullptr,
+                                        /*dryRun=*/false,
+                                        /*useAfterInstall=*/true);
             }
         }
 
@@ -617,7 +629,10 @@ export int run(int argc, char* argv[]) {
             if (match("install")) h = SubHelp{
                 "install", "Install packages (e.g. xlings install gcc@15 node)",
                 { {"packages", "Package names with optional version"} },
-                { {"-g, --global", "Install to global scope (not project-local subos)"} },
+                {
+                    {"-g, --global", "Install to global scope (not project-local subos)"},
+                    {"-u, --use",    "Activate the installed version even if another version is currently active"},
+                },
             };
             else if (match("remove")) h = SubHelp{
                 "remove", "Remove a package",
@@ -748,6 +763,7 @@ export int run(int argc, char* argv[]) {
         .subcommand("install")
             .description("Install packages (e.g. xlings install gcc@15 node)")
             .option(cmdline::Option("global").short_name('g').help("Install to global scope (not project-local subos)"))
+            .option(cmdline::Option("use").short_name('u').help("Activate the installed version even if another version is currently active"))
             .arg("packages").help("Package names with optional version")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
@@ -760,7 +776,10 @@ export int run(int argc, char* argv[]) {
 
                 bool yes = args.is_flag_set("yes");
                 bool global = args.is_flag_set("global");
-                return xim::cmd_install(targets, yes, false, stream, global);
+                bool useAfter = args.is_flag_set("use");
+                return xim::cmd_install(targets, yes, false, stream, global,
+                                        /*cancel=*/nullptr, /*dryRun=*/false,
+                                        useAfter);
             })
 
         // remove

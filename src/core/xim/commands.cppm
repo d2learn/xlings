@@ -62,9 +62,15 @@ int cmd_remove(const std::string& target, bool yes, EventStream& stream);
 // data event but does NOT download or install anything. The capability layer
 // uses this to back the plan_install capability — clients can preflight
 // what would be installed without making changes.
+//
+// useAfterInstall (`--use`): force the installed version to become active
+// even when another version is already active. Default behavior preserves
+// the existing active version; this flag opts back into the legacy
+// "install also switches" behavior on a per-invocation basis.
 int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
                 EventStream& stream, bool forceGlobal = false,
-                CancellationToken* cancel = nullptr, bool dryRun = false) {
+                CancellationToken* cancel = nullptr, bool dryRun = false,
+                bool useAfterInstall = false) {
     auto& catalog = get_catalog();
     if (!catalog.is_loaded()) {
         log::info("package index not available, updating...");
@@ -221,8 +227,12 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
         auto db = Config::versions();
         for (auto& match : requestedMatches) {
             auto active = xvm::get_active_version(Config::effective_workspace(), match.name);
-            if (xvm::has_version(db, match.name, match.version) &&
-                active != match.version) {
+            // Only switch when nothing is active yet for this program OR the
+            // user passed --use to force activation. Otherwise preserve the
+            // existing active version. Pairs with the symmetric guard in
+            // installer.cppm process_xvm_operations_.
+            if ((active.empty() || useAfterInstall) &&
+                xvm::has_version(db, match.name, match.version)) {
                 auto useRet = xvm::cmd_use(match.name, match.version, stream);
                 if (useRet != 0) {
                     log::warn("failed to activate {}@{} in current subos",
@@ -241,7 +251,9 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto pending = plan.pending_count();
     auto allAlreadyInstalled = (pending == 0);
     if (allAlreadyInstalled) {
-        log::println("all packages already installed");
+        for (auto& m : requestedMatches) {
+            log::println("{}@{} is already installed", m.canonicalName, m.version);
+        }
     }
 
     // Show install plan with themed UI
@@ -338,19 +350,21 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
         },
         // Process deferred pkgmanager.install()/remove() requests synchronously
         // between install and config hooks so config can access sub-dependencies
-        [forceGlobal, &stream](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
+        [forceGlobal, useAfterInstall, &stream](const std::vector<mcpplibs::xpkg::InstallRequest>& reqs) {
             for (auto& req : reqs) {
                 if (req.op == "install") {
                     log::debug("installing sub-dependency: {}", req.target);
                     std::vector<std::string> subTargets = { req.target };
-                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, stream, forceGlobal);
+                    cmd_install(subTargets, /*yes=*/true, /*noDeps=*/false, stream,
+                                forceGlobal, /*cancel=*/nullptr, /*dryRun=*/false,
+                                useAfterInstall);
                 } else if (req.op == "remove") {
                     log::debug("removing sub-dependency: {}", req.target);
                     cmd_remove(req.target, /*yes=*/true, stream);
                 }
             }
         },
-        dlRenderer, cancel);
+        dlRenderer, cancel, useAfterInstall);
 
     if (!result) {
         log::error("install failed: {}", result.error());
@@ -793,11 +807,14 @@ int cmd_update(const std::string& target, bool yes, EventStream& stream) {
     }
 
     // Install the new version. cmd_install handles dependency resolution,
-    // download, hooks, and switches the active version on success. We pass
-    // yes=true because the user already confirmed the upgrade above (and
-    // hook-driven sub-installs should never re-prompt regardless).
+    // download, and hooks. We pass yes=true because the user already
+    // confirmed the upgrade above (and hook-driven sub-installs should
+    // never re-prompt regardless). useAfterInstall=true because update by
+    // definition moves the active pointer forward to the new version.
     std::vector<std::string> installTargets = { bareName + "@" + latest };
-    auto rc = cmd_install(installTargets, /*yes=*/true, /*noDeps=*/false, stream);
+    auto rc = cmd_install(installTargets, /*yes=*/true, /*noDeps=*/false, stream,
+                          /*forceGlobal=*/false, /*cancel=*/nullptr,
+                          /*dryRun=*/false, /*useAfterInstall=*/true);
     if (rc != 0) return rc;
 
     nlohmann::json summaryPayload;

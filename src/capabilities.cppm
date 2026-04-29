@@ -50,7 +50,7 @@ public:
         return {
             .name = "install_packages",
             .description = "Install one or more packages",
-            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"},"description":"Format: name, name@version, or namespace:name@version"},"yes":{"type":"boolean","description":"Auto-confirm without prompting"},"noDeps":{"type":"boolean","description":"Skip dependency installation"},"global":{"type":"boolean","description":"Install to global scope"}},"required":["targets"]})",
+            .inputSchema = R"({"type":"object","properties":{"targets":{"type":"array","items":{"type":"string"},"description":"Format: name, name@version, or namespace:name@version"},"yes":{"type":"boolean","description":"Auto-confirm without prompting"},"noDeps":{"type":"boolean","description":"Skip dependency installation"},"global":{"type":"boolean","description":"Install to global scope"},"useAfterInstall":{"type":"boolean","description":"Activate the installed version even if another version is currently active"}},"required":["targets"]})",
             .outputSchema = R"({"type":"object","properties":{"exitCode":{"type":"integer"}}})",
             .destructive = true,
         };
@@ -67,7 +67,9 @@ public:
         bool yes = json.value("yes", false);
         bool noDeps = json.value("noDeps", false);
         bool global = json.value("global", false);
-        return exit_result(xim::cmd_install(targets, yes, noDeps, stream, global, cancel));
+        bool useAfter = json.value("useAfterInstall", false);
+        return exit_result(xim::cmd_install(targets, yes, noDeps, stream, global,
+                                             cancel, /*dryRun=*/false, useAfter));
     }
 };
 
