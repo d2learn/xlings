@@ -128,6 +128,10 @@ printf '{}\n' > "$HOME_DIR/data/xim-index-repos/xim-indexrepos.json"
 STORE_DIR="$HOME_DIR/data/xpkgs/xim-x-rm-fixture"
 
 # ── install all three versions ───────────────────────────────────
+# `install` is no longer an implicit version-switch: once a version is active
+# in the current sub-OS, subsequent `install <name>@<other>` adds the payload
+# but preserves the active pointer. Explicitly `use` the highest after the
+# install loop so the rest of the test reflects "active was 3.0.0".
 for v in 1.0.0 2.0.0 3.0.0; do
   log "install rm-fixture@$v"
   RUN install "rm-fixture@$v" -y >/dev/null 2>&1 \
@@ -135,6 +139,8 @@ for v in 1.0.0 2.0.0 3.0.0; do
   [[ -f "$STORE_DIR/$v/VERSION" ]] \
     || fail "install marker missing: $STORE_DIR/$v/VERSION"
 done
+RUN use rm-fixture 3.0.0 >/dev/null 2>&1 \
+  || fail "use rm-fixture 3.0.0 failed"
 
 python3 - "$HOME_DIR" 1.0.0 2.0.0 3.0.0 <<'PY' || fail "post-install DB state wrong"
 import json, sys, pathlib
