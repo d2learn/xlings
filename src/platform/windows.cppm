@@ -257,6 +257,76 @@ namespace platform_impl {
         static constexpr auto info       = ">";
     };
 
+    // Atomically replace `dst` with the contents of `src`, even when `dst`
+    // is a currently running executable.
+    //
+    // Windows semantics: a running .exe is locked for delete and direct
+    // overwrite — but RENAME of a locked file is allowed. So the canonical
+    // pattern is "move old out of the way, then install new":
+    //   1. MoveFileEx(dst -> "<dst>.xlings.old")  — succeeds even when locked
+    //   2. CopyFile(src -> dst)                   — destination path is now
+    //                                                free, no lock conflict
+    //   3. DeleteFile(.old) best-effort, falling back to MOVEFILE_DELAY_UNTIL_REBOOT
+    //      if the file is still locked by the running process.
+    //
+    // Pattern used in production by Chrome auto-updater, VS Code,
+    // rustup self-update, etc.
+    //
+    // Returns true on success.
+    export bool atomic_replace_executable(const std::filesystem::path& src,
+                                          const std::filesystem::path& dst) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+
+        if (!fs::exists(src, ec) || ec) return false;
+
+        fs::create_directories(dst.parent_path(), ec);
+        ec.clear();
+
+        // Easy case: dst doesn't exist yet — just copy.
+        if (!fs::exists(dst, ec)) {
+            fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+            return !ec;
+        }
+        ec.clear();
+
+        auto old_path = dst;
+        old_path += ".xlings.old";
+
+        // Best-effort cleanup of a leftover .old (may fail if still locked).
+        if (fs::exists(old_path, ec)) {
+            ::DeleteFileW(old_path.wstring().c_str());
+            ec.clear();
+        }
+
+        // Step 1: rename live binary out of the way (works even if running).
+        if (!::MoveFileExW(dst.wstring().c_str(),
+                           old_path.wstring().c_str(),
+                           MOVEFILE_REPLACE_EXISTING)) {
+            return false;
+        }
+
+        // Step 2: copy new binary into the now-free dst path.
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            // Try to restore old binary so we don't leave the user broken.
+            ::MoveFileExW(old_path.wstring().c_str(),
+                          dst.wstring().c_str(),
+                          MOVEFILE_REPLACE_EXISTING);
+            return false;
+        }
+
+        // Step 3: best-effort cleanup. If the .old file is still locked
+        // (because the running process is mapping it), schedule for
+        // deletion at next reboot.
+        if (!::DeleteFileW(old_path.wstring().c_str())) {
+            ::MoveFileExW(old_path.wstring().c_str(), nullptr,
+                          MOVEFILE_DELAY_UNTIL_REBOOT);
+        }
+
+        return true;
+    }
+
 } // namespace platform_impl
 }
 
