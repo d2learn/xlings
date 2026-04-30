@@ -171,4 +171,115 @@ log "S6: doctor --fix removes orphan shim → exit 0"
 RUN self doctor --fix >/dev/null 2>&1 || fail "S6: doctor --fix should succeed"
 [[ ! -e "$SHIM" ]] || fail "S6: --fix should remove orphan shim"
 
-log "PASS: self doctor scenarios 1-6"
+# Reset state for payload-layer scenarios: re-install + ensure shim+workspace.
+RUN install doctor-fixture@1.0.0 -y >/dev/null 2>&1 \
+  || fail "reset: re-install before S7 failed"
+RUN use doctor-fixture 1.0.0 >/dev/null 2>&1 || fail "reset: use failed"
+[[ -e "$SHIM" ]] || fail "reset: shim should exist after re-install"
+
+# ── S7: broken payload (active version) → doctor reports broken ────
+log "S7: rm xpkgs payload while active → doctor reports broken"
+PAYLOAD_DIR="$HOME_DIR/data/xpkgs/xim-x-doctor-fixture/1.0.0"
+[[ -d "$PAYLOAD_DIR" ]] || fail "S7 setup: payload dir should exist"
+rm -rf "$PAYLOAD_DIR"
+
+out=$(RUN self doctor 2>&1) || rc=$?; rc=${rc:-0}
+[[ $rc -ne 0 ]] || fail "S7: doctor should exit non-zero on broken payload (got 0)"
+echo "$out" | grep -q "broken payload" \
+  || fail "S7: output should mention 'broken payload'; got:\n$out"
+echo "$out" | grep -q "active" \
+  || fail "S7: output should mark active version with [active] tag"
+
+# ── S8: --fix deregisters broken payload, clears workspace + shim ──
+log "S8: doctor --fix deregisters broken payload (last version) → exit 0"
+RUN self doctor --fix >/dev/null 2>&1 || fail "S8: doctor --fix should succeed"
+RUN self doctor >/dev/null 2>&1 || fail "S8: post-fix doctor should be clean"
+# After --fix on last version: workspace cleared, shim removed
+python3 - "$HOME_DIR" <<'PY' || fail "S8: workspace should not contain doctor-fixture"
+import json, sys, pathlib
+home = sys.argv[1]
+ws = json.loads(pathlib.Path(home, "subos/default/.xlings.json").read_text())
+assert "doctor-fixture" not in (ws.get("workspace") or {}), \
+    "S8: workspace should be cleared after --fix on last broken version"
+PY
+[[ ! -e "$SHIM" ]] || fail "S8: shim should be removed after --fix on last broken version"
+
+# ── Setup for alias-mode scenarios: a fixture with vdata.alias set ──
+# Inject a new fixture file. The catalog cache was warm from the earlier
+# scenarios and won't pick this up automatically — invalidate so `install`
+# rebuilds the index from disk and sees alias-fixture.lua.
+ALIAS_PKG="$LOCAL_INDEX_DIR/pkgs/d/alias-fixture.lua"
+mkdir -p "$(dirname "$ALIAS_PKG")"
+rm -f "$LOCAL_INDEX_DIR/.xlings-index-cache.json"
+rm -f "$HOME_DIR/data/xim-pkgindex/.xlings-index-cache.json" 2>/dev/null || true
+cat > "$ALIAS_PKG" <<'LUA'
+package = {
+    spec = "1",
+    name = "alias-fixture",
+    description = "fixture for alias-mode doctor checks",
+    type = "package",
+    archs = {"x86_64"},
+    xpm = {
+        linux   = { ["1.0.0"] = {} },
+        macosx  = { ["1.0.0"] = {} },
+        windows = { ["1.0.0"] = {} },
+    },
+}
+
+import("xim.libxpkg.pkginfo")
+import("xim.libxpkg.xvm")
+
+function install()
+    local bindir = path.join(pkginfo.install_dir(), "bin")
+    os.tryrm(pkginfo.install_dir())
+    os.mkdir(bindir)
+    -- Real binary that the alias points to: alias-real
+    io.writefile(path.join(bindir, "alias-real"),
+                 "#!/bin/sh\necho alias-real\n")
+    return true
+end
+
+function config()
+    -- alias mode: register alias-fixture with alias = "alias-real"
+    xvm.add("alias-fixture", {
+        bindir = path.join(pkginfo.install_dir(), "bin"),
+        alias  = "alias-real",
+    })
+    return true
+end
+
+function uninstall()
+    xvm.remove("alias-fixture")
+    return true
+end
+LUA
+
+log "S9: alias resolves in payload → doctor OK"
+RUN install alias-fixture@1.0.0 -y >/dev/null 2>&1 \
+  || fail "S9 setup: install alias-fixture failed"
+RUN self doctor >/dev/null 2>&1 \
+  || fail "S9: alias resolves correctly, doctor should be OK"
+
+# ── S10: alias's underlying binary missing → warning ───────────────
+log "S10: rm alias target → doctor reports warning (not error)"
+ALIAS_PAYLOAD="$HOME_DIR/data/xpkgs/xim-x-alias-fixture/1.0.0/bin/alias-real"
+rm -f "$ALIAS_PAYLOAD"
+# Reset rc — it leaks across scenarios via the `cmd || rc=$?` pattern, so a
+# successful exit here would otherwise still see the previous run's value.
+rc=0
+out=$(RUN self doctor 2>&1) || rc=$?
+echo "$out" | grep -q "alias unresolved" \
+  || fail "S10: should report 'alias unresolved' warning; got:\n$out"
+# Warning-level → exit 0 (no errors; could be intentional system command)
+[[ $rc -eq 0 ]] || fail "S10: alias warning alone should exit 0; got $rc"
+# --fix MUST NOT touch warning-level findings
+RUN self doctor --fix >/dev/null 2>&1
+python3 - "$HOME_DIR" <<'PY' || fail "S10: --fix should not touch alias warning"
+import json, sys, pathlib
+home = sys.argv[1]
+data = json.loads(pathlib.Path(home, ".xlings.json").read_text())
+vers = (data.get("versions") or {}).get("alias-fixture", {}).get("versions", {})
+assert "1.0.0" in vers, "S10: alias-fixture@1.0.0 should remain registered (warning is non-actionable)"
+PY
+
+log "PASS: self doctor scenarios 1-10"
