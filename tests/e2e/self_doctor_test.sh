@@ -177,32 +177,64 @@ RUN install doctor-fixture@1.0.0 -y >/dev/null 2>&1 \
 RUN use doctor-fixture 1.0.0 >/dev/null 2>&1 || fail "reset: use failed"
 [[ -e "$SHIM" ]] || fail "reset: shim should exist after re-install"
 
-# ── S7: broken payload (active version) → doctor reports broken ────
-log "S7: rm xpkgs payload while active → doctor reports broken"
+# ── S7: broken payload (active version) → doctor reports broken + hint ─
+log "S7: rm xpkgs payload while active → doctor reports broken + actionable hint"
 PAYLOAD_DIR="$HOME_DIR/data/xpkgs/xim-x-doctor-fixture/1.0.0"
 [[ -d "$PAYLOAD_DIR" ]] || fail "S7 setup: payload dir should exist"
 rm -rf "$PAYLOAD_DIR"
 
-out=$(RUN self doctor 2>&1) || rc=$?; rc=${rc:-0}
+rc=0
+out=$(RUN self doctor 2>&1) || rc=$?
 [[ $rc -ne 0 ]] || fail "S7: doctor should exit non-zero on broken payload (got 0)"
 echo "$out" | grep -q "broken payload" \
   || fail "S7: output should mention 'broken payload'; got:\n$out"
 echo "$out" | grep -q "active" \
   || fail "S7: output should mark active version with [active] tag"
+echo "$out" | grep -q "xlings remove doctor-fixture@1.0.0" \
+  || fail "S7: output should include the remediation command; got:\n$out"
 
-# ── S8: --fix deregisters broken payload, clears workspace + shim ──
-log "S8: doctor --fix deregisters broken payload (last version) → exit 0"
-RUN self doctor --fix >/dev/null 2>&1 || fail "S8: doctor --fix should succeed"
-RUN self doctor >/dev/null 2>&1 || fail "S8: post-fix doctor should be clean"
-# After --fix on last version: workspace cleared, shim removed
-python3 - "$HOME_DIR" <<'PY' || fail "S8: workspace should not contain doctor-fixture"
+# ── S8: --fix MUST NOT touch broken-payload state (doctor never modifies
+#       payload metadata). Workspace + shim + DB entry must be unchanged
+#       compared to S7. The hint guides users to manual remove+install.
+log "S8: doctor --fix on broken payload → does NOT deregister; only re-prints hint"
+rc=0
+out=$(RUN self doctor --fix 2>&1) || rc=$?
+[[ $rc -ne 0 ]] || fail "S8: --fix should still exit non-zero when broken remains (got 0)"
+echo "$out" | grep -q "broken payload" \
+  || fail "S8: --fix output should still report broken payload"
+echo "$out" | grep -q "xlings remove doctor-fixture@1.0.0" \
+  || fail "S8: --fix output should still print remediation command"
+
+# Confirm doctor preserved metadata (workspace + DB entry + shim file).
+python3 - "$HOME_DIR" <<'PY' || fail "S8: --fix must NOT modify versions DB"
 import json, sys, pathlib
 home = sys.argv[1]
+data = json.loads(pathlib.Path(home, ".xlings.json").read_text())
+assert "doctor-fixture" in (data.get("versions") or {}), \
+    "S8: --fix must NOT remove doctor-fixture from versions DB"
 ws = json.loads(pathlib.Path(home, "subos/default/.xlings.json").read_text())
-assert "doctor-fixture" not in (ws.get("workspace") or {}), \
-    "S8: workspace should be cleared after --fix on last broken version"
+assert (ws.get("workspace") or {}).get("doctor-fixture") == "1.0.0", \
+    "S8: --fix must NOT clear workspace pointer"
 PY
-[[ ! -e "$SHIM" ]] || fail "S8: shim should be removed after --fix on last broken version"
+[[ -e "$SHIM" ]] || fail "S8: --fix must NOT remove shim file (only hints user to remove+install)"
+
+# Note on recovery: actually performing the remove+install hinted by doctor
+# may currently hit limitations in xlings's `install`/`remove` paths when the
+# DB entry exists but the payload is gone (catalog reports not-installed →
+# `remove` short-circuits without cleaning DB; `install` then sees DB-says-
+# installed and skips the install hook). Improving that recovery flow is
+# tracked separately and intentionally not part of this doctor PR — doctor's
+# job ends at "diagnose + suggest". The test stops at the diagnose
+# assertions above.
+
+# Restore the payload directly on disk so the next scenarios start from a
+# clean doctor-fixture state. Doctor itself wouldn't (and shouldn't) do this;
+# we're acting as the user-with-the-original-tarball here.
+mkdir -p "$PAYLOAD_DIR/bin"
+printf '#!/bin/sh\necho doctor-fixture\n' > "$PAYLOAD_DIR/bin/doctor-fixture"
+chmod +x "$PAYLOAD_DIR/bin/doctor-fixture" 2>/dev/null
+RUN self doctor >/dev/null 2>&1 \
+  || fail "post-S8 reset: doctor should be clean again after restoring payload"
 
 # ── Setup for alias-mode scenarios: a fixture with vdata.alias set ──
 # Inject a new fixture file. The catalog cache was warm from the earlier
@@ -282,4 +314,4 @@ vers = (data.get("versions") or {}).get("alias-fixture", {}).get("versions", {})
 assert "1.0.0" in vers, "S10: alias-fixture@1.0.0 should remain registered (warning is non-actionable)"
 PY
 
-log "PASS: self doctor scenarios 1-10"
+log "PASS: self doctor scenarios 1-10 (S8 split into S8 fix-noop + alias S9/S10)"

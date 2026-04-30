@@ -16,90 +16,44 @@ namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
-// Doctor's representation of a "broken payload" finding, kept at namespace
-// scope so std::vector can take it as element type — C++23 modules forbid
-// TU-local types (function-local structs) crossing into exported templates.
-struct DoctorBrokenEntry_ {
-    std::string name;
-    std::string version;
-    std::string detail;
-    bool is_active;
-};
-
-// Deregister a single (name, version) entry from versions DB and reconcile
-// the workspace pointer + shim file accordingly. Used by `doctor --fix`
-// when a broken-payload entry can no longer be made functional and must
-// just be cleared out.
-//
-// Mirrors the survivor-aware logic that PR #237 wired into the uninstall
-// path: drop the version; if survivors remain and the dropped one was
-// active, auto-switch active to the highest remaining semver; if no
-// survivors, clear the workspace entry and remove the shim file.
-static void deregister_broken_version_(const std::string& name,
-                                       const std::string& version) {
-    auto& p = Config::paths();
-
-    xvm::remove_version(Config::versions_mut(), name, version);
-
-    auto& wsm = Config::workspace_mut();
-    auto wit = wsm.find(name);
-    bool was_active = (wit != wsm.end() && wit->second == version);
-
-    auto dit = Config::versions_mut().find(name);
-    bool survivors = (dit != Config::versions_mut().end()
-                      && !dit->second.versions.empty());
-
-    if (!survivors) {
-        wsm.erase(name);
-#ifdef _WIN32
-        auto shim_path = p.binDir / (name + ".exe");
-#else
-        auto shim_path = p.binDir / name;
-#endif
-        std::error_code ec;
-        if (fs::exists(shim_path, ec) || fs::is_symlink(shim_path, ec)) {
-            ec.clear();
-            fs::remove(shim_path, ec);
-        }
-    } else if (was_active) {
-        wsm[name] = xvm::pick_highest_version(dit->second.versions);
-    }
-    Config::save_versions();
-    Config::save_workspace();
-}
-
 // `xlings self doctor` — verify the consistency of the program-registration
-// state across xlings's three layers:
+// state across xlings's state layers, and offer to repair the
+// metadata-layer drift that's safe to mend in place.
 //
-//   [L1 workspace]   ws[name] = "<version>"
-//   [L3 shim file]   <binDir>/<name>
-//   [L4 payload]     vdata.path directory + actual executable inside it
+// State layers:
+//   [L1 workspace]    ws[name] = "<version>"
+//   [L2 versions DB]  db[name].versions[<version>].path = "<bindir>"
+//   [L3 shim file]    <binDir>/<name>
+//   [L4 payload]      vdata.path directory + the actual executable inside it
 //
-// Drift between any two layers manifests as confusing user-facing failures:
-//   - L1 ↔ L3 drift: workspace says active, but PATH has no entry → "command
-//     not found" even though `xlings list` reports the version as installed.
-//   - L1 ↔ L4 / L4 ↔ L5 drift: workspace + shim look fine, but the actual
-//     binary inside xpkgs/<repo>-x-<name>/<version>/ is missing or corrupt
-//     → shim_dispatch can't resolve an executable.
+// Checks (mixed scope is intentional, see each item):
+//   1. `missing shim` — for every program in the active workspace, its
+//      shim file at <binDir>/<name> must exist.  Scope: active versions
+//      only (workspace by definition only references the active one per
+//      name).
+//   2. `orphan shim` — for every program-typed shim under binDir, the
+//      active workspace must have a non-empty entry for that name.
+//      Scope: active.
+//   3. `broken payload` — for every (name, version) entry in the versions
+//      DB, the registered payload must resolve to an executable on disk.
+//      Scope: ALL versions (active + inactive). Reported now, not lazily,
+//      so users get a heads-up before they `xlings use` an inactive
+//      version that is actually broken.
 //
-// Checks:
-//   1. Every workspace program has its shim file (`missing shim`).
-//   2. Every program-typed shim under binDir has a workspace entry
-//      (`orphan shim`).
-//   3. Every (name, version) entry in versions DB has a resolvable
-//      executable on disk (`broken payload`):
-//        - direct mode (no alias): resolve_executable(name, vdata.path).
-//        - alias  mode:           resolve_executable(first-token(alias[0]),
-//                                                    vdata.path).
-//          Absolute-path aliases are treated as intentionally external and
-//          skipped; relative aliases that don't resolve in the payload are
-//          downgraded to a `warning` because they MIGHT be system commands.
-//
-// With `--fix`:
-//   - missing shim → recreate from the bootstrap binary
-//   - orphan shim  → remove the file
-//   - broken payload (error level) → deregister the version (survivor-aware)
-//   - alias warning → not auto-fixed (could be intentional external command)
+// `--fix` policy (deliberately conservative):
+//   - missing shim   → recreate from the bootstrap binary  (safe, local)
+//   - orphan shim    → remove the file                     (safe, local)
+//   - broken payload → DO NOTHING.  Print an actionable hint with the
+//                      exact remove + install commands the user should
+//                      run.  doctor never deletes payload metadata or
+//                      pulls from the network.  Why: a "fix" that wipes
+//                      the DB entry but doesn't reinstall would leave
+//                      the user in a still-unusable state, and an auto
+//                      `remove + install` would silently touch the
+//                      network (failure-prone) and rerun install hooks
+//                      (side effects).  The user is the right party to
+//                      decide that.
+//   - alias warning  → not auto-fixed (could be intentional external).
 export int cmd_doctor(EventStream& stream, bool fix) {
     auto& p   = Config::paths();
     auto db   = Config::versions();
@@ -204,10 +158,31 @@ export int cmd_doctor(EventStream& stream, bool fix) {
     // shim_dispatch uses at runtime so doctor's verdict matches what the
     // user will actually experience when they invoke the shim.
     //
-    // Versions that aren't fixable here are deregistered with the same
-    // survivor-aware semantics as the uninstall path.
+    // Scope: ALL versions (active + inactive) — heads-up before users
+    // `xlings use` an inactive version that's already broken.
+    //
+    // Repair policy: doctor reports broken payloads but never repairs
+    // them. Each finding is followed by a copy-pasteable remediation
+    // command. See the policy comment on cmd_doctor for the rationale.
     auto home_str = p.homeDir.string();
-    std::vector<DoctorBrokenEntry_> to_deregister;
+
+    auto report_broken_payload = [&](const std::string& name,
+                                     const std::string& version,
+                                     std::string detail) {
+        ++broken;
+        auto wit = ws.find(name);
+        bool is_active = (wit != ws.end() && wit->second == version);
+        std::string label = is_active ? "✗ broken payload [active]"
+                                      : "✗ broken payload";
+        add_field(label, std::move(detail));
+        // Actionable remediation, exactly as the user should run it.
+        // doctor never runs this for them: remove + install touches the
+        // network, reruns install hooks, and can fail mid-way leaving a
+        // worse state than just deregistering. Manual is safer.
+        add_field("  → run", std::format(
+            "xlings remove {}@{} && xlings install {}@{}",
+            name, version, name, version));
+    };
 
     for (auto& [name, vinfo] : db) {
         if (vinfo.type != "program") continue;
@@ -219,15 +194,8 @@ export int cmd_doctor(EventStream& stream, bool fix) {
 
             // L4: payload directory must exist.
             if (!fs::is_directory(expanded, ec)) {
-                ++broken;
-                auto wit = ws.find(name);
-                bool is_active = (wit != ws.end() && wit->second == version);
-                std::string label = is_active ? "✗ broken payload [active]"
-                                              : "✗ broken payload";
-                std::string detail = std::format(
-                    "{}@{} path {} missing", name, version, expanded);
-                if (fix) to_deregister.push_back({name, version, detail, is_active});
-                add_field(label, std::move(detail));
+                report_broken_payload(name, version, std::format(
+                    "{}@{} path {} missing", name, version, expanded));
                 continue;
             }
 
@@ -237,38 +205,44 @@ export int cmd_doctor(EventStream& stream, bool fix) {
             if (!alias_mode) {
                 auto exe = xvm::resolve_executable(name, vdata.path, home_str);
                 if (!exe.empty()) continue;  // OK
-                ++broken;
-                auto wit = ws.find(name);
-                bool is_active = (wit != ws.end() && wit->second == version);
-                std::string label = is_active ? "✗ broken payload [active]"
-                                              : "✗ broken payload";
-                std::string detail = std::format(
+                report_broken_payload(name, version, std::format(
                     "{}@{} executable '{}' not found in {}",
-                    name, version, name, expanded);
-                if (fix) to_deregister.push_back({name, version, detail, is_active});
-                add_field(label, std::move(detail));
+                    name, version, name, expanded));
                 continue;
             }
 
-            // Alias mode: parse the first token (the command itself).
+            // Alias mode: best-effort coverage. Parse the first token (the
+            // command itself); absolute-path aliases are intentionally
+            // external and skipped; relative aliases that don't resolve
+            // locally are downgraded to a warning because they MIGHT be
+            // system commands found via the runtime PATH.
+            //
+            // TODO(self-doctor): strengthen alias-mode handling. Known
+            // limitations:
+            //   - `${XLINGS_HOME}` placeholders in alias_prog aren't
+            //     expanded before is_absolute()/resolve_executable() —
+            //     rare in practice but a real coverage gap.
+            //   - only alias[0] is inspected (matches runtime today; if
+            //     multi-element fallback chains ever land they should be
+            //     covered too).
+            //   - "intentional system command" vs "misconfiguration"
+            //     can't be told apart from inside doctor — users see
+            //     warning either way. Acceptable for now since false-
+            //     positive on alias is bounded by warning severity (no
+            //     error, no exit-1, --fix doesn't touch).
+            // For now the alias branch is a permissive heuristic: when
+            // in doubt we skip rather than emit a false `broken payload`
+            // error.
             const auto& alias_cmd = vdata.alias[0];
             auto sp = alias_cmd.find(' ');
             std::string alias_prog = (sp == std::string::npos)
                 ? alias_cmd : alias_cmd.substr(0, sp);
 
-            // Absolute-path alias: intentionally external (e.g.
-            // /usr/bin/some-cmd, C:\Windows\System32\cmd.exe). Skip.
             if (fs::path(alias_prog).is_absolute()) continue;
 
             auto exe = xvm::resolve_executable(alias_prog, vdata.path, home_str);
             if (!exe.empty()) continue;  // resolved within payload — OK
 
-            // Relative alias name not resolvable in payload. May still work
-            // at runtime if `alias_prog` is a system command found via the
-            // process PATH (e.g. cmd.exe, /usr/bin/* in PATH), so report at
-            // warning severity rather than error. --fix does not act on
-            // these — too aggressive for a state we can't be 100% sure is
-            // broken.
             ++warnings;
             std::string detail = std::format(
                 "{}@{} alias '{}' not resolvable in {} (may be a system command)",
@@ -277,14 +251,9 @@ export int cmd_doctor(EventStream& stream, bool fix) {
         }
     }
 
-    // Apply --fix deregistrations after the scan so we don't mutate the DB
-    // mid-iteration above.
-    if (fix && !to_deregister.empty()) {
-        for (auto& e : to_deregister) {
-            deregister_broken_version_(e.name, e.version);
-            ++healed;
-        }
-    }
+    // Note: there is intentionally no --fix loop for broken payloads here.
+    // Hints inline above each broken finding tell the user exactly what
+    // to run.
 
     int issues = missing + orphans + broken;
     if (issues == 0 && warnings == 0) {
@@ -296,8 +265,17 @@ export int cmd_doctor(EventStream& stream, bool fix) {
         if (orphans  > 0) add_field("orphan shims",    std::to_string(orphans));
         if (broken   > 0) add_field("broken payloads", std::to_string(broken));
         if (warnings > 0) add_field("warnings",        std::to_string(warnings));
-        if (fix) add_field("healed", std::to_string(healed), true);
-        else if (issues > 0) add_field("hint", "rerun with `--fix` to repair", true);
+        if (fix) {
+            if (healed > 0) add_field("healed", std::to_string(healed), true);
+            if (broken > 0) add_field("hint",
+                "broken payloads not auto-fixed — run the listed remove+install commands",
+                true);
+        } else {
+            if (missing > 0 || orphans > 0)
+                add_field("hint", "rerun with `--fix` to repair shim-layer issues", true);
+            if (broken > 0)
+                add_field("hint", "broken payloads: manually run the listed remove+install commands", true);
+        }
     }
 
     nlohmann::json payload;
