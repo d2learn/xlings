@@ -12,6 +12,8 @@ import xlings.platform;
 import xlings.core.profile;
 import xlings.runtime;
 import xlings.core.utils;
+import xlings.core.xvm.types;
+import xlings.core.xvm.db;
 
 namespace xlings::xself {
 
@@ -179,6 +181,139 @@ static int cmd_migrate() {
     return 0;
 }
 
+// `xlings self doctor` — verify the workspace ↔ shim file invariant.
+//
+// Background: every program registered in the active workspace must have a
+// corresponding shim at `<binDir>/<name>` (the file that gets dispatched
+// through the bootstrap multiplexer). The two layers — workspace pointer
+// (logical) and shim file (physical) — must stay in sync, otherwise users
+// see "command not found" for a program their workspace says is active.
+//
+// Doctor verifies:
+//   1. Every program in workspace has its shim file present (and report
+//      missing ones).
+//   2. Every program-typed shim under binDir has a workspace entry (and
+//      report orphans).
+//
+// With `--fix`, it self-heals: missing shims are recreated from the
+// bootstrap binary; orphan shims are deleted.
+static int cmd_doctor(EventStream& stream, bool fix) {
+    auto& p   = Config::paths();
+    auto db   = Config::versions();
+    auto ws   = Config::effective_workspace();
+
+#ifdef _WIN32
+    constexpr std::string_view shim_ext = ".exe";
+    auto xlings_bin = p.homeDir / "bin" / "xlings.exe";
+#else
+    constexpr std::string_view shim_ext = "";
+    auto xlings_bin = p.homeDir / "bin" / "xlings";
+#endif
+    if (!fs::exists(xlings_bin)) {
+        xlings_bin = p.homeDir / "xlings";
+    }
+
+    auto shim_filename = [&](const std::string& name) {
+        std::string fn = name;
+        if (!shim_ext.empty() && !fn.ends_with(shim_ext)) fn += shim_ext;
+        return fn;
+    };
+
+    nlohmann::json fields = nlohmann::json::array();
+    auto add_field = [&](std::string_view label, std::string value, bool hl = false) {
+        fields.push_back({{"label", std::string(label)},
+                          {"value", std::move(value)},
+                          {"highlight", hl}});
+    };
+
+    int missing = 0;
+    int orphans = 0;
+    int healed  = 0;
+
+    // Check 1: every workspace program has its shim.
+    for (auto& [name, version] : ws) {
+        if (version.empty()) continue;
+        auto* vi = xvm::get_vinfo(db, name);
+        if (!vi || vi->type != "program") continue;
+
+        auto shim_path = p.binDir / shim_filename(name);
+        if (fs::exists(shim_path) || fs::is_symlink(shim_path)) continue;
+
+        ++missing;
+        std::string detail = std::format("workspace[{}]={} but {} missing",
+                                         name, version, shim_path.string());
+        if (fix && fs::exists(xlings_bin)) {
+            std::error_code ec;
+            fs::create_directories(p.binDir, ec);
+            auto r = create_shim(xlings_bin, shim_path);
+            if (r != LinkResult::Failed) {
+                ++healed;
+                detail += " — recreated";
+            } else {
+                detail += " — recreate failed";
+            }
+        }
+        add_field("✗ missing shim", std::move(detail));
+    }
+
+    // Check 2: orphan shims (program shim file present, workspace doesn't
+    // know about it). Only consider names that are registered as type
+    // "program" in the version DB — random files under binDir aren't ours.
+    if (fs::exists(p.binDir)) {
+        for (auto& entry : platform::dir_entries(p.binDir)) {
+            std::error_code ec;
+            if (!entry.is_regular_file(ec) && !entry.is_symlink(ec)) continue;
+            auto fname = entry.path().filename().string();
+            std::string base = fname;
+            if (!shim_ext.empty() && base.ends_with(shim_ext)) {
+                base = base.substr(0, base.size() - shim_ext.size());
+            }
+
+            auto* vi = xvm::get_vinfo(db, base);
+            if (!vi || vi->type != "program") continue;
+
+            auto wit = ws.find(base);
+            bool active_present = (wit != ws.end() && !wit->second.empty());
+            if (active_present) continue;
+
+            ++orphans;
+            std::string detail = std::format(
+                "{} exists but workspace has no active version for {}",
+                entry.path().string(), base);
+            if (fix) {
+                ec.clear();
+                fs::remove(entry.path(), ec);
+                if (!ec) {
+                    ++healed;
+                    detail += " — removed";
+                } else {
+                    detail += " — remove failed";
+                }
+            }
+            add_field("✗ orphan shim", std::move(detail));
+        }
+    }
+
+    int issues = missing + orphans;
+    if (issues == 0) {
+        add_field("status", "OK — workspace and shim files are consistent", true);
+    } else {
+        add_field("missing shims", std::to_string(missing));
+        add_field("orphan shims",  std::to_string(orphans));
+        if (fix) add_field("healed", std::to_string(healed), true);
+        else     add_field("hint", "rerun with `--fix` to repair", true);
+    }
+
+    nlohmann::json payload;
+    payload["title"]  = "xlings self doctor";
+    payload["fields"] = std::move(fields);
+    stream.emit(DataEvent{"info_panel", payload.dump()});
+
+    // Exit non-zero only when issues remain after the (optional) fix pass.
+    int unresolved = issues - (fix ? healed : 0);
+    return unresolved == 0 ? 0 : 1;
+}
+
 static int cmd_help(EventStream& stream) {
     nlohmann::json payload;
     payload["name"] = "self";
@@ -191,6 +326,7 @@ static int cmd_help(EventStream& stream) {
         {{"name", "config"},   {"desc", "Show configuration details"}},
         {{"name", "clean"},    {"desc", "Remove cache + gc orphaned packages (--dry-run)"}},
         {{"name", "migrate"},  {"desc", "Migrate old layout to subos/default"}},
+        {{"name", "doctor"},   {"desc", "Verify workspace/shim consistency (--fix to repair)"}},
     });
     stream.emit(DataEvent{"help", payload.dump()});
     return 0;
@@ -207,6 +343,13 @@ export int run(int argc, char* argv[], EventStream& stream) {
         return cmd_clean(dryRun);
     }
     if (action == "migrate") return cmd_migrate();
+    if (action == "doctor") {
+        bool fix = false;
+        for (int i = 3; i < argc; ++i) {
+            if (std::string(argv[i]) == "--fix") { fix = true; break; }
+        }
+        return cmd_doctor(stream, fix);
+    }
     return cmd_help(stream);
 }
 
