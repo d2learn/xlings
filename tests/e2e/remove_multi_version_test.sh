@@ -126,6 +126,7 @@ printf '{}\n' > "$HOME_DIR/data/xim-index-repos/xim-indexrepos.json"
 # The fixture repo is registered as name "xim" by write_home_config, so the
 # canonical store prefix is "xim-x-".
 STORE_DIR="$HOME_DIR/data/xpkgs/xim-x-rm-fixture"
+SHIM_PATH="$HOME_DIR/subos/default/bin/rm-fixture"
 
 # ── install all three versions ───────────────────────────────────
 # `install` is no longer an implicit version-switch: once a version is active
@@ -141,6 +142,10 @@ for v in 1.0.0 2.0.0 3.0.0; do
 done
 RUN use rm-fixture 3.0.0 >/dev/null 2>&1 \
   || fail "use rm-fixture 3.0.0 failed"
+
+# Sanity: the per-program shim exists in subos/default/bin after install+use.
+# Subsequent scenarios assert on its survival across remove operations.
+[[ -e "$SHIM_PATH" ]] || fail "setup: shim should exist at $SHIM_PATH after install"
 
 python3 - "$HOME_DIR" 1.0.0 2.0.0 3.0.0 <<'PY' || fail "post-install DB state wrong"
 import json, sys, pathlib
@@ -174,6 +179,12 @@ assert active == "2.0.0", \
     f"S1: active should auto-switch to highest remaining (2.0.0); got {active!r}"
 PY
 
+# Active was switched to 2.0.0 by remove; the shim must still be on PATH so
+# the new active version is actually invokable. Pre-fix, this shim was being
+# eagerly deleted before the survivor check ran, leaving "command not found".
+[[ -e "$SHIM_PATH" ]] \
+  || fail "S1: shim must survive (workspace switched to 2.0.0); was eagerly deleted"
+
 # ── Scenario 2: remove specific non-active 1.0.0 → active still 2.0.0 ──────
 log "Scenario 2: remove rm-fixture@1.0.0 (non-active)"
 RUN remove rm-fixture@1.0.0 -y >/dev/null 2>&1 || fail "remove rm-fixture@1.0.0 failed"
@@ -195,6 +206,10 @@ assert active == "2.0.0", \
     f"S2: active must remain 2.0.0 after removing non-active 1.0.0; got {active!r}"
 PY
 
+# Non-active removal must not touch the shim either.
+[[ -e "$SHIM_PATH" ]] \
+  || fail "S2: shim must survive when removing a non-active version"
+
 # ── Scenario 3: remove the last remaining version → package entry fully gone ──
 log "Scenario 3: remove rm-fixture (last remaining version)"
 RUN remove rm-fixture -y >/dev/null 2>&1 || fail "remove rm-fixture (last) failed"
@@ -212,5 +227,9 @@ ws = json.loads(pathlib.Path(home, "subos/default/.xlings.json").read_text())
 assert "rm-fixture" not in (ws.get("workspace") or {}), \
     "S3: rm-fixture should be cleared from workspace"
 PY
+
+# Last version gone → shim should be removed too (no remaining target to dispatch to).
+[[ ! -e "$SHIM_PATH" ]] \
+  || fail "S3: shim should be removed when the last version is uninstalled"
 
 log "PASS: remove-multi-version scenarios 1, 2, 3"
