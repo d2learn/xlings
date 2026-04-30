@@ -2,6 +2,10 @@ export module xlings.core.xself.doctor;
 
 import std;
 import xlings.core.xself.init;   // create_shim, LinkResult
+// COMPAT(0.4.8 → drop in 0.6.0): legacy alias names + safety predicate.
+// When the compat module is removed, delete this import and the
+// "Check 2.5: legacy alias shims" block below.
+import xlings.core.xself.compat_0_4_8;
 
 import xlings.core.config;
 import xlings.libs.json;
@@ -151,6 +155,42 @@ export int cmd_doctor(EventStream& stream, bool fix) {
                 }
             }
             add_field("✗ orphan shim", std::move(detail));
+        }
+    }
+
+    // COMPAT(0.4.8 → drop in 0.6.0): Check 2.5 — legacy alias shims
+    // (xim/xvm/xself/xsubos/xinstall).
+    //
+    // Names + predicate are owned by xself::compat. Doctor differs from
+    // the silent cleanup helper only in that it reports each finding and
+    // gates removal on `--fix`. Both share the safety predicate so they
+    // agree on what counts as "safe to remove".
+    //
+    // When the compat module is removed, delete this entire block.
+    if (fs::exists(p.binDir)) {
+        std::error_code bec;
+        auto canonical_bootstrap = fs::weakly_canonical(xlings_bin, bec);
+        for (auto alias : compat::LEGACY_ALIAS_NAMES) {
+            auto path = p.binDir / shim_filename(std::string(alias));
+            if (!compat::is_legacy_alias_symlink_to_bootstrap(path,
+                    canonical_bootstrap)) continue;
+
+            ++orphans;
+            std::string detail = std::format(
+                "{} is a leftover symlink from older xlings (alias `{}` "
+                "removed in 0.4.8)",
+                path.string(), alias);
+            if (fix) {
+                std::error_code ec;
+                fs::remove(path, ec);
+                if (!ec) {
+                    ++healed;
+                    detail += " — removed";
+                } else {
+                    detail += " — remove failed";
+                }
+            }
+            add_field("✗ legacy alias shim", std::move(detail));
         }
     }
 

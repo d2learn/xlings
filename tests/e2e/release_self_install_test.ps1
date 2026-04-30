@@ -36,10 +36,15 @@ $INSTALLED_HOME = Join-Path $INSTALL_USER '.xlings'
 if (-not (Test-Path "$INSTALLED_HOME\bin\xlings.exe")) { Fail "installed home missing bin\xlings.exe" }
 if (-not (Test-Path "$INSTALLED_HOME\subos\current")) { Fail "installed home missing subos\current link" }
 
-$shims = @('xlings.exe', 'xim.exe', 'xsubos.exe', 'xself.exe')
-foreach ($s in $shims) {
-    if (-not (Test-Path "$INSTALLED_HOME\subos\default\bin\$s")) {
-        Fail "shim $s missing after self install"
+# 0.4.8 collapsed to a single canonical entry point. The xim/xvm/xself/
+# xsubos/xinstall shims were removed (see src/core/xself/compat_0_4_8.cppm).
+if (-not (Test-Path "$INSTALLED_HOME\subos\default\bin\xlings.exe")) {
+    Fail "shim xlings.exe missing after self install"
+}
+$legacy = @('xim.exe', 'xvm.exe', 'xsubos.exe', 'xself.exe', 'xinstall.exe')
+foreach ($s in $legacy) {
+    if (Test-Path "$INSTALLED_HOME\subos\default\bin\$s") {
+        Fail "legacy alias shim '$s' should NOT be created (removed in 0.4.8)"
     }
 }
 

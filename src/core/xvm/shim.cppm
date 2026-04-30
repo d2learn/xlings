@@ -16,15 +16,14 @@ import xlings.core.xvm.db;
 
 export namespace xlings::xvm {
 
-// Check if a program name is the xlings binary itself (not a shim target)
+// Check if a program name is the xlings binary itself (not a shim target).
+//
+// xlings is the single canonical entry point. Earlier releases also accepted
+// `xim` / `xvm` as multicall aliases, but they have been removed (see
+// main.cpp's deprecated-alias path for the migration error). The set is
+// closed and intentional: only the literal name `xlings`.
 bool is_xlings_binary(std::string_view name) {
-    static constexpr std::array<std::string_view, 3> XLINGS_NAMES = {
-        "xlings", "xim", "xvm"
-    };
-    for (auto n : XLINGS_NAMES) {
-        if (n == name) return true;
-    }
-    return false;
+    return name == "xlings";
 }
 
 // Extract basename from argv[0], stripping path and extension

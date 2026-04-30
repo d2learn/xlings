@@ -6,14 +6,23 @@ import xlings.core.config;
 import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
+// COMPAT(0.4.8 → drop in 0.6.0): legacy alias cleanup helper.
+// When this whole module goes away, delete the import and the cleanup
+// call at the bottom of ensure_subos_shims.
+import xlings.core.xself.compat_0_4_8;
 
 namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
-// Base shim names (always created)
-inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
-    "xlings", "xim", "xinstall", "xsubos", "xself"
+// Base shim names (always created).
+//
+// 0.4.8 collapsed to a single canonical entry point. Earlier releases also
+// created shims for {xim, xvm, xinstall, xsubos, xself} as multicall
+// aliases, but they were removed (see main.cpp's deprecated-alias path).
+// One-shot cleanup of leftover symlinks is delegated to the compat module.
+inline constexpr std::array<std::string_view, 1> SHIM_NAMES_BASE = {
+    "xlings"
 };
 
 // Optional shims (created only when pkg_root/bin/<name> exists)
@@ -122,6 +131,9 @@ void ensure_subos_shims(const fs::path& target_bin_dir,
             }
         }
     }
+
+    // COMPAT(0.4.8 → drop in 0.6.0): one-shot migration cleanup.
+    compat::cleanup_legacy_alias_shims(target_bin_dir, shim_src);
 
     platform::make_files_executable(target_bin_dir);
 }

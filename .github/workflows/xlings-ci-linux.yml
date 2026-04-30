@@ -163,6 +163,10 @@ jobs:
         run: |
           bash tests/e2e/cli_target_compat_test.sh
 
+      - name: "E2E-18: short-command aliases removal (xim/xvm/xself/xsubos/xinstall)"
+        run: |
+          bash tests/e2e/cli_short_alias_removal_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
