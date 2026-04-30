@@ -118,8 +118,16 @@ LinkResult create_shim(const fs::path& source, const fs::path& target) {
 // from <bin_dir>. Only files that ARE symlinks AND resolve to the
 // canonical bootstrap path are removed — never touch unrelated user
 // files that happen to share a name.
-void cleanup_legacy_alias_shims_(const fs::path& bin_dir,
-                                 const fs::path& bootstrap_path) {
+//
+// Exported so the install/use-time self-replace paths (which run during
+// `xlings self update` and any direct `xlings install xlings --use`)
+// can opportunistically clean up old shims at the same moment they
+// replace the bootstrap. That makes the 0.4.7 → 0.4.8 first-upgrade
+// auto-heal without requiring the user to run `self init` separately.
+export void cleanup_legacy_alias_shims(const fs::path& bin_dir,
+                                       const fs::path& bootstrap_path);
+void cleanup_legacy_alias_shims(const fs::path& bin_dir,
+                                const fs::path& bootstrap_path) {
     std::error_code ec;
     auto canonical_bootstrap = fs::weakly_canonical(bootstrap_path, ec);
     if (ec) return;
@@ -166,7 +174,7 @@ void ensure_subos_shims(const fs::path& target_bin_dir,
     // One-shot migration: drop any legacy alias symlinks that older xlings
     // versions sprayed into binDir. Safe-by-default — see helper for the
     // is-symlink + resolves-to-bootstrap gate.
-    cleanup_legacy_alias_shims_(target_bin_dir, shim_src);
+    cleanup_legacy_alias_shims(target_bin_dir, shim_src);
 
     platform::make_files_executable(target_bin_dir);
 }

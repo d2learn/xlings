@@ -509,6 +509,10 @@ void process_xvm_operations_(const PlanNode& node,
                                      xlings_bin.string(), active_bin.string());
                         }
                     }
+                    // Opportunistic migration: drop legacy alias symlinks
+                    // (xim/xvm/...) left over from older xlings, alongside
+                    // the bootstrap replacement.
+                    xself::cleanup_legacy_alias_shims(paths.binDir, xlings_bin);
                 }
             } else if (type == "lib" && !op.bindir.empty()) {
                 // Install lib symlink to subos lib dir
