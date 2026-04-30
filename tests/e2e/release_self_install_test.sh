@@ -23,8 +23,12 @@ INSTALLED_HOME="$INSTALL_USER_DIR/.xlings"
 [[ -L "$INSTALLED_HOME/subos/current" ]] || fail "installed home missing subos/current link"
 [[ -f "$INSTALLED_HOME/config/shell/xlings-profile.sh" ]] || fail "installed home missing shell profile"
 
-for shim in xlings xim xsubos xself; do
-  [[ -x "$INSTALLED_HOME/subos/default/bin/$shim" ]] || fail "shim $shim missing after self install"
+# 0.4.8 collapsed to a single canonical entry point. The xim/xvm/xself/xsubos/
+# xinstall shims were removed (see src/core/xself/compat_0_4_8.cppm).
+[[ -x "$INSTALLED_HOME/subos/default/bin/xlings" ]] || fail "shim xlings missing after self install"
+for legacy in xim xvm xsubos xself xinstall; do
+  [[ ! -e "$INSTALLED_HOME/subos/default/bin/$legacy" ]] || \
+    fail "legacy alias shim '$legacy' should NOT be created (removed in 0.4.8)"
 done
 
 INSTALLED_PATH="$INSTALLED_HOME/subos/current/bin:$INSTALLED_HOME/bin:$(minimal_system_path)"
