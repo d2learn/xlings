@@ -49,15 +49,14 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           xlings install -y
-
-      - name: Export toolchain paths
-        run: |
-          LLVM_PREFIX="$HOME/.xlings/data/xpkgs/llvm/20.1.7"
-          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
-          echo "LLVM_PREFIX=$LLVM_PREFIX"                       >> "$GITHUB_ENV"
-          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)"  >> "$GITHUB_ENV"
-          echo "$LLVM_PREFIX/bin"                               >> "$GITHUB_PATH"
-          "$LLVM_PREFIX/bin/clang++" --version
+          # Sanity: llvm payload's clang/clang++ shims are now on PATH via
+          # the subos current/bin. No --sdk needed — xmake's `--toolchain=llvm`
+          # detects the LLVM clang on PATH and uses its bundled lib/include.
+          xmake --version
+          cmake --version
+          ninja --version
+          clang --version
+          clang++ --version
 
       - name: Prepare fixture index repo
         run: |
@@ -65,12 +64,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -c -p macosx -m release \
-            --toolchain=llvm \
-            --sdk="$LLVM_PREFIX" \
-            --target_minver=11.0 \
-            -y
-          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
+          xmake f -c -p macosx -m release --toolchain=llvm --target_minver=11.0 -y
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 

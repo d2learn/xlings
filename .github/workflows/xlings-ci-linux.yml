@@ -53,18 +53,15 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           xlings install -y
-
-      - name: Export toolchain paths
-        run: |
-          MUSL_SDK="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0"
-          test -d "$MUSL_SDK" || { echo "musl-gcc payload missing at $MUSL_SDK"; exit 1; }
-          test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
-          x86_64-linux-musl-g++ --version
-          bash tools/setup_musl_runtime.sh "$MUSL_SDK"
-          echo "MUSL_SDK=$MUSL_SDK"           >> "$GITHUB_ENV"
-          echo "CC=x86_64-linux-musl-gcc"     >> "$GITHUB_ENV"
-          echo "CXX=x86_64-linux-musl-g++"    >> "$GITHUB_ENV"
-          echo "$MUSL_SDK/bin"                >> "$GITHUB_PATH"
+          # Sanity: musl-gcc registers `gcc`/`g++`/`cc` flavor shims that
+          # resolve to x86_64-linux-musl-gcc with --dynamic-linker / rpath
+          # flags baked in, so xmake auto-picks the toolchain via PATH —
+          # no --sdk / --cross / CC / CXX needed.
+          gcc --version
+          g++ --version
+          xmake --version
+          cmake --version
+          ninja --version
 
       - name: Prepare fixture index repo
         run: |
@@ -72,7 +69,7 @@ jobs:
 
       - name: Configure xmake
         run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
+          xmake f -c -p linux -m release -y
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 

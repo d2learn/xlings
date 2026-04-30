@@ -463,6 +463,30 @@ private:
                 // activation, project-state writes, and the project_dir
                 // env-export that downstream shims would otherwise pick
                 // up. Search continues upward as if this file weren't here.
+                //
+                // TODO(2026-): this flag is a workaround for the
+                // chicken-and-egg of "xlings's own repo wants to declare
+                // build deps via .xlings.json without becoming a
+                // managed xlings project". Cleaner long-term options:
+                //
+                //   1. Embrace project mode at the repo root: rewrite
+                //      tests / dev workflow to assume the xlings repo
+                //      IS a managed project; drop this flag entirely.
+                //   2. Add `xlings env` / `xlings config --pkgdir <name>`
+                //      so CI doesn't need to assume payload paths or
+                //      hand-export toolchain env vars at all — the
+                //      installed-subos PATH + xmake auto-detect already
+                //      cover it for the common case (see CI workflows
+                //      that drop --sdk/--cross thanks to musl-gcc's
+                //      gcc-flavor shims), but cross-compile / non-default
+                //      toolchain selections still need explicit values.
+                //   3. Split: keep `.xlings.json` for `xlings install`
+                //      workspace reads, but introduce a separate
+                //      schema-level marker (e.g. top-level
+                //      `"kind": "build-deps"`) checked here.
+                //
+                // Track these in a single follow-up issue once the CI
+                // self-host PR has soaked in.
                 if (json.contains("projectScope") &&
                     json["projectScope"].is_boolean() &&
                     !json["projectScope"].get<bool>()) {
