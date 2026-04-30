@@ -32,8 +32,33 @@ int main(int argc, char* argv[]) {
     auto& p = xlings::Config::paths();
     xlings::platform::set_env_variable("XLINGS_HOME", p.homeDir.string());
 
-    // Multicall: check argv[0] to determine mode
+    // Multicall: check argv[0] to determine mode.
     auto program_name = xlings::xvm::extract_program_name(argv[0]);
+
+    // 0.4.8: short-command aliases (xim/xvm/xself/xsubos/xinstall) were
+    // removed. If the user invoked one — usually via a leftover symlink
+    // from an older install or a hand-typed habit — give them a clear
+    // migration message instead of the cryptic "no version set for X"
+    // they'd otherwise hit when shim_dispatch tries to resolve the name.
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 5>
+        DEPRECATED_ALIASES = {{
+            {"xim",      "xlings install/remove/search/list/info ..."},
+            {"xvm",      "xlings use ..."},
+            {"xself",    "xlings self ..."},
+            {"xsubos",   "xlings subos ..."},
+            {"xinstall", "xlings install ..."},
+        }};
+    for (auto& [alias, suggestion] : DEPRECATED_ALIASES) {
+        if (alias == program_name) {
+            std::println(std::cerr,
+                "[error] `{}` was removed in 0.4.8. Use `{}` instead.",
+                alias, suggestion);
+            std::println(std::cerr,
+                "        Run `xlings self doctor --fix` to clean up "
+                "leftover shortcuts.");
+            return 2;
+        }
+    }
 
     int rc;
     if (xlings::xvm::is_xlings_binary(program_name)) {

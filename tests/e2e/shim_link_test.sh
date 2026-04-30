@@ -46,9 +46,12 @@ pushd "$RUNTIME_DIR/portable" >/dev/null
 env -u XLINGS_HOME ./bin/xlings self init >/dev/null 2>&1 || fail "self init failed"
 
 # --- Verify base shims are symlinks ---
+# 0.4.8 collapsed to a single canonical entry point (`xlings`) — earlier
+# releases also created xim/xinstall/xsubos/xself shims, which were
+# removed. The legacy aliases now print a migration error if invoked.
 SHIM_DIR="$RUNTIME_DIR/portable/subos/default/bin"
 
-for shim in xlings xim xinstall xsubos xself; do
+for shim in xlings; do
   SHIM_PATH="$SHIM_DIR/$shim"
   [[ -e "$SHIM_PATH" ]] || fail "shim '$shim' does not exist"
   [[ -x "$SHIM_PATH" ]] || fail "shim '$shim' is not executable"
@@ -67,6 +70,12 @@ for shim in xlings xim xinstall xsubos xself; do
     fail "shim '$shim' resolves to '$RESOLVED', expected '$EXPECTED'"
 done
 
+# --- Verify legacy alias shims are NOT created ---
+for legacy in xim xvm xinstall xsubos xself; do
+  [[ ! -e "$SHIM_DIR/$legacy" ]] || \
+    fail "legacy alias shim '$legacy' should NOT be created (removed in 0.4.8)"
+done
+
 # --- Verify shim works (can execute via symlink) ---
 "$SHIM_DIR/xlings" -h >/dev/null 2>&1 || fail "shim xlings -h failed"
 
@@ -83,10 +92,15 @@ popd >/dev/null
 
 INSTALLED_SHIM_DIR="$INSTALL_USER_DIR/.xlings/subos/default/bin"
 
-for shim in xlings xim xinstall xsubos xself; do
+for shim in xlings; do
   SHIM_PATH="$INSTALLED_SHIM_DIR/$shim"
   [[ -e "$SHIM_PATH" ]] || fail "installed shim '$shim' does not exist"
   [[ -L "$SHIM_PATH" ]] || fail "installed shim '$shim' is not a symlink"
+done
+
+for legacy in xim xvm xinstall xsubos xself; do
+  [[ ! -e "$INSTALLED_SHIM_DIR/$legacy" ]] || \
+    fail "installed legacy alias shim '$legacy' should NOT exist"
 done
 
 echo "PASS: all shims are relative symlinks and functional"

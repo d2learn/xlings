@@ -154,6 +154,49 @@ export int cmd_doctor(EventStream& stream, bool fix) {
         }
     }
 
+    // Check 2.5: legacy alias shims (xim/xvm/xself/xsubos/xinstall).
+    //
+    // 0.4.8 collapsed to a single canonical entry point. Shims for these
+    // names that older xlings versions sprayed into binDir are no longer
+    // functional — the multicall in main.cpp short-circuits them to a
+    // "removed in 0.4.8" error. Detect-and-remove eliminates the leftover
+    // before the user trips over them.
+    //
+    // Safe-by-default: only act when the entry is a symlink AND resolves
+    // to the bootstrap binary; never touch unrelated user files.
+    if (fs::exists(p.binDir)) {
+        std::error_code bec;
+        auto canonical_bootstrap = fs::weakly_canonical(xlings_bin, bec);
+        static constexpr std::array<std::string_view, 5> LEGACY_ALIASES = {
+            "xim", "xvm", "xself", "xsubos", "xinstall"
+        };
+        for (auto alias : LEGACY_ALIASES) {
+            auto path = p.binDir / shim_filename(std::string(alias));
+            std::error_code ec;
+            if (!fs::is_symlink(path, ec)) continue;
+            ec.clear();
+            auto target = fs::weakly_canonical(path, ec);
+            if (ec || target != canonical_bootstrap) continue;
+
+            ++orphans;
+            std::string detail = std::format(
+                "{} is a leftover symlink from older xlings (alias `{}` "
+                "removed in 0.4.8)",
+                path.string(), alias);
+            if (fix) {
+                ec.clear();
+                fs::remove(path, ec);
+                if (!ec) {
+                    ++healed;
+                    detail += " — removed";
+                } else {
+                    detail += " — remove failed";
+                }
+            }
+            add_field("✗ legacy alias shim", std::move(detail));
+        }
+    }
+
     // Check 3: payload existence + executability for every (name, version)
     // in the versions DB. Reuses the same `resolve_executable` helper that
     // shim_dispatch uses at runtime so doctor's verdict matches what the

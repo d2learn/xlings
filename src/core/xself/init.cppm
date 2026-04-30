@@ -11,13 +11,27 @@ namespace xlings::xself {
 
 namespace fs = std::filesystem;
 
-// Base shim names (always created)
-inline constexpr std::array<std::string_view, 5> SHIM_NAMES_BASE = {
-    "xlings", "xim", "xinstall", "xsubos", "xself"
+// Base shim names (always created).
+//
+// 0.4.8 collapses to a single canonical entry point. Earlier releases
+// also created shims for {xim, xvm, xinstall, xsubos, xself} as multicall
+// aliases, but they were removed (see main.cpp's deprecated-alias path).
+// Old user installs may still have those leftover symlinks pointing to
+// the bootstrap; LEGACY_ALIAS_NAMES below drives one-shot cleanup.
+inline constexpr std::array<std::string_view, 1> SHIM_NAMES_BASE = {
+    "xlings"
 };
 
 // Optional shims (created only when pkg_root/bin/<name> exists)
 inline constexpr std::array<std::string_view, 0> SHIM_NAMES_OPTIONAL = {};
+
+// Names that USED to be created by older xlings versions. ensure_subos_shims
+// removes any of these still lingering as symlinks-to-bootstrap on disk.
+// Removal is gated on "is symlink AND points to the bootstrap binary" so
+// we never touch a user's package that happens to share a name.
+inline constexpr std::array<std::string_view, 5> LEGACY_ALIAS_NAMES = {
+    "xim", "xvm", "xinstall", "xsubos", "xself"
+};
 
 export enum class LinkResult { Symlink, Hardlink, Copy, Failed };
 
@@ -100,6 +114,32 @@ LinkResult create_shim(const fs::path& source, const fs::path& target) {
     return LinkResult::Failed;
 }
 
+// Remove leftover legacy alias symlinks (xim/xvm/xself/xsubos/xinstall)
+// from <bin_dir>. Only files that ARE symlinks AND resolve to the
+// canonical bootstrap path are removed — never touch unrelated user
+// files that happen to share a name.
+void cleanup_legacy_alias_shims_(const fs::path& bin_dir,
+                                 const fs::path& bootstrap_path) {
+    std::error_code ec;
+    auto canonical_bootstrap = fs::weakly_canonical(bootstrap_path, ec);
+    if (ec) return;
+
+    std::string ext = bootstrap_path.extension().string();
+    for (auto name : LEGACY_ALIAS_NAMES) {
+        auto path = bin_dir / (std::string(name) + ext);
+        ec.clear();
+        if (!fs::is_symlink(path, ec)) continue;
+        ec.clear();
+        auto target = fs::weakly_canonical(path, ec);
+        if (ec) continue;
+        if (target == canonical_bootstrap) {
+            ec.clear();
+            fs::remove(path, ec);
+            log::debug("[migrate] removed legacy alias shim: {}", path.string());
+        }
+    }
+}
+
 void ensure_subos_shims(const fs::path& target_bin_dir,
                         const fs::path& shim_src,
                         const fs::path& pkg_root) {
@@ -122,6 +162,11 @@ void ensure_subos_shims(const fs::path& target_bin_dir,
             }
         }
     }
+
+    // One-shot migration: drop any legacy alias symlinks that older xlings
+    // versions sprayed into binDir. Safe-by-default — see helper for the
+    // is-symlink + resolves-to-bootstrap gate.
+    cleanup_legacy_alias_shims_(target_bin_dir, shim_src);
 
     platform::make_files_executable(target_bin_dir);
 }
