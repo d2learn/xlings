@@ -8,6 +8,7 @@ import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
 import xlings.core.config;
+import xlings.core.mirror;
 
 export namespace xlings::xim {
 
@@ -165,15 +166,29 @@ bool sync_repo(const std::filesystem::path& localDir,
     namespace fs = std::filesystem;
 
     if (!fs::exists(localDir / ".git")) {
-        log::debug("cloning index repo: {}", url);
-        auto cmd = std::format("git clone --depth 1 --quiet \"{}\" \"{}\"",
-                               url, localDir.string());
-        auto [rc, output] = platform::run_command_capture(cmd);
-        if (rc != 0) {
-            log::error("git clone failed: {}", output);
-            return false;
+        // Build mirror fallback list for the index repo URL. Mirror::expand
+        // returns just [url] when mirror_fallback=off or url is non-github.
+        auto urls = mirror::expand(url, {.type = mirror::ResourceType::Git});
+        if (urls.empty()) urls.push_back(url);
+
+        std::string lastErr;
+        for (std::size_t i = 0; i < urls.size(); ++i) {
+            log::debug("cloning index repo attempt {}/{}: {}",
+                       i + 1, urls.size(), urls[i]);
+            auto cmd = std::format("git clone --depth 1 --quiet \"{}\" \"{}\"",
+                                   urls[i], localDir.string());
+            auto [rc, output] = platform::run_command_capture(cmd);
+            if (rc == 0) {
+                if (i > 0)
+                    log::info("[mirror] index repo fallback succeeded via {}", urls[i]);
+                return true;
+            }
+            lastErr = output;
+            std::error_code ec2;
+            fs::remove_all(localDir, ec2);
         }
-        return true;
+        log::error("all index repo clone URLs failed: {}", lastErr);
+        return false;
     }
 
     // Check throttle: skip if pulled within 7 days (unless forced)
