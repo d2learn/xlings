@@ -53,9 +53,15 @@ bool default_config(const PlanNode& node,
     auto xlings_bin = paths.homeDir / "bin" / "xlings.exe";
     constexpr std::string_view shim_ext = ".exe";
 #else
-    auto xlings_bin = paths.homeDir / "xlings";
+    auto xlings_bin = paths.homeDir / "bin" / "xlings";
     constexpr std::string_view shim_ext = "";
 #endif
+    // Bootstrap-layout fallback: pre-`self init` the binary may live
+    // directly at <homeDir>/xlings before being moved under bin/.
+    // Matches the resolution used in xvm/commands.cppm and xself/doctor.cppm.
+    if (!std::filesystem::exists(xlings_bin))
+        xlings_bin = paths.homeDir / ("xlings" + std::string(shim_ext));
+
     if (std::filesystem::exists(xlings_bin)) {
         std::string shim_name = node.name;
         if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))

@@ -81,4 +81,36 @@ echo "$REMOVE_OUT"
 [[ ! -d "$INSTALL_DIR" ]] \
   || fail "install_dir not removed after uninstall"
 
+# ── 13. Regression scenario: canonical bootstrap layout ──
+# `write_home_config` places the binary at <home>/xlings (legacy bootstrap
+# layout). Real-world `xlings self install` puts it at <home>/bin/xlings
+# (canonical). The script default_config used to look only at the legacy
+# path on Unix, silently skipping shim creation in the canonical layout.
+# This scenario re-runs the install with the binary ONLY at the canonical
+# location to pin that fix.
+log "Regression: install with canonical <home>/bin/xlings layout"
+rm -rf "$HOME_DIR"
+mkdir -p "$HOME_DIR/bin" "$HOME_DIR/subos/default/bin"
+cp "$(find_xlings_bin)" "$HOME_DIR/bin/xlings"
+[[ ! -f "$HOME_DIR/xlings" ]] || \
+  fail "regression setup: legacy bootstrap path must be absent"
+
+cat > "$HOME_DIR/.xlings.json" <<EOF
+{
+  "mirror": "GLOBAL",
+  "index_repos": [
+    { "name": "xim", "url": "$FIXTURE_INDEX_DIR" }
+  ]
+}
+EOF
+
+env XLINGS_HOME="$HOME_DIR" "$HOME_DIR/bin/xlings" --verbose self init >/dev/null 2>&1
+env XLINGS_HOME="$HOME_DIR" "$HOME_DIR/bin/xlings" --verbose install xpkg-helper -y >/dev/null 2>&1 \
+  || fail "regression: xpkg-helper install failed under canonical layout"
+
+[[ -e "$HOME_DIR/subos/default/bin/xpkg-helper" ]] \
+  || fail "regression: shim not created under canonical layout (the bug fixed by this PR)"
+
+log "Regression PASS: canonical layout shim creation works"
+
 log "PASS: script-type package install/shim/uninstall flow"
