@@ -162,6 +162,28 @@ strategy to avoid repeatedly downloading the same package payloads.
 - [Adding New Packages](https://xlings.d2learn.org/en/documents/community/contribute/add-xpkg.html)
 - [Documentation Writing](https://xlings.d2learn.org/en/documents/community/contribute/documentation.html)
 
+### Building xlings from source
+
+The repo declares its own build dependencies (xmake / cmake / ninja and a
+platform-specific C++ toolchain) in [`.xlings.json`](.xlings.json), so you
+can install everything via xlings itself:
+
+```bash
+# 1. Install any recent xlings (one-liner) — see installation section above
+# 2. From the repo root:
+xlings install        # reads .xlings.json, installs xmake / cmake / ninja
+                      # + musl-gcc on Linux / llvm on macOS
+                      # (Windows uses the system MSVC)
+
+# 3. Configure + build (paths exported by step 2 satisfy xmake's expectations):
+xmake f -y
+xmake build           # main binary
+xmake build xlings_tests && xmake run xlings_tests
+```
+
+The same `.xlings.json` is consumed by GitHub Actions CI and the release
+pipeline, so a clean local build matches what CI runs.
+
 **👥Contributors**
 
 [![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)

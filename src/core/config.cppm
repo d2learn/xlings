@@ -455,6 +455,20 @@ private:
             auto content = platform::read_file_to_string(cfg.string());
             auto json = nlohmann::json::parse(content, nullptr, false);
             if (!json.is_discarded()) {
+                // Build-deps-only files (e.g. xlings's own repo-root
+                // /.xlings.json declaring CI dependencies) opt out of
+                // project mode by setting `"projectScope": false`. This
+                // lets `xlings install` from the repo root still read
+                // the `workspace` field, but skips project-subos
+                // activation, project-state writes, and the project_dir
+                // env-export that downstream shims would otherwise pick
+                // up. Search continues upward as if this file weren't here.
+                if (json.contains("projectScope") &&
+                    json["projectScope"].is_boolean() &&
+                    !json["projectScope"].get<bool>()) {
+                    log::debug("config: skipping {} (projectScope=false)", cfg.string());
+                    return;
+                }
                 projectDir_ = dir;
                 hasProjectConfig_ = true;
                 // Export project dir so child processes (shims, os.execute)

@@ -28,7 +28,7 @@ cleanup
 XLINGS_BIN="$(find_xlings_bin)"
 
 RUN() {
-  env -i HOME="$HOME" PATH=/usr/bin:/bin XLINGS_HOME="$HOME_DIR" "$XLINGS_BIN" "$@"
+  ( cd /tmp && env -i HOME="$HOME" PATH=/usr/bin:/bin XLINGS_HOME="$HOME_DIR" "$XLINGS_BIN" "$@" )
 }
 
 mkdir -p "$HOME_DIR"

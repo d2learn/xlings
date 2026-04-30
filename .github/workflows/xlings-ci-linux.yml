@@ -11,6 +11,10 @@ env:
   # CI runs on github.com; force GLOBAL mirror so xim doesn't try gitee
   # endpoints (which need auth and aren't reachable in CI).
   XLINGS_RELEASE_MIRROR: GLOBAL
+  # Pinned bootstrap xlings used to read /.xlings.json and install all
+  # build dependencies. Bump this in a dedicated PR after verifying the
+  # target release is healthy.
+  BOOTSTRAP_XLINGS_VERSION: v0.4.8
 
 jobs:
   build-and-test:
@@ -20,45 +24,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Phase 1: Configure Environment ──────────────────────────
+      # ── Phase 1: Configure Environment via xlings ─────────────────
 
       - name: Install system deps
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y curl git build-essential
 
-      - name: Install xmake (bundled v3.0.7)
-        run: |
-          XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-          curl -fsSL -o xmake.bin "$XMAKE_URL" -H "Accept: application/octet-stream"
-          chmod +x xmake.bin
-          mkdir -p xmake/bin
-          mv xmake.bin xmake/bin/xmake
-          echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
-          xmake --version
-
-      - name: Install Xlings
+      - name: Install bootstrap xlings (pinned ${{ env.BOOTSTRAP_XLINGS_VERSION }})
         env:
           XLINGS_NON_INTERACTIVE: 1
+          XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
           curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
-          echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
-          echo "PATH=$HOME/.xlings/subos/current/bin:$PATH" >> "$GITHUB_ENV"
+          echo "XLINGS_HOME=$HOME/.xlings"           >> "$GITHUB_ENV"
+          echo "$HOME/.xlings/subos/current/bin"     >> "$GITHUB_PATH"
+          echo "$HOME/.xlings/bin"                   >> "$GITHUB_PATH"
 
-      - name: Install musl-gcc 15.1
+      - name: Cache xlings package payloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.xlings/data/xpkgs
+          key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xlings-deps-${{ runner.os }}-
+
+      - name: Install build dependencies (xmake / cmake / ninja / musl-gcc)
         run: |
-          MUSL_SDK=$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0
-          mkdir -p "$MUSL_SDK"
-          curl -fSL# https://github.com/xlings-res/musl-gcc/releases/download/15.1.0/musl-gcc-15.1.0-linux-x86_64.tar.gz | tar xz -C "$MUSL_SDK" --strip-components=1
-          echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
-          echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
-          echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
-          echo "PATH=$MUSL_SDK/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$MUSL_SDK/bin:$PATH"
+          cd "$GITHUB_WORKSPACE"
+          xlings install -y
+
+      - name: Export toolchain paths
+        run: |
+          MUSL_SDK="$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0"
+          test -d "$MUSL_SDK" || { echo "musl-gcc payload missing at $MUSL_SDK"; exit 1; }
           test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
           x86_64-linux-musl-g++ --version
           bash tools/setup_musl_runtime.sh "$MUSL_SDK"
+          echo "MUSL_SDK=$MUSL_SDK"           >> "$GITHUB_ENV"
+          echo "CC=x86_64-linux-musl-gcc"     >> "$GITHUB_ENV"
+          echo "CXX=x86_64-linux-musl-g++"    >> "$GITHUB_ENV"
+          echo "$MUSL_SDK/bin"                >> "$GITHUB_PATH"
 
       - name: Prepare fixture index repo
         run: |

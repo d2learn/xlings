@@ -77,7 +77,32 @@ run_xlings() {
   local home_dir="$1"
   local workdir="$2"
   shift 2
-  env XLINGS_HOME="$home_dir" "$(find_xlings_bin)" --verbose "$@"
+  # Default: run from a neutral cwd outside the repo so an ancestor-
+  # search for `.xlings.json` (the repo now ships its own at /.xlings.json
+  # for CI self-host purposes) doesn't accidentally activate project mode
+  # for tests that don't want it. Project-context tests wrap call sites
+  # with `(cd "$SCENARIO_DIR" && run_xlings ...)`; we respect such
+  # explicit chdirs by skipping our own when cwd is already inside a
+  # scenario / fixture tree.
+  #
+  # We also `unset` XLINGS_PROJECT_DIR which xlings auto-exports whenever
+  # it loads a project config — it leaks into the test environment from
+  # any prior xlings invocation in the user's shell and would override
+  # our cwd-based isolation.
+  local cwd
+  cwd="$PWD"
+  if [[ "$cwd" == "$ROOT_DIR" ]]; then
+    # Caller didn't cd — they don't want project context. Use a neutral
+    # cwd so the spawned xlings doesn't pick up the repo's CI-self-host
+    # `.xlings.json`.
+    ( cd /tmp && env -u XLINGS_PROJECT_DIR XLINGS_HOME="$home_dir" \
+        "$(find_xlings_bin)" --verbose "$@" )
+  else
+    # Caller explicitly cd'd somewhere — respect it (project-context
+    # tests rely on the project search starting from cwd).
+    env -u XLINGS_PROJECT_DIR XLINGS_HOME="$home_dir" \
+      "$(find_xlings_bin)" --verbose "$@"
+  fi
 }
 
 platform_name() {

@@ -60,3 +60,4 @@ bin/mdbook*
 # local dev sandbox
 .xlings-home-dev/
 .xlings-sandbox/
+/.xlings/
