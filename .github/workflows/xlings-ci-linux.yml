@@ -167,6 +167,10 @@ jobs:
         run: |
           bash tests/e2e/cli_short_alias_removal_test.sh
 
+      - name: "E2E-19: GitHub mirror fallback wiring (HTTP / git / index)"
+        run: |
+          bash tests/e2e/mirror_fallback_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

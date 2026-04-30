@@ -11,6 +11,7 @@ import xlings.platform;
 import xlings.core.config;
 import xlings.libs.tinyhttps;
 import xlings.runtime.cancellation;
+import xlings.core.mirror;
 // Re-export extract_archive so existing importers (installer) keep working.
 export import xlings.core.xim.extract;
 
@@ -21,14 +22,44 @@ bool is_git_url(const std::string& url) {
     return url.ends_with(".git");
 }
 
-// Clone a git repository
+// Derive the destination directory name from a git URL, e.g.
+// "https://github.com/user/repo.git" -> "repo" (or task.name fallback).
+std::string git_dest_repo_name_(const std::string& url, const std::string& fallback) {
+    std::string repoName;
+    auto lastSlash = url.rfind('/');
+    if (lastSlash != std::string::npos) {
+        repoName = url.substr(lastSlash + 1);
+        if (repoName.ends_with(".git"))
+            repoName = repoName.substr(0, repoName.size() - 4);
+    }
+    return repoName.empty() ? fallback : repoName;
+}
+
+// Build the ordered list of git clone URLs to try: primary + author-
+// declared fallbacks + mirror expansions. Mirror::expand handles the
+// Mode::Off / non-GitHub passthrough cases internally.
+std::vector<std::string> git_candidate_urls_(const DownloadTask& task) {
+    std::vector<std::string> urls;
+    urls.push_back(task.url);
+    for (auto& fb : task.fallbackUrls) urls.push_back(fb);
+
+    auto mirrored = mirror::expand(task.url, {.type = mirror::ResourceType::Git});
+    for (auto& u : mirrored) {
+        if (std::ranges::find(urls, u) == urls.end())
+            urls.push_back(std::move(u));
+    }
+    return urls;
+}
+
+// Clone a git repository, trying the primary URL then mirror fallbacks.
+// Each attempt that fails has its partial clone directory removed before
+// the next URL is tried.
 DownloadResult git_clone_one(const DownloadTask& task) {
     namespace fs = std::filesystem;
 
     DownloadResult result;
     result.name = task.name;
 
-    // Ensure dest directory exists
     std::error_code ec;
     fs::create_directories(task.destDir, ec);
     if (ec) {
@@ -37,22 +68,13 @@ DownloadResult git_clone_one(const DownloadTask& task) {
         return result;
     }
 
-    // Derive directory name from URL: "https://github.com/user/repo.git" -> "repo"
-    std::string url = task.url;
-    std::string repoName;
-    auto lastSlash = url.rfind('/');
-    if (lastSlash != std::string::npos) {
-        repoName = url.substr(lastSlash + 1);
-        if (repoName.ends_with(".git")) {
-            repoName = repoName.substr(0, repoName.size() - 4);
-        }
-    }
-    if (repoName.empty()) repoName = task.name;
-
+    auto repoName = git_dest_repo_name_(task.url, task.name);
     auto destDir = task.destDir / repoName;
     result.localFile = destDir;
 
-    // If already cloned, pull latest
+    // If already cloned, pull latest. Pull is single-URL by design — we
+    // don't switch remotes here. Pull failure removes and re-clones,
+    // which then goes through the URL-list fallback path below.
     if (fs::exists(destDir / ".git")) {
         log::debug("already cloned {}, pulling latest...", task.name);
         auto cmd = std::format("git -C \"{}\" pull --ff-only", destDir.string());
@@ -61,22 +83,31 @@ DownloadResult git_clone_one(const DownloadTask& task) {
             result.success = true;
             return result;
         }
-        // Pull failed, remove and re-clone
         log::warn("pull failed for {}, re-cloning...", task.name);
         fs::remove_all(destDir, ec);
     }
 
-    log::debug("cloning {} from {}", task.name, url);
-    auto cmd = std::format(
-        "git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
-        url, destDir.string());
-    auto rc = platform::exec(cmd);
-    if (rc != 0) {
-        result.error = std::format("git clone failed (rc={})", rc);
-        return result;
+    auto urls = git_candidate_urls_(task);
+    for (std::size_t i = 0; i < urls.size(); ++i) {
+        const auto& url = urls[i];
+        log::debug("cloning {} attempt {}/{}: {}",
+                   task.name, i + 1, urls.size(), url);
+        auto cmd = std::format(
+            "git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
+            url, destDir.string());
+        auto rc = platform::exec(cmd);
+        if (rc == 0) {
+            if (i > 0)
+                log::info("[mirror] git clone fallback succeeded via {}", url);
+            result.success = true;
+            return result;
+        }
+        // Clean partial clone before next attempt.
+        ec.clear();
+        fs::remove_all(destDir, ec);
     }
 
-    result.success = true;
+    result.error = std::format("all git clone URLs failed for {}", task.name);
     return result;
 }
 
@@ -98,30 +129,47 @@ DownloadResult download_one(const DownloadTask& task,
         return result;
     }
 
-    // Git clone for .git URLs
+    // Git clone for .git URLs. The non-cancellable path delegates to
+    // git_clone_one which already handles mirror fallback; the cancellable
+    // path needs the same fallback wiring inline because it uses
+    // spawn_command/wait_or_kill instead of blocking exec.
     if (is_git_url(task.url)) {
-        // When cancellable, run git clone as subprocess for kill support
         if (cancel) {
             namespace fs = std::filesystem;
-            std::string repoName;
-            auto lastSlashGit = task.url.rfind('/');
-            if (lastSlashGit != std::string::npos) {
-                repoName = task.url.substr(lastSlashGit + 1);
-                if (repoName.ends_with(".git"))
-                    repoName = repoName.substr(0, repoName.size() - 4);
-            }
-            if (repoName.empty()) repoName = task.name;
+            auto repoName = git_dest_repo_name_(task.url, task.name);
             auto destDir = task.destDir / repoName;
             result.localFile = destDir;
-            auto cmd = std::format("git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
-                                   task.url, destDir.string());
-            auto h = platform::spawn_command(cmd);
-            if (h.pid <= 0) { result.error = "failed to spawn git"; return result; }
-            auto [code, output] = platform::wait_or_kill(
-                h, cancel, std::chrono::minutes{10});
-            if (cancel->is_paused() || cancel->is_cancelled()) { result.error = "cancelled"; return result; }
-            result.success = (code == 0);
-            if (!result.success) result.error = output;
+
+            auto urls = git_candidate_urls_(task);
+            std::string lastError;
+            for (std::size_t i = 0; i < urls.size(); ++i) {
+                const auto& url = urls[i];
+                log::debug("cloning {} (cancellable) attempt {}/{}: {}",
+                           task.name, i + 1, urls.size(), url);
+                auto cmd = std::format(
+                    "git clone --depth 1 --recursive --quiet \"{}\" \"{}\"",
+                    url, destDir.string());
+                auto h = platform::spawn_command(cmd);
+                if (h.pid <= 0) { lastError = "failed to spawn git"; continue; }
+                auto [code, output] = platform::wait_or_kill(
+                    h, cancel, std::chrono::minutes{10});
+                if (cancel->is_paused() || cancel->is_cancelled()) {
+                    result.error = "cancelled";
+                    return result;
+                }
+                if (code == 0) {
+                    if (i > 0)
+                        log::info("[mirror] git clone fallback succeeded via {}", url);
+                    result.success = true;
+                    return result;
+                }
+                lastError = output;
+                std::error_code ec2;
+                fs::remove_all(destDir, ec2);
+            }
+            result.error = lastError.empty()
+                ? std::format("all git clone URLs failed for {}", task.name)
+                : lastError;
             return result;
         }
         return git_clone_one(task);
@@ -154,10 +202,21 @@ DownloadResult download_one(const DownloadTask& task,
         }
     }
 
-    // Build ordered list of URLs to try (primary + fallbacks)
+    // Build ordered list of URLs to try:
+    //   1. primary URL (as-is)
+    //   2. package-author-declared fallback URLs (already mirror-selected
+    //      by upstream resolver)
+    //   3. github mirror fallbacks (only appended if URL is github.com/
+    //      raw.githubusercontent.com/etc and mirror mode != Off)
     std::vector<std::string> urls;
     urls.push_back(url);
     for (auto& fb : task.fallbackUrls) urls.push_back(fb);
+
+    auto mirrored = mirror::expand(url);
+    for (auto& u : mirrored) {
+        if (std::ranges::find(urls, u) == urls.end())
+            urls.push_back(std::move(u));
+    }
 
     // Use in-process tinyhttps for all downloads (streaming progress).
     // When a CancellationToken is available, wire isCancelled so ESC aborts.
