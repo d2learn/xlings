@@ -151,6 +151,18 @@ jobs:
         run: |
           bash tests/e2e/tui_utf8_test.sh
 
+      - name: "E2E-15: bootstrap self-replace on install/use (xlings/xim/xvm)"
+        run: |
+          bash tests/e2e/xlings_self_replace_test.sh
+
+      - name: "E2E-16: self doctor (workspace/shim/payload invariants)"
+        run: |
+          bash tests/e2e/self_doctor_test.sh
+
+      - name: "E2E-17: CLI target-spec compatibility (name@ver / name ver)"
+        run: |
+          bash tests/e2e/cli_target_compat_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()
