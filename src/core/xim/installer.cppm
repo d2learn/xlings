@@ -344,17 +344,41 @@ void remove_target_shims_(const std::string& target, const std::string& version)
     auto& binDir = Config::paths().binDir;
     std::error_code ec;
 
+    // A program's shim is a generic dispatcher to the bootstrap; the actual
+    // version it routes to is the workspace pointer (read at runtime). So
+    // the shim is only stale when the *last* version of the name is being
+    // removed. With surviving versions still in the DB, the shim must stay
+    // — the uninstall path elsewhere auto-switches the workspace to the
+    // highest remaining version, and the shim resolves through that.
+    //
+    // Removing the shim too eagerly (the previous behavior) leaves PATH
+    // pointing nowhere even though the version DB still holds installs,
+    // surfacing as "command not found" for node/npm/npx/mdbook etc. after
+    // `xlings remove <pkg>@<one-version>`.
+    auto is_last_version_for = [&](const std::string& name,
+                                   const std::string& ver) {
+        auto* vi = xvm::get_vinfo(db, name);
+        if (!vi) return true;
+        for (auto& [v, _] : vi->versions) {
+            if (v != ver) return false;
+        }
+        return true;
+    };
+
     auto mainName = (vinfo && !vinfo->filename.empty()) ? vinfo->filename : target;
-    auto mainShim = binDir / mainName;
-    if (fs::exists(mainShim, ec) || fs::is_symlink(mainShim, ec)) {
-        ec.clear();
-        fs::remove(mainShim, ec);
+    if (is_last_version_for(target, version)) {
+        auto mainShim = binDir / mainName;
+        if (fs::exists(mainShim, ec) || fs::is_symlink(mainShim, ec)) {
+            ec.clear();
+            fs::remove(mainShim, ec);
+        }
     }
 
     if (!vinfo) return;
     for (auto& [bindingName, vermap] : vinfo->bindings) {
         auto vit = vermap.find(version);
         if (vit == vermap.end()) continue;
+        if (!is_last_version_for(bindingName, vit->second)) continue;
         auto bindPath = binDir / bindingName;
         ec.clear();
         if (fs::exists(bindPath, ec) || fs::is_symlink(bindPath, ec)) {
@@ -1203,7 +1227,11 @@ public:
 
         for (auto& op : xvm_ops) {
             if (op.op == "remove") {
-                // Remove shim
+                // Compute shim path now; we only delete the shim once we
+                // know there are no surviving versions of this program.
+                // Removing it eagerly (as the previous code did) leaves
+                // the workspace pointing at the highest-remaining version
+                // but the PATH entry is gone — `command not found`.
 #ifdef _WIN32
                 constexpr std::string_view shim_ext = ".exe";
 #else
@@ -1213,9 +1241,11 @@ public:
                 if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
                     shim_name += shim_ext;
                 auto shim_path = Config::paths().binDir / shim_name;
-                if (std::filesystem::exists(shim_path)) {
-                    std::filesystem::remove(shim_path);
-                }
+                auto remove_shim_if_present = [&]() {
+                    if (std::filesystem::exists(shim_path)) {
+                        std::filesystem::remove(shim_path);
+                    }
+                };
 
                 // Resolve the authoritative version to drop from the DB.
                 // Prefer what the hook sent; fall back to the outer resolve only when the
@@ -1240,6 +1270,7 @@ public:
                     // ops for sibling names that were never registered with a version.
                     Config::versions_mut().erase(op.name);
                     Config::workspace_mut().erase(op.name);
+                    remove_shim_if_present();
                     continue;
                 }
 
@@ -1250,17 +1281,22 @@ public:
                 bool survivors = (dit != Config::versions_mut().end()
                                   && !dit->second.versions.empty());
                 if (!survivors) {
-                    // Package fully gone — clear workspace binding too.
+                    // Package fully gone — clear workspace binding and drop
+                    // the PATH shim with it.
                     Config::workspace_mut().erase(op.name);
+                    remove_shim_if_present();
                 } else if (prev_active.empty() || prev_active == effective_version) {
                     // We just removed the active version (or detach already cleared the
                     // slot for detachTarget). Auto-switch to the highest remaining
-                    // semver so leftover versions stay reachable.
+                    // semver so leftover versions stay reachable. Keep the shim —
+                    // it dispatches to the bootstrap, which resolves the active
+                    // version at runtime via the workspace pointer we just updated.
                     Config::workspace_mut()[op.name] =
                         xvm::pick_highest_version(dit->second.versions);
                 } else {
                     // A non-active version was removed; keep the previous active if still
-                    // present, otherwise fall back to highest remaining.
+                    // present, otherwise fall back to highest remaining. Shim survives
+                    // for the same reason as above.
                     if (dit->second.versions.contains(prev_active)) {
                         Config::workspace_mut()[op.name] = prev_active;
                     } else {
