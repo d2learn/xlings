@@ -1,4 +1,4 @@
-export module xlings.core.xself:init;
+export module xlings.core.xself.init;
 
 import std;
 
@@ -242,6 +242,17 @@ if ($env:Path -notlike "*$env:XLINGS_BIN*") {
     if (!xlings_bin.empty()) ensure_subos_shims(default_subos / "bin", xlings_bin, home_dir);
 
     return true;
+}
+
+// `xlings self init` — bootstrap (or repair) the home directory layout.
+// Thin wrapper over ensure_home_layout; kept here so the dispatcher in
+// xself.cppm can route by command name without pulling Config into a
+// separate translation unit.
+export int cmd_init() {
+    auto& p = Config::paths();
+    if (!ensure_home_layout(p.homeDir)) return 1;
+    log::info("init ok");
+    return 0;
 }
 
 } // namespace xlings::xself

@@ -966,14 +966,38 @@ public:
                     payloadInstalled = true;
                 }
             }
-            // Default: check xvm version database when no installed hook
+            // Default: check xvm version database when no installed hook.
+            //
+            // Trust-but-verify: a DB entry alone isn't enough. If the
+            // payload directory the entry points to is missing or empty
+            // (broken-payload state — payload manually rm'd, partial
+            // uninstall, FS corruption), fall through and let the install
+            // hook re-create the payload.  Without this fall-through,
+            // `xlings install <pkg>@<ver>` reports success without
+            // actually doing anything — the user can never recover from
+            // a broken payload via the obvious command.
             else if (!payloadInstalled) {
                 auto db = Config::versions();
                 auto resolved = xvm::match_version(db, node.name, node.version);
                 if (!resolved.empty()) {
-                    log::debug("{} already installed in xvm (version {})",
-                              node.name, resolved);
-                    payloadInstalled = true;
+                    bool payload_ok = true;
+                    if (auto* vdata = xvm::get_vdata(db, node.name, resolved);
+                        vdata && !vdata->path.empty()) {
+                        auto expanded = xvm::expand_path(
+                            vdata->path, Config::paths().homeDir.string());
+                        std::error_code ec;
+                        payload_ok = std::filesystem::is_directory(expanded, ec)
+                                  && !std::filesystem::is_empty(expanded, ec);
+                    }
+                    if (payload_ok) {
+                        log::debug("{} already installed in xvm (version {})",
+                                  node.name, resolved);
+                        payloadInstalled = true;
+                    } else {
+                        log::debug("{} registered as {} in xvm but payload "
+                                  "missing — re-running install hook",
+                                  node.name, resolved);
+                    }
                 }
             }
 

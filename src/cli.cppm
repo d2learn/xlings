@@ -316,6 +316,56 @@ void generate_xlings_json_(const std::filesystem::path& dir, const xvm::Workspac
     platform::write_string_to_file(outPath.string(), root.dump(2));
 }
 
+// Normalize a target-spec from positional args for the single-target
+// commands (remove/update/info — `use` has its own list-versions
+// semantic and parses inline).
+//
+// Accepted forms (equivalent):
+//   1 positional, contains '@'   →  passed as-is  (e.g. "node@22.17.1")
+//   1 positional, no '@'         →  passed as-is  (bare name; the cmd
+//                                    decides what to do — typically
+//                                    "use the active version")
+//   2 positionals                →  folded into "<arg0>@<arg1>"
+//
+// Rejected:
+//   3+ positionals
+//   2 positionals where arg0 already contains '@' (ambiguous)
+//
+// Returns false (with a logged error) on bad input. Caller should
+// `return 1` on false.
+bool parse_target_spec_(const mcpplibs::cmdline::ParsedArgs& args,
+                        std::string& out) {
+    auto n = args.positional_count();
+    if (n == 0) {
+        log::error("missing target argument");
+        return false;
+    }
+    if (n > 2) {
+        log::error("too many positional arguments (expected 1 or 2, got {})", n);
+        log::error("  hint: use `<name>@<version>` or `<name> <version>`");
+        return false;
+    }
+    auto first = std::string(args.positional(0));
+    if (n == 1) {
+        out = std::move(first);
+        return true;
+    }
+    // n == 2: "<name> <version>" form. The first arg must be a bare
+    // name — if it already includes '@', the user gave us two version
+    // hints and we can't reconcile.
+    if (first.find('@') != std::string::npos) {
+        auto bare = first.substr(0, first.find('@'));
+        log::error("ambiguous target: '{}' already includes @<version>, "
+                   "but a separate version '{}' was also given",
+                   first, std::string(args.positional(1)));
+        log::error("  hint: pick one of `{}` or `{} {}`",
+                   first, bare, std::string(args.positional(1)));
+        return false;
+    }
+    out = first + "@" + std::string(args.positional(1));
+    return true;
+}
+
 // Install packages from project .xlings.json workspace
 int install_from_project_config_(EventStream& stream) {
     namespace fs = std::filesystem;
@@ -636,11 +686,17 @@ export int run(int argc, char* argv[]) {
             };
             else if (match("remove")) h = SubHelp{
                 "remove", "Remove a package",
-                { {"package", "Package to remove", true} }, {},
+                {
+                    {"package", "Package name (or name@ver)", true},
+                    {"version", "Optional version (alternative to name@ver form)"},
+                }, {},
             };
             else if (match("update")) h = SubHelp{
                 "update", "Update package index or a specific package",
-                { {"package", "Package to update (omit for index only)"} }, {},
+                {
+                    {"package", "Package to update (omit for index only)"},
+                    {"version", "Optional version (alternative to name@ver form)"},
+                }, {},
             };
             else if (match("search")) h = SubHelp{
                 "search", "Search for packages",
@@ -652,11 +708,17 @@ export int run(int argc, char* argv[]) {
             };
             else if (match("info")) h = SubHelp{
                 "info", "Show package information",
-                { {"package", "Package name", true} }, {},
+                {
+                    {"package", "Package name (or name@ver)", true},
+                    {"version", "Optional version (alternative to name@ver form)"},
+                }, {},
             };
             else if (match("use")) h = SubHelp{
                 "use", "Switch tool version",
-                { {"target", "Tool name", true}, {"version", "Version to switch to (omit to list)"} }, {},
+                {
+                    {"target",  "Tool name (or name@ver one-shot)", true},
+                    {"version", "Version to switch to (omit to list)"},
+                }, {},
             };
             else if (match("config")) h = SubHelp{
                 "config", "Show or modify xlings configuration", {},
@@ -773,6 +835,24 @@ export int run(int argc, char* argv[]) {
                     auto t = args.positional(i);
                     if (!t.empty()) targets.emplace_back(t);
                 }
+                // Friendly hint: `install` treats every positional as an
+                // independent target (multi-package semantic). If the user
+                // wrote two args where the first looks like a bare package
+                // name and the second looks version-like, they probably
+                // meant the combined `name@version` form (single package),
+                // which is the convention the rest of the CLI follows.
+                if (targets.size() == 2
+                    && targets[0].find('@') == std::string::npos
+                    && !targets[1].empty()
+                    && (std::isdigit(static_cast<unsigned char>(targets[1][0]))
+                        || targets[1] == "latest"))
+                {
+                    log::warn("install: each positional is a separate package; "
+                              "did you mean `{}@{}` (single package) instead "
+                              "of two packages '{}' and '{}'?",
+                              targets[0], targets[1], targets[0], targets[1]);
+                }
+
                 if (targets.empty()) return install_from_project_config_(stream);
 
                 bool yes = args.is_flag_set("yes");
@@ -786,22 +866,27 @@ export int run(int argc, char* argv[]) {
         // remove
         .subcommand("remove")
             .description("Remove a package")
-            .arg("package").required().help("Package to remove")
+            .arg("package").required().help("Package to remove (name or name@ver)")
+            .arg("version").help("Optional version (alternative to name@ver form)")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
+                std::string target;
+                if (!parse_target_spec_(args, target)) return 1;
                 bool yes = args.is_flag_set("yes");
-                return xim::cmd_remove(std::string(args.positional(0)), yes, stream);
+                return xim::cmd_remove(target, yes, stream);
             })
 
         // update
         .subcommand("update")
             .description("Update package index or a specific package")
             .arg("package").help("Package to update (omit for index only)")
+            .arg("version").help("Optional version (alternative to name@ver form)")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string target;
-                if (args.positional_count() > 0)
-                    target = std::string(args.positional(0));
+                if (args.positional_count() > 0) {
+                    if (!parse_target_spec_(args, target)) return 1;
+                }
                 bool yes = args.is_flag_set("yes");
                 return xim::cmd_update(target, yes, stream);
             })
@@ -830,24 +915,55 @@ export int run(int argc, char* argv[]) {
         // info
         .subcommand("info")
             .description("Show package information")
-            .arg("package").required().help("Package name")
+            .arg("package").required().help("Package name (or name@ver)")
+            .arg("version").help("Optional version (alternative to name@ver form)")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                return xim::cmd_info(std::string(args.positional(0)), stream);
+                std::string target;
+                if (!parse_target_spec_(args, target)) return 1;
+                return xim::cmd_info(target, stream);
             })
 
-        // use
+        // use — accepts both `<name> <ver>` (legacy form) and `<name>@<ver>`
+        // (one-shot form, matching install/remove). Bare `<name>` lists
+        // installed versions.
         .subcommand("use")
             .description("Switch tool version")
-            .arg("target").required().help("Tool name")
-            .arg("version").help("Version to switch to (omit to list)")
+            .arg("target").required().help("Tool name (or name@ver one-shot)")
+            .arg("version").help("Version to switch to (omit to list installed versions)")
             .action([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
-                auto target = std::string(args.positional(0));
-                if (args.positional_count() >= 2) {
-                    return xvm::cmd_use(target, std::string(args.positional(1)), stream);
+                auto n = args.positional_count();
+                if (n == 0) {
+                    log::error("missing target argument");
+                    return 1;
                 }
-                return xvm::cmd_list_versions(target, stream);
+                if (n > 2) {
+                    log::error("too many positional arguments (expected 1 or 2, got {})", n);
+                    log::error("  hint: use `<name>@<version>` or `<name> <version>`");
+                    return 1;
+                }
+                auto first = std::string(args.positional(0));
+                if (n == 1) {
+                    auto at = first.find('@');
+                    if (at == std::string::npos)
+                        return xvm::cmd_list_versions(first, stream);
+                    return xvm::cmd_use(first.substr(0, at),
+                                        first.substr(at + 1), stream);
+                }
+                // n == 2: must be `<name> <version>`
+                if (first.find('@') != std::string::npos) {
+                    auto bare = first.substr(0, first.find('@'));
+                    log::error("ambiguous target: '{}' already includes "
+                               "@<version>, but a separate version '{}' was "
+                               "also given", first,
+                               std::string(args.positional(1)));
+                    log::error("  hint: pick one of `{}` or `{} {}`",
+                               first, bare, std::string(args.positional(1)));
+                    return 1;
+                }
+                return xvm::cmd_use(first,
+                                    std::string(args.positional(1)), stream);
             })
 
         // config

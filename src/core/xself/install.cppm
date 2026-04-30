@@ -1,7 +1,7 @@
-export module xlings.core.xself:install;
+export module xlings.core.xself.install;
 
 import std;
-import :init;
+import xlings.core.xself.init;
 
 import xlings.core.config;
 import xlings.libs.json;
