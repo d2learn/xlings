@@ -11,6 +11,7 @@ import xlings.libs.json;
 import xlings.core.xself;
 import xlings.core.xvm.types;
 import xlings.core.xvm.db;
+import xlings.core.xvm.shim;
 
 export namespace xlings::xvm {
 
@@ -249,6 +250,34 @@ int cmd_use(const std::string& target, const std::string& version, EventStream& 
                 shim_name += shim_ext;
             xself::create_shim(xlings_bin, p.binDir / shim_name);
             common::mirror_shim_to_global_bin(xlings_bin, shim_name);
+        }
+    }
+
+    // Self-replace: when the user switches to a different version of xlings
+    // (or its multicall aliases xim/xvm), physically replace the bootstrap
+    // binary with that version. Symmetric with the install-time replace in
+    // installer.cppm — they share the same condition: "we just made this
+    // version active for the running binary's identity".
+    //
+    // main.cpp's multiplexer short-circuits xlings/xim/xvm names to the
+    // local cli::run() without consulting the workspace at runtime, so
+    // updating workspace[xlings] alone has no observable effect; the
+    // bootstrap file itself must change for `xlings --version` etc. to
+    // reflect the switch.
+    if (is_xlings_binary(target) && fs::exists(xlings_bin)) {
+        auto* vd = get_vdata(db, target, resolved);
+        if (vd && !vd->path.empty()) {
+            auto active_bin = fs::path(vd->path)
+                            / ("xlings" + std::string(shim_ext));
+            if (fs::exists(active_bin)) {
+                if (platform::atomic_replace_executable(active_bin, xlings_bin)) {
+                    log::debug("[self-replace] bootstrap synced to {}@{}",
+                              target, resolved);
+                } else {
+                    log::warn("[self-replace] failed: {}@{} -> {}",
+                             target, resolved, xlings_bin.string());
+                }
+            }
         }
     }
 

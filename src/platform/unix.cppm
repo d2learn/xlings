@@ -80,6 +80,72 @@ namespace platform_impl {
         return (0.299 * r + 0.587 * g + 0.114 * b) > 32768.0;
     }
 
+    // Atomically replace `dst` with the contents of `src`, even when `dst`
+    // is the currently running executable.
+    //
+    // POSIX semantics: rename(2) is atomic and the kernel keeps the old inode
+    // alive for the running process's executable mapping. New invocations
+    // resolve the path to the new inode; the running process continues to
+    // execute from the old one until it exits. This is the canonical
+    // self-update pattern used by apt / brew / rustup / et al.
+    //
+    // Steps:
+    //   1. copy src -> "<dst>.xlings.new" (staged on the same FS as dst so
+    //      the rename below is intra-FS and atomic)
+    //   2. chmod 0755
+    //   3. rename(tmp, dst) — atomic
+    //
+    // Returns true on success.
+    export bool atomic_replace_executable(const std::filesystem::path& src,
+                                          const std::filesystem::path& dst) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+
+        if (!fs::exists(src, ec) || ec) return false;
+
+        fs::create_directories(dst.parent_path(), ec);
+        ec.clear();
+
+        auto tmp = dst;
+        tmp += ".xlings.new";
+
+        // Pre-clean any leftover from a previous interrupted run.
+        if (fs::exists(tmp, ec)) {
+            fs::remove(tmp, ec);
+            ec.clear();
+        }
+
+        fs::copy_file(src, tmp, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            std::error_code rmec;
+            fs::remove(tmp, rmec);
+            return false;
+        }
+
+        fs::permissions(tmp,
+            fs::perms::owner_all
+          | fs::perms::group_read | fs::perms::group_exec
+          | fs::perms::others_read | fs::perms::others_exec,
+            fs::perm_options::replace, ec);
+        ec.clear();
+
+        fs::rename(tmp, dst, ec);
+        if (!ec) return true;
+
+        // Cross-filesystem fallback (rare: ec == EXDEV). copy + remove tmp.
+        if (ec == std::errc::cross_device_link) {
+            ec.clear();
+            fs::copy_file(tmp, dst, fs::copy_options::overwrite_existing, ec);
+            std::error_code rmec;
+            fs::remove(tmp, rmec);
+            return !ec;
+        }
+
+        std::error_code rmec;
+        fs::remove(tmp, rmec);
+        return false;
+    }
+
 } // namespace platform_impl
 } // namespace xlings
 

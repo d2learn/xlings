@@ -18,6 +18,7 @@ import xlings.core.xself;
 import xlings.core.xvm.types;
 import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
+import xlings.core.xvm.shim;
 import xlings.core.xim.libxpkg.types.script;
 import xlings.runtime.cancellation;
 
@@ -448,7 +449,8 @@ void process_xvm_operations_(const PlanNode& node,
             if (type == "program") {
                 auto& ws = Config::workspace();
                 bool hasActive = ws.contains(op.name) && !ws.at(op.name).empty();
-                if (!hasActive || useAfterInstall) {
+                bool didActivate = !hasActive || useAfterInstall;
+                if (didActivate) {
                     Config::workspace_mut()[op.name] = ver_key;
                 }
                 if (std::filesystem::exists(xlings_bin)) {
@@ -458,6 +460,31 @@ void process_xvm_operations_(const PlanNode& node,
                     std::filesystem::create_directories(paths.binDir);
                     xself::create_shim(xlings_bin, paths.binDir / shim_name);
                     common::mirror_shim_to_global_bin(xlings_bin, shim_name);
+                }
+
+                // Self-replace bootstrap when activating xlings/xim/xvm.
+                // main.cpp's multiplexer short-circuits these names to the
+                // local cli::run() — it doesn't consult the workspace at
+                // runtime. So the only way to make "active xlings = X.Y.Z"
+                // visible to the user is to physically replace the bootstrap
+                // binary at xlings_bin with the version we just installed.
+                // Atomic replace (POSIX rename / Windows MoveFileEx-old-then-
+                // copy) is safe even when the running process IS the bootstrap.
+                if (didActivate
+                    && xvm::is_xlings_binary(op.name)
+                    && std::filesystem::exists(xlings_bin)
+                    && !op.bindir.empty()) {
+                    auto active_bin = std::filesystem::path(op.bindir)
+                                    / ("xlings" + std::string(shim_ext));
+                    if (std::filesystem::exists(active_bin)) {
+                        if (platform::atomic_replace_executable(active_bin, xlings_bin)) {
+                            log::debug("[self-replace] bootstrap {} <- {}",
+                                      xlings_bin.string(), active_bin.string());
+                        } else {
+                            log::warn("[self-replace] failed: bootstrap {} <- {}",
+                                     xlings_bin.string(), active_bin.string());
+                        }
+                    }
                 }
             } else if (type == "lib" && !op.bindir.empty()) {
                 // Install lib symlink to subos lib dir

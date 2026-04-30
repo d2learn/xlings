@@ -38,6 +38,7 @@ namespace platform {
     export using platform_impl::spawn_command;
     export using platform_impl::wait_or_kill;
     export using platform_impl::Icon;
+    export using platform_impl::atomic_replace_executable;
 
     export [[nodiscard]] std::string get_rundir() {
         return gRundir;
