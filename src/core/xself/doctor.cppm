@@ -43,16 +43,17 @@ namespace fs = std::filesystem;
 // `--fix` policy (deliberately conservative):
 //   - missing shim   → recreate from the bootstrap binary  (safe, local)
 //   - orphan shim    → remove the file                     (safe, local)
-//   - broken payload → DO NOTHING.  Print an actionable hint with the
-//                      exact remove + install commands the user should
-//                      run.  doctor never deletes payload metadata or
-//                      pulls from the network.  Why: a "fix" that wipes
-//                      the DB entry but doesn't reinstall would leave
-//                      the user in a still-unusable state, and an auto
-//                      `remove + install` would silently touch the
-//                      network (failure-prone) and rerun install hooks
-//                      (side effects).  The user is the right party to
-//                      decide that.
+//   - broken payload → DO NOTHING.  Print an actionable hint
+//                      `xlings install <pkg>@<ver>` that the user can
+//                      run themselves.  doctor never deletes payload
+//                      metadata or pulls from the network.  Why: an
+//                      auto reinstall would silently touch the network
+//                      (failure-prone) and rerun install hooks (side
+//                      effects); the user is the right party to decide
+//                      to do that.  The recipe is just `install` —
+//                      installer's xvm-DB shortcut verifies payload
+//                      existence on disk now, so re-running the install
+//                      hook is automatic when the payload is missing.
 //   - alias warning  → not auto-fixed (could be intentional external).
 export int cmd_doctor(EventStream& stream, bool fix) {
     auto& p   = Config::paths();
@@ -176,12 +177,14 @@ export int cmd_doctor(EventStream& stream, bool fix) {
                                       : "✗ broken payload";
         add_field(label, std::move(detail));
         // Actionable remediation, exactly as the user should run it.
-        // doctor never runs this for them: remove + install touches the
-        // network, reruns install hooks, and can fail mid-way leaving a
-        // worse state than just deregistering. Manual is safer.
+        // doctor never runs this for them: install touches the network and
+        // reruns install hooks, both of which are user decisions.
+        // `xlings install <pkg>@<ver>` is sufficient on its own — the
+        // installer's xvm-DB shortcut now verifies payload existence
+        // before honoring it, so a broken-payload entry triggers a
+        // re-run of the install hook automatically.
         add_field("  → run", std::format(
-            "xlings remove {}@{} && xlings install {}@{}",
-            name, version, name, version));
+            "xlings install {}@{}", name, version));
     };
 
     for (auto& [name, vinfo] : db) {
@@ -268,13 +271,13 @@ export int cmd_doctor(EventStream& stream, bool fix) {
         if (fix) {
             if (healed > 0) add_field("healed", std::to_string(healed), true);
             if (broken > 0) add_field("hint",
-                "broken payloads not auto-fixed — run the listed remove+install commands",
+                "broken payloads not auto-fixed — run the listed `xlings install` commands",
                 true);
         } else {
             if (missing > 0 || orphans > 0)
                 add_field("hint", "rerun with `--fix` to repair shim-layer issues", true);
             if (broken > 0)
-                add_field("hint", "broken payloads: manually run the listed remove+install commands", true);
+                add_field("hint", "broken payloads: run the listed `xlings install` commands to repair", true);
         }
     }
 

@@ -190,7 +190,7 @@ echo "$out" | grep -q "broken payload" \
   || fail "S7: output should mention 'broken payload'; got:\n$out"
 echo "$out" | grep -q "active" \
   || fail "S7: output should mark active version with [active] tag"
-echo "$out" | grep -q "xlings remove doctor-fixture@1.0.0" \
+echo "$out" | grep -q "xlings install doctor-fixture@1.0.0" \
   || fail "S7: output should include the remediation command; got:\n$out"
 
 # ── S8: --fix MUST NOT touch broken-payload state (doctor never modifies
@@ -202,7 +202,7 @@ out=$(RUN self doctor --fix 2>&1) || rc=$?
 [[ $rc -ne 0 ]] || fail "S8: --fix should still exit non-zero when broken remains (got 0)"
 echo "$out" | grep -q "broken payload" \
   || fail "S8: --fix output should still report broken payload"
-echo "$out" | grep -q "xlings remove doctor-fixture@1.0.0" \
+echo "$out" | grep -q "xlings install doctor-fixture@1.0.0" \
   || fail "S8: --fix output should still print remediation command"
 
 # Confirm doctor preserved metadata (workspace + DB entry + shim file).
@@ -216,25 +216,23 @@ ws = json.loads(pathlib.Path(home, "subos/default/.xlings.json").read_text())
 assert (ws.get("workspace") or {}).get("doctor-fixture") == "1.0.0", \
     "S8: --fix must NOT clear workspace pointer"
 PY
-[[ -e "$SHIM" ]] || fail "S8: --fix must NOT remove shim file (only hints user to remove+install)"
+[[ -e "$SHIM" ]] || fail "S8: --fix must NOT remove shim file (only hints user to install)"
 
-# Note on recovery: actually performing the remove+install hinted by doctor
-# may currently hit limitations in xlings's `install`/`remove` paths when the
-# DB entry exists but the payload is gone (catalog reports not-installed →
-# `remove` short-circuits without cleaning DB; `install` then sees DB-says-
-# installed and skips the install hook). Improving that recovery flow is
-# tracked separately and intentionally not part of this doctor PR — doctor's
-# job ends at "diagnose + suggest". The test stops at the diagnose
-# assertions above.
-
-# Restore the payload directly on disk so the next scenarios start from a
-# clean doctor-fixture state. Doctor itself wouldn't (and shouldn't) do this;
-# we're acting as the user-with-the-original-tarball here.
-mkdir -p "$PAYLOAD_DIR/bin"
-printf '#!/bin/sh\necho doctor-fixture\n' > "$PAYLOAD_DIR/bin/doctor-fixture"
-chmod +x "$PAYLOAD_DIR/bin/doctor-fixture" 2>/dev/null
+# ── S8c: user follows the hint (`xlings install <pkg>@<ver>`)
+#         → installer detects payload missing, re-runs install hook,
+#         → next doctor reports OK
+#         (validates the installer-side trust-but-verify on the xvm-DB
+#          shortcut: a DB-registered version with no payload on disk
+#          must NOT be treated as "already installed".)
+log "S8c: user follows hint (xlings install) → installer self-heals → doctor OK"
+RUN install doctor-fixture@1.0.0 -y >/dev/null 2>&1 \
+  || fail "S8c: install (the hinted command) should succeed"
+[[ -d "$PAYLOAD_DIR/bin" ]] \
+  || fail "S8c: payload bin/ must be recreated by install hook"
+[[ -f "$PAYLOAD_DIR/bin/doctor-fixture" ]] \
+  || fail "S8c: payload binary must be recreated by install hook"
 RUN self doctor >/dev/null 2>&1 \
-  || fail "post-S8 reset: doctor should be clean again after restoring payload"
+  || fail "S8c: doctor should report OK after install self-heal"
 
 # ── Setup for alias-mode scenarios: a fixture with vdata.alias set ──
 # Inject a new fixture file. The catalog cache was warm from the earlier
