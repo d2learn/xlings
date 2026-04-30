@@ -6,14 +6,17 @@
 // surface from those partitions and (b) route subcommand names to them.
 //
 // Layout:
-//   xself.cppm           — this file (router + help)
-//   xself/init.cppm      — home layout helpers + `self init`
-//   xself/install.cppm   — `self install` (bootstrap from release tarball)
-//   xself/update.cppm    — `self update`
-//   xself/config.cppm    — `self config`
-//   xself/clean.cppm     — `self clean [--dry-run]`
-//   xself/migrate.cppm   — `self migrate`
-//   xself/doctor.cppm    — `self doctor [--fix]`
+//   xself.cppm                  — this file (router + help)
+//   xself/init.cppm             — home layout helpers + `self init`
+//   xself/install.cppm          — `self install` (bootstrap from release tarball)
+//   xself/update.cppm           — `self update`
+//   xself/config.cppm           — `self config`
+//   xself/clean.cppm            — `self clean [--dry-run]`
+//   xself/migrate.cppm          — `self migrate`
+//   xself/doctor.cppm           — `self doctor [--fix]`
+//   xself/compat_0_4_8.cppm     — COMPAT(0.4.8 → drop in 0.6.0): legacy
+//                                 alias migration. See its header comment
+//                                 for the removal procedure.
 
 export module xlings.core.xself;
 
@@ -26,6 +29,11 @@ export import xlings.core.xself.config;
 export import xlings.core.xself.clean;
 export import xlings.core.xself.migrate;
 export import xlings.core.xself.doctor;
+// COMPAT(0.4.8 → drop in 0.6.0): re-exported so external callers
+// (main.cpp, xvm/commands.cppm, xim/installer.cppm) reach
+// `xself::compat::*` through the umbrella module without depending
+// on the partition file directly.
+export import xlings.core.xself.compat_0_4_8;
 
 import xlings.libs.json;
 import xlings.runtime;

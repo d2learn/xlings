@@ -4,6 +4,10 @@ import xlings.cli;
 import xlings.core.config;
 import xlings.platform;
 import xlings.core.xvm.shim;
+// COMPAT(0.4.8 → drop in 0.6.0): see compat_0_4_8.cppm.
+// When this import is removed, also delete the
+// `report_deprecated_alias_if_match` call below.
+import xlings.core.xself.compat_0_4_8;
 
 #ifdef _WIN32
 #include <io.h>
@@ -35,29 +39,14 @@ int main(int argc, char* argv[]) {
     // Multicall: check argv[0] to determine mode.
     auto program_name = xlings::xvm::extract_program_name(argv[0]);
 
-    // 0.4.8: short-command aliases (xim/xvm/xself/xsubos/xinstall) were
-    // removed. If the user invoked one — usually via a leftover symlink
-    // from an older install or a hand-typed habit — give them a clear
-    // migration message instead of the cryptic "no version set for X"
-    // they'd otherwise hit when shim_dispatch tries to resolve the name.
-    static constexpr std::array<std::pair<std::string_view, std::string_view>, 5>
-        DEPRECATED_ALIASES = {{
-            {"xim",      "xlings install/remove/search/list/info ..."},
-            {"xvm",      "xlings use ..."},
-            {"xself",    "xlings self ..."},
-            {"xsubos",   "xlings subos ..."},
-            {"xinstall", "xlings install ..."},
-        }};
-    for (auto& [alias, suggestion] : DEPRECATED_ALIASES) {
-        if (alias == program_name) {
-            std::println(std::cerr,
-                "[error] `{}` was removed in 0.4.8. Use `{}` instead.",
-                alias, suggestion);
-            std::println(std::cerr,
-                "        Run `xlings self doctor --fix` to clean up "
-                "leftover shortcuts.");
-            return 2;
-        }
+    // COMPAT(0.4.8 → drop in 0.6.0): short-command aliases (xim/xvm/xself/
+    // xsubos/xinstall) were removed in 0.4.8. If the user invoked one —
+    // usually via a leftover symlink from an older install or a hand-typed
+    // habit — print a migration error (centralized in xself::compat) and
+    // exit with code 2 instead of falling through to shim_dispatch's
+    // cryptic "no version set for X".
+    if (xlings::xself::compat::report_deprecated_alias_if_match(program_name)) {
+        return 2;
     }
 
     int rc;

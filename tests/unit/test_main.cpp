@@ -1172,8 +1172,14 @@ TEST(XvmShimTest, ResolveExecutableFindsProgram) {
 }
 
 TEST(XvmShimTest, IsXlingsBinary) {
+    // 0.4.8 collapsed the multicall surface to a single canonical name.
+    // {xim, xvm, xself, xsubos, xinstall} are deprecated aliases that
+    // main.cpp short-circuits to a migration error — they must NOT be
+    // recognized as xlings here, otherwise they'd skip the error path.
     EXPECT_TRUE(xlings::xvm::is_xlings_binary("xlings"));
-    EXPECT_TRUE(xlings::xvm::is_xlings_binary("xim"));
+    EXPECT_FALSE(xlings::xvm::is_xlings_binary("xim"));
+    EXPECT_FALSE(xlings::xvm::is_xlings_binary("xvm"));
+    EXPECT_FALSE(xlings::xvm::is_xlings_binary("xself"));
     EXPECT_FALSE(xlings::xvm::is_xlings_binary("gcc"));
     EXPECT_FALSE(xlings::xvm::is_xlings_binary("node"));
     EXPECT_FALSE(xlings::xvm::is_xlings_binary("g++"));
@@ -1773,13 +1779,14 @@ TEST_F(ShimCreateTest, SourceNotExistReturnsFailed) {
 }
 
 TEST_F(ShimCreateTest, IsBuiltinShimCoversAll) {
-    // Base shims
+    // 0.4.8: only the canonical `xlings` is a builtin shim. The legacy
+    // aliases (xim/xinstall/xsubos/xself) were removed.
     EXPECT_TRUE(xlings::xself::is_builtin_shim("xlings"));
-    EXPECT_TRUE(xlings::xself::is_builtin_shim("xim"));
-    EXPECT_TRUE(xlings::xself::is_builtin_shim("xinstall"));
-    EXPECT_TRUE(xlings::xself::is_builtin_shim("xsubos"));
-    EXPECT_TRUE(xlings::xself::is_builtin_shim("xself"));
-    // Non-builtin (xmake removed from optional shims)
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xim"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xvm"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xinstall"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xsubos"));
+    EXPECT_FALSE(xlings::xself::is_builtin_shim("xself"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim("xmake"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim("gcc"));
     EXPECT_FALSE(xlings::xself::is_builtin_shim("node"));
@@ -1793,13 +1800,53 @@ TEST_F(ShimCreateTest, EnsureSubosShimsCreatesAll) {
 
     xlings::xself::ensure_subos_shims(binDir, src, fs::path{});
 
-    for (auto name : {"xlings", "xim", "xinstall", "xsubos", "xself"}) {
-        auto shim = binDir / name;
-        EXPECT_TRUE(fs::exists(shim)) << "missing shim: " << name;
+    // 0.4.8: only the canonical `xlings` shim is created.
+    auto xlings_shim = binDir / "xlings";
+    EXPECT_TRUE(fs::exists(xlings_shim));
 #if !defined(_WIN32)
-        EXPECT_TRUE(fs::is_symlink(shim)) << "shim should be symlink: " << name;
+    EXPECT_TRUE(fs::is_symlink(xlings_shim));
 #endif
+
+    // Legacy alias shims must NOT be created.
+    for (auto name : {"xim", "xvm", "xinstall", "xsubos", "xself"}) {
+        EXPECT_FALSE(fs::exists(binDir / name))
+            << "legacy alias shim '" << name << "' should not be created in 0.4.8+";
     }
+}
+
+// COMPAT(0.4.8 → drop in 0.6.0): tests for xself::compat::cleanup_legacy_alias_shims.
+// Delete this whole TEST_F block when the compat module is removed.
+TEST_F(ShimCreateTest, CleanupLegacyAliasShimsRemovesOnlyMatchingSymlinks) {
+#if defined(_WIN32)
+    GTEST_SKIP() << "symlink semantics differ on Windows";
+#else
+    namespace fs = std::filesystem;
+    auto src = testDir_ / "src" / "xlings";
+    auto binDir = testDir_ / "dst";
+    fs::create_directories(binDir);
+
+    // Layout under test:
+    //   xvm, xself, xsubos, xinstall — symlinks → bootstrap (must be removed)
+    //   xim                          — regular user file with colliding name
+    //                                  (must survive — gate is "is symlink")
+    for (auto name : {"xvm", "xself", "xsubos", "xinstall"}) {
+        fs::create_symlink(src, binDir / name);
+    }
+    auto userFile = binDir / "xim";
+    std::ofstream(userFile) << "user data\n";
+
+    xlings::xself::compat::cleanup_legacy_alias_shims(binDir, src);
+
+    // Regular user file with a colliding name must survive.
+    EXPECT_TRUE(fs::exists(userFile));
+    EXPECT_FALSE(fs::is_symlink(userFile));
+
+    // Matching symlinks must be removed.
+    for (auto name : {"xvm", "xself", "xsubos", "xinstall"}) {
+        EXPECT_FALSE(fs::exists(binDir / name))
+            << "legacy alias symlink '" << name << "' should have been removed";
+    }
+#endif
 }
 
 // ============================================================

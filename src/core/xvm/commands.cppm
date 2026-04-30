@@ -279,12 +279,11 @@ int cmd_use(const std::string& target, const std::string& version, EventStream& 
                 }
             }
         }
-        // Opportunistic migration: any time we re-pin the active xlings
-        // binary, also drop legacy alias symlinks (xim/xvm/...) left over
-        // from xlings ≤ 0.4.7. This is what makes the 0.4.7 → 0.4.8
-        // first-upgrade self-heal — `xlings self update` ends with
-        // `xlings use xlings latest`, which now lands here.
-        xself::cleanup_legacy_alias_shims(p.binDir, xlings_bin);
+        // COMPAT(0.4.8 → drop in 0.6.0): opportunistically drop legacy
+        // alias symlinks (xim/xvm/...) left over from xlings ≤ 0.4.7.
+        // Lands on this path during `xlings self update`, which ends with
+        // `xlings use xlings latest` — so first-upgrade self-heals.
+        xself::compat::cleanup_legacy_alias_shims(p.binDir, xlings_bin);
     }
 
     log::info("{} -> {}", target, resolved);
