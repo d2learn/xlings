@@ -200,7 +200,11 @@ jobs:
         run: |
           bash tests/e2e/mirror_fallback_test.sh
 
-      - name: "E2E-20: build/runtime deps split (kind=Build skip-activate + build_dep API)"
+      - name: "E2E-20: remove xim:xlings — single-version guard (regression: silent terminate on Windows)"
+        run: |
+          bash tests/e2e/remove_self_guard_test.sh
+
+      - name: "E2E-21: build/runtime deps split (kind=Build skip-activate + build_dep API)"
         run: |
           bash tests/e2e/build_deps_split_test.sh
 

@@ -19,6 +19,7 @@ import xlings.platform;
 import xlings.libs.tinyhttps;
 import xlings.core.xvm.db;
 import xlings.core.xvm.commands;
+import xlings.core.xvm.shim;
 import xlings.core.profile;
 import xlings.runtime.cancellation;
 
@@ -425,6 +426,42 @@ int cmd_remove(const std::string& target, bool yes, EventStream& stream) {
         if (!match->installed && resolvedToDefiniteVersion) {
             log::warn("{}@{} is not installed", displayName, displayVersion);
             return 0;
+        }
+
+        // Guard against `xlings remove xim:xlings` when xlings has only
+        // one version installed.
+        //
+        // The remove path's "no surviving versions" branch tries to delete
+        // the program's PATH shim — and that shim IS the running xlings.exe.
+        // On Windows this fails with ERROR_SHARING_VIOLATION; on POSIX it
+        // succeeds via unlink(2)'s allow-unlink-of-running-executable
+        // semantics, but leaves a workspace pointer to a version that no
+        // longer exists. Both outcomes are wrong for the same reason: this
+        // command is the wrong tool for the job.
+        //
+        // Multi-version remove (auto-switch to highest remaining) keeps
+        // working unchanged — the no-survivors branch never fires there.
+        // Full uninstall has its own command (`xlings self uninstall`)
+        // which uses the atomic_replace_executable + scheduled-delete
+        // machinery designed precisely for "uninstall the running binary".
+        if (xvm::is_xlings_binary(match->name)) {
+            auto db = Config::versions();
+            const auto* vinfo = xvm::get_vinfo(db, match->name);
+            bool only_version = vinfo
+                && vinfo->versions.size() == 1
+                && vinfo->versions.contains(match->version);
+            if (only_version) {
+                log::error(
+                    "xlings only has one version installed ({}@{}); "
+                    "cannot remove the running binary itself.",
+                    match->canonicalName, match->version);
+                log::println(
+                    "  use `xlings self uninstall` to fully uninstall xlings, or");
+                log::println(
+                    "  install another version first: `xlings install {}@<other>`",
+                    match->canonicalName);
+                return 2;
+            }
         }
     }
 
