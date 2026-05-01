@@ -60,10 +60,6 @@ jobs:
         run: |
           bash tests/e2e/prepare_fixture_index.sh
 
-      - name: Configure xmake
-        run: |
-          xmake f -c -p linux -m release -y
-
       - name: Build (linux_release)
         run: |
           chmod +x ./tools/linux_release.sh
@@ -106,11 +102,6 @@ jobs:
           clang --version
           xmake --version
 
-      - name: Configure xmake
-        run: |
-          xmake f -c -p macosx -m release --toolchain=llvm -y
-          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
-
       - name: Build (macos_release)
         run: |
           chmod +x ./tools/macos_release.sh
@@ -152,10 +143,6 @@ jobs:
         run: |
           Set-Location $env:GITHUB_WORKSPACE
           xlings install -y
-
-      - name: Configure xmake
-        shell: pwsh
-        run: xmake f -p windows -m release -y
 
       - name: Build (windows_release)
         shell: pwsh

@@ -62,15 +62,11 @@ jobs:
         run: |
           bash tests/e2e/prepare_fixture_index.sh
 
-      - name: Configure xmake
-        run: |
-          xmake f -c -p macosx -m release --toolchain=llvm --target_minver=11.0 -y
-
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 
       - name: Build and run unit tests
         run: |
-          xmake build xlings_tests
+          xmake build -vV xlings_tests
           xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────

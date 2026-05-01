@@ -67,15 +67,11 @@ jobs:
         run: |
           bash tests/e2e/prepare_fixture_index.sh
 
-      - name: Configure xmake
-        run: |
-          xmake f -c -p linux -m release -y
-
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 
       - name: Build and run unit tests
         run: |
-          xmake build xlings_tests
+          xmake build -vV xlings_tests
           xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
