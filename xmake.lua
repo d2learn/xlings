@@ -9,10 +9,33 @@ end
 
 add_repositories("mcpplibs-index https://github.com/mcpplibs/mcpplibs-index.git")
 
+-- Local-libxpkg override for cross-repo joint debugging.
+-- Usage:
+--   xmake f --local_libxpkg=/path/to/mcpplibs/libxpkg ...
+-- When set, we treat the local checkout as the source of mcpplibs-xpkg
+-- instead of fetching from the released xrepo package. Useful while
+-- iterating on libxpkg + xlings together (e.g., schema split for
+-- build/runtime deps). Empty string (default) → use released package.
+option("local_libxpkg")
+    set_default("")
+    set_showmenu(true)
+    set_description("Path to local mcpplibs/libxpkg checkout for dev builds")
+option_end()
+
 add_requires("cmdline 0.0.2")
 add_requires("ftxui 6.1.9")
 add_requires("mcpplibs-capi-lua")
-add_requires("mcpplibs-xpkg 0.0.31")
+-- mcpplibs-xpkg: prefer a local source checkout for joint debugging
+-- when --local_libxpkg=/path/to/libxpkg is set. We pull the upstream
+-- xmake.lua targets in via `includes()` so the consumer's build sees
+-- our edits without going through xrepo's package cache (which keys
+-- by released-version hash and ignores in-flight source changes).
+-- Otherwise fall back to the released package from xrepo.
+if has_config("local_libxpkg") and get_config("local_libxpkg") ~= "" then
+    includes(path.join(get_config("local_libxpkg"), "xmake.lua"))
+else
+    add_requires("mcpplibs-xpkg 0.0.31")
+end
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
 -- libarchive's compression backends. Force `system = false` so xmake
@@ -34,7 +57,13 @@ target("xlings")
     add_files("src/**.cppm")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua")
-    add_packages("mcpplibs-xpkg")
+    if has_config("local_libxpkg") and get_config("local_libxpkg") ~= "" then
+        add_deps("mcpplibs-xpkg", "mcpplibs-xpkg-loader",
+                 "mcpplibs-xpkg-index", "mcpplibs-xpkg-lua-stdlib",
+                 "mcpplibs-xpkg-executor")
+    else
+        add_packages("mcpplibs-xpkg")
+    end
     add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 
@@ -61,7 +90,13 @@ target("xlings_tests")
     add_files("src/**.cppm")
     add_includedirs("src/libs/json")
     add_packages("cmdline", "ftxui", "mcpplibs-capi-lua", "gtest")
-    add_packages("mcpplibs-xpkg")
+    if has_config("local_libxpkg") and get_config("local_libxpkg") ~= "" then
+        add_deps("mcpplibs-xpkg", "mcpplibs-xpkg-loader",
+                 "mcpplibs-xpkg-index", "mcpplibs-xpkg-lua-stdlib",
+                 "mcpplibs-xpkg-executor")
+    else
+        add_packages("mcpplibs-xpkg")
+    end
     add_packages("mcpplibs-tinyhttps", "libarchive")
     set_policy("build.c++.modules", true)
 

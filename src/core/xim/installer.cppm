@@ -741,6 +741,36 @@ public:
     explicit Installer(IndexManager& index) : index_(&index) {}
     explicit Installer(PackageCatalog& catalog) : catalog_(&catalog) {}
 
+    // Resolve a build_deps entry (e.g. "gcc", "ns:gcc@15") to its
+    // payload directory inside xpkgs/<store>/<version>. Plan is in topo
+    // order, so by the time a Runtime node runs its install hook all of
+    // its build_deps already have their payloads laid down on disk.
+    static std::filesystem::path
+    locate_dep_install_dir_(const InstallPlan& plan,
+                            const std::filesystem::path& dataDir,
+                            std::string_view depRef) {
+        auto at = depRef.find('@');
+        auto baseRef = (at == std::string_view::npos) ? depRef
+                                                       : depRef.substr(0, at);
+        auto colon = baseRef.find(':');
+        std::string ns = (colon == std::string_view::npos)
+            ? std::string{}
+            : std::string(baseRef.substr(0, colon));
+        std::string bare = (colon == std::string_view::npos)
+            ? std::string(baseRef)
+            : std::string(baseRef.substr(colon + 1));
+        for (auto& n : plan.nodes) {
+            bool match = (n.name == bare)
+                       || (n.canonicalName == baseRef)
+                       || (n.rawName == depRef);
+            if (!ns.empty()) match = match && (n.namespaceName == ns);
+            if (!match) continue;
+            auto root = n.storeRoot.empty() ? (dataDir / "xpkgs") : n.storeRoot;
+            return root / detail_::effective_store_name_(n) / n.version;
+        }
+        return {};
+    }
+
     // Execute an install plan.
     // useAfterInstall: when true, force the installed program version to
     // become the active one even if another version is currently active.
@@ -1020,8 +1050,59 @@ public:
                     ? dlIt->second.localFile.parent_path()
                     : detail_::runtime_dir_(node, dataDir); // fallback to runtime dir
                 detail_::ScopedCurrentDir_ installCwd(hookCwd);
+
+                // Inject XLINGS_BUILDDEP_<UPPER>_PATH for every build_dep
+                // declared by this node, and prepend their bin/ dirs to
+                // PATH for the duration of the hook. The hook (and any
+                // subprocess it spawns) sees both forms; xpkg-side
+                // pkginfo.build_dep() picks the env path first.
+                std::string oldPath = std::getenv("PATH") ? std::getenv("PATH") : "";
+                std::vector<std::string> setEnvKeys;
+                std::string newPath = oldPath;
+                for (auto& bd : node.build_deps) {
+                    auto bdDir = locate_dep_install_dir_(plan, dataDir, bd);
+                    if (bdDir.empty()) {
+                        log::debug("[{}] build_dep '{}' not found in plan",
+                                   node.name, bd);
+                        continue;
+                    }
+                    std::string nameOnly = bd;
+                    if (auto a = nameOnly.find('@'); a != std::string::npos)
+                        nameOnly.resize(a);
+                    if (auto c = nameOnly.find(':'); c != std::string::npos)
+                        nameOnly = nameOnly.substr(c + 1);
+                    std::string upper;
+                    upper.reserve(nameOnly.size());
+                    for (char c : nameOnly) {
+                        upper += std::isalnum(static_cast<unsigned char>(c))
+                            ? static_cast<char>(std::toupper(static_cast<unsigned char>(c)))
+                            : '_';
+                    }
+                    auto envKey = "XLINGS_BUILDDEP_" + upper + "_PATH";
+                    platform::set_env_variable(envKey, bdDir.string());
+                    setEnvKeys.push_back(envKey);
+                    auto bdBin = (bdDir / "bin").string();
+                    if (std::filesystem::exists(bdDir / "bin")) {
+                        newPath = bdBin + std::string(1, platform::PATH_SEPARATOR) + newPath;
+                    }
+                    log::debug("[{}] build_dep {} -> {} (env {})",
+                               node.name, bd, bdDir.string(), envKey);
+                }
+                if (!setEnvKeys.empty()) {
+                    platform::set_env_variable("PATH", newPath);
+                }
+
                 auto hookResult = executor.run_hook(
                     mcpplibs::xpkg::HookType::Install, ctx);
+
+                // Restore env regardless of hook outcome
+                if (!setEnvKeys.empty()) {
+                    platform::set_env_variable("PATH", oldPath);
+                    for (auto& k : setEnvKeys) {
+                        platform::set_env_variable(k, "");
+                    }
+                }
+
                 if (!hookResult.success) {
                     log::error("install hook failed for {}: {}",
                                node.name, hookResult.error);
@@ -1091,7 +1172,14 @@ public:
                 }
             }
 
-            if (!executor.has_hook(mcpplibs::xpkg::HookType::Config) && node.pkgType == 1 /* Script */) {
+            if (node.kind == DepKind::Build) {
+                // Build-only deps: payload is on disk and resolvable via
+                // pkginfo.build_dep() / XLINGS_BUILDDEP_*_PATH. We skip
+                // config hook + xvm operations entirely so the dep does
+                // NOT take over a workspace slot or get a PATH shim.
+                log::debug("[{}] kind=Build: skipping config hook / workspace activation",
+                           node.name);
+            } else if (!executor.has_hook(mcpplibs::xpkg::HookType::Config) && node.pkgType == 1 /* Script */) {
                 if (!script::default_config(node, dataDir)) {
                     if (onStatus) {
                         onStatus({ node.name, InstallPhase::Failed, 0.0f,

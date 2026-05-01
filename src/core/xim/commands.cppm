@@ -591,14 +591,30 @@ int cmd_info(const std::string& target, EventStream& stream) {
         addField(fieldsJson, "versions", verStr);
     }
 
-    auto depsIt = pkg->xpm.deps.find(platform);
-    if (depsIt != pkg->xpm.deps.end() && !depsIt->second.empty()) {
-        std::string depStr;
-        for (auto& d : depsIt->second) {
-            if (!depStr.empty()) depStr += " ";
-            depStr += d;
+    auto join_deps = [](const std::vector<std::string>& v) {
+        std::string s;
+        for (auto& d : v) {
+            if (!s.empty()) s += " ";
+            s += d;
         }
-        addField(fieldsJson, "deps", depStr);
+        return s;
+    };
+    auto rtIt = pkg->xpm.runtime_deps.find(platform);
+    auto bdIt = pkg->xpm.build_deps.find(platform);
+    bool hasRuntime = (rtIt != pkg->xpm.runtime_deps.end() && !rtIt->second.empty());
+    bool hasBuild   = (bdIt != pkg->xpm.build_deps.end()   && !bdIt->second.empty());
+    if (hasRuntime || hasBuild) {
+        // Show split form when either is non-empty. The legacy `deps`
+        // field was always the union, so omit it to avoid duplication
+        // when a package only declares the array form (loader fans
+        // legacy → both kinds, so listing all three would triple-print).
+        if (hasRuntime) addField(fieldsJson, "runtime deps", join_deps(rtIt->second));
+        if (hasBuild)   addField(fieldsJson, "build deps",   join_deps(bdIt->second));
+    } else {
+        auto depsIt = pkg->xpm.deps.find(platform);
+        if (depsIt != pkg->xpm.deps.end() && !depsIt->second.empty()) {
+            addField(fieldsJson, "deps", join_deps(depsIt->second));
+        }
     }
 
     addField(fieldsJson, "installed", match->installed ? "yes" : "no", match->installed);
