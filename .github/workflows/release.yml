@@ -10,9 +10,14 @@ on:
 
 env:
   GIT_TERMINAL_PROMPT: 0
-  BOOTSTRAP_XLINGS_VERSION: v0.4.2
-  BOOTSTRAP_LLVM_VERSION: 20.1.7
-  XMAKE_VERSION: v3.0.7
+  # CI runs on github.com; force GLOBAL mirror so xim doesn't try gitee
+  # endpoints (which need auth and aren't reachable in CI).
+  XLINGS_RELEASE_MIRROR: GLOBAL
+  # Pinned bootstrap xlings used to read /.xlings.json and install all
+  # build dependencies (xmake, cmake, ninja, musl-gcc on Linux, llvm on
+  # macOS). Bump this in a dedicated PR after verifying the target
+  # release is healthy.
+  BOOTSTRAP_XLINGS_VERSION: v0.4.8
 
 jobs:
   build-linux:
@@ -26,49 +31,44 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y curl git build-essential
 
-      - name: Install xmake (bundled v3.0.7)
-        run: |
-          XMAKE_URL="https://github.com/xmake-io/xmake/releases/download/v3.0.7/xmake-bundle-v3.0.7.linux.x86_64"
-          curl -fsSL -o xmake.bin "$XMAKE_URL" -H "Accept: application/octet-stream"
-          chmod +x xmake.bin
-          mkdir -p xmake/bin
-          mv xmake.bin xmake/bin/xmake
-          echo "PATH=$GITHUB_WORKSPACE/xmake/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$GITHUB_WORKSPACE/xmake/bin:$PATH"
-          xmake --version
-
-      - name: Install Xlings
+      - name: Install bootstrap xlings (pinned ${{ env.BOOTSTRAP_XLINGS_VERSION }})
         env:
           XLINGS_NON_INTERACTIVE: 1
+          XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
           curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
-          echo "XLINGS_HOME=$HOME/.xlings" >> "$GITHUB_ENV"
-          echo "PATH=$HOME/.xlings/subos/current/bin:$PATH" >> "$GITHUB_ENV"
+          echo "XLINGS_HOME=$HOME/.xlings"           >> "$GITHUB_ENV"
+          echo "$HOME/.xlings/subos/current/bin"     >> "$GITHUB_PATH"
+          echo "$HOME/.xlings/bin"                   >> "$GITHUB_PATH"
 
-      - name: Install musl-gcc 15.1
+      - name: Cache xlings package payloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.xlings/data/xpkgs
+          key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xlings-deps-${{ runner.os }}-
+
+      - name: Install build dependencies (xmake / cmake / ninja / musl-gcc)
         run: |
-          MUSL_SDK=$HOME/.xlings/data/xpkgs/musl-gcc/15.1.0
-          mkdir -p "$MUSL_SDK"
-          curl -fSL# https://github.com/xlings-res/musl-gcc/releases/download/15.1.0/musl-gcc-15.1.0-linux-x86_64.tar.gz | tar xz -C "$MUSL_SDK" --strip-components=1
-          echo "MUSL_SDK=$MUSL_SDK" >> "$GITHUB_ENV"
-          echo "CC=x86_64-linux-musl-gcc" >> "$GITHUB_ENV"
-          echo "CXX=x86_64-linux-musl-g++" >> "$GITHUB_ENV"
-          echo "PATH=$MUSL_SDK/bin:$PATH" >> "$GITHUB_ENV"
-          export PATH="$MUSL_SDK/bin:$PATH"
-          test -f "$MUSL_SDK/x86_64-linux-musl/include/c++/15.1.0/bits/std.cc"
-          x86_64-linux-musl-g++ --version
-          bash tools/setup_musl_runtime.sh "$MUSL_SDK"
+          cd "$GITHUB_WORKSPACE"
+          xlings install -y
+          gcc --version
+          xmake --version
 
       - name: Prepare fixture index repo
         run: |
           bash tests/e2e/prepare_fixture_index.sh
 
-      - name: Configure xmake
-        run: |
-          xmake f -c -p linux -m release --sdk="$MUSL_SDK" --cross=x86_64-linux-musl- --cc="$CC" --cxx="$CXX" -y
-
       - name: Build (linux_release)
+        # TODO(2026-): linux_release.sh's default MUSL_SDK still assumes
+        # the legacy `data/xpkgs/musl-gcc/...` layout (no namespace
+        # prefix). Modern xlings install puts it under
+        # `data/xpkgs/xim-x-musl-gcc/...`. Exporting MUSL_SDK explicitly
+        # here gets the right path; can be dropped once the script is
+        # updated to glob both layouts.
         run: |
+          export MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
 
@@ -84,57 +84,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install xmake
-        uses: xmake-io/github-action-setup-xmake@v1
+      - name: Install bootstrap xlings (pinned ${{ env.BOOTSTRAP_XLINGS_VERSION }})
+        env:
+          XLINGS_NON_INTERACTIVE: 1
+          XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          echo "XLINGS_HOME=$HOME/.xlings"           >> "$GITHUB_ENV"
+          echo "$HOME/.xlings/subos/current/bin"     >> "$GITHUB_PATH"
+          echo "$HOME/.xlings/bin"                   >> "$GITHUB_PATH"
+
+      - name: Cache xlings package payloads
+        uses: actions/cache@v4
         with:
-          xmake-version: ${{ env.XMAKE_VERSION }}
+          path: ~/.xlings/data/xpkgs
+          key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xlings-deps-${{ runner.os }}-
 
-      - name: Bootstrap legacy xlings
+      - name: Install build dependencies (xmake / cmake / ninja / llvm)
         run: |
-          PKG_VERSION="${BOOTSTRAP_XLINGS_VERSION#v}"
-          ARCHIVE="xlings-${PKG_VERSION}-macosx-arm64.tar.gz"
-          DOWNLOAD_URL="https://github.com/d2learn/xlings/releases/download/${BOOTSTRAP_XLINGS_VERSION}/${ARCHIVE}"
-          BOOTSTRAP_ROOT="$RUNNER_TEMP/bootstrap-xlings"
-          rm -rf "$BOOTSTRAP_ROOT"
-          mkdir -p "$BOOTSTRAP_ROOT"
-          curl -fsSL -o "$BOOTSTRAP_ROOT/$ARCHIVE" "$DOWNLOAD_URL"
-          tar -xzf "$BOOTSTRAP_ROOT/$ARCHIVE" -C "$BOOTSTRAP_ROOT"
-          BOOTSTRAP_HOME="$(find "$BOOTSTRAP_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'xlings-*' | head -1)"
-          [[ -n "$BOOTSTRAP_HOME" ]] || { echo "bootstrap xlings package not found"; exit 1; }
-          xattr -cr "$BOOTSTRAP_HOME" 2>/dev/null || true
-          echo "BOOTSTRAP_XLINGS_HOME=$BOOTSTRAP_HOME" >> "$GITHUB_ENV"
-
-      - name: Install LLVM toolchain with legacy xlings
-        run: |
-          export XLINGS_HOME="$HOME/.xlings"
-          rm -rf "$XLINGS_HOME"
-          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" self init
-          "$BOOTSTRAP_XLINGS_HOME/bin/xlings" install llvm@"$BOOTSTRAP_LLVM_VERSION" -y
-          ACTUAL_LLVM_PREFIX="$(find "$XLINGS_HOME/data/xpkgs" -path "*/${BOOTSTRAP_LLVM_VERSION}" -type d | head -1)"
-          [[ -n "$ACTUAL_LLVM_PREFIX" ]] || { echo "installed llvm toolchain not found"; exit 1; }
-          LLVM_ALIAS_ROOT="$XLINGS_HOME/data/xpkgs/local-x-llvm"
-          mkdir -p "$LLVM_ALIAS_ROOT"
-          rm -rf "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
-          ln -s "$ACTUAL_LLVM_PREFIX" "$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
-          LLVM_PREFIX="$LLVM_ALIAS_ROOT/$BOOTSTRAP_LLVM_VERSION"
-          [[ -x "$LLVM_PREFIX/bin/clang++" ]] || { echo "clang++ missing in $LLVM_PREFIX"; exit 1; }
-          echo "LLVM_PREFIX=$LLVM_PREFIX" >> "$GITHUB_ENV"
-          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
-          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
-          echo "Configured LLVM toolchain path: $LLVM_PREFIX"
-
-      - name: Configure xmake
-        run: |
-          # Temporary workaround: configure xmake with the explicit SDK path
-          # from the bootstrap-installed LLVM toolchain on the GitHub runner.
-          xmake f -c -p macosx -m release \
-            --toolchain=llvm \
-            --sdk="$LLVM_PREFIX" \
-            -y
-          echo "xmake configured with LLVM SDK: $LLVM_PREFIX"
+          cd "$GITHUB_WORKSPACE"
+          xlings install -y
+          clang --version
+          xmake --version
 
       - name: Build (macos_release)
+        # TODO(2026-): same TODO as linux_release — macos_release.sh's
+        # default LLVM_PREFIX assumes legacy `data/xpkgs/llvm/...`
+        # without `xim-x-` prefix. Drop this export once the script
+        # is updated.
         run: |
+          export LLVM_PREFIX="$HOME/.xlings/data/xpkgs/xim-x-llvm/20.1.7"
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 
@@ -150,13 +131,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install xmake
-        uses: xmake-io/github-action-setup-xmake@v1
-        with:
-          xmake-version: latest
+      - name: Install bootstrap xlings (pinned ${{ env.BOOTSTRAP_XLINGS_VERSION }})
+        shell: pwsh
+        env:
+          XLINGS_NON_INTERACTIVE: '1'
+          XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
+        run: |
+          irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex
+          "XLINGS_HOME=$env:USERPROFILE\.xlings"            >> $env:GITHUB_ENV
+          "$env:USERPROFILE\.xlings\subos\current\bin"      >> $env:GITHUB_PATH
+          "$env:USERPROFILE\.xlings\bin"                    >> $env:GITHUB_PATH
 
-      - name: Configure xmake
-        run: xmake f -p windows -m release -y
+      - name: Cache xlings package payloads
+        uses: actions/cache@v4
+        with:
+          path: ~\.xlings\data\xpkgs
+          key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xlings-deps-${{ runner.os }}-
+
+      - name: Install build dependencies (xmake / cmake / ninja)
+        shell: pwsh
+        run: |
+          Set-Location $env:GITHUB_WORKSPACE
+          xlings install -y
 
       - name: Build (windows_release)
         shell: pwsh

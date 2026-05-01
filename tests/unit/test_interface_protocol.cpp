@@ -68,8 +68,15 @@ std::pair<std::string, int> run_xlings_(
     if (!xlings_home.empty()) {
 #ifdef _WIN32
         _putenv_s("XLINGS_HOME", xlings_home.c_str());
+        // XLINGS_PROJECT_DIR is auto-set by xlings whenever it loads a
+        // project config (config.cppm). It can leak in from the user's
+        // shell (e.g., running xlings in the repo before the test) and
+        // would override the `cd <neutral_cwd>` isolation below by
+        // forcing the spawned binary to use the leaked project root.
+        _putenv_s("XLINGS_PROJECT_DIR", "");
 #else
         ::setenv("XLINGS_HOME", xlings_home.c_str(), 1);
+        ::unsetenv("XLINGS_PROJECT_DIR");
 #endif
     }
 
@@ -96,6 +103,20 @@ std::pair<std::string, int> run_xlings_(
         cmd += " '" + a + "'";
 #endif
     }
+
+    // Run from a clean directory so the spawned xlings doesn't walk up
+    // and pick up an unrelated project-scope `.xlings.json` (e.g. the
+    // repo root's, which now ships its own `.xlings.json` for CI
+    // self-host purposes). The system temp dir typically has no
+    // ancestor `.xlings.json`, so project-scope detection cleanly
+    // returns "no project". XLINGS_HOME (set above) still routes the
+    // spawned binary to the sandbox global config.
+    auto neutral_cwd = std::filesystem::temp_directory_path().string();
+#ifdef _WIN32
+    cmd = "cd /D \"" + neutral_cwd + "\" && " + cmd;
+#else
+    cmd = "cd \"" + neutral_cwd + "\" && " + cmd;
+#endif
 #ifdef _WIN32
     cmd += " 2>NUL";
 #else

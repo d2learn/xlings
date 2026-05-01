@@ -11,6 +11,10 @@ env:
   # CI runs on github.com; force GLOBAL mirror so xim doesn't try gitee
   # endpoints (which need auth and aren't reachable in CI).
   XLINGS_RELEASE_MIRROR: GLOBAL
+  # Pinned bootstrap xlings used to read /.xlings.json and install xmake
+  # / cmake / ninja. Windows uses MSVC from the runner image (no compiler
+  # in .xlings.json), so xmake's auto-detection still applies.
+  BOOTSTRAP_XLINGS_VERSION: v0.4.8
 
 jobs:
   build-and-test:
@@ -20,25 +24,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Phase 1: Configure Environment ──────────────────────────
+      # ── Phase 1: Configure Environment via xlings ─────────────────
 
-      - name: Install xmake
-        uses: xmake-io/github-action-setup-xmake@v1
+      - name: Install bootstrap xlings (pinned ${{ env.BOOTSTRAP_XLINGS_VERSION }})
+        shell: pwsh
+        env:
+          XLINGS_NON_INTERACTIVE: '1'
+          XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
+        run: |
+          irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex
+          "XLINGS_HOME=$env:USERPROFILE\.xlings"            >> $env:GITHUB_ENV
+          "$env:USERPROFILE\.xlings\subos\current\bin"      >> $env:GITHUB_PATH
+          "$env:USERPROFILE\.xlings\bin"                    >> $env:GITHUB_PATH
+
+      - name: Cache xlings package payloads
+        uses: actions/cache@v4
         with:
-          xmake-version: latest
+          path: ~\.xlings\data\xpkgs
+          key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xlings-deps-${{ runner.os }}-
+
+      - name: Install build dependencies (xmake / cmake / ninja)
+        shell: pwsh
+        run: |
+          Set-Location $env:GITHUB_WORKSPACE
+          xlings install -y
 
       - name: Prepare fixture index repo
+        shell: bash
         run: |
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
-        run: xmake f -p windows -m release -y
+        shell: pwsh
+        run: xmake f -p windows -m release -y -vv
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 
       - name: Build and run unit tests
+        shell: pwsh
         run: |
-          xmake build xlings_tests
+          xmake build -y -vv xlings_tests
           xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
