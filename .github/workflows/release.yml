@@ -61,7 +61,14 @@ jobs:
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Build (linux_release)
+        # TODO(2026-): linux_release.sh's default MUSL_SDK still assumes
+        # the legacy `data/xpkgs/musl-gcc/...` layout (no namespace
+        # prefix). Modern xlings install puts it under
+        # `data/xpkgs/xim-x-musl-gcc/...`. Exporting MUSL_SDK explicitly
+        # here gets the right path; can be dropped once the script is
+        # updated to glob both layouts.
         run: |
+          export MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
 
@@ -103,7 +110,12 @@ jobs:
           xmake --version
 
       - name: Build (macos_release)
+        # TODO(2026-): same TODO as linux_release — macos_release.sh's
+        # default LLVM_PREFIX assumes legacy `data/xpkgs/llvm/...`
+        # without `xim-x-` prefix. Drop this export once the script
+        # is updated.
         run: |
+          export LLVM_PREFIX="$HOME/.xlings/data/xpkgs/xim-x-llvm/20.1.7"
           chmod +x ./tools/macos_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/macos_release.sh
 

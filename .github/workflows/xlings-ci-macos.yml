@@ -63,8 +63,19 @@ jobs:
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
+        # TODO(2026-): the explicit `--sdk=...` here works around an xmake
+        # quirk: xrepo subprocesses don't inherit toolchain SDK info, so
+        # any xrepo dep using `import std` (mcpplibs-xpkg etc) can't
+        # resolve std modules without --sdk pointing at the LLVM payload.
+        # When the upstream issue is fixed, drop --sdk and rely on
+        # `clang`/`clang++` from `xlings install`-installed shims on PATH.
         run: |
-          xmake f -p macosx -m release --toolchain=llvm --target_minver=11.0 -y -vv
+          LLVM_PREFIX="$HOME/.xlings/data/xpkgs/xim-x-llvm/20.1.7"
+          xmake f -c -p macosx -m release \
+            --toolchain=llvm \
+            --sdk="$LLVM_PREFIX" \
+            --target_minver=11.0 \
+            -y -vv
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 

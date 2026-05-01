@@ -68,8 +68,26 @@ jobs:
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
+        # TODO(2026-): the explicit `--sdk=...` here works around an xmake
+        # quirk: when an xrepo dependency (e.g. mcpplibs-xpkg) uses
+        # `import std`, the xrepo subprocess does its own `xmake f` and
+        # does NOT inherit the parent's PATH-based toolchain. Without
+        # `--sdk` it can't locate `<sdk>/x86_64-linux-musl/include/c++/
+        # <ver>/bits/std.cc`, falls back to a deprecated `-fmodules-ts`
+        # check that fails on GCC 15, and reports the misleading
+        # "compiler(gcc): does not support c++ module" error.
+        # See https://github.com/xmake-io/xmake/issues — likely needs
+        # an upstream fix to propagate SDK info into xrepo build env.
+        # When fixed, drop --sdk / --cross / --cc / --cxx and rely on
+        # the musl-gcc-flavor `gcc`/`g++` shims on PATH.
         run: |
-          xmake f -p linux -m release -y -vv
+          MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
+          xmake f -c -p linux -m release \
+            --sdk="$MUSL_SDK" \
+            --cross=x86_64-linux-musl- \
+            --cc=x86_64-linux-musl-gcc \
+            --cxx=x86_64-linux-musl-g++ \
+            -y -vv
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
 
