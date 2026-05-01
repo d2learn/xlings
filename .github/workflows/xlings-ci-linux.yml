@@ -68,25 +68,28 @@ jobs:
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Configure xmake
-        # TODO(2026-): the explicit `--sdk=...` here works around an xmake
-        # quirk: when an xrepo dependency (e.g. mcpplibs-xpkg) uses
-        # `import std`, the xrepo subprocess does its own `xmake f` and
-        # does NOT inherit the parent's PATH-based toolchain. Without
-        # `--sdk` it can't locate `<sdk>/x86_64-linux-musl/include/c++/
-        # <ver>/bits/std.cc`, falls back to a deprecated `-fmodules-ts`
-        # check that fails on GCC 15, and reports the misleading
-        # "compiler(gcc): does not support c++ module" error.
-        # See https://github.com/xmake-io/xmake/issues — likely needs
-        # an upstream fix to propagate SDK info into xrepo build env.
-        # When fixed, drop --sdk / --cross / --cc / --cxx and rely on
-        # the musl-gcc-flavor `gcc`/`g++` shims on PATH.
+        # TODO(2026-): we pass --cc / --cxx as ABSOLUTE PATHS to the
+        # real musl-gcc binaries (not the shim names) to bypass xlings'
+        # shim dispatch. xmake's xrepo install spawns subprocesses with
+        # cwd at <pkg-cache>/.../source.tmp, where the shim's project
+        # search can't find the project workspace; the shim then
+        # falls back to the GLOBAL xvm DB which has no musl-gcc entries
+        # (bootstrap xlings 0.4.8 doesn't recognize `projectScope:
+        # false` yet, so it registered musl-gcc to project scope at
+        # install time). Result: shim returns "no version set" in
+        # subprocess context, xmake misinterprets as "compiler doesn't
+        # support flag X", build fails. Absolute paths sidestep the
+        # whole shim dispatch chain.
+        # When the bootstrap xlings is bumped to a release that knows
+        # `projectScope: false` (or musl-gcc is registered globally),
+        # we can revert to bare `--cc=x86_64-linux-musl-gcc`.
         run: |
           MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
           xmake f -c -p linux -m release \
             --sdk="$MUSL_SDK" \
             --cross=x86_64-linux-musl- \
-            --cc=x86_64-linux-musl-gcc \
-            --cxx=x86_64-linux-musl-g++ \
+            --cc="$MUSL_SDK/bin/x86_64-linux-musl-gcc" \
+            --cxx="$MUSL_SDK/bin/x86_64-linux-musl-g++" \
             -y -vv
 
       # ── Phase 1.5: Unit Tests ────────────────────────────────────
