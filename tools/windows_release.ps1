@@ -33,6 +33,11 @@ Set-Location $PROJECT_DIR
 Info "Version: $VERSION  |  Arch: $ARCH"
 Info "Building C++ binary..."
 xmake clean -q 2>$null
+# `xmake f` is required so xmake resolves+installs xrepo deps (ftxui /
+# cmdline / ...) before the `xmake build` step touches sources. The
+# Linux + macOS release scripts have an equivalent step.
+xmake f -p windows -m release -y
+if ($LASTEXITCODE -ne 0) { Fail "xmake configure failed" }
 xmake build -y xlings
 if ($LASTEXITCODE -ne 0) { Fail "xmake build failed" }
 
