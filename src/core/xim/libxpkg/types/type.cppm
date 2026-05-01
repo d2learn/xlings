@@ -29,6 +29,11 @@ struct InstallStatus {
     std::string message;
 };
 
+// How a node was reached in the dep graph. Determines whether the
+// installer activates it in the subos workspace (Runtime) or merely
+// places it in the xpkgs store for the consumer's install hook (Build).
+enum class DepKind { Runtime, Build };
+
 // A node in the dependency-resolved install plan
 struct PlanNode {
     std::string rawName;
@@ -39,7 +44,19 @@ struct PlanNode {
     std::string repoName;
     std::filesystem::path pkgFile;
     std::filesystem::path storeRoot;
+    // Effective union of runtime + build deps (kept for legacy callers
+    // that don't yet distinguish; populated by resolver as `runtime ∪
+    // build`).
     std::vector<std::string> deps;
+    // The two kinds, populated when the package's xpm declares them
+    // separately. For legacy packages where only `deps` is present in
+    // the schema, both lists are equal to `deps` (loader-side fan-out).
+    std::vector<std::string> runtime_deps;
+    std::vector<std::string> build_deps;
+    // How this node was added to the plan: Build = a transitive
+    // build-only dep of some other node; Runtime = part of a consumer's
+    // active workspace contract. Build nodes skip workspace activation.
+    DepKind kind { DepKind::Runtime };
     bool alreadyInstalled { false };
     bool isSystemPM { false };
     PackageScope scope { PackageScope::Global };

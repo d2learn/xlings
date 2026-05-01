@@ -141,6 +141,10 @@ jobs:
         run: |
           bash tests/e2e/remove_self_guard_test.sh
 
+      - name: "E2E-11: build/runtime deps split (kind=Build skip-activate + build_dep API)"
+        run: |
+          bash tests/e2e/build_deps_split_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

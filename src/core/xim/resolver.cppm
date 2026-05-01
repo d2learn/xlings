@@ -42,9 +42,13 @@ resolve(IndexManager& index,
     std::unordered_map<std::string, Color_> color;
     std::unordered_map<std::string, PlanNode> nodeMap;
 
-    // Recursive DFS to expand dependencies
-    std::function<bool(const std::string&, std::vector<std::string>&)> expand =
-        [&](const std::string& target, std::vector<std::string>& path) -> bool {
+    // Recursive DFS to expand dependencies. `kind` propagates from
+    // parent: a Runtime parent's runtime_deps stay Runtime; a Runtime
+    // parent's build_deps become Build; once a subtree is Build, every
+    // transitive dep stays Build (it's only present to serve the build
+    // of an upstream consumer, not the user's active workspace).
+    std::function<bool(const std::string&, std::vector<std::string>&, DepKind)> expand =
+        [&](const std::string& target, std::vector<std::string>& path, DepKind kind) -> bool {
 
         auto [baseName, versionHint] = parse_target_(target);
 
@@ -119,6 +123,7 @@ resolve(IndexManager& index,
         node.name = name;
         node.pkgFile = entry->path;
         node.alreadyInstalled = entry->installed;
+        node.kind = kind;
 
         if (pkg) {
             node.pkgType = static_cast<int>(pkg->type);
@@ -145,15 +150,35 @@ resolve(IndexManager& index,
             }
             key = node_key_(name, node.version);
 
-            // Get deps for this platform
+            // Populate runtime_deps and build_deps separately. Loader
+            // fan-out guarantees: legacy `deps = { ... }` array form is
+            // mirrored into both vectors; new table form `deps = {
+            // runtime = ..., build = ... }` is split. So reading the two
+            // separately is always safe.
+            auto rtIt = pkg->xpm.runtime_deps.find(platform);
+            if (rtIt != pkg->xpm.runtime_deps.end())
+                node.runtime_deps = rtIt->second;
+            auto bdIt = pkg->xpm.build_deps.find(platform);
+            if (bdIt != pkg->xpm.build_deps.end())
+                node.build_deps = bdIt->second;
+
+            // The legacy `deps` field is the union (loader-side) — keep
+            // populating it so existing topo-sort code paths that read
+            // `node.deps` keep working until they're migrated.
             auto depsIt = pkg->xpm.deps.find(platform);
-            if (depsIt != pkg->xpm.deps.end()) {
-                node.deps = depsIt->second;
-                for (auto& dep : node.deps) {
-                    if (!expand(dep, path)) {
-                        // Continue collecting errors
-                    }
-                }
+            if (depsIt != pkg->xpm.deps.end()) node.deps = depsIt->second;
+
+            // Walk the two kinds. Build subtrees stay Build (the dep is
+            // only being installed to satisfy an upstream consumer's
+            // install hook); Runtime parents fork their build_deps to
+            // Build but keep runtime_deps as Runtime.
+            DepKind rt_kind = (kind == DepKind::Build) ? DepKind::Build
+                                                       : DepKind::Runtime;
+            for (auto& dep : node.runtime_deps) {
+                if (!expand(dep, path, rt_kind)) { /* keep collecting */ }
+            }
+            for (auto& dep : node.build_deps) {
+                if (!expand(dep, path, DepKind::Build)) { /* keep collecting */ }
             }
         } else {
             log::warn("failed to load package {}: {}", name, pkg.error());
@@ -165,10 +190,13 @@ resolve(IndexManager& index,
         return true;
     };
 
-    // Process all targets
+    // Process all targets. Top-level user-requested targets are
+    // Runtime by definition — the user is asking xlings to make this
+    // package active in their workspace. Build-only entry points
+    // currently aren't exposed at the CLI level.
     for (auto& target : targets) {
         std::vector<std::string> path;
-        expand(target, path);
+        expand(target, path, DepKind::Runtime);
     }
 
     if (plan.has_errors()) {
@@ -238,8 +266,9 @@ resolve(PackageCatalog& catalog,
     std::unordered_map<std::string, Color_> color;
     std::unordered_map<std::string, PlanNode> nodeMap;
 
-    std::function<bool(const std::string&, std::vector<std::string>&)> expand =
-        [&](const std::string& target, std::vector<std::string>& path) -> bool {
+    // See the IndexManager overload above for `kind` propagation rules.
+    std::function<bool(const std::string&, std::vector<std::string>&, DepKind)> expand =
+        [&](const std::string& target, std::vector<std::string>& path, DepKind kind) -> bool {
         auto resolved = catalog.resolve_target(target, platform);
         if (!resolved) {
             plan.errors.push_back(resolved.error());
@@ -258,6 +287,15 @@ resolve(PackageCatalog& catalog,
                 plan.errors.push_back(std::format("cyclic dependency detected: {}", cycle));
                 return false;
             }
+            // Already processed. If we're encountering this node via a
+            // Runtime walk this time but it was first seen as Build,
+            // upgrade its kind so the installer activates it. Build does
+            // NOT downgrade Runtime — Runtime always wins.
+            if (kind == DepKind::Runtime) {
+                auto nit = nodeMap.find(key);
+                if (nit != nodeMap.end() && nit->second.kind == DepKind::Build)
+                    nit->second.kind = DepKind::Runtime;
+            }
             return true;
         }
 
@@ -275,18 +313,26 @@ resolve(PackageCatalog& catalog,
         node.storeRoot = match.storeRoot;
         node.scope = match.scope;
         node.alreadyInstalled = match.installed;
+        node.kind = kind;
 
         auto pkg = catalog.load_package(match);
         if (pkg) {
             node.pkgType = static_cast<int>(pkg->type);
+
+            auto rtIt = pkg->xpm.runtime_deps.find(platform);
+            if (rtIt != pkg->xpm.runtime_deps.end()) node.runtime_deps = rtIt->second;
+            auto bdIt = pkg->xpm.build_deps.find(platform);
+            if (bdIt != pkg->xpm.build_deps.end()) node.build_deps = bdIt->second;
             auto depsIt = pkg->xpm.deps.find(platform);
-            if (depsIt != pkg->xpm.deps.end()) {
-                node.deps = depsIt->second;
-                for (auto& dep : node.deps) {
-                    if (!expand(dep, path)) {
-                        // keep collecting all dependency errors
-                    }
-                }
+            if (depsIt != pkg->xpm.deps.end()) node.deps = depsIt->second;
+
+            DepKind rt_kind = (kind == DepKind::Build) ? DepKind::Build
+                                                       : DepKind::Runtime;
+            for (auto& dep : node.runtime_deps) {
+                if (!expand(dep, path, rt_kind)) { /* keep collecting */ }
+            }
+            for (auto& dep : node.build_deps) {
+                if (!expand(dep, path, DepKind::Build)) { /* keep collecting */ }
             }
         } else {
             log::warn("failed to load package {}: {}", key, pkg.error());
@@ -300,7 +346,7 @@ resolve(PackageCatalog& catalog,
 
     for (auto& target : targets) {
         std::vector<std::string> path;
-        expand(target, path);
+        expand(target, path, DepKind::Runtime);
     }
 
     if (plan.has_errors()) {
