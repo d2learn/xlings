@@ -993,7 +993,31 @@ export int run(int argc, char* argv[]) {
                 return interface::run(args, stream, tui_listener, registry);
             });
 
-    return app.run(argc, argv);
+    // Top-level catch: any uncaught std::exception (most commonly
+    // std::filesystem::filesystem_error from a missing error_code
+    // overload, but also out-of-memory, invalid_argument from JSON parsing,
+    // etc.) would otherwise propagate out of main() and trigger
+    // std::terminate(). On Windows, terminate() does not flush stdio
+    // buffers, so any log::error already queued is lost — CI sees a
+    // silent non-zero exit. Convert to a logged error + non-zero return
+    // so the user always sees what went wrong.
+    try {
+        return app.run(argc, argv);
+    } catch (const std::filesystem::filesystem_error& e) {
+        log::error("filesystem error: {}", e.what());
+        if (!e.path1().empty()) log::error("  path: {}", e.path1().string());
+        log::error("  hint: this is likely a bug; please report at "
+                   "https://github.com/d2learn/xlings/issues");
+        return 1;
+    } catch (const std::exception& e) {
+        log::error("internal error: {}", e.what());
+        log::error("  hint: this is likely a bug; please report at "
+                   "https://github.com/d2learn/xlings/issues");
+        return 1;
+    } catch (...) {
+        log::error("internal error: unknown exception");
+        return 1;
+    }
 }
 
 } // namespace xlings::cli
