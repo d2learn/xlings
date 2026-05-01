@@ -9,6 +9,14 @@ end
 
 add_repositories("mcpplibs-index https://github.com/mcpplibs/mcpplibs-index.git")
 
+-- Project-private package overrides. See xmake/packages/libarchive.lua
+-- for why we ship our own libarchive definition (TL;DR: xmake-repo's
+-- libarchive uses 7-Zip LZMA SDK as a dep, libarchive's cmake actually
+-- needs xz-utils' liblzma → .tar.xz extraction silently degrades to a
+-- fork-exec of the system `xz` binary, which doesn't exist on
+-- musl-static minimal containers or Windows).
+includes("xmake/packages/libarchive.lua")
+
 -- Local-libxpkg override for cross-repo joint debugging.
 -- Usage:
 --   xmake f --local_libxpkg=/path/to/mcpplibs/libxpkg ...
@@ -43,12 +51,17 @@ add_requires("mcpplibs-tinyhttps 0.2.0")
 -- picking up the host's glibc-built /usr/lib copies, which can't be
 -- linked into a musl-static binary. Required for the linux release
 -- build; harmless on macOS/Windows.
-add_requires("zlib",  { system = false })
-add_requires("lz4",   { system = false })
+--
+-- Note `xz` (xz-utils / liblzma) replaces the upstream
+-- `lzma` (7-Zip LZMA SDK). See xmake/packages/libarchive.lua header
+-- comment for why; the override of libarchive itself wires `xz` in as
+-- a dep so libarchive's cmake actually finds liblzma.
+add_requires("zlib", { system = false })
+add_requires("lz4",  { system = false })
 add_requires("bzip2", { system = false })
-add_requires("zstd",  { system = false })
-add_requires("lzma",  { system = false })
-add_requires("libarchive 3.8.7")
+add_requires("zstd", { system = false })
+add_requires("xz",   { system = false })
+add_requires("libarchive-xlings 3.8.7")
 
 -- C++23 main binary
 target("xlings")
@@ -64,7 +77,7 @@ target("xlings")
     else
         add_packages("mcpplibs-xpkg")
     end
-    add_packages("mcpplibs-tinyhttps", "libarchive")
+    add_packages("mcpplibs-tinyhttps", "libarchive-xlings")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
@@ -97,7 +110,7 @@ target("xlings_tests")
     else
         add_packages("mcpplibs-xpkg")
     end
-    add_packages("mcpplibs-tinyhttps", "libarchive")
+    add_packages("mcpplibs-tinyhttps", "libarchive-xlings")
     set_policy("build.c++.modules", true)
 
     if is_plat("macosx") then
