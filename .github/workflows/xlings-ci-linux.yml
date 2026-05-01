@@ -71,7 +71,7 @@ jobs:
 
       - name: Build and run unit tests
         run: |
-          xmake build -vV xlings_tests
+          xmake build -vv xlings_tests
           xmake run xlings_tests
 
       # ── Phase 2: Build via Release Script ───────────────────────
