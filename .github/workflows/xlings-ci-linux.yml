@@ -200,6 +200,10 @@ jobs:
         run: |
           bash tests/e2e/mirror_fallback_test.sh
 
+      - name: "E2E-20: remove xim:xlings — single-version guard (regression: silent terminate on Windows)"
+        run: |
+          bash tests/e2e/remove_self_guard_test.sh
+
       - name: Attach artifact
         uses: actions/upload-artifact@v4
         if: success()

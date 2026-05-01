@@ -544,13 +544,28 @@ void process_xvm_operations_(const PlanNode& node,
                 if (std::filesystem::is_symlink(dst, ec))
                     std::filesystem::remove(dst, ec);
             } else {
-                // Remove shim for uninstalled program
+                // Remove shim for uninstalled program. Use the error_code
+                // overload: on Windows the shim may be the running xlings.exe
+                // (when an install hook indirectly emits a remove for xlings),
+                // and DeleteFile on a running executable raises
+                // ERROR_SHARING_VIOLATION. Throwing here would escape main()
+                // (no top-level catch on the cmd_install path) and terminate
+                // the process — silent non-zero exit on CI. The next install
+                // / use cycle re-creates the shim via xself::create_shim, so
+                // a failure here is benign: warn and continue.
                 std::string shim_name = op.name;
                 if (!shim_ext.empty() && !shim_name.ends_with(shim_ext))
                     shim_name += shim_ext;
                 auto shim_path = paths.binDir / shim_name;
-                if (std::filesystem::exists(shim_path)) {
-                    std::filesystem::remove(shim_path);
+                std::error_code shim_ec;
+                if (std::filesystem::exists(shim_path, shim_ec)) {
+                    shim_ec.clear();
+                    std::filesystem::remove(shim_path, shim_ec);
+                    if (shim_ec) {
+                        log::warn("could not remove shim {}: {}; will be replaced "
+                                  "on next install/use",
+                                  shim_path.string(), shim_ec.message());
+                    }
                 }
             }
             Config::workspace_mut().erase(op.name);
@@ -1269,8 +1284,24 @@ public:
                     shim_name += shim_ext;
                 auto shim_path = Config::paths().binDir / shim_name;
                 auto remove_shim_if_present = [&]() {
-                    if (std::filesystem::exists(shim_path)) {
-                        std::filesystem::remove(shim_path);
+                    // error_code overload only — on Windows the shim may be
+                    // the running xlings.exe (e.g. user runs
+                    // `xlings remove xim:xlings` and that's the only version
+                    // installed, so this branch fires). DeleteFile on a
+                    // running .exe raises ERROR_SHARING_VIOLATION, the
+                    // throwing overload would escape main() and silently
+                    // terminate the process (CI sees non-zero exit, no
+                    // diagnostic). The shim is repointed to whatever
+                    // bootstrap exists on the next install/use cycle, so
+                    // failing to remove it now is benign — log and move on.
+                    std::error_code ec;
+                    if (!std::filesystem::exists(shim_path, ec)) return;
+                    ec.clear();
+                    std::filesystem::remove(shim_path, ec);
+                    if (ec) {
+                        log::warn("could not remove shim {}: {}; will be replaced "
+                                  "on next install/use",
+                                  shim_path.string(), ec.message());
                     }
                 };
 
