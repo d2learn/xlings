@@ -102,7 +102,12 @@ jobs:
       # ── Phase 2: Build via Release Script ───────────────────────
 
       - name: Build (linux_release)
+        # TODO: linux_release.sh's default MUSL_SDK assumes the legacy
+        # `data/xpkgs/musl-gcc/...` layout (no namespace prefix); modern
+        # xlings install puts it under `data/xpkgs/xim-x-musl-gcc/...`.
+        # Drop this export once the script globs both layouts.
         run: |
+          export MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
 
