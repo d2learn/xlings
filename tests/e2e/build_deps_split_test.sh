@@ -21,33 +21,51 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/project_test_lib.sh"
 
 require_fixture_index
 
-# The cloned xim-pkgindex doesn't ship our private bdtool/rttool/bdconsumer
-# fixtures (they're test-only schemas exercising the build_deps split). Copy
-# them into the index pkgs/ tree for this run, then remove on EXIT.
+# Use a private LOCAL_INDEX_DIR (not the shared $FIXTURE_INDEX_DIR) because
+# `xlings install` internally calls sync_all_repos when the catalog isn't
+# loaded yet — that runs `git fetch + reset --hard` against the index repo
+# and would clobber any fixture .lua we drop in. Following the same pattern
+# as remove_multi_version_test.sh / xlings_self_replace_test.sh: clone-copy
+# the shared fixture into a runtime-private directory, neutralise its
+# sub-index repos to skip GitHub fetches, and inject the test-only fixtures
+# there. The .xlings.json points "xim" at LOCAL_INDEX_DIR — sync sees it
+# as a non-git path and leaves it alone.
+RUNTIME_DIR="$ROOT_DIR/tests/e2e/runtime/build_deps_split"
+HOME_DIR="$RUNTIME_DIR/home"
+LOCAL_INDEX_DIR="$RUNTIME_DIR/xim-pkgindex"
 SCENARIO_FIXTURES="$ROOT_DIR/tests/e2e/fixtures/build_deps_split"
-INSTALLED_FIXTURES=(
-    "$FIXTURE_INDEX_DIR/pkgs/b/bdtool.lua"
-    "$FIXTURE_INDEX_DIR/pkgs/b/bdconsumer.lua"
-    "$FIXTURE_INDEX_DIR/pkgs/r/rttool.lua"
-)
-mkdir -p "$FIXTURE_INDEX_DIR/pkgs/b" "$FIXTURE_INDEX_DIR/pkgs/r"
-cp "$SCENARIO_FIXTURES/bdtool.lua"     "$FIXTURE_INDEX_DIR/pkgs/b/bdtool.lua"
-cp "$SCENARIO_FIXTURES/bdconsumer.lua" "$FIXTURE_INDEX_DIR/pkgs/b/bdconsumer.lua"
-cp "$SCENARIO_FIXTURES/rttool.lua"     "$FIXTURE_INDEX_DIR/pkgs/r/rttool.lua"
 
-HOME_DIR="$(runtime_home_dir build_deps_split_home)"
-cleanup() {
-    rm -rf "$HOME_DIR"
-    for f in "${INSTALLED_FIXTURES[@]}"; do rm -f "$f"; done
-}
+cleanup() { rm -rf "$RUNTIME_DIR"; }
 trap cleanup EXIT
 cleanup
 
-# Index cache stores absolute paths from prior runs — wipe.
-rm -f "$FIXTURE_INDEX_DIR/.xlings-index-cache.json"
+mkdir -p "$HOME_DIR/subos/default/bin"
 
-write_home_config "$HOME_DIR" "GLOBAL"
-run_xlings "$HOME_DIR" "$ROOT_DIR" self init
+# Private copy of the shared fixture index, neutralise sub-index repos.
+cp -r "$FIXTURE_INDEX_DIR" "$LOCAL_INDEX_DIR"
+printf 'xim_indexrepos = {}\n' > "$LOCAL_INDEX_DIR/xim-indexrepos.lua"
+rm -f "$LOCAL_INDEX_DIR/.xlings-index-cache.json"
+
+# Inject the test fixtures into the private index.
+mkdir -p "$LOCAL_INDEX_DIR/pkgs/b" "$LOCAL_INDEX_DIR/pkgs/r"
+cp "$SCENARIO_FIXTURES/bdtool.lua"     "$LOCAL_INDEX_DIR/pkgs/b/bdtool.lua"
+cp "$SCENARIO_FIXTURES/bdconsumer.lua" "$LOCAL_INDEX_DIR/pkgs/b/bdconsumer.lua"
+cp "$SCENARIO_FIXTURES/rttool.lua"     "$LOCAL_INDEX_DIR/pkgs/r/rttool.lua"
+
+# Seed XLINGS_HOME pointing at the private (neutralised + injected) index.
+cp "$(find_xlings_bin)" "$HOME_DIR/xlings"
+cat > "$HOME_DIR/.xlings.json" <<EOF
+{
+  "mirror": "GLOBAL",
+  "index_repos": [
+    { "name": "xim", "url": "$LOCAL_INDEX_DIR" }
+  ]
+}
+EOF
+
+run_xlings "$HOME_DIR" "$ROOT_DIR" self init >/dev/null 2>&1 || fail "self init failed"
+mkdir -p "$HOME_DIR/data/xim-index-repos"
+printf '{}\n' > "$HOME_DIR/data/xim-index-repos/xim-indexrepos.json"
 
 log "Installing bdconsumer (runtime_dep=rttool, build_dep=bdtool) ..."
 INSTALL_OUT="$(run_xlings "$HOME_DIR" "$ROOT_DIR" install bdconsumer -y 2>&1)" || {
