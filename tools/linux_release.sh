@@ -56,7 +56,7 @@ else
   fail "musl-gcc sdk not found at $MUSL_SDK (Linux release requires musl-gcc@15.1.0 for fully static binary)"
 fi
 xmake clean -q 2>/dev/null || true
-xmake build xlings 2>&1 || fail "xmake build failed"
+xmake build -y xlings 2>&1 || fail "xmake build failed"
 
 BIN_SRC="build/linux/${ARCH}/release/xlings"
 [[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"
