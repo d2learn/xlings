@@ -34,7 +34,7 @@ add_requires("mcpplibs-capi-lua")
 if has_config("local_libxpkg") and get_config("local_libxpkg") ~= "" then
     includes(path.join(get_config("local_libxpkg"), "xmake.lua"))
 else
-    add_requires("mcpplibs-xpkg 0.0.31")
+    add_requires("mcpplibs-xpkg 0.0.32")
 end
 add_requires("gtest 1.15.2")
 add_requires("mcpplibs-tinyhttps 0.2.0")
