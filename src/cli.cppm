@@ -812,6 +812,21 @@ export int run(int argc, char* argv[]) {
         }
     }
 
+    // cmdline::App stores actions as std::function<void(ParsedArgs&)>, so the
+    // int returns from each action lambda below are silently discarded by the
+    // library on its way through std::function. Capture the lambda's intended
+    // exit code into this shared int and have run() return it after app.run()
+    // completes. Without this every cmd_* return value (1 for failures, 2 for
+    // refused-by-policy, ...) is squashed to 0 — so e.g. CI scripts that branch
+    // on `xlings install` exit code never see install failures.
+    int action_rc = 0;
+    auto wrap_rc = [&action_rc](auto&& fn) {
+        return [fn = std::forward<decltype(fn)>(fn), &action_rc]
+               (const cmdline::ParsedArgs& args) {
+            action_rc = fn(args);
+        };
+    };
+
     auto app = cmdline::App("xlings")
         .version(std::string(Info::VERSION))
         .author("d2learn community")
@@ -828,7 +843,7 @@ export int run(int argc, char* argv[]) {
             .option(cmdline::Option("global").short_name('g').help("Install to global scope (not project-local subos)"))
             .option(cmdline::Option("use").short_name('u').help("Activate the installed version even if another version is currently active"))
             .arg("packages").help("Package names with optional version")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::vector<std::string> targets;
                 for (std::size_t i = 0; i < args.positional_count(); ++i) {
@@ -861,27 +876,27 @@ export int run(int argc, char* argv[]) {
                 return xim::cmd_install(targets, yes, false, stream, global,
                                         /*cancel=*/nullptr, /*dryRun=*/false,
                                         useAfter);
-            })
+            }))
 
         // remove
         .subcommand("remove")
             .description("Remove a package")
             .arg("package").required().help("Package to remove (name or name@ver)")
             .arg("version").help("Optional version (alternative to name@ver form)")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string target;
                 if (!parse_target_spec_(args, target)) return 1;
                 bool yes = args.is_flag_set("yes");
                 return xim::cmd_remove(target, yes, stream);
-            })
+            }))
 
         // update
         .subcommand("update")
             .description("Update package index or a specific package")
             .arg("package").help("Package to update (omit for index only)")
             .arg("version").help("Optional version (alternative to name@ver form)")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string target;
                 if (args.positional_count() > 0) {
@@ -889,40 +904,40 @@ export int run(int argc, char* argv[]) {
                 }
                 bool yes = args.is_flag_set("yes");
                 return xim::cmd_update(target, yes, stream);
-            })
+            }))
 
         // search
         .subcommand("search")
             .description("Search for packages")
             .arg("keyword").required().help("Search keyword")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 return xim::cmd_search(std::string(args.positional(0)), stream);
-            })
+            }))
 
         // list
         .subcommand("list")
             .description("List installed packages")
             .arg("filter").help("Filter pattern")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string filter;
                 if (args.positional_count() > 0)
                     filter = std::string(args.positional(0));
                 return xim::cmd_list(filter, stream);
-            })
+            }))
 
         // info
         .subcommand("info")
             .description("Show package information")
             .arg("package").required().help("Package name (or name@ver)")
             .arg("version").help("Optional version (alternative to name@ver form)")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 std::string target;
                 if (!parse_target_spec_(args, target)) return 1;
                 return xim::cmd_info(target, stream);
-            })
+            }))
 
         // use — accepts both `<name> <ver>` (legacy form) and `<name>@<ver>`
         // (one-shot form, matching install/remove). Bare `<name>` lists
@@ -931,7 +946,7 @@ export int run(int argc, char* argv[]) {
             .description("Switch tool version")
             .arg("target").required().help("Tool name (or name@ver one-shot)")
             .arg("version").help("Version to switch to (omit to list installed versions)")
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 auto n = args.positional_count();
                 if (n == 0) {
@@ -964,7 +979,7 @@ export int run(int argc, char* argv[]) {
                 }
                 return xvm::cmd_use(first,
                                     std::string(args.positional(1)), stream);
-            })
+            }))
 
         // config
         .subcommand("config")
@@ -973,10 +988,10 @@ export int run(int argc, char* argv[]) {
             .option(cmdline::Option("mirror").takes_value().value_name("MIRROR").help("Set mirror (GLOBAL/CN)"))
             .option(cmdline::Option("add-xpkg").takes_value().value_name("FILE").help("Add xpkg file to package index"))
             .option(cmdline::Option("index-repo").takes_value().value_name("NS:URL").help("Add/update index repo (e.g. myns:https://...git)"))
-            .action([&stream](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream](const cmdline::ParsedArgs& args) -> int {
                 apply_global_opts_(args);
                 return cmd_config_(args, stream);
-            })
+            }))
 
         // interface — programmatic JSON API (NDJSON over stdio).
         // See docs/plans/2026-04-25-interface-api-v1.md for full protocol spec.
@@ -989,9 +1004,9 @@ export int run(int argc, char* argv[]) {
             .option(cmdline::Option("list").help("List all available capabilities with schemas"))
             .option(cmdline::Option("version").help("Print protocol version and exit"))
             .arg("capability").help("Capability name to invoke")
-            .action([&stream, tui_listener, &registry](const cmdline::ParsedArgs& args) -> int {
+            .action(wrap_rc([&stream, tui_listener, &registry](const cmdline::ParsedArgs& args) -> int {
                 return interface::run(args, stream, tui_listener, registry);
-            });
+            }));
 
     // Top-level catch: any uncaught std::exception (most commonly
     // std::filesystem::filesystem_error from a missing error_code
@@ -1002,7 +1017,15 @@ export int run(int argc, char* argv[]) {
     // silent non-zero exit. Convert to a logged error + non-zero return
     // so the user always sees what went wrong.
     try {
-        return app.run(argc, argv);
+        // app.run returns its own status (1 for parse errors, 0 on
+        // successful dispatch). On successful dispatch, the action
+        // lambda's intended exit code lives in `action_rc` (cmdline lib
+        // discards it on its own). Surface the action's rc when app.run
+        // succeeded so e.g. `xlings install <bad-pkg>` returns non-zero
+        // to scripts and CI.
+        auto app_rc = app.run(argc, argv);
+        if (app_rc != 0) return app_rc;
+        return action_rc;
     } catch (const std::filesystem::filesystem_error& e) {
         log::error("filesystem error: {}", e.what());
         if (!e.path1().empty()) log::error("  path: {}", e.path1().string());
