@@ -48,7 +48,7 @@ if [[ -n "$LLVM_PREFIX_DEFAULT" && -x "$LLVM_PREFIX_DEFAULT/bin/clang++" ]]; the
     || fail "xmake configure with llvm failed"
 fi
 xmake clean -q 2>/dev/null || true
-xmake build xlings 2>&1 || fail "xmake build failed"
+xmake build -y xlings 2>&1 || fail "xmake build failed"
 
 BIN_SRC="build/macosx/${ARCH}/release/xlings"
 [[ -f "$BIN_SRC" ]] || fail "C++ binary not found at $BIN_SRC"

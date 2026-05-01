@@ -61,14 +61,20 @@ jobs:
           bash tests/e2e/prepare_fixture_index.sh
 
       - name: Build (linux_release)
-        # TODO(2026-): linux_release.sh's default MUSL_SDK still assumes
-        # the legacy `data/xpkgs/musl-gcc/...` layout (no namespace
-        # prefix). Modern xlings install puts it under
-        # `data/xpkgs/xim-x-musl-gcc/...`. Exporting MUSL_SDK explicitly
-        # here gets the right path; can be dropped once the script is
-        # updated to glob both layouts.
+        # TODO(2026-): two workarounds, both removable once bootstrap
+        # xlings 0.4.9 propagates everywhere:
+        #   1. linux_release.sh's default MUSL_SDK assumes the legacy
+        #      `data/xpkgs/musl-gcc/...` layout; modern xlings install
+        #      uses `data/xpkgs/xim-x-musl-gcc/...`. Override here.
+        #   2. CC / CXX must be ABSOLUTE PATHS to bypass xlings shim
+        #      dispatch (same shim-vs-real-binary issue documented in
+        #      xlings-ci-linux.yml). Without this, xrepo subprocess
+        #      can't resolve the shim and reports "compiler does not
+        #      support c++ module".
         run: |
           export MUSL_SDK="$HOME/.xlings/data/xpkgs/xim-x-musl-gcc/15.1.0"
+          export CC="$MUSL_SDK/bin/x86_64-linux-musl-gcc"
+          export CXX="$MUSL_SDK/bin/x86_64-linux-musl-g++"
           chmod +x ./tools/linux_release.sh
           SKIP_NETWORK_VERIFY=1 ./tools/linux_release.sh
 

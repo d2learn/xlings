@@ -33,7 +33,7 @@ Set-Location $PROJECT_DIR
 Info "Version: $VERSION  |  Arch: $ARCH"
 Info "Building C++ binary..."
 xmake clean -q 2>$null
-xmake build xlings
+xmake build -y xlings
 if ($LASTEXITCODE -ne 0) { Fail "xmake build failed" }
 
 $BIN_SRC = "build\windows\x64\release\xlings.exe"
