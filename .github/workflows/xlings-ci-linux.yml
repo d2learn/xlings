@@ -20,7 +20,7 @@ env:
   # deps + new runtime-dep declarations on prebuilts (post #107) cascade
   # into E2E-05's dual-mount scenario. Bump after xim-pkgindex deps
   # stabilize (namespace prefixes universal + lib-closure verified).
-  XIM_PKGINDEX_REF: 83044b5
+  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
 
 jobs:
   build-and-test:
