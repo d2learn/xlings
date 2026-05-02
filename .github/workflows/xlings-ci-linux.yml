@@ -18,10 +18,14 @@ env:
   # exports). Co-bumping prevents a known-good xlings + in-flight
   # pkgindex (or vice versa) from breaking CI.
   BOOTSTRAP_XLINGS_VERSION: v0.4.13
-  # Pinned xim-pkgindex commit for the test fixture clone, time-matched
-  # to BOOTSTRAP_XLINGS_VERSION above. Bump in lockstep.
-  # Current: tip of main as of v0.4.13 release time.
-  XIM_PKGINDEX_REF: 3f1462d83bf6444b84a251f8f26edbeb2ee4fa97
+  # Pinned xim-pkgindex commit for the test fixture clone, last known-
+  # good against the pinned BOOTSTRAP_XLINGS_VERSION (verified by the
+  # 0.4.13 release CI, predates xim-pkgindex#108 which added runtime
+  # deps that 0.4.13 doesn't fully wire up — gcc-specs-config not
+  # auto-activated, runtime lib closure misses libstdc++). Bump
+  # together with BOOTSTRAP_XLINGS_VERSION once a future release
+  # supports the post-#108 pkgindex schema.
+  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
 
 jobs:
   build-and-test:
