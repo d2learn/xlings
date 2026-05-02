@@ -17,9 +17,9 @@ env:
   # build dependencies (xmake, cmake, ninja, musl-gcc on Linux, llvm on
   # macOS). Bump this in a dedicated PR after verifying the target
   # release is healthy.
-  BOOTSTRAP_XLINGS_VERSION: v0.4.8
+  BOOTSTRAP_XLINGS_VERSION: v0.4.13
   # See xlings-ci-linux.yml for why this is pinned.
-  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
+  XIM_PKGINDEX_REF: 3f1462d83bf6444b84a251f8f26edbeb2ee4fa97
 
 jobs:
   build-linux:

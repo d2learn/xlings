@@ -12,15 +12,16 @@ env:
   # endpoints (which need auth and aren't reachable in CI).
   XLINGS_RELEASE_MIRROR: GLOBAL
   # Pinned bootstrap xlings used to read /.xlings.json and install all
-  # build dependencies. Bump this in a dedicated PR after verifying the
-  # target release is healthy.
-  BOOTSTRAP_XLINGS_VERSION: v0.4.8
-  # Pinned xim-pkgindex commit for the test fixture clone. Pinning here
-  # decouples xlings CI from in-flight xim-pkgindex churn — bare-name
-  # deps + new runtime-dep declarations on prebuilts (post #107) cascade
-  # into E2E-05's dual-mount scenario. Bump after xim-pkgindex deps
-  # stabilize (namespace prefixes universal + lib-closure verified).
-  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
+  # build dependencies. Bump together with XIM_PKGINDEX_REF in a single
+  # dedicated PR — the bootstrap xlings's resolver / elfpatch behavior
+  # must match the pkgindex schema (deps form, namespace conventions,
+  # exports). Co-bumping prevents a known-good xlings + in-flight
+  # pkgindex (or vice versa) from breaking CI.
+  BOOTSTRAP_XLINGS_VERSION: v0.4.13
+  # Pinned xim-pkgindex commit for the test fixture clone, time-matched
+  # to BOOTSTRAP_XLINGS_VERSION above. Bump in lockstep.
+  # Current: tip of main as of v0.4.13 release time.
+  XIM_PKGINDEX_REF: 3f1462d83bf6444b84a251f8f26edbeb2ee4fa97
 
 jobs:
   build-and-test:
