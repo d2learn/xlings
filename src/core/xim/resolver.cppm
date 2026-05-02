@@ -168,6 +168,17 @@ resolve(IndexManager& index,
             auto depsIt = pkg->xpm.deps.find(platform);
             if (depsIt != pkg->xpm.deps.end()) node.deps = depsIt->second;
 
+            // Pull the package's own exports for this platform (parsed
+            // from xpm.<platform>.exports.runtime by libxpkg loader).
+            // Empty `loader` means "this package doesn't provide a
+            // dynamic linker"; predicate-driven elfpatch reads this.
+            auto exIt = pkg->xpm.exports.find(platform);
+            if (exIt != pkg->xpm.exports.end()) {
+                node.exports.loader  = exIt->second.runtime.loader;
+                node.exports.libdirs = exIt->second.runtime.libdirs;
+                node.exports.abi     = exIt->second.runtime.abi;
+            }
+
             // Walk the two kinds. Build subtrees stay Build (the dep is
             // only being installed to satisfy an upstream consumer's
             // install hook); Runtime parents fork their build_deps to
@@ -325,6 +336,14 @@ resolve(PackageCatalog& catalog,
             if (bdIt != pkg->xpm.build_deps.end()) node.build_deps = bdIt->second;
             auto depsIt = pkg->xpm.deps.find(platform);
             if (depsIt != pkg->xpm.deps.end()) node.deps = depsIt->second;
+
+            // See IndexManager overload above for why exports propagation lives here.
+            auto exIt = pkg->xpm.exports.find(platform);
+            if (exIt != pkg->xpm.exports.end()) {
+                node.exports.loader  = exIt->second.runtime.loader;
+                node.exports.libdirs = exIt->second.runtime.libdirs;
+                node.exports.abi     = exIt->second.runtime.abi;
+            }
 
             DepKind rt_kind = (kind == DepKind::Build) ? DepKind::Build
                                                        : DepKind::Runtime;
