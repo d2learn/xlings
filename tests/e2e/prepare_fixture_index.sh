@@ -15,7 +15,15 @@ rm -rf "$FIXTURE_INDEX_DIR"
 mkdir -p "$(dirname "$FIXTURE_INDEX_DIR")"
 
 echo "[fixture] cloning $XIM_PKGINDEX_URL (ref: $XIM_PKGINDEX_REF) -> $FIXTURE_INDEX_DIR"
-git clone --depth 1 --branch "$XIM_PKGINDEX_REF" "$XIM_PKGINDEX_URL" "$FIXTURE_INDEX_DIR"
+
+# git clone --branch accepts branches/tags but not commit SHAs. Detect a
+# 40-char hex SHA and use the deeper clone-then-checkout path instead.
+if [[ "$XIM_PKGINDEX_REF" =~ ^[0-9a-f]{40}$ ]]; then
+  git clone "$XIM_PKGINDEX_URL" "$FIXTURE_INDEX_DIR"
+  git -C "$FIXTURE_INDEX_DIR" checkout --quiet "$XIM_PKGINDEX_REF"
+else
+  git clone --depth 1 --branch "$XIM_PKGINDEX_REF" "$XIM_PKGINDEX_URL" "$FIXTURE_INDEX_DIR"
+fi
 
 if [[ ! -d "$FIXTURE_INDEX_DIR/pkgs" ]]; then
   echo "[fixture] FAIL: missing pkgs directory after clone: $FIXTURE_INDEX_DIR" >&2
