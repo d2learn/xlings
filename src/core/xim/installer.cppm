@@ -954,7 +954,60 @@ public:
             ctx.xpkg_dir = node.pkgFile.parent_path();
             ctx.project_data_dir = Config::project_data_dir();
             ctx.subos_sysrootdir = Config::paths().subosDir.string();
-            ctx.deps_list = node.deps;
+            ctx.deps_list = node.deps;                  // legacy union (compat)
+            ctx.runtime_deps_list = node.runtime_deps;  // split form
+            ctx.build_deps_list   = node.build_deps;
+
+            // self_exports: pre-resolve relative paths to absolute by
+            // joining with this package's own install_dir.
+            if (!node.exports.loader.empty()) {
+                ctx.self_exports.loader = (ctx.install_dir / node.exports.loader).string();
+            }
+            ctx.self_exports.abi = node.exports.abi;
+            for (auto& d : node.exports.libdirs) {
+                ctx.self_exports.libdirs.push_back((ctx.install_dir / d).string());
+            }
+
+            // deps_exports: walk the topo plan to find each runtime dep
+            // node and pull its exports (already populated by resolver).
+            // Resolve relative paths against THAT dep's install_dir, not
+            // ours. Strip @version when matching dep_spec → dep node, so
+            // a runtime_deps entry "xim:glibc@2.39" matches the plan
+            // node whose canonicalName == "xim:glibc" + version "2.39".
+            for (auto& dep_spec : node.runtime_deps) {
+                std::string dep_base = dep_spec;
+                std::string dep_ver;
+                if (auto at = dep_base.find('@'); at != std::string::npos) {
+                    dep_ver = dep_base.substr(at + 1);
+                    dep_base.resize(at);
+                }
+                for (auto& depNode : plan.nodes) {
+                    bool name_match = (depNode.canonicalName == dep_base
+                                    || depNode.name == dep_base
+                                    || depNode.rawName == dep_base);
+                    bool ver_match = dep_ver.empty() || depNode.version == dep_ver;
+                    if (!name_match || !ver_match) continue;
+                    if (depNode.exports.loader.empty() && depNode.exports.libdirs.empty()) {
+                        // Dep declared no exports — skip (predicate falls
+                        // through to convention later).
+                        break;
+                    }
+                    auto depRoot = depNode.storeRoot.empty()
+                        ? (dataDir / "xpkgs") : depNode.storeRoot;
+                    auto depInstallDir = depRoot
+                        / detail_::effective_store_name_(depNode) / depNode.version;
+                    mcpplibs::xpkg::DepExport e;
+                    if (!depNode.exports.loader.empty()) {
+                        e.loader = (depInstallDir / depNode.exports.loader).string();
+                    }
+                    e.abi = depNode.exports.abi;
+                    for (auto& d : depNode.exports.libdirs) {
+                        e.libdirs.push_back((depInstallDir / d).string());
+                    }
+                    ctx.deps_exports[dep_spec] = std::move(e);
+                    break;
+                }
+            }
 
             auto planKey = detail_::plan_key_(node);
             auto dlIt = downloadResults.find(planKey);

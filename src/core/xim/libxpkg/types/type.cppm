@@ -34,6 +34,17 @@ struct InstallStatus {
 // places it in the xpkgs store for the consumer's install hook (Build).
 enum class DepKind { Runtime, Build };
 
+// What this package exposes — mirrors libxpkg's ExportsBlock but lives in
+// xlings's plan so resolver/installer can pass it around without dragging
+// the upstream header into every TU. All paths are RELATIVE to install_dir
+// at this stage; xlings joins them with the actual install_dir before
+// pushing into _RUNTIME so the Lua side gets absolute paths.
+struct ExportsRuntime {
+    std::string loader;                       // relative path, e.g. "lib64/ld-linux-x86-64.so.2"
+    std::vector<std::string> libdirs;         // relative paths
+    std::string abi;                          // e.g. "linux-x86_64-glibc"
+};
+
 // A node in the dependency-resolved install plan
 struct PlanNode {
     std::string rawName;
@@ -57,6 +68,11 @@ struct PlanNode {
     // build-only dep of some other node; Runtime = part of a consumer's
     // active workspace contract. Build nodes skip workspace activation.
     DepKind kind { DepKind::Runtime };
+    // What this package itself exposes (parsed from xpm.<platform>.exports
+    // by the resolver). Empty `loader` means "this package isn't a loader
+    // provider"; predicate-driven elfpatch trigger reads this + dep nodes'
+    // exports to decide whether and how to patch.
+    ExportsRuntime exports;
     bool alreadyInstalled { false };
     bool isSystemPM { false };
     PackageScope scope { PackageScope::Global };
