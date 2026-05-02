@@ -16,6 +16,8 @@ env:
   # cmake, ninja, and the macOS LLVM toolchain. Bump in a dedicated PR
   # after verifying the target release is healthy.
   BOOTSTRAP_XLINGS_VERSION: v0.4.8
+  # See xlings-ci-linux.yml for why this is pinned.
+  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
 
 jobs:
   build-and-test:
