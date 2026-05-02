@@ -15,6 +15,8 @@ env:
   # / cmake / ninja. Windows uses MSVC from the runner image (no compiler
   # in .xlings.json), so xmake's auto-detection still applies.
   BOOTSTRAP_XLINGS_VERSION: v0.4.8
+  # See xlings-ci-linux.yml for why this is pinned.
+  XIM_PKGINDEX_REF: 9cb6982e85b5b9fa1dd43a32eba94cbc4e32d52a
 
 jobs:
   build-and-test:
