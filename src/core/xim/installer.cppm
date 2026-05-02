@@ -1211,6 +1211,24 @@ public:
                 continue;
             }
 
+            // Auto-stamp: drop a `.xim-installed` marker in install_dir if
+            // it's still empty after every install path (hook + extracted-
+            // payload fallback + script default). Wrapper packages
+            // (linux-headers, fromsource:* aliases) legitimately leave
+            // install_dir empty because their real payload lives in a
+            // separately-installed dep — without a stamp, xlings's
+            // installed-probe (`is_directory && !is_empty`) reports
+            // "not installed" and re-runs install + config on every
+            // dependent install. Critical: this MUST come after
+            // stage_extracted_payload_ above; otherwise a stamp written
+            // earlier would falsely make install_dir look "non-empty"
+            // and skip the extracted-payload fallback (which exists for
+            // packages whose hook silently no-ops, e.g. patchelf where
+            // the tarball has no top-level dir).
+            if (!payloadInstalled) {
+                executor.apply_install_stamp_if_empty(ctx);
+            }
+
             // Apply elfpatch auto-patching if the install hook enabled it
             if (!payloadInstalled) {
                 // Ensure binDir is in PATH so elfpatch can find patchelf
