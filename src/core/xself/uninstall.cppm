@@ -91,7 +91,7 @@ static bool home_dir_safe_to_remove_(const fs::path& home) {
     // (Catches e.g. XLINGS_HOME=. or XLINGS_HOME=foo)
     if (!canonical.is_absolute()) return false;
     int component_count = 0;
-    for (auto& _ : canonical) (void)_, ++component_count;
+    for ([[maybe_unused]] const auto& _ : canonical) ++component_count;
     if (component_count < 2) return false;
 
     return true;
