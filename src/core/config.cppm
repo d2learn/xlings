@@ -558,6 +558,23 @@ private:
 
         auto homeNorm = fs::weakly_canonical(paths_.homeDir, ec);
 
+        // Walk cwd → root, looking for a `.xlings.json` that activates project
+        // mode. A file with `projectScope: false` is "deps-manifest only" — it
+        // declares deps for `xlings install` but does NOT mean its directory is
+        // a project root (e.g. xlings's own repo uses this to install build
+        // deps without making the repo look like a user project to nested
+        // commands). load_project_config_from_dir_ honors that opt-out by
+        // returning without setting hasProjectConfig_.
+        //
+        // Critical: when from_dir_ skips a projectScope:false file, we must
+        // NOT early-return — that would hide the real project from any
+        // subprocess whose cwd traversal happens to hit such a file before
+        // reaching the actual project. Instead, continue walking up; if no
+        // real project is found in the rest of the walk, the env-var fallback
+        // below picks it up (the parent xlings exports XLINGS_PROJECT_DIR
+        // whenever it loads a real project, so subprocesses can recover the
+        // intended project context even when their cwd is outside the project
+        // tree).
         fs::path cur = startDir;
         while (!cur.empty()) {
             auto cfg = cur / ".xlings.json";
@@ -565,7 +582,8 @@ private:
                 auto curNorm = fs::weakly_canonical(cur, ec);
                 if (curNorm != homeNorm) {
                     load_project_config_from_dir_(cur);
-                    return;
+                    if (hasProjectConfig_) return;     // real project loaded
+                    // else: projectScope:false skip — keep walking, then env fallback
                 }
             }
             auto parent = cur.parent_path();
@@ -573,7 +591,9 @@ private:
             cur = parent;
         }
 
-        // CWD traversal did not find project config — check XLINGS_PROJECT_DIR env var
+        // CWD traversal did not find project config (either no .xlings.json
+        // at all, or only projectScope:false ones) — check XLINGS_PROJECT_DIR
+        // env var as a last resort.
         if (!hasProjectConfig_) {
             auto env_project = utils::get_env_or_default("XLINGS_PROJECT_DIR");
             if (!env_project.empty()) {
