@@ -18,14 +18,19 @@ env:
   # exports). Co-bumping prevents a known-good xlings + in-flight
   # pkgindex (or vice versa) from breaking CI.
   BOOTSTRAP_XLINGS_VERSION: v0.4.13
-  # Pinned xim-pkgindex commit for the test fixture clone, last known-
-  # good against the pinned BOOTSTRAP_XLINGS_VERSION (verified by the
-  # 0.4.13 release CI, predates xim-pkgindex#108 which added runtime
-  # deps that 0.4.13 doesn't fully wire up — gcc-specs-config not
-  # auto-activated, runtime lib closure misses libstdc++). Bump
-  # together with BOOTSTRAP_XLINGS_VERSION once a future release
-  # supports the post-#108 pkgindex schema.
-  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
+  # Pinned xim-pkgindex commit for the test fixture clone. Bump in
+  # lockstep with BOOTSTRAP_XLINGS_VERSION when both sides have shipped
+  # the schema features they need from each other:
+  #   - bootstrap xlings v0.4.13 + post-merge config.cppm fix (PR #259)
+  #     handles projectScope:false fall-through correctly, so subprocess
+  #     shims spawned from install hooks (e.g. gcc-specs-config) resolve
+  #     project workspace via XLINGS_PROJECT_DIR env fallback
+  #   - xim-pkgindex 19f4383 = main HEAD with #110/#111 (namespace
+  #     deps), #116 (gcc-runtime as standalone xpkg), #117 (ninja/node/
+  #     mdbook switched to xim:gcc-runtime), #118 (use libdirs not abi
+  #     for lib export). End-to-end exercises the full predicate-driven
+  #     elfpatch + script-as-runtime-dep flow on Linux E2E-05.
+  XIM_PKGINDEX_REF: 19f4383ba5d65ab86cc6904f6392ceecb0be5d09
 
 jobs:
   build-and-test:
