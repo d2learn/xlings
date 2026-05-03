@@ -9,6 +9,7 @@
 //   xself.cppm                  — this file (router + help)
 //   xself/init.cppm             — home layout helpers + `self init`
 //   xself/install.cppm          — `self install` (bootstrap from release tarball)
+//   xself/uninstall.cppm        — `self uninstall [-y] [--keep-data] [--dry-run]`
 //   xself/update.cppm           — `self update`
 //   xself/config.cppm           — `self config`
 //   xself/clean.cppm            — `self clean [--dry-run]`
@@ -24,6 +25,7 @@ import std;
 
 export import xlings.core.xself.init;
 export import xlings.core.xself.install;
+export import xlings.core.xself.uninstall;
 export import xlings.core.xself.update;
 export import xlings.core.xself.config;
 export import xlings.core.xself.clean;
@@ -46,13 +48,14 @@ static int cmd_help(EventStream& stream) {
     payload["description"] = "Manage xlings itself";
     payload["args"] = nlohmann::json::array();
     payload["opts"] = nlohmann::json::array({
-        {{"name", "install"},  {"desc", "Install xlings from release package"}},
-        {{"name", "init"},     {"desc", "Create home/data/subos dirs"}},
-        {{"name", "update"},   {"desc", "Update index + install latest xlings"}},
-        {{"name", "config"},   {"desc", "Show configuration details"}},
-        {{"name", "clean"},    {"desc", "Remove cache + gc orphaned packages (--dry-run)"}},
-        {{"name", "migrate"},  {"desc", "Migrate old layout to subos/default"}},
-        {{"name", "doctor"},   {"desc", "Verify workspace/shim consistency (--fix to repair)"}},
+        {{"name", "install"},   {"desc", "Install xlings from release package"}},
+        {{"name", "uninstall"}, {"desc", "Remove this xlings install entirely (-y / --keep-data / --dry-run)"}},
+        {{"name", "init"},      {"desc", "Create home/data/subos dirs"}},
+        {{"name", "update"},    {"desc", "Update index + install latest xlings"}},
+        {{"name", "config"},    {"desc", "Show configuration details"}},
+        {{"name", "clean"},     {"desc", "Remove cache + gc orphaned packages (--dry-run)"}},
+        {{"name", "migrate"},   {"desc", "Migrate old layout to subos/default"}},
+        {{"name", "doctor"},    {"desc", "Verify workspace/shim consistency (--fix to repair)"}},
     });
     stream.emit(DataEvent{"help", payload.dump()});
     return 0;
@@ -61,6 +64,21 @@ static int cmd_help(EventStream& stream) {
 export int run(int argc, char* argv[], EventStream& stream) {
     std::string action = (argc >= 3) ? argv[2] : "help";
     if (action == "install") return cmd_install();
+    if (action == "uninstall") {
+        UninstallOpts opts;
+        for (int i = 3; i < argc; ++i) {
+            std::string a = argv[i];
+            if      (a == "-y" || a == "--yes") opts.yes      = true;
+            else if (a == "--keep-data")        opts.keepData = true;
+            else if (a == "--dry-run")          opts.dryRun   = true;
+            else {
+                stream.emit(DataEvent{"error",
+                    nlohmann::json{{"msg", "unknown 'self uninstall' flag: " + a}}.dump()});
+                return 2;
+            }
+        }
+        return cmd_uninstall(opts);
+    }
     if (action == "init")    return cmd_init();
     if (action == "update")  return cmd_update();
     if (action == "config")  return cmd_config(stream);
@@ -76,7 +94,16 @@ export int run(int argc, char* argv[], EventStream& stream) {
         }
         return cmd_doctor(stream, fix);
     }
-    return cmd_help(stream);
+    // help / unknown-action handling. Distinguish a deliberate help
+    // request (no action / -h / --help) from a typo / made-up action so
+    // `xlings self bogus` exits non-zero instead of pretending success.
+    if (action == "help" || action == "-h" || action == "--help" || action.empty()) {
+        return cmd_help(stream);
+    }
+    stream.emit(DataEvent{"error",
+        nlohmann::json{{"msg", "unknown 'self' action: " + action}}.dump()});
+    cmd_help(stream);
+    return 2;
 }
 
 } // namespace xlings::xself
