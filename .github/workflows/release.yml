@@ -19,7 +19,7 @@ env:
   # release is healthy.
   BOOTSTRAP_XLINGS_VERSION: v0.4.13
   # See xlings-ci-linux.yml for why this is pinned.
-  XIM_PKGINDEX_REF: 83044b5488b739139ea66214e22870e087eec4d8
+  XIM_PKGINDEX_REF: 19f4383ba5d65ab86cc6904f6392ceecb0be5d09
 
 jobs:
   build-linux:
