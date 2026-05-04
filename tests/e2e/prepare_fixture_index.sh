@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FIXTURE_INDEX_DIR="${1:-$ROOT_DIR/tests/fixtures/xim-pkgindex}"
 XIM_PKGINDEX_REF="${XIM_PKGINDEX_REF:-main}"
-XIM_PKGINDEX_URL="${XIM_PKGINDEX_URL:-https://github.com/d2learn/xim-pkgindex.git}"
+XIM_PKGINDEX_URL="${XIM_PKGINDEX_URL:-https://github.com/openxlings/xim-pkgindex.git}"
 
 if [[ -d "$FIXTURE_INDEX_DIR/pkgs" ]]; then
   echo "[fixture] reuse existing fixture index: $FIXTURE_INDEX_DIR"

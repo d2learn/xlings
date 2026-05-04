@@ -1,21 +1,23 @@
 # Maintainer: sunrisepeak <speakshen@163.com>
 pkgname=xlings
-pkgver=0.0.4
+pkgver=0.4.14
 pkgrel=1
 pkgdesc="A Developer's Toolkit for Programming Learning, Development, and Tutorial Creation"
 arch=('x86_64')
-url="https://github.com/d2learn/xlings"
+url="https://github.com/openxlings/xlings"
 license=('Apache-2.0')
 depends=()
-makedepends=('git')
 source=(
-    "git+https://github.com/d2learn/xlings.git"
+    "https://github.com/openxlings/xlings/releases/download/v${pkgver}/xlings-${pkgver}-linux-x86_64.tar.gz"
     "xlings-remove.hook"
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+sha256sums=(
+    '4d5ba18fb5f8b32ec899c43c64719302445fe13eec952629f28cce9d8c400b71'
+    'SKIP'
+)
 
 package() {
-  cd "$srcdir/$pkgname"
+  cd "$srcdir/$pkgname-$pkgver-linux-x86_64"
 
   # Install binary
   install -Dm755 bin/xlings "$pkgdir/usr/bin/xlings"
@@ -24,7 +26,7 @@ package() {
   install -d "$pkgdir/usr/share/$pkgname"
   cp -r . "$pkgdir/usr/share/$pkgname"
 
-  chmod 766 "$pkgdir/usr/share/$pkgname/config/xlings.json"
+  chmod 766 "$pkgdir/usr/share/$pkgname/.xlings.json"
 
   # Set permissions for files
   # find "$pkgdir/usr/share/$pkgname" -type f -exec chmod 644 {} +

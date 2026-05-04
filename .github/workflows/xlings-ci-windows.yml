@@ -34,7 +34,7 @@ jobs:
           XLINGS_NON_INTERACTIVE: '1'
           XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
-          irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex
+          irm https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.ps1 | iex
           "XLINGS_HOME=$env:USERPROFILE\.xlings"            >> $env:GITHUB_ENV
           "$env:USERPROFILE\.xlings\subos\current\bin"      >> $env:GITHUB_PATH
           "$env:USERPROFILE\.xlings\bin"                    >> $env:GITHUB_PATH
@@ -103,7 +103,7 @@ jobs:
           Remove-Item Env:XLINGS_HOME -ErrorAction SilentlyContinue
           Remove-Item -Recurse -Force "$env:USERPROFILE\.xlings" -ErrorAction SilentlyContinue
           Write-Host "=== Running quick install script ==="
-          irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+          irm https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
           $env:Path = "$env:USERPROFILE\.xlings\subos\current\bin;$env:Path"
           $atSubos = Test-Path "$env:USERPROFILE\.xlings\subos\current\bin\xlings.exe"
           if (-not $atSubos) { throw "xlings not installed at .xlings\subos\current\bin" }

@@ -36,7 +36,7 @@ Use this path when building the static Linux binary with `musl-gcc@15.1.0`.
 ### 1) Install xlings
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 source ~/.bashrc
 ```
 
@@ -109,7 +109,7 @@ The checked-in CI uses Homebrew `llvm@20` plus `xmake`. If the user insists on a
 ### 1) Install xlings
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 source ~/.bashrc
 ```
 

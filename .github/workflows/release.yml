@@ -38,7 +38,7 @@ jobs:
           XLINGS_NON_INTERACTIVE: 1
           XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.sh | bash
           echo "XLINGS_HOME=$HOME/.xlings"           >> "$GITHUB_ENV"
           echo "$HOME/.xlings/subos/current/bin"     >> "$GITHUB_PATH"
           echo "$HOME/.xlings/bin"                   >> "$GITHUB_PATH"
@@ -97,7 +97,7 @@ jobs:
           XLINGS_NON_INTERACTIVE: 1
           XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.sh | bash
           echo "XLINGS_HOME=$HOME/.xlings"           >> "$GITHUB_ENV"
           echo "$HOME/.xlings/subos/current/bin"     >> "$GITHUB_PATH"
           echo "$HOME/.xlings/bin"                   >> "$GITHUB_PATH"
@@ -145,7 +145,7 @@ jobs:
           XLINGS_NON_INTERACTIVE: '1'
           XLINGS_VERSION: ${{ env.BOOTSTRAP_XLINGS_VERSION }}
         run: |
-          irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex
+          irm https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.ps1 | iex
           "XLINGS_HOME=$env:USERPROFILE\.xlings"            >> $env:GITHUB_ENV
           "$env:USERPROFILE\.xlings\subos\current\bin"      >> $env:GITHUB_PATH
           "$env:USERPROFILE\.xlings\bin"                    >> $env:GITHUB_PATH

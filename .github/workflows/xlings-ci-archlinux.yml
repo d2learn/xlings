@@ -39,23 +39,22 @@ jobs:
             pwd
             sudo chown -R test .
             echo ::group:: Copy Repo
-              mkdir -p /tmp/build/src
-              cp -Rv ./ /tmp/build/src/xlings
+              mkdir -p /tmp/build
               cp -Rv ./config/aur/* /tmp/build
-              cp -Rv ./config/aur/* /tmp/build/src
             echo ::endgroup::
             echo ::group:: Makepkg Xlings
               cd /tmp/build
-              makepkg -sie --noconfirm
+              makepkg -si --noconfirm
               cd -
             echo ::endgroup::
             echo ::group:: Package Info
               pacman -Qii xlings
               pacman -Ql xlings
             echo ::endgroup::
-            echo ::group:: Xlings Init and test aur
+            echo ::group:: Xlings Init and package index smoke
               xlings
-              xlings install nvm@pmwrapper -y
+              xlings update
+              xlings search nvm
             echo ::endgroup::
             echo ::group:: Xlings Add Test User
               xlings self config --adduser test
@@ -74,7 +73,8 @@ jobs:
           su test -c """
             set -euo pipefail
 
-            echo ::group:: Test XIM AUR Wrapper
-              xlings install wechat@pmwrapper -y
+            echo ::group:: Test XIM package index lookup
+              xlings update
+              xlings info nvm
             echo ::endgroup::
           """

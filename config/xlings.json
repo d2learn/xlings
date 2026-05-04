@@ -9,7 +9,7 @@
   "xim": {
     "mirrors": {
       "index-repo": {
-        "GLOBAL": "https://github.com/d2learn/xim-pkgindex.git",
+        "GLOBAL": "https://github.com/openxlings/xim-pkgindex.git",
         "CN": "https://gitee.com/sunrisepeak/xim-pkgindex.git"
       },
       "res-server": {

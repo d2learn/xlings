@@ -68,7 +68,7 @@ write_indexrepos() {
 EOF
 }
 
-GH_BAD_URL="https://github.com/d2learn/this-repo-deliberately-does-not-exist-xlings-mirror-test.git"
+GH_BAD_URL="https://github.com/openxlings/this-repo-deliberately-does-not-exist-xlings-mirror-test.git"
 
 write_indexrepos "$GH_BAD_URL"
 

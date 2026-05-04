@@ -459,7 +459,7 @@ TEST(ConfigTest, ResolveRepoSourceFileScheme) {
 TEST(ConfigTest, ResolveRepoSourceRemoteUrlReturnsEmpty) {
     xlings::IndexRepo repo {
         .name = "xim",
-        .url = "https://github.com/d2learn/xim-pkgindex.git"
+        .url = "https://github.com/openxlings/xim-pkgindex.git"
     };
     EXPECT_TRUE(xlings::Config::resolve_repo_source(repo, false).empty());
     EXPECT_FALSE(xlings::Config::is_local_repo_source(repo, false));
@@ -1546,11 +1546,11 @@ TEST(XimSubReposTest, DiscoverSubReposFromLuaFile) {
     // Write a mock xim-indexrepos.lua
     std::string lua = R"(xim_indexrepos = {
     ["awesome"] = {
-        ["GLOBAL"] = "https://github.com/d2learn/xim-pkgindex-awesome.git",
+        ["GLOBAL"] = "https://github.com/openxlings/xim-pkgindex-awesome.git",
         ["CN"] = "https://gitee.com/d2learn/xim-pkgindex-awesome.git",
     },
     ["scode"] = {
-        ["GLOBAL"] = "https://github.com/d2learn/xim-pkgindex-scode.git",
+        ["GLOBAL"] = "https://github.com/openxlings/xim-pkgindex-scode.git",
     }
 }
 )";
@@ -1565,10 +1565,10 @@ TEST(XimSubReposTest, DiscoverSubReposFromLuaFile) {
     for (auto& r : repos) {
         if (r.name == "awesome") {
             foundAwesome = true;
-            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-awesome.git");
+            EXPECT_EQ(r.url, "https://github.com/openxlings/xim-pkgindex-awesome.git");
         } else if (r.name == "scode") {
             foundScode = true;
-            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-scode.git");
+            EXPECT_EQ(r.url, "https://github.com/openxlings/xim-pkgindex-scode.git");
         }
     }
     EXPECT_TRUE(foundAwesome);
@@ -1581,7 +1581,7 @@ TEST(XimSubReposTest, DiscoverSubReposFromLuaFile) {
         if (r.name == "awesome") {
             EXPECT_EQ(r.url, "https://gitee.com/d2learn/xim-pkgindex-awesome.git");
         } else if (r.name == "scode") {
-            EXPECT_EQ(r.url, "https://github.com/d2learn/xim-pkgindex-scode.git");
+            EXPECT_EQ(r.url, "https://github.com/openxlings/xim-pkgindex-scode.git");
         }
     }
 
@@ -1602,8 +1602,8 @@ TEST(XimSubReposTest, DiscoverSubReposNoFile) {
 
 TEST(XimSubReposTest, SyncRepoUrlKeepsGithubOnCNMirror) {
     auto url = xlings::xim::sync_repo_url(
-        "https://github.com/d2learn/xim-pkgindex-awesome.git", "CN");
-    EXPECT_EQ(url, "https://github.com/d2learn/xim-pkgindex-awesome.git");
+        "https://github.com/openxlings/xim-pkgindex-awesome.git", "CN");
+    EXPECT_EQ(url, "https://github.com/openxlings/xim-pkgindex-awesome.git");
 }
 
 // ============================================================

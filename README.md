@@ -18,7 +18,7 @@
 
 [Website]: https://xlings.d2learn.org
 [Quick Start]: https://xlings.d2learn.org/en/documents/quick-start/one-click-install.html
-[Package Index]: https://d2learn.github.io/xim-pkgindex
+[Package Index]: https://openxlings.github.io/xim-pkgindex
 [XPackage]: https://xlings.d2learn.org/en/documents/xpkg/intro.html
 [Contributing]: https://xlings.d2learn.org/en/documents/community/contribute/add-xpkg.html
 [Forum]: https://forum.d2learn.org/category/9/xlings
@@ -27,7 +27,7 @@
 > [!CAUTION]
 > xlings is currently migrating from Lua to MC++ with a modular architecture. Some packages may be unstable during this transition. If you run into any problems, please report them via [Issues] or the [Forum].
 
-[Issues]: https://github.com/d2learn/xlings/issues
+[Issues]: https://github.com/openxlings/xlings/issues
 
 ## Quick Start
 
@@ -60,13 +60,13 @@ irm https://d2learn.org/xlings-install.ps1.txt | iex
 #### Linux/MacOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 ```
 
 #### Windows - PowerShell
 
 ```bash
-irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+irm https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
 ```
 
 
@@ -186,8 +186,8 @@ pipeline, so a clean local build matches what CI runs.
 
 **👥Contributors**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=openxlings/xlings,openxlings/xim-pkgindex&type=Date)](https://star-history.com/#openxlings/xlings&openxlings/xim-pkgindex&Date)
 
-<a href="https://github.com/d2learn/xlings/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=d2learn/xlings" />
+<a href="https://github.com/openxlings/xlings/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=openxlings/xlings" />
 </a>

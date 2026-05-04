@@ -3,7 +3,7 @@
 ## Install and Verify
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 xlings help
 xim -h
 ```

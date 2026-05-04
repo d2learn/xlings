@@ -17,7 +17,7 @@
 | 资源 | 链接 |
 |------|------|
 | 官网 | https://xlings.d2learn.org |
-| 包索引 | [xim-pkgindex](https://github.com/d2learn/xim-pkgindex) |
+| 包索引 | [xim-pkgindex](https://github.com/openxlings/xim-pkgindex) |
 | 论坛 | https://forum.d2learn.org/category/9/xlings |
 | QQ 群 | 167535744 / 1006282943 |
 
@@ -72,12 +72,12 @@
 
 #### xim-pkgindex — 官方包索引
 
-- **仓库**: [github.com/d2learn/xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
+- **仓库**: [github.com/openxlings/xim-pkgindex](https://github.com/openxlings/xim-pkgindex)
 - **简介**: 61 个 xpkg 包定义 + V1 规范 + Pytest 测试框架
 - **关键文档**:
-  - [xpackage-spec.md](https://github.com/d2learn/xim-pkgindex/blob/main/docs/xpackage-spec.md) — xpkg 规范
-  - [add-xpackage.md](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md) — 添加包指南
-  - [test/design.md](https://github.com/d2learn/xim-pkgindex/blob/main/test/design.md) — 测试框架设计
+  - [xpackage-spec.md](https://github.com/openxlings/xim-pkgindex/blob/main/docs/xpackage-spec.md) — xpkg 规范
+  - [add-xpackage.md](https://github.com/openxlings/xim-pkgindex/blob/main/docs/add-xpackage.md) — 添加包指南
+  - [test/design.md](https://github.com/openxlings/xim-pkgindex/blob/main/test/design.md) — 测试框架设计
 
 #### xpkg 规范要点
 
@@ -113,7 +113,7 @@
 ## 贡献者指南
 
 - **Issues 与 Bug 修复** — [官网指南](https://xlings.d2learn.org)
-- **添加 XPackage 包** — [官网指南](https://xlings.d2learn.org) / [xim-pkgindex 仓库](https://github.com/d2learn/xim-pkgindex)
+- **添加 XPackage 包** — [官网指南](https://xlings.d2learn.org) / [xim-pkgindex 仓库](https://github.com/openxlings/xim-pkgindex)
 - **文档编写** — [官网指南](https://xlings.d2learn.org)
 - **社区**: [论坛](https://forum.d2learn.org/category/9/xlings) / QQ 群 167535744 / 1006282943
 
@@ -155,7 +155,7 @@
 [AGENTS.md](../AGENTS.md) → [architecture.md](../.agents/docs/architecture.md) → [tests/README.md](../tests/README.md) → [changelog.md](../.agents/docs/changelog.md)
 
 **包贡献者**:
-[xpackage-spec.md](https://github.com/d2learn/xim-pkgindex/blob/main/docs/xpackage-spec.md) → [add-xpackage.md](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md) → 示例包 → [测试框架](https://github.com/d2learn/xim-pkgindex/blob/main/test/design.md)
+[xpackage-spec.md](https://github.com/openxlings/xim-pkgindex/blob/main/docs/xpackage-spec.md) → [add-xpackage.md](https://github.com/openxlings/xim-pkgindex/blob/main/docs/add-xpackage.md) → 示例包 → [测试框架](https://github.com/openxlings/xim-pkgindex/blob/main/test/design.md)
 
 **设计贡献者**:
 [architecture.md](../.agents/docs/architecture.md) → [mcpp-version/README.md](../.agents/docs/mcpp-version/README.md) → 设计文档 → [tasks/](../.agents/tasks/)

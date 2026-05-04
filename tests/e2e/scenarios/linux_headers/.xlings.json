@@ -3,7 +3,7 @@
   "index_repos": [
     {
       "name": "xim",
-      "url": "https://github.com/d2learn/xim-pkgindex.git"
+      "url": "https://github.com/openxlings/xim-pkgindex.git"
     }
   ],
   "workspace": {

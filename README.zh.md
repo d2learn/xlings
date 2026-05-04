@@ -18,7 +18,7 @@
 
 [官网]: https://xlings.d2learn.org
 [快速开始]: https://xlings.d2learn.org/documents/quick-start/one-click-install.html
-[包索引]: https://d2learn.github.io/xim-pkgindex
+[包索引]: https://openxlings.github.io/xim-pkgindex
 [XPKG包]: https://xlings.d2learn.org/documents/xpkg/intro.html
 [贡献]: https://xlings.d2learn.org/documents/community/contribute/add-xpkg.html
 [论坛]: https://forum.d2learn.org/category/9/xlings
@@ -27,7 +27,7 @@
 > [!CAUTION]
 > xlings 正在从 Lua 迁移到 MC++ 并进行模块化重构，部分包在迁移期间可能存在不稳定的情况。如遇问题，请通过 [Issues] 或 [论坛] 反馈。
 
-[Issues]: https://github.com/d2learn/xlings/issues
+[Issues]: https://github.com/openxlings/xlings/issues
 
 ## 快速开始
 
@@ -60,13 +60,13 @@ irm https://d2learn.org/xlings-install.ps1.txt | iex
 #### Linux/MacOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 ```
 
 #### Windows - PowerShell
 
 ```bash
-irm https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
+irm https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.ps1 | iex
 ```
 
 
@@ -159,8 +159,8 @@ xlings install
 
 **👥贡献者**
 
-[![Star History Chart](https://api.star-history.com/svg?repos=d2learn/xlings,d2learn/xim-pkgindex&type=Date)](https://star-history.com/#d2learn/xlings&d2learn/xim-pkgindex&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=openxlings/xlings,openxlings/xim-pkgindex&type=Date)](https://star-history.com/#openxlings/xlings&openxlings/xim-pkgindex&Date)
 
-<a href="https://github.com/d2learn/xlings/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=d2learn/xlings" />
+<a href="https://github.com/openxlings/xlings/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=openxlings/xlings" />
 </a>
