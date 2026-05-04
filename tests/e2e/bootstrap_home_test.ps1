@@ -21,7 +21,7 @@ if (-not (Test-Path $BIN_SRC)) { Fail "built xlings binary not found at $BIN_SRC
 # Prepare fixture index (clone if not present)
 if (-not (Test-Path "$FIXTURE_INDEX\pkgs")) {
     $fixtureRef = if ($env:XIM_PKGINDEX_REF) { $env:XIM_PKGINDEX_REF } else { 'xlings_0.4.0' }
-    $fixtureUrl = if ($env:XIM_PKGINDEX_URL) { $env:XIM_PKGINDEX_URL } else { 'https://github.com/d2learn/xim-pkgindex.git' }
+    $fixtureUrl = if ($env:XIM_PKGINDEX_URL) { $env:XIM_PKGINDEX_URL } else { 'https://github.com/openxlings/xim-pkgindex.git' }
     if (Test-Path $FIXTURE_INDEX) { Remove-Item -Recurse -Force $FIXTURE_INDEX }
     New-Item -ItemType Directory -Force -Path (Split-Path $FIXTURE_INDEX) | Out-Null
     git clone --depth 1 --branch $fixtureRef $fixtureUrl $FIXTURE_INDEX

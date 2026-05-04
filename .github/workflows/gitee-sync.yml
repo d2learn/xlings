@@ -12,7 +12,7 @@ jobs:
       - name: Mirror the Github organization repos to Gitee.
         uses: Yikun/hub-mirror-action@master
         with:
-          src: 'github/d2learn'
+          src: 'github/openxlings'
           dst: 'gitee/Sunrisepeak'
           dst_key: ${{ secrets.GITEE_SSH_KEY }}
           dst_token:  ${{ secrets.GITEE_TOKEN }}

@@ -14,7 +14,7 @@ namespace xlings {
 
 export struct Info {
     static constexpr std::string_view VERSION = "0.4.14";
-    static constexpr std::string_view REPO = "https://github.com/d2learn/xlings";
+    static constexpr std::string_view REPO = "https://github.com/openxlings/xlings";
 };
 
 export struct IndexRepo {
@@ -68,7 +68,7 @@ private:
     static constexpr std::string_view DEFAULT_INDEX_REPO_DIR = "xim-pkgindex";
 
     static std::vector<IndexRepo> default_global_index_repos_(const std::string& mirror) {
-        std::string url = "https://github.com/d2learn/xim-pkgindex.git";
+        std::string url = "https://github.com/openxlings/xim-pkgindex.git";
         if (mirror == "CN") {
             url = "https://gitee.com/sunrisepeak/xim-pkgindex.git";
         }

@@ -74,8 +74,8 @@ xlings update
 
 ## 包索引
 
-- 包索引仓库: [xim-pkgindex](https://github.com/d2learn/xim-pkgindex)
-- 添加 XPackage 文档: [add-xpackage](https://github.com/d2learn/xim-pkgindex/blob/main/docs/add-xpackage.md)
+- 包索引仓库: [xim-pkgindex](https://github.com/openxlings/xim-pkgindex)
+- 添加 XPackage 文档: [add-xpackage](https://github.com/openxlings/xim-pkgindex/blob/main/docs/add-xpackage.md)
 
 ### sub 索引仓库 mirror 选择位置
 

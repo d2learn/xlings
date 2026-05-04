@@ -5,7 +5,7 @@
 Install and configure:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash
 source ~/.bashrc
 xlings install musl-gcc@15.1.0 -y
 xlings info musl-gcc

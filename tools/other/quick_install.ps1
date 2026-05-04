@@ -1,5 +1,5 @@
 # One-line installer for xlings (Windows).
-#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.ps1 | iex"
+#   powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.ps1 | iex"
 #Requires -Version 5
 
 param(
@@ -14,7 +14,7 @@ function Log-Info  { param([string]$Msg) Write-Host "[xlings]: $Msg" -Foreground
 function Log-Warn  { param([string]$Msg) Write-Host "[xlings]: $Msg" -ForegroundColor Yellow }
 function Log-Error { param([string]$Msg) Write-Host "[xlings]: $Msg" -ForegroundColor Red }
 
-$GITHUB_REPO = "d2learn/xlings"
+$GITHUB_REPO = "openxlings/xlings"
 $GITHUB_MIRROR = $env:XLINGS_GITHUB_MIRROR
 
 # --------------- banner ---------------
@@ -30,7 +30,7 @@ Write-Host @"
                             __/ |
                            |___/
 
-repo:  https://github.com/d2learn/xlings
+repo:  https://github.com/openxlings/xlings
 forum: https://forum.d2learn.org
 
 "@ -ForegroundColor Cyan

@@ -1030,12 +1030,12 @@ export int run(int argc, char* argv[]) {
         log::error("filesystem error: {}", e.what());
         if (!e.path1().empty()) log::error("  path: {}", e.path1().string());
         log::error("  hint: this is likely a bug; please report at "
-                   "https://github.com/d2learn/xlings/issues");
+                   "https://github.com/openxlings/xlings/issues");
         return 1;
     } catch (const std::exception& e) {
         log::error("internal error: {}", e.what());
         log::error("  hint: this is likely a bug; please report at "
-                   "https://github.com/d2learn/xlings/issues");
+                   "https://github.com/openxlings/xlings/issues");
         return 1;
     } catch (...) {
         log::error("internal error: unknown exception");

@@ -11,7 +11,7 @@ HOME="$QUICK_HOME" \
 PATH="$(minimal_system_path)" \
 XLINGS_NON_INTERACTIVE=1 \
 env -u XLINGS_HOME \
-  bash -c 'curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh | bash'
+  bash -c 'curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh | bash'
 
 INSTALLED_HOME="$QUICK_HOME/.xlings"
 [[ -x "$INSTALLED_HOME/subos/current/bin/xlings" ]] || fail "quick install did not create current xlings shim"

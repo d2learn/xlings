@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-line installer for xlings (Linux / macOS).
-#   curl -fsSL https://raw.githubusercontent.com/d2learn/xlings/main/tools/other/quick_install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/openxlings/xlings/main/tools/other/quick_install.sh | bash
 
 set -euo pipefail
 
@@ -16,7 +16,7 @@ log_error() { echo -e "${RED}[xlings]:${RESET} $1"; }
 
 trap 'log_error "Interrupted"; exit 1' INT TERM
 
-GITHUB_REPO="d2learn/xlings"
+GITHUB_REPO="openxlings/xlings"
 GITHUB_MIRROR="${XLINGS_GITHUB_MIRROR:-}"
 
 # Specify version: curl ... | bash -s -- v0.5.0
@@ -72,7 +72,7 @@ cat << 'EOF'
                             __/ |
                            |___/
 
-repo:  https://github.com/d2learn/xlings
+repo:  https://github.com/openxlings/xlings
 forum: https://forum.d2learn.org
 
 EOF

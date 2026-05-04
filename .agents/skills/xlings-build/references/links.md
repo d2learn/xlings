@@ -2,10 +2,10 @@
 
 ## Project
 
-- Repository: https://github.com/d2learn/xlings
+- Repository: https://github.com/openxlings/xlings
 - Website: https://xlings.d2learn.org
-- Quick install script (Linux/macOS): https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.sh
-- Quick install script (Windows): https://raw.githubusercontent.com/d2learn/xlings/refs/heads/main/tools/other/quick_install.ps1
+- Quick install script (Linux/macOS): https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.sh
+- Quick install script (Windows): https://raw.githubusercontent.com/openxlings/xlings/refs/heads/main/tools/other/quick_install.ps1
 
 ## CI Workflows
 
