@@ -252,8 +252,14 @@ int cmd_install(std::span<const std::string> targets, bool yes, bool noDeps,
     auto pending = plan.pending_count();
     auto allAlreadyInstalled = (pending == 0);
     if (allAlreadyInstalled) {
+        // Per-package "already installed" lines fire on every re-invocation
+        // of `xlings install <pkg>` against an already-active workspace —
+        // they're noise for the common case of re-running install
+        // commands as a no-op refresh. Demoted to debug; the install
+        // summary at the end of the run still gives the user feedback
+        // when something actually happened.
         for (auto& m : requestedMatches) {
-            log::println("{}@{} is already installed", m.canonicalName, m.version);
+            log::debug("{}@{} is already installed", m.canonicalName, m.version);
         }
     }
 
