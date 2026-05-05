@@ -2,6 +2,13 @@
 
 ## 2026
 
+### 2026-05 (v0.4.16)
+
+- **修复：对未安装的包再次 `xlings remove` 仍打印 "✓ removed" 的循环 (#266)**
+  - `src/core/xim/commands.cppm`：`cmd_remove` 在用户不带版本号、active 绑定又为空时,曾把解析降级到 catalog 配方里的"声明最高版本",再把 `!installed` 的判定门控在 `resolvedToDefiniteVersion` 上 —— 注释里那句"留给 installer.uninstall 处理"是错的,uninstall 在空 DB 上会跑完所有 no-op 仍报 success,把用户卡在重复卸载循环里。
+  - 修复双管齐下:active 为空时先回查 xvm DB(`xvm::pick_highest_version`,与 multi-version remove 的兜底复用同一函数);移除 `resolvedToDefiniteVersion` 守门,只要 catalog 解出的 match 不在磁盘上就 warn `"<pkg>@<ver> is not installed"` 并 exit 0,不再 emit `remove_summary`。
+  - `tests/e2e/remove_multi_version_test.sh` 加 Scenario 4:第三次卸完最后一个版本后再 `remove`,断言 exit 0、无 `removed.*subos` 摘要、有 `not installed` 诊断、DB / workspace / store 仍为空。
+
 ### 2026-05 (v0.4.15)
 
 - **下载缓存：sha256 缺失时改用 HEAD 探测，不再每次重下 (#TBD)**
