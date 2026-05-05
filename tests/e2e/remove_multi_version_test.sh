@@ -232,4 +232,44 @@ PY
 [[ ! -e "$SHIM_PATH" ]] \
   || fail "S3: shim should be removed when the last version is uninstalled"
 
-log "PASS: remove-multi-version scenarios 1, 2, 3"
+# ── Scenario 4: remove after fully uninstalled — must NOT loop ─────────────
+# Regression for the bug where, after the last version was removed, the next
+# `xlings remove rm-fixture` (no version) re-resolved to the recipe's highest
+# *declared* version (e.g. 3.0.0), ran installer.uninstall as a no-op (xvm DB
+# already empty, payload dir already gone), and printed "✓ removed" anyway —
+# trapping the user in a remove loop with stale UI claiming a version was
+# uninstalled that wasn't even installed.
+log "Scenario 4: remove rm-fixture after full uninstall (regression: must not loop)"
+
+set +e
+out=$(RUN remove rm-fixture -y 2>&1)
+rc=$?
+set -e
+
+# The command must exit cleanly (we treat "nothing to do" as success, not an
+# error — matches the existing pattern for `xlings remove <pinned-version>`
+# when that version isn't installed) but it MUST NOT print the success
+# summary, and the DB / workspace / store must still be empty.
+[[ $rc -eq 0 ]] || fail "S4: remove after full uninstall should exit 0; got $rc (output: $out)"
+
+if grep -qE "removed.*subos" <<<"$out"; then
+  fail "S4: 'removed' summary printed for a package that isn't installed; output: $out"
+fi
+grep -qE "not installed" <<<"$out" \
+  || fail "S4: expected 'not installed' diagnostic; got: $out"
+
+python3 - "$HOME_DIR" <<'PY' || fail "S4 state should remain fully cleared"
+import json, sys, pathlib
+home = sys.argv[1]
+data = json.loads(pathlib.Path(home, ".xlings.json").read_text())
+assert "rm-fixture" not in (data.get("versions") or {}), \
+    "S4: versions DB should still be empty for rm-fixture"
+ws = json.loads(pathlib.Path(home, "subos/default/.xlings.json").read_text())
+assert "rm-fixture" not in (ws.get("workspace") or {}), \
+    "S4: workspace should still be empty for rm-fixture"
+PY
+
+[[ ! -d "$STORE_DIR" ]] || [[ -z "$(ls -A "$STORE_DIR" 2>/dev/null)" ]] \
+  || fail "S4: store dir should remain absent or empty after no-op remove"
+
+log "PASS: remove-multi-version scenarios 1, 2, 3, 4"
