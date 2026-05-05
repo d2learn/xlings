@@ -65,6 +65,23 @@ jobs:
           restore-keys: |
             xlings-deps-${{ runner.os }}-
 
+      # Cache xrepo's compiled C++ deps (cmdline / ftxui / mcpplibs-* /
+      # libarchive + its compression backends / gtest / etc). On a cold
+      # runner the `Configure xmake` step takes ~4min on Linux because
+      # it pulls + compiles every entry from add_requires; with this
+      # cache hot, that drops to ~30s (extract + xmake re-validate).
+      # Keyed on xmake.lua so any add_requires version change cleanly
+      # invalidates; BOOTSTRAP_XLINGS_VERSION is in the key because the
+      # toolchain (musl-gcc etc.) installed by bootstrap xlings can
+      # change ABI between releases — old objects won't link.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.xmake/packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
       - name: Install build dependencies (xmake / cmake / ninja / musl-gcc)
         run: |
           cd "$GITHUB_WORKSPACE"
