@@ -51,6 +51,16 @@ jobs:
           restore-keys: |
             xlings-deps-${{ runner.os }}-
 
+      # Cache xrepo's compiled C++ deps so Release builds reuse what
+      # the per-PR CI just built. See xlings-ci-linux.yml for rationale.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.xmake/packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
       - name: Install build dependencies (xmake / cmake / ninja / musl-gcc)
         run: |
           cd "$GITHUB_WORKSPACE"
@@ -110,6 +120,16 @@ jobs:
           restore-keys: |
             xlings-deps-${{ runner.os }}-
 
+      # Cache xrepo's compiled C++ deps so Release builds reuse what
+      # the per-PR CI just built. See xlings-ci-linux.yml for rationale.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.xmake/packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
       - name: Install build dependencies (xmake / cmake / ninja / llvm)
         run: |
           cd "$GITHUB_WORKSPACE"
@@ -157,6 +177,16 @@ jobs:
           key: xlings-deps-${{ runner.os }}-${{ hashFiles('.xlings.json') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
           restore-keys: |
             xlings-deps-${{ runner.os }}-
+
+      # Cache xrepo's compiled C++ deps so Release builds reuse what
+      # the per-PR CI just built. See xlings-ci-linux.yml for rationale.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~\.xmake\packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
 
       - name: Install build dependencies (xmake / cmake / ninja)
         shell: pwsh

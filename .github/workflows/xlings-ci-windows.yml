@@ -47,6 +47,18 @@ jobs:
           restore-keys: |
             xlings-deps-${{ runner.os }}-
 
+      # See xlings-ci-linux.yml for the full rationale. On Windows the
+      # bulk of Configure time is xrepo building libarchive + its
+      # compression backends with MSVC; caching those object trees here
+      # is the same single-step win as on Linux/macOS.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~\.xmake\packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
       - name: Install build dependencies (xmake / cmake / ninja)
         shell: pwsh
         run: |

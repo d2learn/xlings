@@ -47,6 +47,18 @@ jobs:
           restore-keys: |
             xlings-deps-${{ runner.os }}-
 
+      # See xlings-ci-linux.yml for the full rationale. Same step,
+      # macOS-specific Configure xmake savings are smaller (~2m45s →
+      # ~30s) because LLVM compiles the C++ deps faster than the
+      # musl-cross toolchain.
+      - name: Cache xrepo packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.xmake/packages
+          key: xmake-pkgs-${{ runner.os }}-${{ hashFiles('xmake.lua') }}-${{ env.BOOTSTRAP_XLINGS_VERSION }}
+          restore-keys: |
+            xmake-pkgs-${{ runner.os }}-
+
       - name: Install build dependencies (xmake / cmake / ninja / llvm)
         run: |
           cd "$GITHUB_WORKSPACE"
