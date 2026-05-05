@@ -23,12 +23,27 @@ struct DownloadFileResult {
     std::string error;
 };
 
+// Result of a HEAD probe used by the cache to decide whether a previously
+// downloaded file is still current. `ok` is true only when the server
+// returned a 2xx response — header fields may still be empty if the
+// server omitted them, in which case callers should fall back to other
+// signals (e.g. file existence) rather than re-downloading blindly.
+struct RemoteFileMeta {
+    bool ok { false };
+    int statusCode { 0 };
+    std::int64_t contentLength { -1 };  // -1 if header missing/unparseable
+    std::string lastModified;           // RFC 1123 string, empty if missing
+    std::string etag;                   // empty if missing
+    std::string error;
+};
+
 void global_init();
 void global_cleanup();
 DownloadFileResult download_file(const DownloadOptions& opts);
 double probe_latency(const std::string& url, int timeoutMs = 2000);
 bool fetch_to_file(const std::string& url, const std::filesystem::path& dest);
 std::int64_t query_content_length(const std::string& url, int connectTimeoutSec = 10);
+RemoteFileMeta query_remote_meta(const std::string& url, int connectTimeoutSec = 10);
 
 // Returns the proxy URL that would be used for `url` (libcurl-style env
 // resolution: HTTPS_PROXY / HTTP_PROXY / ALL_PROXY with NO_PROXY exemption,
@@ -232,7 +247,8 @@ bool fetch_to_file(const std::string& url, const std::filesystem::path& dest) {
     return download_file(o).success;
 }
 
-std::int64_t query_content_length(const std::string& url, int connectTimeoutSec) {
+RemoteFileMeta query_remote_meta(const std::string& url, int connectTimeoutSec) {
+    RemoteFileMeta meta;
     global_init();
     auto client = detail_::make_client(connectTimeoutSec, /*readTimeoutSec=*/60, url);
 
@@ -242,18 +258,34 @@ std::int64_t query_content_length(const std::string& url, int connectTimeoutSec)
     req.headers["User-Agent"] = "xlings/1.0";
 
     auto resp = client.send(req);
+    meta.statusCode = resp.statusCode;
 
-    if (!resp.ok()) return -1;
+    if (!resp.ok()) {
+        meta.error = resp.statusText.empty()
+            ? std::format("HTTP {}", resp.statusCode)
+            : std::format("HTTP {} {}", resp.statusCode, resp.statusText);
+        return meta;
+    }
 
-    // Case-insensitive content-length lookup
+    // Case-insensitive header lookup
     for (auto& [k, v] : resp.headers) {
         std::string lower = k;
         for (auto& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         if (lower == "content-length") {
-            try { return std::stoll(v); } catch (...) { return -1; }
+            try { meta.contentLength = std::stoll(v); } catch (...) { meta.contentLength = -1; }
+        } else if (lower == "last-modified") {
+            meta.lastModified = v;
+        } else if (lower == "etag") {
+            meta.etag = v;
         }
     }
-    return -1;
+    meta.ok = true;
+    return meta;
+}
+
+std::int64_t query_content_length(const std::string& url, int connectTimeoutSec) {
+    auto meta = query_remote_meta(url, connectTimeoutSec);
+    return meta.ok ? meta.contentLength : -1;
 }
 
 } // namespace xlings::tinyhttps
