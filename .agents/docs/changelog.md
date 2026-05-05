@@ -2,6 +2,17 @@
 
 ## 2026
 
+### 2026-05 (v0.4.15)
+
+- **下载缓存：sha256 缺失时改用 HEAD 探测，不再每次重下 (#TBD)**
+  - `src/core/xim/downloader.cppm`：包索引中只声明 `url` 不声明 `sha256` 的条目（fixture 索引里约 8%；实际 `node.lua` / `nvm.lua` 之类 `_linux_url` helper 拼出来的 URL 占比更高）原来每次 `xlings install` 都会重下整包。新增 HEAD-fallback 缓存路径：`fs::file_size` 与服务端 `Content-Length` 比对 + `<destFile>.meta` sidecar 记录的 `Last-Modified` / `ETag` 与本次 HEAD 响应比对，命中则跳过下载。HEAD 失败（离线/服务端拒 HEAD）回退"文件存在即信"，airline-friendly。
+  - sha256 路径在不匹配时主动 `fs::remove` 旧文件，预防将来 tinyhttps 启用 Range/resume 时拼出腐烂文件。
+  - `src/libs/tinyhttps.cppm`：`query_remote_meta()` 返回完整 `RemoteFileMeta { contentLength, lastModified, etag, ... }`；老的 `query_content_length()` 改成薄包装。
+  - `tests/unit/test_main.cpp::XimDownloaderTest::MetaSidecarRoundTrip` 锁定写入 + 读取 + 缺失 + 畸形行容错。
+
+- **bump：mcpplibs-xpkg 0.0.37 → 0.0.38**
+  - 带入 libxpkg 的 `os.dirs` glob 修复（POSIX 下 `ls -d "<pat>"` 双引号会让 shell 跳过 glob 展开，导致 `os.dirs("…/v*")` 静默返回空表）。
+
 ### 2026-04 (v0.4.3)
 
 - **下载器：自动识别系统代理 (#222)**

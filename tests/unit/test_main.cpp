@@ -686,6 +686,46 @@ TEST(XimDownloaderTest, DownloadAllEmpty) {
     EXPECT_TRUE(results.empty());
 }
 
+// HEAD-based cache sidecar (used when sha256 is unset). Round-trips a
+// minimal sidecar through the writer + parser and verifies missing-file
+// and malformed-line handling.
+TEST(XimDownloaderTest, MetaSidecarRoundTrip) {
+    namespace fs = std::filesystem;
+    auto tmp = fs::temp_directory_path() / "xim_meta_sidecar_test";
+    fs::create_directories(tmp);
+    auto path = tmp / "payload.tar.gz.meta";
+    fs::remove(path);
+
+    xlings::tinyhttps::RemoteFileMeta meta;
+    meta.ok = true;
+    meta.lastModified = "Wed, 21 Oct 2015 07:28:00 GMT";
+    meta.etag = "\"abc123\"";
+
+    xlings::xim::write_meta_sidecar_(path, meta);
+    auto roundtrip = xlings::xim::read_meta_sidecar_(path);
+    ASSERT_TRUE(roundtrip.has_value());
+    EXPECT_EQ(roundtrip->lastModified, meta.lastModified);
+    EXPECT_EQ(roundtrip->etag, meta.etag);
+
+    fs::remove(path);
+    EXPECT_FALSE(xlings::xim::read_meta_sidecar_(path).has_value());
+
+    // Malformed input: extra colons, blank lines, unknown keys all ignored
+    {
+        std::ofstream out(path);
+        out << "\n";
+        out << "x-custom: ignored\n";
+        out << "Last-Modified: Mon, 01 Jan 2024 00:00:00 GMT\n";
+        out << "no-colon-line\n";
+    }
+    auto m2 = xlings::xim::read_meta_sidecar_(path);
+    ASSERT_TRUE(m2.has_value());
+    EXPECT_EQ(m2->lastModified, "Mon, 01 Jan 2024 00:00:00 GMT");
+    EXPECT_TRUE(m2->etag.empty());
+
+    fs::remove_all(tmp);
+}
+
 // ============================================================
 // xim installer tests
 // ============================================================

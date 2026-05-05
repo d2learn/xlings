@@ -22,6 +22,52 @@ bool is_git_url(const std::string& url) {
     return url.ends_with(".git");
 }
 
+// ── Sidecar (.meta) helpers for HEAD-based cache freshness ────────────
+//
+// When a package recipe omits sha256 (~8% of pkgindex entries declare a
+// URL but no checksum), we can't verify a cached file by hash. Instead
+// we save the server-reported Last-Modified / ETag next to the file in
+// a tiny <name>.meta sidecar and use it on the next install to decide
+// whether to reuse the cached payload.
+//
+// Format: one "key: value" per line, only `last-modified` and `etag`
+// recognized. Anything else is ignored. Missing sidecar = no metadata.
+struct MetaSidecar_ {
+    std::string lastModified;
+    std::string etag;
+};
+
+std::optional<MetaSidecar_> read_meta_sidecar_(const std::filesystem::path& p) {
+    std::ifstream in(p);
+    if (!in) return std::nullopt;
+    MetaSidecar_ m;
+    std::string line;
+    while (std::getline(in, line)) {
+        auto colon = line.find(':');
+        if (colon == std::string::npos) continue;
+        std::string key = line.substr(0, colon);
+        std::string val = line.substr(colon + 1);
+        // trim
+        auto trim = [](std::string& s) {
+            while (!s.empty() && (s.front() == ' ' || s.front() == '\t' || s.front() == '\r')) s.erase(s.begin());
+            while (!s.empty() && (s.back()  == ' ' || s.back()  == '\t' || s.back()  == '\r')) s.pop_back();
+        };
+        trim(key); trim(val);
+        for (auto& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (key == "last-modified") m.lastModified = std::move(val);
+        else if (key == "etag")     m.etag = std::move(val);
+    }
+    return m;
+}
+
+void write_meta_sidecar_(const std::filesystem::path& p,
+                         const tinyhttps::RemoteFileMeta& meta) {
+    std::ofstream out(p, std::ios::trunc);
+    if (!out) return;
+    if (!meta.lastModified.empty()) out << "last-modified: " << meta.lastModified << "\n";
+    if (!meta.etag.empty())         out << "etag: "          << meta.etag         << "\n";
+}
+
 // Derive the destination directory name from a git URL, e.g.
 // "https://github.com/user/repo.git" -> "repo" (or task.name fallback).
 std::string git_dest_repo_name_(const std::string& url, const std::string& fallback) {
@@ -189,16 +235,80 @@ DownloadResult download_one(const DownloadTask& task,
     if (filename.empty()) filename = task.name + ".download";
 
     auto destFile = task.destDir / filename;
+    auto sidecarPath = destFile;
+    sidecarPath += ".meta";
     result.localFile = destFile;
 
-    // Skip if already downloaded and SHA matches
+    // ── Cache hit path 1: sha256 verified (cheapest, most reliable) ──
+    // If the recipe declares a sha256 and the on-disk file matches, we're
+    // byte-identical to upstream — skip download outright.
     if (fs::exists(destFile) && !task.sha256.empty()) {
         auto cmd = std::format("sha256sum \"{}\"", destFile.string());
         auto [rc, output] = platform::run_command_capture(cmd);
         if (rc == 0 && output.find(task.sha256) != std::string::npos) {
-            log::debug("already downloaded: {}", destFile.string());
+            log::debug("already downloaded (sha256): {}", destFile.string());
             result.success = true;
             return result;
+        }
+        // sha mismatch: stale/corrupt cache. Remove before falling through
+        // so the next download_to_file starts from a clean slate (defends
+        // against a future tinyhttps that might enable Range/resume).
+        fs::remove(destFile, ec);
+    }
+
+    // ── Cache hit path 2: HEAD-based freshness (when sha256 is unset) ──
+    // Trade a tiny HEAD round-trip for not re-downloading toolchain-sized
+    // payloads on every `xlings install`. We only consult this when the
+    // recipe omits sha256 — otherwise path 1 already decided.
+    tinyhttps::RemoteFileMeta probedMeta;
+    bool probedMetaValid = false;
+    if (fs::exists(destFile) && task.sha256.empty()) {
+        probedMeta = tinyhttps::query_remote_meta(task.url);
+        probedMetaValid = true;
+
+        if (probedMeta.ok) {
+            std::error_code sec;
+            auto localSize = static_cast<std::int64_t>(fs::file_size(destFile, sec));
+            std::string storedLM, storedETag;
+            if (auto stored = read_meta_sidecar_(sidecarPath)) {
+                storedLM   = std::move(stored->lastModified);
+                storedETag = std::move(stored->etag);
+            }
+            bool sizeMatch = (probedMeta.contentLength > 0)
+                          && (localSize == probedMeta.contentLength);
+            // Strong freshness signal: server's Last-Modified or ETag
+            // matches what we recorded the last time we downloaded.
+            bool freshMatch =
+                (!probedMeta.lastModified.empty() && probedMeta.lastModified == storedLM)
+             || (!probedMeta.etag.empty()         && probedMeta.etag         == storedETag);
+            // Weak signal: no sidecar (legacy file from before this code),
+            // but the size matches what the server reports right now.
+            bool weakMatch = sizeMatch && storedLM.empty() && storedETag.empty();
+
+            if (sizeMatch && (freshMatch || weakMatch)) {
+                log::debug("already downloaded (HEAD cache hit, size={}): {}",
+                           localSize, destFile.string());
+                result.success = true;
+                return result;
+            }
+            // Stale: drop both file and sidecar before re-downloading.
+            fs::remove(destFile, ec);
+            fs::remove(sidecarPath, ec);
+        } else {
+            // HEAD failed (offline, server blocks HEAD, 4xx, etc.). If we
+            // already have a non-empty cached file, prefer it over failing
+            // — being airline-friendly is worth the small risk of serving
+            // a stale payload when sha256 is unset.
+            std::error_code sec;
+            auto localSize = fs::file_size(destFile, sec);
+            if (!sec && localSize > 0) {
+                log::warn("HEAD probe failed for {} ({}); using cached file: {}",
+                          task.url,
+                          probedMeta.error.empty() ? "unknown" : probedMeta.error,
+                          destFile.string());
+                result.success = true;
+                return result;
+            }
         }
     }
 
@@ -247,6 +357,17 @@ DownloadResult download_one(const DownloadTask& task,
             result.error = std::format("SHA256 mismatch for {}", task.name);
             fs::remove(destFile, ec);
             return result;
+        }
+    } else {
+        // No sha256 declared: persist server-reported Last-Modified / ETag
+        // alongside the payload so the next install can use a HEAD probe
+        // to decide cache freshness instead of re-downloading.
+        if (!probedMetaValid) {
+            probedMeta = tinyhttps::query_remote_meta(task.url);
+            probedMetaValid = true;
+        }
+        if (probedMeta.ok && (!probedMeta.lastModified.empty() || !probedMeta.etag.empty())) {
+            write_meta_sidecar_(sidecarPath, probedMeta);
         }
     }
 
