@@ -408,22 +408,46 @@ int cmd_remove(const std::string& target, bool yes, EventStream& stream) {
         auto bareName = target.substr(target.rfind(':') + 1);
         auto active = xvm::get_active_version(
             Config::effective_workspace(), bareName);
+        // Fall back to "any installed version" when the active binding
+        // has been cleared. The catalog's default version pick is the
+        // recipe's highest *declared* version, which may not match what's
+        // on disk. Before this fallback, a sequence like
+        //
+        //     xlings remove d2x        # detaches active binding
+        //     xlings use d2x           # error: 'd2x' not in version DB
+        //     xlings remove d2x        # ← still picks declared 0.1.4!
+        //
+        // would loop forever: each subsequent remove re-resolved to the
+        // recipe's latest, hit `installer.uninstall` as a no-op (xvm DB
+        // already empty, payload dir already gone), and printed
+        // "✓ removed" anyway. Picking from the xvm DB instead anchors
+        // the resolution to reality.
+        if (active.empty()) {
+            const auto* vinfo = xvm::get_vinfo(Config::versions(), bareName);
+            if (vinfo && !vinfo->versions.empty()) {
+                active = xvm::pick_highest_version(vinfo->versions);
+            }
+        }
         if (!active.empty()) {
             resolveTarget = target + "@" + active;
         }
     }
-    bool resolvedToDefiniteVersion = (resolveTarget.find('@') != std::string::npos);
 
     auto match = catalog.resolve_target(resolveTarget, detect_platform());
     if (match) {
         displayName = match->canonicalName;
         displayVersion = match->version;
-        // Only short-circuit "not installed" when the resolution is
-        // unambiguous (user pinned, or matches the active version).
-        // Otherwise the catalog may have picked the highest *declared*
-        // version, which can differ from what's actually installed —
-        // let installer.uninstall handle that path.
-        if (!match->installed && resolvedToDefiniteVersion) {
+        // Refuse to "remove" a version whose payload isn't on disk. The
+        // earlier version of this check only fired when the user pinned
+        // a version — under the theory that installer.uninstall would
+        // resolve the mismatch when the catalog had picked a non-installed
+        // version on its own. It does not. uninstall runs through the
+        // motions (xvm ops over an already-empty DB, fs::remove_all over
+        // a non-existent dir) and reports success, which loops the user.
+        // The xvm-DB fallback above already anchors resolution to a real
+        // installed version when one exists, so reaching here with
+        // `!installed` means nothing is installed for this target.
+        if (!match->installed) {
             log::warn("{}@{} is not installed", displayName, displayVersion);
             return 0;
         }
