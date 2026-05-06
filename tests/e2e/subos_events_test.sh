@@ -74,13 +74,13 @@ assert_contains "already exists" "$OUT" "S4"
 
 # ── 5. switch non-existent ────────────────────────────────────────
 log "Scenario 5: switch to non-existent"
-OUT="$(RUN subos use nope 2>&1)" || true
+OUT="$(RUN subos use nope --global 2>&1)" || true
 assert_contains "subos 'nope' not found" "$OUT" "S5"
 assert_contains "create it first" "$OUT" "S5 hint"
 
 # ── 6. switch to existing ─────────────────────────────────────────
 log "Scenario 6: switch to existing"
-OUT="$(RUN subos use s1 2>&1)" || fail "S6: switch exited non-zero"
+OUT="$(RUN subos use s1 --global 2>&1)" || fail "S6: switch exited non-zero"
 assert_contains "switched to subos s1" "$OUT" "S6"
 
 # ── 7. remove active subos ────────────────────────────────────────
@@ -91,7 +91,7 @@ assert_contains "switch first" "$OUT" "S7 hint"
 
 # ── 8. remove 'default' ───────────────────────────────────────────
 log "Scenario 8: remove 'default'"
-RUN subos use default >/dev/null 2>&1
+RUN subos use default --global >/dev/null 2>&1
 OUT="$(RUN subos remove default 2>&1)" || true
 assert_contains "cannot remove the 'default' subos" "$OUT" "S8"
 

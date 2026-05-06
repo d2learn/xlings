@@ -2,6 +2,21 @@
 
 ## 2026
 
+### 2026-05 (v0.4.17)
+
+- **shell-level subos 切换 + auto-upgrading profile + TUI 渲染统一 (#269)**
+  - `xlings subos use foo` 默认从"改全局符号链接"改成 **spawn 一个新交互 shell**(POSIX `execl` / Windows `CreateProcess+WaitForSingleObject`),env 里有 `XLINGS_ACTIVE_SUBOS=foo`,`exit` 直接回到原 shell,**两个 terminal 终于可以用不同 subos 互不干扰**。原"持久 + 全局"行为通过显式 `--global` flag 保留。`--shell <kind>` 是给测试 / 高级用户的 eval-able snippet 输出,不在用户帮助里出现。
+  - 嵌套策略:同 subos 二次 use → 一行 `› already in subos NAME` 退 0,**不重复 spawn**。不同 subos use → `▾ nesting subos FROM -> TO  ('exit' returns to FROM)` 提示后再 spawn。spawn 模型下"先退出当前 subos 再进新的"在物理层做不到(子进程无法操控父 shell exec(2)),所以只做嵌套 + 友好提示。
+  - shell profile 三种 shell 都换成 `XLINGS_BIN="$XLINGS_HOME/subos/${XLINGS_ACTIVE_SUBOS:-current}/bin"`(env 优先,没设就回退到 `subos/current` 全局符号链接,保留原有兜底);Config 端的 `update_effective_paths_()` 也对齐同样的 project > env > global 优先级链,保证 `xpkg install` / PATH 看到的是同一个 active subos。
+  - profile 多了一个 prompt marker:进入 subos shell 后 prompt 自动加 `[xsubos:NAME]` 前缀(cyan + bold name,bash/zsh/fish/pwsh 各自原生上色),色盲 / 不支持 ANSI 的终端通过 `NO_COLOR` 或 `TERM=dumb` 退到纯文本。再次 source profile **不会**叠加多个 marker。
+  - profile 内嵌到 C++ 模块:新增 `src/core/xself/profile_resources.cppm` 持有 bash / fish / pwsh 三份 payload + `kVersion` 常量,`init.cppm` 通过 `import` 消费;旧的 `config/shell/xlings-profile.{sh,fish,ps1}` 文件删掉(那三份和 init.cppm 内嵌的 raw literal 之前差 1 字节都没人发现)。**单一来源**。
+  - profile 升级机制:`# xlings-profile-version: <N>` 标记 + `write_or_upgrade_profile_`。版本递进 v1 → v5(env override → 加 prompt marker → marker 改名 `[xsubos:...]` → 加 ANSI 颜色)。**新装走 fresh write,旧装走自动升级且保留用户在 marker 之外的编辑**。
+  - **`xlings update xlings` 后老用户也能拿到新 profile**:新 binary 启动时(每次 xlings 调用)跑 `xself::compat::v0_4_17::auto_upgrade_profiles_if_stale`,版本不一致就静默重写。一次性的成本,旧 binary 的 `xlings update xlings` 路径只翻 xvm 指针、不调 `ensure_home_layout`;新 binary 自检自愈。
+  - TUI 输出统一为单行模板,四种事件 + 四种颜色:`▸ switched to subos NAME [global] (DIR)` cyan / `▸ entering subos NAME (exit to leave)` magenta / `› already in subos NAME` gray / `▾ nesting subos FROM -> TO ('exit' returns to FROM)` amber。`[global]` tag 把"持久"和"per-shell ephemeral"显式区分。
+  - **compat 模块整理**:`src/core/xself/compat_0_4_8.cppm` → `compat.cppm`,每个 compat 块归到 `vX_Y_Z` 子命名空间,header 注释含 `removal_target` 字段。当前两组:`v0_4_8::*`(legacy alias 迁移,drop in 0.6.0)+ `v0_4_17::*`(profile auto-upgrade,permanent self-heal)。删除某个 compat 是删一整块 namespace 的一次性操作,所有 caller 立刻编译报错暴露出来。
+  - 测试:新增 `subos_shell_level_test.sh`(14 个 scenario,含 prompt 颜色 + 嵌套 + 并行 sub-shell 隔离 + PATH dedup)和 `subos_profile_upgrade_test.sh`(4 个,含 v1 legacy 升级 + 同版本保留用户编辑)。
+  - 现有测试一处适配:`xlings subos use NAME` 默认行为变更 → `release_subos_smoke` / `subos_events` / `subos_payload_refcount` 显式补 `--global`。
+
 ### 2026-05 (v0.4.16)
 
 - **修复：对未安装的包再次 `xlings remove` 仍打印 "✓ removed" 的循环 (#266)**

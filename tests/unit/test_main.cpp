@@ -1875,7 +1875,7 @@ TEST_F(ShimCreateTest, CleanupLegacyAliasShimsRemovesOnlyMatchingSymlinks) {
     auto userFile = binDir / "xim";
     std::ofstream(userFile) << "user data\n";
 
-    xlings::xself::compat::cleanup_legacy_alias_shims(binDir, src);
+    xlings::xself::compat::v0_4_8::cleanup_legacy_alias_shims(binDir, src);
 
     // Regular user file with a colliding name must survive.
     EXPECT_TRUE(fs::exists(userFile));

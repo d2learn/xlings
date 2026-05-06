@@ -2,10 +2,9 @@ export module xlings.core.xself.doctor;
 
 import std;
 import xlings.core.xself.init;   // create_shim, LinkResult
-// COMPAT(0.4.8 → drop in 0.6.0): legacy alias names + safety predicate.
-// When the compat module is removed, delete this import and the
-// "Check 2.5: legacy alias shims" block below.
-import xlings.core.xself.compat_0_4_8;
+// Cross-version compat module (legacy alias names + safety predicate
+// live under v0_4_8). See xself/compat.cppm.
+import xlings.core.xself.compat;
 
 import xlings.core.config;
 import xlings.libs.json;
@@ -170,9 +169,9 @@ export int cmd_doctor(EventStream& stream, bool fix) {
     if (fs::exists(p.binDir)) {
         std::error_code bec;
         auto canonical_bootstrap = fs::weakly_canonical(xlings_bin, bec);
-        for (auto alias : compat::LEGACY_ALIAS_NAMES) {
+        for (auto alias : compat::v0_4_8::LEGACY_ALIAS_NAMES) {
             auto path = p.binDir / shim_filename(std::string(alias));
-            if (!compat::is_legacy_alias_symlink_to_bootstrap(path,
+            if (!compat::v0_4_8::is_legacy_alias_symlink_to_bootstrap(path,
                     canonical_bootstrap)) continue;
 
             ++orphans;

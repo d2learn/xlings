@@ -511,7 +511,7 @@ void process_xvm_operations_(const PlanNode& node,
                     }
                     // COMPAT(0.4.8 → drop in 0.6.0): opportunistic legacy
                     // alias cleanup, alongside the bootstrap replacement.
-                    xself::compat::cleanup_legacy_alias_shims(paths.binDir, xlings_bin);
+                    xself::compat::v0_4_8::cleanup_legacy_alias_shims(paths.binDir, xlings_bin);
                 }
             } else if (type == "lib" && !op.bindir.empty()) {
                 // Install lib symlink to subos lib dir

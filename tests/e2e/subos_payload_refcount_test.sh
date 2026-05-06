@@ -41,7 +41,7 @@ for subos_name in s1 s2; do
     fail "$subos_name .xlings.json missing workspace object"
 done
 
-run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
+run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 --global >/dev/null
 run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y
 
 PAYLOAD_DIR="$HOME_DIR/data/xpkgs/xim-x-node/22.17.1"
@@ -50,7 +50,7 @@ DOWNLOAD_FILE="$HOME_DIR/data/runtimedir/$(node_archive_name 22.17.1)"
 [[ -f "$DOWNLOAD_FILE" ]] || fail "download cache missing after s1 install"
 [[ -x "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim missing after install"
 
-run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
+run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 --global >/dev/null
 run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" install node@22.17.1 -y
 
 # Verify s2 reuses existing payload (shim created, payload still at same location)
@@ -62,12 +62,12 @@ NODE_VER_S2="$(
 )"
 [[ "$NODE_VER_S2" == "v22.17.1" ]] || fail "s2 node shim did not resolve to v22.17.1"
 
-run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 >/dev/null
+run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s1 --global >/dev/null
 REMOVE_S1="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node -y)"
 [[ -x "$PAYLOAD_DIR/bin/node" ]] || fail "payload removed even though s2 still referenced it"
 [[ ! -e "$HOME_DIR/subos/s1/bin/node" ]] || fail "s1 shim still present after detach"
 
-run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 >/dev/null
+run_xlings "$HOME_DIR" "$ROOT_DIR" subos use s2 --global >/dev/null
 REMOVE_S2="$(run_and_capture run_xlings "$HOME_DIR" "$ROOT_DIR" remove node -y)"
 [[ ! -e "$PAYLOAD_DIR" ]] || fail "payload still present after last subos reference was removed"
 [[ ! -e "$HOME_DIR/subos/s2/bin/node" ]] || fail "s2 shim still present after final remove"

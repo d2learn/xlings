@@ -6,10 +6,11 @@ import xlings.core.config;
 import xlings.libs.json;
 import xlings.core.log;
 import xlings.platform;
-// COMPAT(0.4.8 → drop in 0.6.0): legacy alias cleanup helper.
-// When this whole module goes away, delete the import and the cleanup
-// call at the bottom of ensure_subos_shims.
-import xlings.core.xself.compat_0_4_8;
+// Cross-version compat (currently: legacy alias cleanup, profile upgrade).
+// See xself/compat.cppm — each compat lives in its own version sub-namespace.
+import xlings.core.xself.compat;
+// Generated at build time from config/shell/*.{sh,fish,ps1}; see xmake.lua.
+import xlings.core.xself.profile_resources;
 
 namespace xlings::xself {
 
@@ -133,7 +134,7 @@ void ensure_subos_shims(const fs::path& target_bin_dir,
     }
 
     // COMPAT(0.4.8 → drop in 0.6.0): one-shot migration cleanup.
-    compat::cleanup_legacy_alias_shims(target_bin_dir, shim_src);
+    compat::v0_4_8::cleanup_legacy_alias_shims(target_bin_dir, shim_src);
 
     platform::make_files_executable(target_bin_dir);
 }
@@ -146,6 +147,62 @@ static void ensure_parent_dirs_(const fs::path& file) {
 static void write_if_missing_(const fs::path& path, std::string_view content) {
     if (fs::exists(path)) return;
     ensure_parent_dirs_(path);
+    platform::write_string_to_file(path.string(), std::string(content));
+}
+
+// Extract the value following `# xlings-profile-version: ` on any line of
+// `text`. Returns an empty string when the marker is absent, which we
+// interpret as "legacy v1" — anything older than the time we started
+// shipping a version marker.
+static std::string extract_profile_version_(std::string_view text) {
+    constexpr std::string_view marker = "# xlings-profile-version:";
+    auto pos = text.find(marker);
+    if (pos == std::string_view::npos) return {};
+    auto value_start = pos + marker.size();
+    while (value_start < text.size() &&
+           (text[value_start] == ' ' || text[value_start] == '\t')) {
+        ++value_start;
+    }
+    auto eol = text.find_first_of("\r\n", value_start);
+    auto end = (eol == std::string_view::npos) ? text.size() : eol;
+    auto value = std::string{text.substr(value_start, end - value_start)};
+    while (!value.empty() &&
+           (value.back() == ' ' || value.back() == '\t')) {
+        value.pop_back();
+    }
+    return value;
+}
+
+// Profile-aware writer. Behavior:
+//
+//   1. Path doesn't exist  → write fresh.
+//   2. Path exists, version matches `target_version` → leave alone (we
+//      respect any user edits made after install).
+//   3. Path exists with older or missing version marker → overwrite, log
+//      the upgrade. This is how shell-level subos switching reaches users
+//      who installed before v2 of the profile shipped.
+//
+// The version of the bytes we're shipping comes from
+// xlings::xself::profile_resources::kVersion; the on-disk value comes from
+// the marker line we inject as the first comment of every profile.
+static void write_or_upgrade_profile_(const fs::path& path,
+                                      std::string_view content,
+                                      std::string_view target_version) {
+    if (!fs::exists(path)) {
+        ensure_parent_dirs_(path);
+        platform::write_string_to_file(path.string(), std::string(content));
+        return;
+    }
+
+    auto existing = platform::read_file_to_string(path.string());
+    auto existing_version = extract_profile_version_(existing);
+    if (existing_version == target_version) return;
+
+    log::debug("upgrading {} (was: {}, now: {})",
+               path.filename().string(),
+               existing_version.empty() ? "<no marker, treated as v1>"
+                                        : existing_version,
+               target_version);
     platform::write_string_to_file(path.string(), std::string(content));
 }
 
@@ -208,45 +265,19 @@ bool ensure_home_layout(const fs::path& home_dir) {
 
     write_if_missing_(default_subos / ".xlings.json", "{\"workspace\":{}}");
     write_if_missing_(home_dir / "data" / "xim-index-repos" / "xim-indexrepos.json", "{}");
-    write_if_missing_(home_dir / "config" / "shell" / "xlings-profile.sh",
-R"XLINGSSH(# Xlings Shell Profile (bash/zsh)
-
-_xlings_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
-if [ -n "$_xlings_dir" ]; then
-    export XLINGS_HOME="$_xlings_dir"
-fi
-unset _xlings_dir
-
-export XLINGS_BIN="$XLINGS_HOME/subos/current/bin"
-
-case ":$PATH:" in
-    *":$XLINGS_BIN:"*) ;;
-    *) export PATH="$XLINGS_BIN:$XLINGS_HOME/bin:$PATH" ;;
-esac
-)XLINGSSH");
-    write_if_missing_(home_dir / "config" / "shell" / "xlings-profile.fish",
-R"XLINGSFISH(# Xlings Shell Profile (fish)
-
-set -l _script_dir (dirname (status filename))
-set -gx XLINGS_HOME (dirname (dirname "$_script_dir"))
-
-set -gx XLINGS_BIN "$XLINGS_HOME/subos/current/bin"
-
-if not contains "$XLINGS_BIN" $PATH
-    set -gx PATH "$XLINGS_BIN" "$XLINGS_HOME/bin" $PATH
-end
-)XLINGSFISH");
-    write_if_missing_(home_dir / "config" / "shell" / "xlings-profile.ps1",
-R"XLINGSPS(# Xlings Shell Profile (PowerShell)
-
-$env:XLINGS_HOME = (Resolve-Path "$PSScriptRoot\..\..").Path
-
-$env:XLINGS_BIN = "$env:XLINGS_HOME\subos\current\bin"
-
-if ($env:Path -notlike "*$env:XLINGS_BIN*") {
-    $env:Path = "$env:XLINGS_BIN;$env:XLINGS_HOME\bin;$env:Path"
-}
-)XLINGSPS");
+    // Profile content lives in xlings.core.xself.profile_resources. We use
+    // the version-aware writer so users who installed an older xlings get
+    // their profile auto-upgraded on the next `self init` / `self update`,
+    // while users on the current version preserve any local edits.
+    write_or_upgrade_profile_(home_dir / "config" / "shell" / "xlings-profile.sh",
+                              profile_resources::bash_sh,
+                              profile_resources::kVersion);
+    write_or_upgrade_profile_(home_dir / "config" / "shell" / "xlings-profile.fish",
+                              profile_resources::fish,
+                              profile_resources::kVersion);
+    write_or_upgrade_profile_(home_dir / "config" / "shell" / "xlings-profile.ps1",
+                              profile_resources::pwsh,
+                              profile_resources::kVersion);
 
     ensure_home_config_defaults_(home_dir);
 
