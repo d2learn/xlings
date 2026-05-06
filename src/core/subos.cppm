@@ -1,3 +1,18 @@
+module;
+
+// System headers used by use_spawn_shell only. `import std;` doesn't
+// pull these in, and we want execl/errno (POSIX) or CreateProcess
+// (Win32) without #include in the named-module purview (which the
+// standard forbids for headers that aren't importable units).
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <cerrno>
+#include <cstring>
+#include <unistd.h>
+#endif
+
 export module xlings.core.subos;
 
 import std;
@@ -151,11 +166,29 @@ export int create(const std::string& name, const fs::path& customDir,
     return 0;
 }
 
-export int use(const std::string& name, EventStream& stream) {
-    auto& p = Config::paths();
-    auto configPath = p.homeDir / ".xlings.json";
-    auto json = read_config_json_(configPath);
+// `xlings subos use` modes:
+//
+//   spawn  (default) — exec a fresh interactive $SHELL with
+//                      XLINGS_ACTIVE_SUBOS=<name> set. The user lives in a
+//                      sub-context until they `exit`, then PATH / env are
+//                      restored to whatever the parent shell had. Other
+//                      shells are unaffected.
+//   shell  (--shell) — emit shell code on stdout for the user to eval into
+//                      the current shell. No fork. Useful in scripts and for
+//                      tools that don't want a sub-shell layer.
+//   global (--global)— legacy behavior: write activeSubos into
+//                      ~/.xlings.json and re-point subos/current symlink.
+//                      Affects every shell that picks up the next profile
+//                      load (i.e., new shells; existing shells via the
+//                      indirect symlink).
+//
+// All three share validation: subos must exist in ~/.xlings.json's subos map.
 
+namespace use_detail_ {
+
+inline int validate_subos_(const std::string& name, EventStream& stream) {
+    auto& p = Config::paths();
+    auto json = read_config_json_(p.homeDir / ".xlings.json");
     if (!json.contains("subos") || !json["subos"].contains(name)) {
         stream.emit(ErrorEvent{
             .code = ErrorCode::NotFound,
@@ -165,7 +198,58 @@ export int use(const std::string& name, EventStream& stream) {
         });
         return 1;
     }
+    return 0;
+}
 
+// Build the new PATH for shell-level switching. The fresh subos bin goes to
+// the front; any *other* xlings-managed subos bin segments are removed so
+// repeated --shell / spawn calls don't pile up stale entries. The PATH
+// separator differs by platform — `;` on Windows, `:` everywhere else.
+inline std::string rebuild_path_for_subos_(const std::string& orig_path,
+                                          const fs::path& home_dir,
+                                          const fs::path& new_bin) {
+#if defined(_WIN32)
+    constexpr char SEP = ';';
+#else
+    constexpr char SEP = ':';
+#endif
+    auto subos_root = (home_dir / "subos").string();
+    std::string out;
+    out.reserve(orig_path.size() + new_bin.string().size() + 1);
+
+    out += new_bin.string();
+
+    std::size_t pos = 0;
+    while (pos < orig_path.size()) {
+        auto sep = orig_path.find(SEP, pos);
+        auto end = (sep == std::string::npos) ? orig_path.size() : sep;
+        std::string_view seg{orig_path.data() + pos, end - pos};
+        // Skip empty segments and any xlings-owned subos bin — those will
+        // be replaced by new_bin.
+        bool is_subos_bin =
+            seg.size() > subos_root.size() &&
+            seg.starts_with(subos_root) &&
+            (seg[subos_root.size()] == '/' || seg[subos_root.size()] == '\\');
+        if (!seg.empty() && !is_subos_bin) {
+            out += SEP;
+            out.append(seg);
+        }
+        if (sep == std::string::npos) break;
+        pos = sep + 1;
+    }
+    return out;
+}
+
+} // namespace use_detail_
+
+// Internal — not exported. `xlings subos use --global <name>` and
+// the back-compat single-arg `use()` both route here.
+int use_global(const std::string& name, EventStream& stream) {
+    if (auto rc = use_detail_::validate_subos_(name, stream); rc != 0) return rc;
+
+    auto& p = Config::paths();
+    auto configPath = p.homeDir / ".xlings.json";
+    auto json = read_config_json_(configPath);
     json["activeSubos"] = name;
     write_config_json_(configPath, json);
 
@@ -177,6 +261,167 @@ export int use(const std::string& name, EventStream& stream) {
     payload["dir"]  = dir.string();
     stream.emit(DataEvent{"subos_switched", payload.dump()});
     return 0;
+}
+
+// Internal — not exported. Powers the hidden `--shell <kind>` flag,
+// kept available for tests and power users that want eval-able output
+// without a sub-shell layer. The default user-facing path is
+// use_spawn_shell; --shell is intentionally not in the help text.
+int use_emit_shell(const std::string& name,
+                          std::string_view shell_kind,
+                          EventStream& stream) {
+    if (auto rc = use_detail_::validate_subos_(name, stream); rc != 0) return rc;
+
+    auto& p = Config::paths();
+    auto bin_dir = p.homeDir / "subos" / name / "bin";
+
+    bool is_fish = (shell_kind == "fish");
+    bool is_pwsh = (shell_kind == "pwsh" || shell_kind == "powershell" ||
+                    shell_kind == "ps1" || shell_kind == "ps");
+
+    if (is_fish) {
+        std::println(R"(set -gx XLINGS_ACTIVE_SUBOS "{}";)", name);
+        std::println(R"(set -gx XLINGS_BIN "{}";)", bin_dir.string());
+        // Strip any old subos bin segments from PATH, then prepend the new
+        // bin. fish's $PATH is a list, so we use string match -v.
+        std::println(R"(set -gx PATH "{}" (string match -v -r "^{}/subos/[^/]+/bin$" -- $PATH);)",
+                     bin_dir.string(), p.homeDir.string());
+        return 0;
+    }
+    if (is_pwsh) {
+        std::println(R"($env:XLINGS_ACTIVE_SUBOS = '{}')", name);
+        std::println(R"($env:XLINGS_BIN = '{}')", bin_dir.string());
+        std::println(R"($env:Path = '{}' + ';' + (($env:Path -split ';') -notmatch '^{}\\subos\\[^\\]+\\bin$' -join ';'))",
+                     bin_dir.string(), p.homeDir.string());
+        return 0;
+    }
+    // POSIX (sh/bash/zsh) default
+    auto orig_path = utils::get_env_or_default("PATH");
+    auto new_path  = use_detail_::rebuild_path_for_subos_(
+        orig_path, p.homeDir, bin_dir);
+    std::println(R"(export XLINGS_ACTIVE_SUBOS="{}";)", name);
+    std::println(R"(export XLINGS_BIN="{}";)", bin_dir.string());
+    std::println(R"(export PATH="{}";)", new_path);
+    return 0;
+}
+
+// Spawn a fresh interactive shell with XLINGS_ACTIVE_SUBOS set. Uses execvp
+// to replace the current process — xlings exits, the new shell takes its
+// place, and `exit` returns to the parent shell with original env intact.
+//
+// On Windows we'd need CreateProcess + WaitForSingleObject (no exec
+// equivalent); for now POSIX-only with a stub that falls back to global
+// mode on Windows.
+// Internal — not exported. Default `xlings subos use <name>` routes here.
+// Replaces the xlings process with a fresh interactive shell that has
+// XLINGS_ACTIVE_SUBOS set; `exit` returns the user to the parent shell.
+//
+// Nesting policy:
+//   * already in the same subos → print a friendly note and exit 0
+//     (no point spawning a redundant duplicate layer);
+//   * already in a different subos → spawn anyway (intentional nesting),
+//     but print one line so the user can see the layering they just
+//     created and remembers `exit` returns them to the previous one.
+//
+// "Exit current subos then enter new" is not implementable from a child
+// process without shell-function infrastructure (we'd have to manipulate
+// the parent shell's env, which exec(2) cannot do). Users who really
+// want flat semantics type `exit` first.
+int use_spawn_shell(const std::string& name, EventStream& stream) {
+    if (auto rc = use_detail_::validate_subos_(name, stream); rc != 0) return rc;
+
+    auto already = utils::get_env_or_default("XLINGS_ACTIVE_SUBOS");
+    if (already == name) {
+        nlohmann::json p; p["name"] = name;
+        stream.emit(DataEvent{"subos_already_in", p.dump()});
+        return 0;
+    }
+    if (!already.empty()) {
+        nlohmann::json p; p["from"] = already; p["to"] = name;
+        stream.emit(DataEvent{"subos_nesting", p.dump()});
+    }
+
+    auto& p = Config::paths();
+    auto bin_dir = p.homeDir / "subos" / name / "bin";
+
+    auto orig_path = utils::get_env_or_default("PATH");
+    auto new_path  = use_detail_::rebuild_path_for_subos_(
+        orig_path, p.homeDir, bin_dir);
+
+    // Set env BEFORE spawning so the child shell inherits it. The profile
+    // sourced by the child reads XLINGS_ACTIVE_SUBOS and re-computes
+    // XLINGS_BIN; XLINGS_BIN we set here is mostly defensive (covers the
+    // case where the child shell is started with --norc and never sources
+    // the profile).
+    platform::set_env_variable("XLINGS_ACTIVE_SUBOS", name);
+    platform::set_env_variable("XLINGS_BIN", bin_dir.string());
+    platform::set_env_variable("PATH", new_path);
+
+    nlohmann::json payload;
+    payload["name"] = name;
+    payload["mode"] = "spawn";
+    stream.emit(DataEvent{"subos_entering", payload.dump()});
+
+    // Flush std streams before exec/CreateProcess — buffered output isn't
+    // preserved across execve(2), and on Windows the child shell may start
+    // writing before the parent's pending output drains; in either case
+    // CI capture (where stdout is a pipe rather than a TTY) loses any
+    // block-buffered bytes that didn't get flushed.
+    std::cout.flush();
+    std::cerr.flush();
+
+#if defined(_WIN32)
+    // Windows: CreateProcess + WaitForSingleObject. We try shells in
+    // preference order (pwsh > powershell > cmd) and inherit the parent's
+    // stdio handles so the user can interact normally. Unlike POSIX exec,
+    // CreateProcess can't replace the current process — xlings stays
+    // alive parked on WaitForSingleObject. The child's exit code becomes
+    // ours so `xlings subos use` exits with whatever the shell exited.
+    constexpr const char* shells[] = { "pwsh.exe", "powershell.exe", "cmd.exe" };
+    for (auto* exe : shells) {
+        STARTUPINFOA si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        // CreateProcessA needs a writable command-line buffer; std::string
+        // ::data() returns a non-const char* since C++17. We pass null for
+        // lpApplicationName so Windows resolves the bare exe via PATH.
+        std::string cmdline = exe;
+        if (::CreateProcessA(nullptr, cmdline.data(), nullptr, nullptr,
+                             /*bInheritHandles=*/TRUE,
+                             /*dwCreationFlags=*/0,
+                             /*lpEnvironment=*/nullptr,
+                             /*lpCurrentDirectory=*/nullptr,
+                             &si, &pi)) {
+            ::WaitForSingleObject(pi.hProcess, INFINITE);
+            DWORD exitCode = 0;
+            ::GetExitCodeProcess(pi.hProcess, &exitCode);
+            ::CloseHandle(pi.hThread);
+            ::CloseHandle(pi.hProcess);
+            return static_cast<int>(exitCode);
+        }
+    }
+    log::error("could not launch any shell on Windows "
+               "(tried pwsh.exe, powershell.exe, cmd.exe)");
+    return 127;
+#else
+    // POSIX: exec(2) replaces the current process so xlings exits and the
+    // child shell takes over. `exit` from that shell returns directly to
+    // the parent shell with the original env intact.
+    auto shell = utils::get_env_or_default("SHELL");
+    if (shell.empty()) shell = "/bin/sh";
+    ::execl(shell.c_str(), shell.c_str(), "-i", static_cast<char*>(nullptr));
+
+    // Only reached if exec failed.
+    log::error("failed to exec shell '{}': {}", shell, std::strerror(errno));
+    return 127;
+#endif
+}
+
+// Back-compat single-arg entry point: keeps existing callers (anyone who
+// imports xlings::subos::use directly) on the legacy global behavior.
+// CLI dispatch goes through `run()` which uses the flag-aware path below.
+export int use(const std::string& name, EventStream& stream) {
+    return use_global(name, stream);
 }
 
 export int remove(const std::string& name, EventStream& stream) {
@@ -313,8 +558,43 @@ export int run(int argc, char* argv[], EventStream& stream) {
         return create(argv[3], {}, stream);
     }
     if (sub == "use") {
-        if (argc < 4) { usageError("missing <name> for: xlings subos use"); return 1; }
-        return use(argv[3], stream);
+        // Flags supported:
+        //   --global         persist the choice into ~/.xlings.json + symlink
+        //                    (legacy behavior; affects every shell)
+        //   --shell <kind>   emit shell code on stdout for the user to
+        //                    eval/Invoke-Expression. <kind> ∈ {sh,bash,zsh,
+        //                    fish,pwsh}. Defaults to "sh" if not provided.
+        //   (no flag)        spawn a fresh interactive shell with
+        //                    XLINGS_ACTIVE_SUBOS=<name> in env. Per-shell.
+        std::string name;
+        std::string mode = "spawn";        // default
+        std::string shell_kind = "sh";
+        for (int i = 3; i < argc; ++i) {
+            std::string a = argv[i];
+            if (a == "--global") { mode = "global"; }
+            else if (a == "--shell") {
+                mode = "shell";
+                if (i + 1 < argc && argv[i + 1][0] != '-') {
+                    shell_kind = argv[++i];
+                }
+            }
+            else if (a.rfind("--shell=", 0) == 0) {
+                mode = "shell";
+                shell_kind = a.substr(8);
+            }
+            else if (!a.empty() && a[0] != '-' && name.empty()) {
+                name = std::move(a);
+            }
+            else {
+                usageError("unknown option for `xlings subos use`: " + a);
+                return 1;
+            }
+        }
+        if (name.empty()) { usageError("missing <name> for: xlings subos use"); return 1; }
+
+        if (mode == "global") return use_global(name, stream);
+        if (mode == "shell")  return use_emit_shell(name, shell_kind, stream);
+        return use_spawn_shell(name, stream);
     }
     if (sub == "list")   return run_list_(stream);
     if (sub == "remove") {

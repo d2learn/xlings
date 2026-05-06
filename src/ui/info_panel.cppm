@@ -203,9 +203,11 @@ void print_subos_list(
 namespace subos_ansi_ {
     constexpr auto reset  = "\033[0m";
     constexpr auto bold   = "\033[1m";
-    constexpr auto cyan   = "\033[38;2;34;211;238m";
-    constexpr auto green  = "\033[38;2;34;197;94m";
-    constexpr auto gray   = "\033[38;2;148;163;184m";
+    constexpr auto cyan   = "\033[38;2;34;211;238m";       // switched (--global)
+    constexpr auto green  = "\033[38;2;34;197;94m";        // created / removed
+    constexpr auto gray   = "\033[38;2;148;163;184m";      // dim / "already in"
+    constexpr auto magenta= "\033[38;2;217;70;239m";       // entering (spawn) — distinct from switched
+    constexpr auto amber  = "\033[38;2;245;158;11m";       // nesting (caution-ish)
 }
 
 void print_subos_created(const std::string& name, const std::string& dir) {
@@ -218,10 +220,13 @@ void print_subos_created(const std::string& name, const std::string& dir) {
 
 void print_subos_switched(const std::string& name, const std::string& dir) {
     using namespace subos_ansi_;
+    // [global] tag distinguishes the persistent "--global" action from the
+    // per-shell spawn (which is the default `xlings subos use NAME`).
     if (dir.empty()) {
-        std::println("{}  ▸ switched to subos {}{}{}", cyan, bold, name, reset);
+        std::println("{}  ▸ switched to subos {}{}{}{}  [global]{}",
+                     cyan, bold, name, reset, cyan, reset);
     } else {
-        std::println("{}  ▸ switched to subos {}{}{}{}  ({}){}",
+        std::println("{}  ▸ switched to subos {}{}{}{}  [global]  ({}){}",
                      cyan, bold, name, reset, cyan, dir, reset);
     }
 }
@@ -229,6 +234,38 @@ void print_subos_switched(const std::string& name, const std::string& dir) {
 void print_subos_removed(const std::string& name) {
     using namespace subos_ansi_;
     std::println("{}  ✓ subos removed: {}{}{}", green, bold, name, reset);
+}
+
+// `xlings subos use <name>` (default spawn mode): user is entering a fresh
+// sub-shell where XLINGS_ACTIVE_SUBOS=<name> is set. Reuses the same
+// `▸ <verb> to subos <name>  (<modifier>)` template as `switched`; the
+// absence of a `[global]` tag is what tells the user this is a per-shell
+// action, not a persistent one.
+void print_subos_entering(const std::string& name) {
+    using namespace subos_ansi_;
+    std::println("{}  \xe2\x96\xb8 entering subos {}{}{}{}  (exit to leave){}",
+                 magenta, bold, name, reset, magenta, reset);
+}
+
+// `xlings subos use <same>` while already in <same>: nothing happens, but
+// we tell the user so they know the command was received and acknowledged.
+void print_subos_already_in(const std::string& name) {
+    using namespace subos_ansi_;
+    std::println("{}  \xe2\x80\xba already in subos {}{}{}{}",
+                 gray, bold, name, reset, gray);
+    std::print("{}", reset);
+}
+
+// `xlings subos use <other>` while in <current>: the spawn will create a
+// nested sub-shell. Single-line summary; the entering line that follows
+// gives the destination, no need to repeat the layer count separately.
+void print_subos_nesting(const std::string& from, const std::string& to) {
+    using namespace subos_ansi_;
+    std::println("{}  \xe2\x96\xbe nesting subos {}{}{}{} -> {}{}{}{}  ('exit' returns to {}{}{}{}){}",
+                 amber,
+                 bold, from, reset, amber,
+                 bold, to, reset, amber,
+                 bold, from, reset, amber, reset);
 }
 
 // Print install summary with success/fail counts

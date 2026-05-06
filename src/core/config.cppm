@@ -13,7 +13,7 @@ import xlings.core.xvm.db;
 namespace xlings {
 
 export struct Info {
-    static constexpr std::string_view VERSION = "0.4.16";
+    static constexpr std::string_view VERSION = "0.4.17";
     static constexpr std::string_view REPO = "https://github.com/openxlings/xlings";
 };
 
@@ -355,8 +355,23 @@ private:
     }
 
     void update_effective_paths_() {
+        // Resolution priority for the effective subos:
+        //   1. Project-mode (Named or Anonymous) — strongest, "this directory
+        //      asks for subos X" overrides everything else.
+        //   2. $XLINGS_ACTIVE_SUBOS env var — shell-level override; the shell
+        //      profile honors the same priority so PATH and `xpkg install`
+        //      target stay in sync.
+        //   3. globalActiveSubos_ from ~/.xlings.json — the persistent default
+        //      that new shells inherit when no env override is set.
         paths_.activeSubos = globalActiveSubos_;
         paths_.subosDir = paths_.homeDir / "subos" / globalActiveSubos_;
+
+        if (auto env = utils::get_env_or_default("XLINGS_ACTIVE_SUBOS");
+            !env.empty()) {
+            paths_.activeSubos = env;
+            paths_.subosDir = paths_.homeDir / "subos" / env;
+        }
+
         if (projectSubosMode_ == ProjectSubosMode::Named && !projectSubosName_.empty()) {
             paths_.activeSubos = projectSubosName_;
             paths_.subosDir = project_subos_dir_();

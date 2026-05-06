@@ -26,7 +26,7 @@ D2X_VERSION="${D2X_VERSION:-$(default_d2x_version)}"
 
 xlings subos new s1
 [[ -f "$XLINGS_HOME/subos/s1/.xlings.json" ]] || fail "s1 config missing"
-xlings subos use s1
+xlings subos use s1 --global
 readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || fail "subos/current not pointing to s1"
 
 xlings --verbose install "d2x@$D2X_VERSION" -y 2>&1 || true
@@ -34,19 +34,19 @@ xlings --verbose install "d2x@$D2X_VERSION" -y 2>&1 || true
 
 xlings subos new s2
 [[ -f "$XLINGS_HOME/subos/s2/.xlings.json" ]] || fail "s2 config missing"
-xlings subos use s2
+xlings subos use s2 --global
 readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || fail "subos/current not pointing to s2"
 
 xlings --verbose install "d2x@$D2X_VERSION" -y 2>&1 || true
 [[ -x "$XLINGS_HOME/subos/s2/bin/d2x" ]] || fail "s2 d2x shim missing"
 
-xlings subos use s1
+xlings subos use s1 --global
 readlink "$XLINGS_HOME/subos/current" | grep -q "s1" || fail "failed to switch back to s1"
-xlings subos use s2
+xlings subos use s2 --global
 readlink "$XLINGS_HOME/subos/current" | grep -q "s2" || fail "failed to switch back to s2"
 xlings subos list >/dev/null
 
-xlings subos use default
+xlings subos use default --global
 xlings subos remove s1
 xlings subos remove s2
 

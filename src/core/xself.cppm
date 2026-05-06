@@ -15,9 +15,10 @@
 //   xself/clean.cppm            — `self clean [--dry-run]`
 //   xself/migrate.cppm          — `self migrate`
 //   xself/doctor.cppm           — `self doctor [--fix]`
-//   xself/compat_0_4_8.cppm     — COMPAT(0.4.8 → drop in 0.6.0): legacy
-//                                 alias migration. See its header comment
-//                                 for the removal procedure.
+//   xself/compat.cppm           — cross-version compat shims, organized
+//                                 into vX_Y_Z sub-namespaces. See its
+//                                 header for the removal procedure when
+//                                 a compat block expires.
 
 export module xlings.core.xself;
 
@@ -31,11 +32,10 @@ export import xlings.core.xself.config;
 export import xlings.core.xself.clean;
 export import xlings.core.xself.migrate;
 export import xlings.core.xself.doctor;
-// COMPAT(0.4.8 → drop in 0.6.0): re-exported so external callers
-// (main.cpp, xvm/commands.cppm, xim/installer.cppm) reach
-// `xself::compat::*` through the umbrella module without depending
-// on the partition file directly.
-export import xlings.core.xself.compat_0_4_8;
+// Re-exported so external callers (main.cpp, xvm/commands.cppm,
+// xim/installer.cppm) reach `xself::compat::v*::*` through the umbrella
+// module without depending on the partition file directly.
+export import xlings.core.xself.compat;
 
 import xlings.libs.json;
 import xlings.runtime;

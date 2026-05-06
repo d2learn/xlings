@@ -154,6 +154,16 @@ static void dispatch_data_event(const DataEvent& e) {
         ui::print_subos_switched(
             json.value("name", ""), json.value("dir", ""));
     }
+    else if (e.kind == "subos_entering") {
+        ui::print_subos_entering(json.value("name", ""));
+    }
+    else if (e.kind == "subos_already_in") {
+        ui::print_subos_already_in(json.value("name", ""));
+    }
+    else if (e.kind == "subos_nesting") {
+        ui::print_subos_nesting(
+            json.value("from", ""), json.value("to", ""));
+    }
     else if (e.kind == "subos_removed") {
         ui::print_subos_removed(json.value("name", ""));
     }

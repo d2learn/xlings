@@ -31,7 +31,7 @@ $D2X_VERSION = if ($env:D2X_VERSION) { $env:D2X_VERSION } else { Get-DefaultD2xV
 # ── Create subos s1, install d2x ────────────────────────────────
 xlings subos new s1
 if (-not (Test-Path "$PKG_DIR\subos\s1\.xlings.json")) { Fail "s1 config missing" }
-xlings subos use s1
+xlings subos use s1 --global
 
 $installS1 = (xlings install "d2x@$D2X_VERSION" -y 2>&1) | Out-String
 Write-Host $installS1
@@ -42,7 +42,7 @@ if (-not (Test-Path "$PKG_DIR\subos\s1\bin\d2x.exe")) { Fail "s1 d2x shim missin
 # ── Create subos s2, install d2x ────────────────────────────────
 xlings subos new s2
 if (-not (Test-Path "$PKG_DIR\subos\s2\.xlings.json")) { Fail "s2 config missing" }
-xlings subos use s2
+xlings subos use s2 --global
 
 $installS2 = (xlings install "d2x@$D2X_VERSION" -y 2>&1) | Out-String
 Write-Host $installS2
@@ -50,12 +50,12 @@ if ($installS2 -notmatch "installed|already installed") { Fail "s2 install did n
 if (-not (Test-Path "$PKG_DIR\subos\s2\bin\d2x.exe")) { Fail "s2 d2x shim missing" }
 
 # ── Switch and verify ───────────────────────────────────────────
-xlings subos use s1
-xlings subos use s2
+xlings subos use s1 --global
+xlings subos use s2 --global
 xlings subos list | Out-Null
 
 # ── Cleanup ─────────────────────────────────────────────────────
-xlings subos use default
+xlings subos use default --global
 xlings subos remove s1
 xlings subos remove s2
 
