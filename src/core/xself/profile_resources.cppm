@@ -49,10 +49,13 @@ namespace xlings::xself::profile_resources {
 //   4 — prompt marker label tightened to [xsubos:<name>] for clarity
 //   5 — prompt marker uses ANSI color when terminal supports it
 //       (respects NO_COLOR and TERM=dumb opt-outs)
-export inline constexpr std::string_view kVersion = "5";
+//   6 — prompt marker uses inverted "tag" style (bold black on cyan
+//       background) so it visually separates from neighbouring prompt
+//       text instead of just blending in as colored letters
+export inline constexpr std::string_view kVersion = "6";
 
 export inline constexpr std::string_view bash_sh =
-R"XPROFILE(# xlings-profile-version: 5
+R"XPROFILE(# xlings-profile-version: 6
 # Xlings Shell Profile (bash/zsh)
 
 _xlings_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
@@ -88,8 +91,11 @@ if [ -n "${XLINGS_ACTIVE_SUBOS-}" ] && [ -n "${PS1-}" ]; then
         *"[xsubos:$XLINGS_ACTIVE_SUBOS]"*) ;;
         *)
             if [ -z "${NO_COLOR-}" ] && [ -n "${TERM-}" ] && [ "$TERM" != "dumb" ]; then
+                # Bold black fg on cyan bg — renders as a filled "tag" pill
+                # that sits visually apart from the rest of the prompt
+                # rather than blending in as another colored letter.
                 _xlings_esc=$(printf '\033')
-                PS1="${_xlings_esc}[36m[xsubos:${_xlings_esc}[1m${XLINGS_ACTIVE_SUBOS}${_xlings_esc}[22;36m]${_xlings_esc}[0m ${PS1}"
+                PS1="${_xlings_esc}[1;30;46m[xsubos:${XLINGS_ACTIVE_SUBOS}]${_xlings_esc}[0m ${PS1}"
                 unset _xlings_esc
             else
                 PS1="[xsubos:${XLINGS_ACTIVE_SUBOS}] ${PS1}"
@@ -100,7 +106,7 @@ fi
 )XPROFILE";
 
 export inline constexpr std::string_view fish =
-R"XPROFILE(# xlings-profile-version: 5
+R"XPROFILE(# xlings-profile-version: 6
 # Xlings Shell Profile (fish)
 
 set -l _script_dir (dirname (status filename))
@@ -129,14 +135,12 @@ if set -q XLINGS_ACTIVE_SUBOS
     function fish_prompt
         if set -q XLINGS_ACTIVE_SUBOS
             if not set -q NO_COLOR; and set -q TERM; and test "$TERM" != "dumb"
-                set_color cyan
-                echo -n "[xsubos:"
-                set_color --bold cyan
-                echo -n "$XLINGS_ACTIVE_SUBOS"
+                # Bold black on cyan background — "tag pill" style so the
+                # marker stands clearly apart from the rest of the prompt.
+                set_color --bold black --background cyan
+                echo -n "[xsubos:$XLINGS_ACTIVE_SUBOS]"
                 set_color normal
-                set_color cyan
-                echo -n "] "
-                set_color normal
+                echo -n " "
             else
                 echo -n "[xsubos:$XLINGS_ACTIVE_SUBOS] "
             end
@@ -147,7 +151,7 @@ end
 )XPROFILE";
 
 export inline constexpr std::string_view pwsh =
-R"XPROFILE(# xlings-profile-version: 5
+R"XPROFILE(# xlings-profile-version: 6
 # Xlings Shell Profile (PowerShell)
 
 $env:XLINGS_HOME = (Resolve-Path "$PSScriptRoot\..\..").Path
@@ -172,8 +176,10 @@ if ($env:XLINGS_ACTIVE_SUBOS) {
     function global:prompt {
         $useColor = (-not $env:NO_COLOR) -and $env:TERM -ne 'dumb'
         if ($useColor) {
+            # Bold black fg on cyan bg — "tag pill" style so the marker
+            # stands clearly apart from the rest of the prompt.
             $e = [char]27
-            Write-Host -NoNewline "$e[36m[xsubos:$e[1m$($env:XLINGS_ACTIVE_SUBOS)$e[22;36m]$e[0m "
+            Write-Host -NoNewline "$e[1;30;46m[xsubos:$($env:XLINGS_ACTIVE_SUBOS)]$e[0m "
         } else {
             Write-Host -NoNewline "[xsubos:$($env:XLINGS_ACTIVE_SUBOS)] "
         }

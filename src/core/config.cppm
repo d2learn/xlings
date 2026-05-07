@@ -453,8 +453,14 @@ private:
 
         log::debug("config: home={}, selfContained={}", paths_.homeDir.string(), paths_.selfContained);
 
-        // Load subos workspace
-        auto subosConfigPath = paths_.homeDir / "subos" / globalActiveSubos_ / ".xlings.json";
+        // Load subos workspace from the path resolved by
+        // update_effective_paths_, which honors XLINGS_ACTIVE_SUBOS env
+        // overrides. Using `globalActiveSubos_` directly here (a snapshot
+        // of `~/.xlings.json activeSubos`) would silently load the wrong
+        // subos's workspace whenever the user is in a spawned subos shell
+        // with XLINGS_ACTIVE_SUBOS set, which then corrupts that subos
+        // when `xvm use` writes back through save_workspace().
+        auto subosConfigPath = paths_.homeDir / "subos" / paths_.activeSubos / ".xlings.json";
         globalWorkspace_ = load_workspace_from_file_(subosConfigPath);
 
         // Load project-level config (walk up from cwd)
@@ -890,7 +896,14 @@ public:
             if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
             subosConfigPath = self.project_state_path_();
         } else {
-            subosConfigPath = self.paths_.homeDir / "subos" / self.globalActiveSubos_ / ".xlings.json";
+            // Use paths_.activeSubos (env-aware) rather than
+            // globalActiveSubos_ (~/.xlings.json snapshot). Without this
+            // honoring of XLINGS_ACTIVE_SUBOS, `xvm use` from inside a
+            // spawned subos shell writes back to the persistent default
+            // instead of the active env-resolved subos — the workspace
+            // change leaks to other shells. The load side (Config init)
+            // is symmetric.
+            subosConfigPath = self.paths_.homeDir / "subos" / self.paths_.activeSubos / ".xlings.json";
         }
 
         nlohmann::json json;

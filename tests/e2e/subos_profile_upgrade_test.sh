@@ -28,11 +28,11 @@ run_xlings() {
 # ── 1. Fresh init produces a v2 profile ───────────────────────────────
 log "Scenario 1: fresh init writes v2 profile"
 run_xlings self init >/dev/null
-grep -q "^# xlings-profile-version: 5" "$HOME_DIR/config/shell/xlings-profile.sh" \
+grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S1: bash profile missing version marker"
-grep -q "^# xlings-profile-version: 5" "$HOME_DIR/config/shell/xlings-profile.fish" \
+grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.fish" \
     || fail "S1: fish profile missing version marker"
-grep -q "^# xlings-profile-version: 5" "$HOME_DIR/config/shell/xlings-profile.ps1" \
+grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.ps1" \
     || fail "S1: pwsh profile missing version marker"
 
 # ── 2. Legacy profile (no marker) gets upgraded ───────────────────────
@@ -46,7 +46,7 @@ case ":$PATH:" in
 esac
 EOF
 run_xlings self init >/dev/null
-grep -q "^# xlings-profile-version: 5" "$HOME_DIR/config/shell/xlings-profile.sh" \
+grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S2: legacy profile was not upgraded"
 grep -q 'XLINGS_ACTIVE_SUBOS' "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S2: upgraded profile missing env-fallback logic"
@@ -66,7 +66,7 @@ cat > "$HOME_DIR/config/shell/xlings-profile.sh" <<'EOF'
 export FOO=bar
 EOF
 run_xlings self init >/dev/null
-grep -q "^# xlings-profile-version: 5" "$HOME_DIR/config/shell/xlings-profile.sh" \
+grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S4: v1-marked profile was not upgraded"
 
 log "PASS: subos profile upgrade (1-4)"
