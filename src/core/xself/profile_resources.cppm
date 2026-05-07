@@ -53,13 +53,14 @@ namespace xlings::xself::profile_resources {
 //       too aggressive in real prompts, dropped in v7
 //   7 — prompt marker is foreground-only: brackets/label in default
 //       color, the subos name itself in bold green
-//   8 — prompt marker brackets/label tinted gray (slate-400) so they
-//       sit visually behind the bold-green subos name without leaving
-//       the marker as plain white text on the user's prompt line
-export inline constexpr std::string_view kVersion = "8";
+//   8 — prompt marker brackets/label tinted gray (slate-400), subos
+//       name in bold green
+//   9 — subos name color shifts from bold green to bold magenta (8-color
+//       SGR 35) for a calmer "purple" reading; brackets stay slate-400
+export inline constexpr std::string_view kVersion = "9";
 
 export inline constexpr std::string_view bash_sh =
-R"XPROFILE(# xlings-profile-version: 8
+R"XPROFILE(# xlings-profile-version: 9
 # Xlings Shell Profile (bash/zsh)
 
 _xlings_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
@@ -95,13 +96,13 @@ if [ -n "${XLINGS_ACTIVE_SUBOS-}" ] && [ -n "${PS1-}" ]; then
         *"[xsubos:$XLINGS_ACTIVE_SUBOS]"*) ;;
         *)
             if [ -z "${NO_COLOR-}" ] && [ -n "${TERM-}" ] && [ "$TERM" != "dumb" ]; then
-                # Brackets / "xsubos:" label tinted gray (slate-400, the
-                # same `subos_ansi_::gray` used by the TUI renderers) so
-                # they recede; the subos name itself stays bold green so
-                # it's the visual focus.
+                # Brackets / "xsubos:" label tinted slate-400 gray; subos
+                # name itself in bold magenta (SGR 1;35) — calmer "purple"
+                # than truecolor magenta and rendered consistently across
+                # terminals.
                 _xlings_esc=$(printf '\033')
                 _xlings_g="${_xlings_esc}[38;2;148;163;184m"
-                _xlings_n="${_xlings_esc}[1;32m"
+                _xlings_n="${_xlings_esc}[1;35m"
                 _xlings_r="${_xlings_esc}[0m"
                 PS1="${_xlings_g}[xsubos:${_xlings_n}${XLINGS_ACTIVE_SUBOS}${_xlings_r}${_xlings_g}]${_xlings_r} ${PS1}"
                 unset _xlings_esc _xlings_g _xlings_n _xlings_r
@@ -114,7 +115,7 @@ fi
 )XPROFILE";
 
 export inline constexpr std::string_view fish =
-R"XPROFILE(# xlings-profile-version: 8
+R"XPROFILE(# xlings-profile-version: 9
 # Xlings Shell Profile (fish)
 
 set -l _script_dir (dirname (status filename))
@@ -143,11 +144,12 @@ if set -q XLINGS_ACTIVE_SUBOS
     function fish_prompt
         if set -q XLINGS_ACTIVE_SUBOS
             if not set -q NO_COLOR; and set -q TERM; and test "$TERM" != "dumb"
-                # Brackets / "xsubos:" label tinted slate-400 gray so they
-                # recede; subos name itself bold green so it's the focus.
+                # Brackets / "xsubos:" label slate-400 gray; subos name
+                # in bold magenta (the 8-color "purple") for a calmer
+                # tone than the truecolor magenta used by entering.
                 set_color 94a3b8
                 echo -n "[xsubos:"
-                set_color --bold green
+                set_color --bold magenta
                 echo -n "$XLINGS_ACTIVE_SUBOS"
                 set_color normal
                 set_color 94a3b8
@@ -164,7 +166,7 @@ end
 )XPROFILE";
 
 export inline constexpr std::string_view pwsh =
-R"XPROFILE(# xlings-profile-version: 8
+R"XPROFILE(# xlings-profile-version: 9
 # Xlings Shell Profile (PowerShell)
 
 $env:XLINGS_HOME = (Resolve-Path "$PSScriptRoot\..\..").Path
@@ -189,11 +191,11 @@ if ($env:XLINGS_ACTIVE_SUBOS) {
     function global:prompt {
         $useColor = (-not $env:NO_COLOR) -and $env:TERM -ne 'dumb'
         if ($useColor) {
-            # Brackets / "xsubos:" label tinted slate-400 gray so they
-            # recede; subos name itself bold green so it's the focus.
+            # Brackets / "xsubos:" label slate-400 gray; subos name in
+            # bold magenta (8-color "purple") for a calmer tone.
             $e = [char]27
             $g = "$e[38;2;148;163;184m"
-            $n = "$e[1;32m"
+            $n = "$e[1;35m"
             $r = "$e[0m"
             Write-Host -NoNewline "$g[xsubos:$n$($env:XLINGS_ACTIVE_SUBOS)$r$g]$r "
         } else {

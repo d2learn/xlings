@@ -41,8 +41,8 @@ run_xlings self init >/dev/null
 
 # ── 1. Profile contains version marker + env fallback logic ────────────
 log "Scenario 1: profile is v2 (has version marker + env fallback)"
-grep -q "^# xlings-profile-version: 8" "$HOME_DIR/config/shell/xlings-profile.sh" \
-    || fail "S1: missing 'xlings-profile-version: 8' marker"
+grep -q "^# xlings-profile-version: 9" "$HOME_DIR/config/shell/xlings-profile.sh" \
+    || fail "S1: missing 'xlings-profile-version: 9' marker"
 grep -q 'XLINGS_ACTIVE_SUBOS' "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S1: missing XLINGS_ACTIVE_SUBOS in bash profile"
 grep -q 'XLINGS_ACTIVE_SUBOS' "$HOME_DIR/config/shell/xlings-profile.fish" \
