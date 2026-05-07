@@ -54,7 +54,7 @@ NODE_RC=$?
 set -e
 echo "node --version (without XLINGS_PROJECT_DIR): $NODE_ERR"
 [[ $NODE_RC -ne 0 ]] || fail "shim without XLINGS_PROJECT_DIR should have failed"
-assert_contains "$NODE_ERR" "no version set" \
-  "expected 'no version set' error without XLINGS_PROJECT_DIR (got: $NODE_ERR)"
+assert_contains "$NODE_ERR" "xlings:" \
+  "expected xlings shim error without XLINGS_PROJECT_DIR (got: $NODE_ERR)"
 
 log "PASS: shim project context via XLINGS_PROJECT_DIR"

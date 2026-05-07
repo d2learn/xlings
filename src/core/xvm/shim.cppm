@@ -118,14 +118,34 @@ int shim_dispatch(const std::string& program_name, int argc, char* argv[]) {
 
     // Look up active version for this program
     auto version = get_active_version(workspace, program_name);
+    auto db = Config::versions();
     if (version.empty()) {
-        log::error("xlings: no version set for '{}'", program_name);
-        log::error("  hint: xlings use {} <version>", program_name);
+        // Differentiate "not installed" from "installed but no active":
+        //   * 0 versions in the global versions DB → user needs `install`
+        //   * ≥1 version exists → user needs `use` to pin one
+        // The previous "xlings use <pkg> <version>" hint is misleading when
+        // the package isn't installed at all (e.g. immediately after
+        // `xlings remove <pkg>` left an orphan shim in PATH from another
+        // subos's bin, the workspace lookup returns empty AND the global
+        // DB returns empty too).
+        auto all = get_all_versions(db, program_name);
+        if (all.empty()) {
+            log::error("xlings: '{}' is not installed", program_name);
+            log::error("  hint: xlings install {}", program_name);
+        } else {
+            log::error("xlings: no active version of '{}' in current subos", program_name);
+            std::string avail;
+            for (auto& v : all) {
+                if (!avail.empty()) avail += " ";
+                avail += v;
+            }
+            log::error("  available: {}", avail);
+            log::error("  hint: xlings use {} <version>", program_name);
+        }
         return 1;
     }
 
     // Resolve version (fuzzy match)
-    auto db = Config::versions();
     auto resolved_version = match_version(db, program_name, version);
     if (resolved_version.empty()) {
         log::error("xlings: version '{}' not found for '{}'", version, program_name);
