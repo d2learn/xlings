@@ -105,8 +105,8 @@ Log "node --version (without XLINGS_PROJECT_DIR): $nodeErr"
 if ($nodeRc -eq 0) {
     Fail "shim without XLINGS_PROJECT_DIR should have failed"
 }
-if ($nodeErr -notmatch "no version set") {
-    Fail "expected 'no version set' error without XLINGS_PROJECT_DIR (got: $nodeErr)"
+if ($nodeErr -notmatch "xlings:") {
+    Fail "expected xlings shim error without XLINGS_PROJECT_DIR (got: $nodeErr)"
 }
 
 # Cleanup temp dir
