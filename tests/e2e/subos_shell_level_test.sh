@@ -41,8 +41,8 @@ run_xlings self init >/dev/null
 
 # ── 1. Profile contains version marker + env fallback logic ────────────
 log "Scenario 1: profile is v2 (has version marker + env fallback)"
-grep -q "^# xlings-profile-version: 6" "$HOME_DIR/config/shell/xlings-profile.sh" \
-    || fail "S1: missing 'xlings-profile-version: 6' marker"
+grep -q "^# xlings-profile-version: 8" "$HOME_DIR/config/shell/xlings-profile.sh" \
+    || fail "S1: missing 'xlings-profile-version: 8' marker"
 grep -q 'XLINGS_ACTIVE_SUBOS' "$HOME_DIR/config/shell/xlings-profile.sh" \
     || fail "S1: missing XLINGS_ACTIVE_SUBOS in bash profile"
 grep -q 'XLINGS_ACTIVE_SUBOS' "$HOME_DIR/config/shell/xlings-profile.fish" \
@@ -265,4 +265,31 @@ out=$(run_xlings_with_active web subos use infra </dev/null 2>&1 || true)
 echo "$out" | grep -q "nesting subos" \
     || fail "S13: expected 'nesting subos' note; got: $out"
 
-log "PASS: subos shell-level switching (1-13 + 6b + 11b)"
+# ── 14. anonymous-project dir + global-scope read does not mint subos/_ ──
+# Regression for: `xlings install -g <pkg>` invoked from inside an
+# anonymous-project directory (cwd has a `.xlings.json` that triggers
+# ProjectSubosMode::Anonymous) was composing the workspace save path from
+# paths_.activeSubos = "_", producing `~/.xlings/subos/_/.xlings.json`,
+# which doesn't exist. The save then failed with "Failed to write file".
+# Surfaced under `xlings self install` because its patchelf-runtime-dep
+# step explicitly spawns `xlings install xim:patchelf@0.18.0 -y -g`.
+#
+# We can't easily fake an `install -g` without fixture-index plumbing,
+# so we assert the necessary precondition: even when the user's CWD is
+# an anonymous project, no xlings command (here `config`) ever creates
+# state under `~/.xlings/subos/_/`. The fix in Config::save_workspace's
+# else branch composes the global path from env-or-globalActiveSubos_
+# rather than paths_.activeSubos, so anonymous "_" cannot leak into a
+# global write.
+log "Scenario 14: anonymous-project dir does not leak '_' into global subos path"
+mkdir -p "$RUNTIME_DIR/anon"
+echo '{}' > "$RUNTIME_DIR/anon/.xlings.json"
+(
+    cd "$RUNTIME_DIR/anon"
+    env -i HOME="$HOME" PATH=/usr/bin:/bin XLINGS_HOME="$HOME_DIR" \
+        "$XLINGS_BIN_PATH" config >/dev/null 2>&1 || true
+)
+[[ ! -d "$HOME_DIR/subos/_" ]] \
+    || fail "S14: \$XLINGS_HOME/subos/_ must never be created from anon project context"
+
+log "PASS: subos shell-level switching (1-14 + 6b + 11b)"

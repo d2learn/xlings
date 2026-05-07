@@ -241,10 +241,14 @@ void print_subos_removed(const std::string& name) {
 // `▸ <verb> to subos <name>  (<modifier>)` template as `switched`; the
 // absence of a `[global]` tag is what tells the user this is a per-shell
 // action, not a persistent one.
+//
+// The subos NAME is rendered in bold green (matching the prompt marker
+// styling) so the user's eye lands on it; the rest of the line stays in
+// the magenta accent that distinguishes "spawn" from "switched" (cyan).
 void print_subos_entering(const std::string& name) {
     using namespace subos_ansi_;
-    std::println("{}  \xe2\x96\xb8 entering subos {}{}{}{}  (exit to leave){}",
-                 magenta, bold, name, reset, magenta, reset);
+    std::println("{}  \xe2\x96\xb8 entering subos {}{}{}{}{}  (exit to leave){}",
+                 magenta, green, bold, name, reset, magenta, reset);
 }
 
 // `xlings subos use <same>` while already in <same>: nothing happens, but

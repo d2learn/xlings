@@ -49,13 +49,17 @@ namespace xlings::xself::profile_resources {
 //   4 — prompt marker label tightened to [xsubos:<name>] for clarity
 //   5 — prompt marker uses ANSI color when terminal supports it
 //       (respects NO_COLOR and TERM=dumb opt-outs)
-//   6 — prompt marker uses inverted "tag" style (bold black on cyan
-//       background) so it visually separates from neighbouring prompt
-//       text instead of just blending in as colored letters
-export inline constexpr std::string_view kVersion = "6";
+//   6 — prompt marker tried inverted "tag pill" (bold black on cyan bg);
+//       too aggressive in real prompts, dropped in v7
+//   7 — prompt marker is foreground-only: brackets/label in default
+//       color, the subos name itself in bold green
+//   8 — prompt marker brackets/label tinted gray (slate-400) so they
+//       sit visually behind the bold-green subos name without leaving
+//       the marker as plain white text on the user's prompt line
+export inline constexpr std::string_view kVersion = "8";
 
 export inline constexpr std::string_view bash_sh =
-R"XPROFILE(# xlings-profile-version: 6
+R"XPROFILE(# xlings-profile-version: 8
 # Xlings Shell Profile (bash/zsh)
 
 _xlings_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
@@ -91,12 +95,16 @@ if [ -n "${XLINGS_ACTIVE_SUBOS-}" ] && [ -n "${PS1-}" ]; then
         *"[xsubos:$XLINGS_ACTIVE_SUBOS]"*) ;;
         *)
             if [ -z "${NO_COLOR-}" ] && [ -n "${TERM-}" ] && [ "$TERM" != "dumb" ]; then
-                # Bold black fg on cyan bg — renders as a filled "tag" pill
-                # that sits visually apart from the rest of the prompt
-                # rather than blending in as another colored letter.
+                # Brackets / "xsubos:" label tinted gray (slate-400, the
+                # same `subos_ansi_::gray` used by the TUI renderers) so
+                # they recede; the subos name itself stays bold green so
+                # it's the visual focus.
                 _xlings_esc=$(printf '\033')
-                PS1="${_xlings_esc}[1;30;46m[xsubos:${XLINGS_ACTIVE_SUBOS}]${_xlings_esc}[0m ${PS1}"
-                unset _xlings_esc
+                _xlings_g="${_xlings_esc}[38;2;148;163;184m"
+                _xlings_n="${_xlings_esc}[1;32m"
+                _xlings_r="${_xlings_esc}[0m"
+                PS1="${_xlings_g}[xsubos:${_xlings_n}${XLINGS_ACTIVE_SUBOS}${_xlings_r}${_xlings_g}]${_xlings_r} ${PS1}"
+                unset _xlings_esc _xlings_g _xlings_n _xlings_r
             else
                 PS1="[xsubos:${XLINGS_ACTIVE_SUBOS}] ${PS1}"
             fi
@@ -106,7 +114,7 @@ fi
 )XPROFILE";
 
 export inline constexpr std::string_view fish =
-R"XPROFILE(# xlings-profile-version: 6
+R"XPROFILE(# xlings-profile-version: 8
 # Xlings Shell Profile (fish)
 
 set -l _script_dir (dirname (status filename))
@@ -135,10 +143,15 @@ if set -q XLINGS_ACTIVE_SUBOS
     function fish_prompt
         if set -q XLINGS_ACTIVE_SUBOS
             if not set -q NO_COLOR; and set -q TERM; and test "$TERM" != "dumb"
-                # Bold black on cyan background — "tag pill" style so the
-                # marker stands clearly apart from the rest of the prompt.
-                set_color --bold black --background cyan
-                echo -n "[xsubos:$XLINGS_ACTIVE_SUBOS]"
+                # Brackets / "xsubos:" label tinted slate-400 gray so they
+                # recede; subos name itself bold green so it's the focus.
+                set_color 94a3b8
+                echo -n "[xsubos:"
+                set_color --bold green
+                echo -n "$XLINGS_ACTIVE_SUBOS"
+                set_color normal
+                set_color 94a3b8
+                echo -n "]"
                 set_color normal
                 echo -n " "
             else
@@ -151,7 +164,7 @@ end
 )XPROFILE";
 
 export inline constexpr std::string_view pwsh =
-R"XPROFILE(# xlings-profile-version: 6
+R"XPROFILE(# xlings-profile-version: 8
 # Xlings Shell Profile (PowerShell)
 
 $env:XLINGS_HOME = (Resolve-Path "$PSScriptRoot\..\..").Path
@@ -176,10 +189,13 @@ if ($env:XLINGS_ACTIVE_SUBOS) {
     function global:prompt {
         $useColor = (-not $env:NO_COLOR) -and $env:TERM -ne 'dumb'
         if ($useColor) {
-            # Bold black fg on cyan bg — "tag pill" style so the marker
-            # stands clearly apart from the rest of the prompt.
+            # Brackets / "xsubos:" label tinted slate-400 gray so they
+            # recede; subos name itself bold green so it's the focus.
             $e = [char]27
-            Write-Host -NoNewline "$e[1;30;46m[xsubos:$($env:XLINGS_ACTIVE_SUBOS)]$e[0m "
+            $g = "$e[38;2;148;163;184m"
+            $n = "$e[1;32m"
+            $r = "$e[0m"
+            Write-Host -NoNewline "$g[xsubos:$n$($env:XLINGS_ACTIVE_SUBOS)$r$g]$r "
         } else {
             Write-Host -NoNewline "[xsubos:$($env:XLINGS_ACTIVE_SUBOS)] "
         }

@@ -896,14 +896,33 @@ public:
             if (!projectHomeDir.empty()) fs::create_directories(projectHomeDir);
             subosConfigPath = self.project_state_path_();
         } else {
-            // Use paths_.activeSubos (env-aware) rather than
-            // globalActiveSubos_ (~/.xlings.json snapshot). Without this
-            // honoring of XLINGS_ACTIVE_SUBOS, `xvm use` from inside a
-            // spawned subos shell writes back to the persistent default
-            // instead of the active env-resolved subos — the workspace
-            // change leaks to other shells. The load side (Config init)
-            // is symmetric.
-            subosConfigPath = self.paths_.homeDir / "subos" / self.paths_.activeSubos / ".xlings.json";
+            // useProject=false here — either no project config, or
+            // forceGlobalScope_ override is on (e.g. `xlings install -g`).
+            // Both paths mean "act on global scope, ignore project mode".
+            //
+            // We must NOT use paths_.activeSubos directly: when the user
+            // is inside an anonymous-project directory, paths_.activeSubos
+            // was set to "_" by update_effective_paths_ (the anonymous
+            // marker) and stays "_" even after forceGlobalScope_ flips
+            // useProject to false. Writing to `~/.xlings/subos/_/.xlings.json`
+            // (a directory that doesn't exist) then fails the workspace
+            // save — surfaced as `Failed to write file` during
+            // `xlings self install`'s patchelf-runtime-dep step (which
+            // spawns `xlings install -g`) when the user happens to run
+            // self install from inside an xlings repo / project tree.
+            //
+            // Compose the global-scope path from XLINGS_ACTIVE_SUBOS env
+            // (per-shell override) or globalActiveSubos_ (~/.xlings.json
+            // snapshot) — both are valid global-scope subos names whose
+            // directories exist on disk.
+            std::string global_name;
+            if (auto env = utils::get_env_or_default("XLINGS_ACTIVE_SUBOS");
+                !env.empty()) {
+                global_name = env;
+            } else {
+                global_name = self.globalActiveSubos_;
+            }
+            subosConfigPath = self.paths_.homeDir / "subos" / global_name / ".xlings.json";
         }
 
         nlohmann::json json;
