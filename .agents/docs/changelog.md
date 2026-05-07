@@ -2,6 +2,25 @@
 
 ## 2026
 
+### 2026-05 (v0.4.18)
+
+- **prompt marker subos 名色调:bold green → bold magenta(8-color "经典紫")(#272)**
+  - 用户反馈 v0.4.17 的 bold-green 名字跟周围 prompt 颜色站位不协调,绿色和 entering message 的 magenta、switched message 的 cyan 混在一起会让 prompt 看着乱。
+  - 三种 shell(bash/zsh、fish、PowerShell)同步切到 SGR `\033[1;35m`(8-color magenta,大多数终端 theme 渲染为低饱和度紫色)。括号 `[xsubos:` 和 `]` 仍是 slate-400 灰。`NO_COLOR` / `TERM=dumb` 仍走纯文本 fallback。
+  - `profile_resources::kVersion` 8 → 9。已装 v8 用户(只有 v0.4.17 极短窗口期内升级过的人)下次 xlings 调用时通过 `compat::v0_4_17::auto_upgrade_profiles_if_stale` 自动覆盖。
+
+- **shim 报错 hint 区分 "未安装" vs "未激活"(用户 0.4.17 反馈)**
+  - 旧:`gcc` 命令(orphan shim) → workspace 找不到 → 永远提示 `xlings use gcc <version>`,但 gcc 可能根本没装,使用 `xlings use` 没用。
+  - 新:shim 拿到空 active 后,先查全局 versions DB:
+    - 0 个版本 → `[error] 'gcc' is not installed` + `hint: xlings install gcc`
+    - ≥1 个版本 → `[error] no active version of 'gcc' in current subos` + `available: <list>` + `hint: xlings use gcc <version>`
+  - 仅改报错文案,不动 install/remove/use 的语义,零回归风险。
+
+- **subos-binding 设计文档(`docs/plans/2026-05-07-xlings-cmd-subos-binding-analysis.md`)**
+  - 把"`xlings list / use / update / install / remove` 与 subos 绑定"的真实数据模型讲清楚:`versions DB` 全局、`workspace` per-subos、还缺一个 per-subos `registered` 集合。
+  - 列出三种修复方向:**A**(只改 shim UX,本 patch 已落)/ **B**(installer 收紧 versionless `xvm.remove` 处理,0.4.19 候选)/ **C**(per-subos `registered` 集合,真正的 subos 作用域,0.5.0 minor)。
+  - 用户报告的 `xlings remove gcc` 后 `gcc` 命令仍报错的根因(versions DB 是全局视图,subos 没有 registered 集合,导致 shim 留存 + workspace auto-switch 走偏)文档化,作为 0.5.0 重构的 baseline。
+
 ### 2026-05 (v0.4.17)
 
 - **shell-level subos 切换 + auto-upgrading profile + TUI 渲染统一 (#269)**
